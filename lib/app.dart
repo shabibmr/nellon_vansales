@@ -13,6 +13,7 @@ import 'ui/features/sales_invoice/bloc/sales_invoice_bloc.dart';
 import 'ui/features/auth/views/login_page.dart';
 import 'ui/features/route/views/route_page.dart';
 import 'ui/features/dashboard/views/dashboard_page.dart';
+import 'ui/features/sync/views/masters_sync_page.dart';
 
 class VanSalesApp extends StatelessWidget {
   const VanSalesApp({super.key});
@@ -49,7 +50,6 @@ class VanSalesApp extends StatelessWidget {
           BlocProvider<RouteBloc>(
             create: (context) => RouteBloc(
               salesRepository: context.read<SalesRepository>(),
-              syncRepository: context.read<SyncRepository>(),
             )..add(LoadRoutes()),
           ),
           BlocProvider<SalesInvoiceBloc>(
@@ -84,9 +84,19 @@ class SessionGateway extends StatelessWidget {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, authState) {
         if (authState is Authenticated) {
-          // Check if predefined route is already chosen
           return BlocBuilder<RouteBloc, RouteState>(
             builder: (context, routeState) {
+              if (routeState.isLoading) {
+                return const Scaffold(
+                  body: Center(
+                    child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
+                  ),
+                );
+              }
+              final hasMasters = context.read<SyncRepository>().hasCoreMasters();
+              if (!hasMasters) {
+                return const MastersSyncPage();
+              }
               if (routeState.activeRouteId == null || routeState.activeRouteId!.isEmpty) {
                 return const RouteSelectionPage();
               }

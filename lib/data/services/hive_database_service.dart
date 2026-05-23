@@ -8,6 +8,12 @@ import '../../domain/models/receipt_voucher.dart';
 import '../../domain/models/sales_return.dart';
 import '../../domain/models/expense_entry.dart';
 import '../../domain/models/cash_closing.dart';
+import '../../domain/models/warehouse.dart';
+import '../../domain/models/payment_account.dart';
+import '../../domain/models/tax.dart';
+import '../../domain/models/expense_account.dart';
+import '../../domain/models/organization.dart';
+import '../../domain/models/open_invoice.dart';
 import '../models/customer_model.dart';
 import '../models/item_model.dart';
 import '../models/sales_invoice_model.dart';
@@ -15,6 +21,12 @@ import '../models/receipt_voucher_model.dart';
 import '../models/sales_return_model.dart';
 import '../models/expense_entry_model.dart';
 import '../models/cash_closing_model.dart';
+import '../models/warehouse_model.dart';
+import '../models/payment_account_model.dart';
+import '../models/tax_model.dart';
+import '../models/expense_account_model.dart';
+import '../models/organization_model.dart';
+import '../models/open_invoice_model.dart';
 import '../models/sync_queue_item.dart';
 
 class HiveDatabaseService {
@@ -101,6 +113,97 @@ class HiveDatabaseService {
         .map((r) => jsonEncode({'id': r.id, 'name': r.name, 'description': r.description}))
         .toList();
     await _masterBox.put('routes', serialized);
+  }
+
+  // --- Master: Warehouses ---
+  List<Warehouse> getWarehouses() {
+    final rawList = _masterBox.get('warehouses', defaultValue: []);
+    return (rawList as List)
+        .map((w) => WarehouseModel.fromJson(Map<String, dynamic>.from(jsonDecode(w))))
+        .toList();
+  }
+
+  Future<void> saveWarehouses(List<Warehouse> warehouses) async {
+    final serialized = warehouses
+        .map((w) => jsonEncode(WarehouseModel.fromDomain(w).toJson()))
+        .toList();
+    await _masterBox.put('warehouses', serialized);
+  }
+
+  // --- Master: Payment Accounts (Bank / Cash ledgers for receipts) ---
+  List<PaymentAccount> getPaymentAccounts() {
+    final rawList = _masterBox.get('payment_accounts', defaultValue: []);
+    return (rawList as List)
+        .map((a) => PaymentAccountModel.fromJson(Map<String, dynamic>.from(jsonDecode(a))))
+        .toList();
+  }
+
+  Future<void> savePaymentAccounts(List<PaymentAccount> accounts) async {
+    final serialized = accounts
+        .map((a) => jsonEncode(PaymentAccountModel.fromDomain(a).toJson()))
+        .toList();
+    await _masterBox.put('payment_accounts', serialized);
+  }
+
+  // --- Master: Taxes ---
+  List<Tax> getTaxes() {
+    final rawList = _masterBox.get('taxes', defaultValue: []);
+    return (rawList as List)
+        .map((t) => TaxModel.fromJson(Map<String, dynamic>.from(jsonDecode(t))))
+        .toList();
+  }
+
+  Future<void> saveTaxes(List<Tax> taxes) async {
+    final serialized = taxes
+        .map((t) => jsonEncode(TaxModel.fromDomain(t).toJson()))
+        .toList();
+    await _masterBox.put('taxes', serialized);
+  }
+
+  // --- Master: Expense Accounts (Expense ledgers) ---
+  List<ExpenseAccount> getExpenseAccounts() {
+    final rawList = _masterBox.get('expense_accounts', defaultValue: []);
+    return (rawList as List)
+        .map((a) => ExpenseAccountModel.fromJson(Map<String, dynamic>.from(jsonDecode(a))))
+        .toList();
+  }
+
+  Future<void> saveExpenseAccounts(List<ExpenseAccount> accounts) async {
+    final serialized = accounts
+        .map((a) => jsonEncode(ExpenseAccountModel.fromDomain(a).toJson()))
+        .toList();
+    await _masterBox.put('expense_accounts', serialized);
+  }
+
+  // --- Master: Organization (Currency, fiscal year, etc.) ---
+  Organization? getOrganization() {
+    final raw = _masterBox.get('organization');
+    if (raw == null) return null;
+    return OrganizationModel.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
+  }
+
+  Future<void> saveOrganization(Organization org) async {
+    await _masterBox.put(
+      'organization',
+      jsonEncode(OrganizationModel.fromDomain(org).toJson()),
+    );
+  }
+
+  // --- Master: Open Invoices (per customer, for receipt allocation) ---
+  List<OpenInvoice> getOpenInvoices({String? customerId}) {
+    final rawList = _masterBox.get('open_invoices', defaultValue: []);
+    final all = (rawList as List)
+        .map((i) => OpenInvoiceModel.fromJson(Map<String, dynamic>.from(jsonDecode(i))))
+        .toList();
+    if (customerId == null) return all;
+    return all.where((inv) => inv.customerId == customerId).toList();
+  }
+
+  Future<void> saveOpenInvoices(List<OpenInvoice> invoices) async {
+    final serialized = invoices
+        .map((i) => jsonEncode(OpenInvoiceModel.fromDomain(i).toJson()))
+        .toList();
+    await _masterBox.put('open_invoices', serialized);
   }
 
   // --- Sync Queue (Post data offline queue) ---

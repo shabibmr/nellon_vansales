@@ -35,4 +35,15 @@ class SyncRepositoryImpl implements SyncRepository {
   Future<void> refreshMasterData() {
     return _syncWorker.refreshMasterData();
   }
+
+  @override
+  Future<void> syncMaster(MasterType type) {
+    return _syncWorker.syncMaster(type);
+  }
+
+  @override
+  bool hasCoreMasters() {
+    // Treat the app as bootstrapped once Routes and Items have been pulled at least once.
+    return _dbService.getRoutes().isNotEmpty && _dbService.getItems().isNotEmpty;
+  }
 }

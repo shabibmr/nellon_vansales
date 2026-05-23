@@ -3,7 +3,6 @@ import 'package:equatable/equatable.dart';
 import '../../../../domain/models/route.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/repositories/sales_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 
 // --- Events ---
 abstract class RouteEvent extends Equatable {
@@ -78,11 +77,9 @@ class RouteState extends Equatable {
 // --- Bloc ---
 class RouteBloc extends Bloc<RouteEvent, RouteState> {
   final SalesRepository _salesRepository;
-  final SyncRepository _syncRepository;
 
   RouteBloc({
     required SalesRepository this._salesRepository,
-    required SyncRepository this._syncRepository,
   })  : super(const RouteState()) {
     on<LoadRoutes>(_onLoadRoutes);
     on<SelectActiveRoute>(_onSelectActiveRoute);
@@ -120,11 +117,6 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
     emit(state.copyWith(isLoading: true));
     try {
       await _salesRepository.setActiveRouteId(event.routeId);
-      
-      // If we selected a route, trigger background master data sync for that route
-      if (event.routeId != null) {
-        await _syncRepository.refreshMasterData();
-      }
 
       final activeRouteCustomers = _salesRepository.getCustomers()
           .where((c) => c.routeId == event.routeId)

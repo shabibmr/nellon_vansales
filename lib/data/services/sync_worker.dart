@@ -5,7 +5,41 @@ import 'zoho_api_client.dart';
 import '../models/sync_queue_item.dart';
 import '../models/item_model.dart';
 import '../models/customer_model.dart';
+import '../models/warehouse_model.dart';
+import '../models/payment_account_model.dart';
+import '../models/tax_model.dart';
+import '../models/expense_account_model.dart';
+import '../models/organization_model.dart';
+import '../models/open_invoice_model.dart';
 import '../../domain/models/route.dart';
+
+enum MasterType {
+  organization,
+  warehouses,
+  paymentAccounts,
+  taxes,
+  expenseAccounts,
+  routes,
+  items,
+  customers,
+  openInvoices,
+}
+
+extension MasterTypeLabel on MasterType {
+  String get label {
+    switch (this) {
+      case MasterType.organization:    return 'Organization';
+      case MasterType.warehouses:      return 'Warehouses';
+      case MasterType.paymentAccounts: return 'Payment Accounts';
+      case MasterType.taxes:           return 'Taxes';
+      case MasterType.expenseAccounts: return 'Expense Accounts';
+      case MasterType.routes:          return 'Routes';
+      case MasterType.items:           return 'Items';
+      case MasterType.customers:       return 'Customers';
+      case MasterType.openInvoices:    return 'Open Invoices';
+    }
+  }
+}
 
 class SyncWorker {
   final HiveDatabaseService _dbService;
@@ -109,9 +143,6 @@ class SyncWorker {
         }
       }
 
-      // Re-trigger a fetch of master data so localized cache has all remote records updated
-      await refreshMasterData();
-
       _syncStatusController.add(successCount == pendingItems.length
           ? 'Sync Successful: All transactions synced!'
           : 'Sync Partial: $successCount/${pendingItems.length} synced successfully.');
@@ -146,35 +177,96 @@ class SyncWorker {
     }
   }
 
-  // 2. Fetch fresh Master Data from Zoho Books (Customers, Items, Routes)
-  Future<void> refreshMasterData() async {
-    final activeRoute = _dbService.activeRouteId;
-    final activeWarehouse = _dbService.assignedWarehouseId ?? 'van_wh_01';
-
+  // Fetch a single master from Zoho Books and save into Hive.
+  Future<void> syncMaster(MasterType type) async {
+    _syncStatusController.add('Syncing ${type.label}...');
     try {
-      // Fetch routes
-      final routeList = await _apiClient.fetchRoutes();
-      final domainRoutes = routeList.map((r) => RouteModel(
-        id: r['id'],
-        name: r['name'],
-        description: r['description'],
-      )).toList();
-      await _dbService.saveRoutes(domainRoutes);
-
-      // Fetch items for our warehouse
-      final itemList = await _apiClient.fetchItems(activeWarehouse);
-      final domainItems = itemList.map((i) => ItemModel.fromJson(i)).toList();
-      await _dbService.saveItems(domainItems);
-
-      // Fetch customers for our active route (if selected)
-      if (activeRoute != null && activeRoute.isNotEmpty) {
-        final customerList = await _apiClient.fetchCustomers(activeRoute);
-        final domainCustomers = customerList.map((c) => CustomerModel.fromJson(c)).toList();
-        await _dbService.saveCustomers(domainCustomers);
+      switch (type) {
+        case MasterType.organization:
+          final org = await _apiClient.fetchOrganization();
+          if (org != null) {
+            await _dbService.saveOrganization(OrganizationModel.fromJson(org));
+          }
+          break;
+        case MasterType.warehouses:
+          final list = await _apiClient.fetchWarehouses();
+          await _dbService.saveWarehouses(
+            list.map((w) => WarehouseModel.fromJson(w)).toList(),
+          );
+          break;
+        case MasterType.paymentAccounts:
+          final list = await _apiClient.fetchPaymentAccounts();
+          await _dbService.savePaymentAccounts(
+            list.map((a) => PaymentAccountModel.fromJson(a)).toList(),
+          );
+          break;
+        case MasterType.taxes:
+          final list = await _apiClient.fetchTaxes();
+          await _dbService.saveTaxes(
+            list.map((t) => TaxModel.fromJson(t)).toList(),
+          );
+          break;
+        case MasterType.expenseAccounts:
+          final list = await _apiClient.fetchExpenseAccounts();
+          await _dbService.saveExpenseAccounts(
+            list.map((a) => ExpenseAccountModel.fromJson(a)).toList(),
+          );
+          break;
+        case MasterType.routes:
+          final list = await _apiClient.fetchRoutes();
+          await _dbService.saveRoutes(list
+              .map((r) => RouteModel(
+                    id: r['id'],
+                    name: r['name'],
+                    description: r['description'],
+                  ))
+              .toList());
+          break;
+        case MasterType.items:
+          final activeWarehouse = _dbService.assignedWarehouseId ?? 'van_wh_01';
+          final list = await _apiClient.fetchItems(activeWarehouse);
+          await _dbService.saveItems(
+            list.map((i) => ItemModel.fromJson(i)).toList(),
+          );
+          break;
+        case MasterType.customers:
+          final activeRoute = _dbService.activeRouteId;
+          if (activeRoute == null || activeRoute.isEmpty) {
+            throw Exception('No active route selected');
+          }
+          final list = await _apiClient.fetchCustomers(activeRoute);
+          await _dbService.saveCustomers(
+            list.map((c) => CustomerModel.fromJson(c)).toList(),
+          );
+          break;
+        case MasterType.openInvoices:
+          final list = await _apiClient.fetchOpenInvoices();
+          await _dbService.saveOpenInvoices(
+            list.map((i) => OpenInvoiceModel.fromJson(i)).toList(),
+          );
+          break;
       }
+      _syncStatusController.add('${type.label} synced.');
     } catch (e) {
-      // ignore: avoid_print
-      print('Error refreshing master data from Zoho Books: $e');
+      _syncStatusController.add('${type.label} sync failed: $e');
+      rethrow;
     }
+  }
+
+  // Pull all masters that don't require an active route/warehouse selection.
+  // Items/customers are pulled here too when the selection exists.
+  Future<void> refreshMasterData() async {
+    _syncStatusController.add('Refreshing master data...');
+    for (final type in MasterType.values) {
+      if (type == MasterType.customers && (_dbService.activeRouteId == null || _dbService.activeRouteId!.isEmpty)) {
+        continue;
+      }
+      try {
+        await syncMaster(type);
+      } catch (_) {
+        // Per-master errors already surfaced; continue with the rest.
+      }
+    }
+    _syncStatusController.add('Master data refresh complete.');
   }
 }

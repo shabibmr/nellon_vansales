@@ -17,6 +17,7 @@ import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
+import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:get_it/get_it.dart';
 
 // Fake implementations to isolate E2E UI rendering from disk/network IO
@@ -64,6 +65,12 @@ class FakeSyncRepository implements SyncRepository {
 
   @override
   Future<void> refreshMasterData() async {}
+
+  @override
+  Future<void> syncMaster(MasterType type) async {}
+
+  @override
+  bool hasCoreMasters() => true;
 }
 
 class FakeSalesRepository implements SalesRepository {

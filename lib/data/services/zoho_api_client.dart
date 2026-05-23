@@ -14,6 +14,10 @@ class ZohoApiClient {
   final String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
   final String _organizationId = '783019958';
 
+  // Milestone 1: transaction posting is mocked end-to-end while masters are wired up.
+  // Flip to false once invoice/receipt/return/expense/customer payloads are validated against Zoho.
+  static const bool _mockTransactions = true;
+
   ZohoApiClient({required HiveDatabaseService this._dbService}) {
     _dio.options.baseUrl = _apiUrl;
     _dio.options.connectTimeout = const Duration(seconds: 10);
@@ -141,6 +145,27 @@ class ZohoApiClient {
 
   // 2. Fetch Customers in Active Route
   Future<List<Map<String, dynamic>>> fetchCustomers(String routeId) async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get(
+          '/contacts',
+          queryParameters: {
+            'contact_type': 'customer',
+            'cf_route_id': routeId, // assumes a custom contact field
+            'per_page': 200,
+          },
+        );
+        if (response.statusCode == 200) {
+          final list = (response.data['contacts'] as List? ?? []);
+          return list.map((c) => Map<String, dynamic>.from(c)).toList();
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchCustomers error: $e');
+      }
+      return const [];
+    }
+
     await Future.delayed(const Duration(milliseconds: 700));
 
     // Realistic Mock Contacts
@@ -212,6 +237,26 @@ class ZohoApiClient {
 
   // 3. Fetch Items in Van Warehouse (Zoho Books Warehouse Inventory API)
   Future<List<Map<String, dynamic>>> fetchItems(String warehouseId) async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get(
+          '/items',
+          queryParameters: {
+            'warehouse_id': warehouseId,
+            'per_page': 200,
+          },
+        );
+        if (response.statusCode == 200) {
+          final list = (response.data['items'] as List? ?? []);
+          return list.map((i) => Map<String, dynamic>.from(i)).toList();
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchItems error: $e');
+      }
+      return const [];
+    }
+
     await Future.delayed(const Duration(milliseconds: 650));
 
     // Realistic Stock allotted to this specific van's warehouse
@@ -271,7 +316,7 @@ class ZohoApiClient {
 
   // 4. Zoho Books Contacts API: Sync New Customer
   Future<String> syncCustomer(Map<String, dynamic> customerJson) async {
-    if (!_isMockMode()) {
+    if (!_isMockMode() && !_mockTransactions) {
       try {
         final response = await _dio.post('/contacts', data: customerJson);
         if (response.statusCode == 201 || response.statusCode == 200) {
@@ -289,7 +334,7 @@ class ZohoApiClient {
 
   // 5. Zoho Books Invoices API: Sync Sales Invoice
   Future<String> syncInvoice(Map<String, dynamic> invoiceJson) async {
-    if (!_isMockMode()) {
+    if (!_isMockMode() && !_mockTransactions) {
       try {
         final response = await _dio.post('/invoices', data: invoiceJson);
         if (response.statusCode == 201 || response.statusCode == 200) {
@@ -307,7 +352,7 @@ class ZohoApiClient {
 
   // 6. Zoho Books Customer Payments API: Sync Receipt Voucher
   Future<String> syncReceiptVoucher(Map<String, dynamic> paymentJson) async {
-    if (!_isMockMode()) {
+    if (!_isMockMode() && !_mockTransactions) {
       try {
         final response = await _dio.post('/customerpayments', data: paymentJson);
         if (response.statusCode == 201 || response.statusCode == 200) {
@@ -325,7 +370,7 @@ class ZohoApiClient {
 
   // 7. Zoho Books Credit Notes API: Sync Sales Return
   Future<String> syncSalesReturn(Map<String, dynamic> creditNoteJson) async {
-    if (!_isMockMode()) {
+    if (!_isMockMode() && !_mockTransactions) {
       try {
         final response = await _dio.post('/creditnotes', data: creditNoteJson);
         if (response.statusCode == 201 || response.statusCode == 200) {
@@ -343,7 +388,7 @@ class ZohoApiClient {
 
   // 8. Zoho Books Expenses API: Sync Expense Entry
   Future<String> syncExpense(Map<String, dynamic> expenseJson) async {
-    if (!_isMockMode()) {
+    if (!_isMockMode() && !_mockTransactions) {
       try {
         // Multi-part formatting in case a receipt image exists
         final receiptPath = expenseJson['receiptImagePath'];
@@ -370,5 +415,187 @@ class ZohoApiClient {
     // Mock response
     await Future.delayed(const Duration(seconds: 1));
     return 'zoho_exp_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // --- Master Data Fetchers ---
+
+  // 9. Warehouses (GET /settings/warehouses)
+  Future<List<Map<String, dynamic>>> fetchWarehouses() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get('/settings/warehouses');
+        if (response.statusCode == 200) {
+          final list = (response.data['warehouses'] as List? ?? []);
+          return list.map((w) => Map<String, dynamic>.from(w)).toList();
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchWarehouses error: $e');
+      }
+      return const [];
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    return [
+      {
+        'warehouse_id': 'van_wh_01',
+        'warehouse_name': 'Van Warehouse 01',
+        'address': 'Mobile / On-route',
+        'is_primary': true,
+      },
+    ];
+  }
+
+  // 10. Payment Accounts (GET /bankaccounts — bank + cash accounts for receipts)
+  Future<List<Map<String, dynamic>>> fetchPaymentAccounts() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get('/bankaccounts');
+        if (response.statusCode == 200) {
+          final list = (response.data['bankaccounts'] as List? ?? []);
+          return list.map((a) => Map<String, dynamic>.from(a)).toList();
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchPaymentAccounts error: $e');
+      }
+      return const [];
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    return [
+      {
+        'account_id': 'acc_cash',
+        'account_name': 'Petty Cash',
+        'account_type': 'cash',
+        'currency_code': 'INR',
+        'payment_mode': 'Cash',
+      },
+      {
+        'account_id': 'acc_bank',
+        'account_name': 'HDFC Current',
+        'account_type': 'bank',
+        'currency_code': 'INR',
+        'payment_mode': 'Bank Transfer',
+      },
+    ];
+  }
+
+  // 11. Taxes (GET /settings/taxes)
+  Future<List<Map<String, dynamic>>> fetchTaxes() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get('/settings/taxes');
+        if (response.statusCode == 200) {
+          final list = (response.data['taxes'] as List? ?? []);
+          return list.map((t) => Map<String, dynamic>.from(t)).toList();
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchTaxes error: $e');
+      }
+      return const [];
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    return [
+      {'tax_id': 'tax_5',  'tax_name': 'GST 5%',  'tax_percentage': 5.0,  'tax_type': 'tax', 'is_default_tax': true},
+      {'tax_id': 'tax_12', 'tax_name': 'GST 12%', 'tax_percentage': 12.0, 'tax_type': 'tax'},
+      {'tax_id': 'tax_18', 'tax_name': 'GST 18%', 'tax_percentage': 18.0, 'tax_type': 'tax'},
+    ];
+  }
+
+  // 12. Expense Accounts (GET /chartofaccounts?filter_by=AccountType.Expense)
+  Future<List<Map<String, dynamic>>> fetchExpenseAccounts() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get(
+          '/chartofaccounts',
+          queryParameters: {'filter_by': 'AccountType.Expense'},
+        );
+        if (response.statusCode == 200) {
+          final list = (response.data['chartofaccounts'] as List? ?? []);
+          return list.map((a) => Map<String, dynamic>.from(a)).toList();
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchExpenseAccounts error: $e');
+      }
+      return const [];
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    return [
+      {'account_id': 'exp_fuel',  'account_name': 'Fuel Expense',        'account_code': 'EXP-FUEL',  'category': 'Fuel'},
+      {'account_id': 'exp_toll',  'account_name': 'Tolls & Parking',     'account_code': 'EXP-TOLL',  'category': 'Tolls'},
+      {'account_id': 'exp_meal',  'account_name': 'Meals & Refreshments','account_code': 'EXP-MEAL',  'category': 'Meals'},
+      {'account_id': 'exp_maint', 'account_name': 'Vehicle Maintenance', 'account_code': 'EXP-MAINT', 'category': 'Maintenance'},
+      {'account_id': 'exp_misc',  'account_name': 'Miscellaneous',       'account_code': 'EXP-MISC',  'category': 'Miscellaneous'},
+    ];
+  }
+
+  // 13. Organization (GET /organizations/{org_id})
+  Future<Map<String, dynamic>?> fetchOrganization() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get('/organizations/$_organizationId');
+        if (response.statusCode == 200) {
+          final org = response.data['organization'];
+          if (org != null) return Map<String, dynamic>.from(org);
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchOrganization error: $e');
+      }
+      return null;
+    }
+
+    await Future.delayed(const Duration(milliseconds: 250));
+    return {
+      'organization_id': _organizationId,
+      'name': 'Mock Org',
+      'currency_code': 'INR',
+      'currency_symbol': '₹',
+      'fiscal_year_start_month': 'april',
+      'time_zone': 'Asia/Kolkata',
+    };
+  }
+
+  // 14. Open Invoices (GET /invoices?status=unpaid) — for receipt allocation
+  Future<List<Map<String, dynamic>>> fetchOpenInvoices() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get(
+          '/invoices',
+          queryParameters: {
+            'status': 'unpaid',
+            'per_page': 200,
+          },
+        );
+        if (response.statusCode == 200) {
+          final list = (response.data['invoices'] as List? ?? []);
+          return list.map((i) => Map<String, dynamic>.from(i)).toList();
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchOpenInvoices error: $e');
+      }
+      return const [];
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    final now = DateTime.now();
+    return [
+      {
+        'invoice_id': 'inv_001',
+        'invoice_number': 'INV-001',
+        'customer_id': 'cust_101',
+        'date': now.subtract(const Duration(days: 20)).toIso8601String(),
+        'due_date': now.add(const Duration(days: 10)).toIso8601String(),
+        'total': 2850.00,
+        'balance': 2850.00,
+        'status': 'unpaid',
+      },
+    ];
   }
 }
