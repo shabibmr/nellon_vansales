@@ -10,9 +10,9 @@ class ZohoApiClient {
   final String _accountsUrl = 'https://accounts.zoho.com/oauth/v2/token';
   final String _apiUrl = 'https://www.zohoapis.com/books/v3';
   
-  final String _clientId = '1000.XXXXXX_YOUR_CLIENT_ID';
-  final String _clientSecret = 'XXXXXX_YOUR_CLIENT_SECRET';
-  final String _organizationId = '123456789_ORG_ID'; // Required header for Zoho Books API
+  final String _clientId = '1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP';
+  final String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
+  final String _organizationId = '783019958';
 
   ZohoApiClient({required HiveDatabaseService this._dbService}) {
     _dio.options.baseUrl = _apiUrl;
@@ -85,7 +85,7 @@ class ZohoApiClient {
   Future<String?> _refreshAccessToken({bool force = false}) async {
     if (_isMockMode()) return 'mock_access_token';
 
-    const refreshToken = 'YOUR_REFRESH_TOKEN'; // Retrieve from secure storage
+    const refreshToken = '1000.ccb7c895a473ba5569c55565c0aed87d.c2f3a5530356193d39a19c511efed856';
     try {
       final response = await Dio().post(
         _accountsUrl,
