@@ -3,13 +3,17 @@ import '../models/sync_queue_item.dart';
 import '../services/sync_worker.dart';
 import '../services/hive_database_service.dart';
 
+/// Concrete implementation of [SyncRepository].
+///
+/// Combines [SyncWorker] background jobs and [HiveDatabaseService] queries to trigger and monitor sync sequences.
 class SyncRepositoryImpl implements SyncRepository {
   final SyncWorker _syncWorker;
   final HiveDatabaseService _dbService;
 
+  /// Creates a new [SyncRepositoryImpl] with required worker and local database service.
   SyncRepositoryImpl({
-    required SyncWorker this._syncWorker,
-    required HiveDatabaseService this._dbService,
+    required this._syncWorker,
+    required this._dbService,
   });
 
   @override
@@ -43,7 +47,7 @@ class SyncRepositoryImpl implements SyncRepository {
 
   @override
   bool hasCoreMasters() {
-    // Treat the app as bootstrapped once Routes and Items have been pulled at least once.
-    return _dbService.getRoutes().isNotEmpty && _dbService.getItems().isNotEmpty;
+    return _dbService.getItems().isNotEmpty;
   }
 }
+

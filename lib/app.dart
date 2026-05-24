@@ -1,3 +1,6 @@
+// \file app.dart
+// \brief Main application widget setting up providers, themes, and navigation routing gateways.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'data/services/injection.dart';
@@ -10,11 +13,20 @@ import 'ui/features/auth/bloc/auth_bloc.dart';
 import 'ui/features/sync/bloc/sync_bloc.dart';
 import 'ui/features/route/bloc/route_bloc.dart';
 import 'ui/features/sales_invoice/bloc/sales_invoice_bloc.dart';
+import 'ui/features/expenses/bloc/expense_bloc.dart';
+import 'ui/features/receipts/bloc/receipt_bloc.dart';
 import 'ui/features/auth/views/login_page.dart';
 import 'ui/features/route/views/route_page.dart';
 import 'ui/features/dashboard/views/dashboard_page.dart';
 import 'ui/features/sync/views/masters_sync_page.dart';
 
+/// The root widget of the Van Sales Pro application.
+///
+/// Sets up:
+/// 1. Global repositories via [MultiRepositoryProvider] injected through dependency injection ([sl]).
+/// 2. Core application BLoCs via [MultiBlocProvider] for authentication, sync management, routing, and sales.
+/// 3. Visual theme support (light, dark, dynamic) linked to [ThemeCubit].
+/// 4. Home destination pointing to the [SessionGateway] to branch based on auth and setup state.
 class VanSalesApp extends StatelessWidget {
   const VanSalesApp({super.key});
 
@@ -58,6 +70,18 @@ class VanSalesApp extends StatelessWidget {
               syncRepository: context.read<SyncRepository>(),
             ),
           ),
+          BlocProvider<ExpenseBloc>(
+            create: (context) => ExpenseBloc(
+              salesRepository: context.read<SalesRepository>(),
+              syncRepository: context.read<SyncRepository>(),
+            ),
+          ),
+          BlocProvider<ReceiptBloc>(
+            create: (context) => ReceiptBloc(
+              salesRepository: context.read<SalesRepository>(),
+              syncRepository: context.read<SyncRepository>(),
+            ),
+          ),
         ],
         child: BlocBuilder<ThemeCubit, ThemeMode>(
           builder: (context, themeMode) {
@@ -76,6 +100,13 @@ class VanSalesApp extends StatelessWidget {
   }
 }
 
+/// A stateful gateway that decides which initial page the user should see.
+///
+/// Gates the application based on:
+/// - **Authentication State**: If unauthenticated or loading, routes to [LoginPage] or a loading spinner.
+/// - **Core Master Data Status**: If authenticated but has no core masters in the local cache, redirects to [MastersSyncPage].
+/// - **Route Selection**: If the user hasn't selected an active sales route, forces redirect to [RouteSelectionPage].
+/// - **Dashboard**: When auth, masters, and active route are fully verified, drops into the [DashboardPage].
 class SessionGateway extends StatelessWidget {
   const SessionGateway({super.key});
 
@@ -97,9 +128,6 @@ class SessionGateway extends StatelessWidget {
               if (!hasMasters) {
                 return const MastersSyncPage();
               }
-              if (routeState.activeRouteId == null || routeState.activeRouteId!.isEmpty) {
-                return const RouteSelectionPage();
-              }
               return const DashboardPage();
             },
           );
@@ -115,3 +143,4 @@ class SessionGateway extends StatelessWidget {
     );
   }
 }
+

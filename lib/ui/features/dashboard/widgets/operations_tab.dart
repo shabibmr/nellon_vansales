@@ -5,17 +5,19 @@ import 'van_action_tile.dart';
 class OperationsTab extends StatelessWidget {
   final bool isDark;
   final VoidCallback onCreateCustomer;
-  final VoidCallback onLogExpense;
   final VoidCallback onCashClosing;
-  final VoidCallback onSwitchRoute;
+  final VoidCallback onManageInvoices;
+  final VoidCallback onManageExpenses;
+  final VoidCallback onManageReceipts;
 
   const OperationsTab({
     super.key,
     required this.isDark,
     required this.onCreateCustomer,
-    required this.onLogExpense,
     required this.onCashClosing,
-    required this.onSwitchRoute,
+    required this.onManageInvoices,
+    required this.onManageExpenses,
+    required this.onManageReceipts,
   });
 
   @override
@@ -27,6 +29,33 @@ class OperationsTab extends StatelessWidget {
           padding: const EdgeInsets.all(20.0),
           children: [
             VanActionTile(
+              title: 'Manage Sales Invoices',
+              subtitle: 'View, filter, edit, or create offline sales invoices.',
+              icon: Icons.description_outlined,
+              color: AppTheme.primaryIndigo,
+              isDark: isDark,
+              onTap: onManageInvoices,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
+              title: 'Manage Expenses',
+              subtitle: 'View and log van trip expenses with receipt capture.',
+              icon: Icons.local_gas_station_outlined,
+              color: AppTheme.errorRose,
+              isDark: isDark,
+              onTap: onManageExpenses,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
+              title: 'Manage Receipts',
+              subtitle: 'View and log customer payment receipt vouchers.',
+              icon: Icons.payments_outlined,
+              color: AppTheme.successEmerald,
+              isDark: isDark,
+              onTap: onManageReceipts,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
               title: 'Register New Customer',
               subtitle: 'Create customer details offline. Enqueues instantly to Zoho.',
               icon: Icons.person_add_alt_outlined,
@@ -36,30 +65,12 @@ class OperationsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             VanActionTile(
-              title: 'Log Van Expense',
-              subtitle: 'Log operations costs (fuel, food, tolls) with receipt capture.',
-              icon: Icons.local_gas_station_outlined,
-              color: AppTheme.errorRose,
-              isDark: isDark,
-              onTap: onLogExpense,
-            ),
-            const SizedBox(height: 16),
-            VanActionTile(
               title: 'Daily Cash Closing',
               subtitle: 'End of session cash count, inventory check & Zoho reconciliation.',
               icon: Icons.verified_outlined,
-              color: AppTheme.successEmerald,
-              isDark: isDark,
-              onTap: onCashClosing,
-            ),
-            const SizedBox(height: 16),
-            VanActionTile(
-              title: 'Switch Selected Route',
-              subtitle: 'Choose a different active sequence route list.',
-              icon: Icons.alt_route_rounded,
               color: AppTheme.infoSky,
               isDark: isDark,
-              onTap: onSwitchRoute,
+              onTap: onCashClosing,
             ),
             const SizedBox(height: 40),
           ],

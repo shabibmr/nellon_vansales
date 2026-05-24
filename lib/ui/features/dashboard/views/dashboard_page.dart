@@ -6,8 +6,11 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
-import '../../route/bloc/route_bloc.dart';
 import '../../sync/bloc/sync_bloc.dart';
+import '../../expenses/bloc/expense_bloc.dart';
+import '../../expenses/views/expense_list_page.dart';
+import '../../receipts/bloc/receipt_bloc.dart';
+import '../../receipts/views/receipt_list_page.dart';
 import '../widgets/route_sequence_tab.dart';
 import '../widgets/analytics_reports_tab.dart';
 import '../widgets/operations_tab.dart';
@@ -18,10 +21,15 @@ import '../widgets/invoice_flow_sheet.dart';
 import '../widgets/receipt_payment_dialog.dart';
 import '../widgets/sales_return_dialog.dart';
 import '../widgets/create_customer_dialog.dart';
-import '../widgets/expense_log_dialog.dart';
 import '../widgets/cash_closing_dialog.dart';
+import '../../sales_invoice/views/sales_invoice_list_page.dart';
 
+/// The central workspace of the Van Sales application.
+///
+/// Features a multi-tab view (Route sequence, operations, and analytical reporting)
+/// displaying real-time daily sales, collections, route stats, and triggers to create new entities.
 class DashboardPage extends StatefulWidget {
+  /// Creates a new [DashboardPage].
   const DashboardPage({super.key});
 
   @override
@@ -44,6 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _loadDailyStats();
   }
 
+  /// Queries the local Hive database for daily records and accumulates totals to display stats.
   void _loadDailyStats() {
     final invoices = _db.getLocalInvoices();
     final receipts = _db.getLocalReceipts();
@@ -172,16 +181,20 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showExpenseLogForm(bool isDark) {
-    showDialog(
-      context: context,
-      builder: (context) => ExpenseLogDialog(
-        isDark: isDark,
-        onExpenseLogged: () {
-          _loadDailyStats();
-        },
-      ),
-    );
+  void _showExpenseListPage() {
+    context.read<ExpenseBloc>().add(LoadExpenses());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ExpenseListPage()),
+    ).then((_) => _loadDailyStats());
+  }
+
+  void _showReceiptListPage() {
+    context.read<ReceiptBloc>().add(LoadReceipts());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReceiptListPage()),
+    ).then((_) => _loadDailyStats());
   }
 
   void _showCashClosingForm(bool isDark) {
@@ -217,9 +230,19 @@ class _DashboardPageState extends State<DashboardPage> {
       OperationsTab(
         isDark: isDark,
         onCreateCustomer: () => _showCreateCustomerForm(isDark),
-        onLogExpense: () => _showExpenseLogForm(isDark),
         onCashClosing: () => _showCashClosingForm(isDark),
-        onSwitchRoute: () => context.read<RouteBloc>().add(const SelectActiveRoute(null)),
+        onManageExpenses: _showExpenseListPage,
+        onManageReceipts: _showReceiptListPage,
+        onManageInvoices: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const SalesInvoiceListPage(),
+            ),
+          ).then((_) {
+            _loadDailyStats();
+          });
+        },
       ),
     ];
 
@@ -233,12 +256,6 @@ class _DashboardPageState extends State<DashboardPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Van Sales Pro', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text(
-                  _db.activeRouteId == 'route_north'
-                      ? 'North Downtown Sequence'
-                      : (_db.activeRouteId == 'route_south' ? 'South Retail Hub' : 'Custom Route Sequence'),
-                  style: const TextStyle(fontSize: 11, color: AppTheme.primaryIndigo, fontWeight: FontWeight.normal),
-                )
               ],
             )
           ],
@@ -334,9 +351,9 @@ class _DashboardPageState extends State<DashboardPage> {
           },
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.route_outlined),
-              activeIcon: Icon(Icons.route),
-              label: 'Route Clients',
+              icon: Icon(Icons.people_outline),
+              activeIcon: Icon(Icons.people),
+              label: 'Customers',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.analytics_outlined),
