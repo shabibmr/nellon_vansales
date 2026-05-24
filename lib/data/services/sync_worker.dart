@@ -56,8 +56,8 @@ class SyncWorker {
   bool get isSyncing => _isSyncing;
 
   SyncWorker({
-    required HiveDatabaseService this._dbService,
-    required ZohoApiClient this._apiClient,
+    required this._dbService,
+    required this._apiClient,
   }) {
     // Listen to network changes
     _connectivity.onConnectivityChanged.listen((List<ConnectivityResult> results) {
@@ -230,11 +230,7 @@ class SyncWorker {
           );
           break;
         case MasterType.customers:
-          final activeRoute = _dbService.activeRouteId;
-          if (activeRoute == null || activeRoute.isEmpty) {
-            throw Exception('No active route selected');
-          }
-          final list = await _apiClient.fetchCustomers(activeRoute);
+          final list = await _apiClient.fetchCustomers();
           await _dbService.saveCustomers(
             list.map((c) => CustomerModel.fromJson(c)).toList(),
           );
@@ -258,9 +254,7 @@ class SyncWorker {
   Future<void> refreshMasterData() async {
     _syncStatusController.add('Refreshing master data...');
     for (final type in MasterType.values) {
-      if (type == MasterType.customers && (_dbService.activeRouteId == null || _dbService.activeRouteId!.isEmpty)) {
-        continue;
-      }
+
       try {
         await syncMaster(type);
       } catch (_) {
