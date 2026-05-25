@@ -1,12 +1,17 @@
 import '../../domain/models/expense_entry.dart';
 
+/// Data transfer object representing a specific [ExpenseLineItem].
+///
+/// Maps categories (Fuel, Tolls, etc.) to hardcoded backend ledger accounts in Zoho.
 class ExpenseLineItemModel extends ExpenseLineItem {
+  /// Creates a new [ExpenseLineItemModel] instance.
   const ExpenseLineItemModel({
     required super.category,
     required super.amount,
     required super.description,
   });
 
+  /// Factory constructor to parse local database JSON maps into an [ExpenseLineItemModel].
   factory ExpenseLineItemModel.fromJson(Map<String, dynamic> json) {
     return ExpenseLineItemModel(
       category: json['category'] ?? 'Miscellaneous',
@@ -15,6 +20,7 @@ class ExpenseLineItemModel extends ExpenseLineItem {
     );
   }
 
+  /// Converts this [ExpenseLineItemModel] into a serialization compatible JSON map, injecting Zoho Account ID mappings.
   Map<String, dynamic> toJson() {
     return {
       'category': category,
@@ -24,6 +30,7 @@ class ExpenseLineItemModel extends ExpenseLineItem {
     };
   }
 
+  /// Maps local UI expense category labels directly to Zoho Book expense ledger account IDs.
   static String _getZohoAccountIdForCategory(String category) {
     switch (category) {
       case 'Fuel':
@@ -39,6 +46,7 @@ class ExpenseLineItemModel extends ExpenseLineItem {
     }
   }
 
+  /// Translates a base domain [ExpenseLineItem] entity into its [ExpenseLineItemModel] DTO representation.
   factory ExpenseLineItemModel.fromDomain(ExpenseLineItem domain) {
     return ExpenseLineItemModel(
       category: domain.category,
@@ -48,7 +56,11 @@ class ExpenseLineItemModel extends ExpenseLineItem {
   }
 }
 
+/// Data transfer object representing the overall [ExpenseEntry] voucher log.
+///
+/// Bundles multi-line logs and formats receipt attachment variables for local database and background uploading.
 class ExpenseEntryModel extends ExpenseEntry {
+  /// Creates a new [ExpenseEntryModel] instance.
   const ExpenseEntryModel({
     required super.id,
     required super.date,
@@ -57,6 +69,7 @@ class ExpenseEntryModel extends ExpenseEntry {
     super.isPendingSync,
   });
 
+  /// Factory constructor to parse local database JSON maps into an [ExpenseEntryModel].
   factory ExpenseEntryModel.fromJson(Map<String, dynamic> json) {
     return ExpenseEntryModel(
       id: json['expense_id'] ?? json['id'] ?? '',
@@ -70,6 +83,7 @@ class ExpenseEntryModel extends ExpenseEntry {
     );
   }
 
+  /// Converts this [ExpenseEntryModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -84,6 +98,7 @@ class ExpenseEntryModel extends ExpenseEntry {
     };
   }
 
+  /// Translates a base domain [ExpenseEntry] entity into its [ExpenseEntryModel] representation.
   factory ExpenseEntryModel.fromDomain(ExpenseEntry expense) {
     return ExpenseEntryModel(
       id: expense.id,
@@ -94,3 +109,4 @@ class ExpenseEntryModel extends ExpenseEntry {
     );
   }
 }
+

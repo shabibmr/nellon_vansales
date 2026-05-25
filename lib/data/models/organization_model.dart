@@ -1,6 +1,10 @@
 import '../../domain/models/organization.dart';
 
+/// Data transfer object representing the [Organization] config.
+///
+/// Parses localized parameters (currency codes, symbols, fiscal configuration) from Zoho's settings API.
 class OrganizationModel extends Organization {
+  /// Creates a new [OrganizationModel] instance.
   const OrganizationModel({
     required super.id,
     required super.name,
@@ -10,6 +14,9 @@ class OrganizationModel extends Organization {
     required super.timeZone,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into an [OrganizationModel].
+  ///
+  /// Mappes keys (`organization_id`, `currency_code`, `currency_symbol`, `fiscal_year_start_month`) correctly.
   factory OrganizationModel.fromJson(Map<String, dynamic> json) {
     return OrganizationModel(
       id: json['organization_id'] ?? json['id'] ?? '',
@@ -22,6 +29,7 @@ class OrganizationModel extends Organization {
     );
   }
 
+  /// Converts this [OrganizationModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -34,6 +42,7 @@ class OrganizationModel extends Organization {
     };
   }
 
+  /// Translates a base domain [Organization] entity into its [OrganizationModel] DTO representation.
   factory OrganizationModel.fromDomain(Organization o) {
     return OrganizationModel(
       id: o.id,
@@ -45,3 +54,4 @@ class OrganizationModel extends Organization {
     );
   }
 }
+

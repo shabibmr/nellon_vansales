@@ -1,13 +1,29 @@
 import 'package:equatable/equatable.dart';
 
+/// Represents the authenticated Sales Agent or User operating the van sales application.
+///
+/// Holds basic profile details, system roles, current route assignment,
+/// and the specific physical warehouse ID mapped to their delivery van.
 class User extends Equatable {
+  /// Unique identifier of the user (e.g. Firebase UID).
   final String id;
-  final String name;
-  final String email;
-  final String role; // e.g. "agent", "admin"
-  final String? activeRouteId;
-  final String? assignedVanWarehouseId; // Zoho warehouse ID specific to this van
 
+  /// Full display name of the user.
+  final String name;
+
+  /// Primary email address used for login.
+  final String email;
+
+  /// Authorization role in the system (e.g., "agent", "admin").
+  final String role;
+
+  /// ID of the route currently active for this session, if any.
+  final String? activeRouteId;
+
+  /// Zoho warehouse ID representing the physical inventory stocked in this user's van.
+  final String? assignedVanWarehouseId;
+
+  /// Creates a new [User] profile session entity.
   const User({
     required this.id,
     required this.name,
@@ -17,6 +33,7 @@ class User extends Equatable {
     this.assignedVanWarehouseId,
   });
 
+  /// Creates a copy of this [User] with replaced values for specific fields.
   User copyWith({
     String? id,
     String? name,
@@ -45,3 +62,4 @@ class User extends Equatable {
         assignedVanWarehouseId,
       ];
 }
+

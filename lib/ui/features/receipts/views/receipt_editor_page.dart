@@ -4,7 +4,11 @@ import 'package:intl/intl.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/receipt_bloc.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
+import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../domain/models/receipt_voucher.dart';
 
 class ReceiptEditorPage extends StatefulWidget {
   const ReceiptEditorPage({super.key});
@@ -73,6 +77,7 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
   }
 
   void _showCustomerSelector(BuildContext context, bool isDark) {
+    final cs = context.org.currencySymbol;
     final allCustomers = _db.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
 
     showModalBottomSheet(
@@ -160,7 +165,7 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                   subtitle: Text(customer.companyName),
                                   trailing: customer.outstandingBalance > 0
                                       ? Text(
-                                          'Outstanding: ₹${customer.outstandingBalance.toStringAsFixed(2)}',
+                                          'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
                                           style: const TextStyle(
                                               color: AppTheme.errorRose,
                                               fontSize: 11,
@@ -223,6 +228,7 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
         builder: (context, state) {
           final date = state.editingDate ?? DateTime.now();
           final customer = state.editingCustomer;
+          final cs = context.org.currencySymbol;
 
           return Column(
             children: [
@@ -287,7 +293,7 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                           ),
                                           if (customer.outstandingBalance > 0)
                                             Text(
-                                              'Outstanding: ₹${customer.outstandingBalance.toStringAsFixed(2)}',
+                                              'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 color: AppTheme.errorRose,
@@ -367,10 +373,9 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                             final amount = double.tryParse(v) ?? 0.0;
                             context.read<ReceiptBloc>().add(SetEditingAmount(amount));
                           },
-                          decoration: const InputDecoration(
-                            labelText: 'Payment Amount (₹)',
-                            prefixIcon:
-                                Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
+                          decoration: InputDecoration(
+                            labelText: 'Payment Amount ($cs)',
+                            prefixIcon: const Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -447,7 +452,7 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                 style: TextStyle(
                                     fontWeight: FontWeight.w900, fontSize: 16)),
                             Text(
-                              '₹${state.editingAmount.toStringAsFixed(2)}',
+                              '$cs${state.editingAmount.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 18,
@@ -474,6 +479,53 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                 style: TextStyle(color: Colors.white)),
                           ),
                         ),
+                        if (!state.isEditingNew) ...[
+                          const SizedBox(height: 16),
+                          VoucherPdfActionsWidget(
+                            type: VoucherType.paymentReceipt,
+                            voucher: ReceiptVoucher(
+                              id: state.editingId ?? '',
+                              paymentNumber: state.receipts
+                                  .firstWhere(
+                                    (rec) => rec.id == state.editingId,
+                                    orElse: () => ReceiptVoucher(
+                                      id: '',
+                                      paymentNumber: 'RCPT-TEMP',
+                                      customerId: '',
+                                      customerName: '',
+                                      allocations: const [],
+                                      amount: 0,
+                                      paymentMode: 'Cash',
+                                      referenceNumber: '',
+                                      date: DateTime.now(),
+                                    ),
+                                  )
+                                  .paymentNumber,
+                              customerId: customer?.id ?? '',
+                              customerName: customer?.name ?? '',
+                              allocations: state.receipts
+                                  .firstWhere(
+                                    (rec) => rec.id == state.editingId,
+                                    orElse: () => ReceiptVoucher(
+                                      id: '',
+                                      paymentNumber: 'RCPT-TEMP',
+                                      customerId: '',
+                                      customerName: '',
+                                      allocations: const [],
+                                      amount: 0,
+                                      paymentMode: 'Cash',
+                                      referenceNumber: '',
+                                      date: DateTime.now(),
+                                    ),
+                                  )
+                                  .allocations,
+                              amount: state.editingAmount,
+                              paymentMode: state.editingPaymentMode,
+                              referenceNumber: state.editingReferenceNumber,
+                              date: date,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

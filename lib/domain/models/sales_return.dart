@@ -1,17 +1,26 @@
 import 'package:equatable/equatable.dart';
 import 'sales_invoice.dart';
 
+/// Represents a single returned line item in a customer sales return/credit note.
+///
+/// Wraps the original invoiced line item and specifies the quantity being returned by the customer.
 class SalesReturnLineItem extends Equatable {
+  /// The original invoiced line item reference.
   final InvoiceLineItem invoiceLineItem;
+
+  /// Quantity of items returned by the customer.
   final int returnedQuantity;
 
+  /// Creates a new [SalesReturnLineItem].
   const SalesReturnLineItem({
     required this.invoiceLineItem,
     required this.returnedQuantity,
   });
 
+  /// Computes the total return value (rate * quantity returned) for this line.
   double get total => invoiceLineItem.rate * returnedQuantity;
 
+  /// Creates a copy of this [SalesReturnLineItem] with replaced values for specific fields.
   SalesReturnLineItem copyWith({
     InvoiceLineItem? invoiceLineItem,
     int? returnedQuantity,
@@ -26,16 +35,35 @@ class SalesReturnLineItem extends Equatable {
   List<Object?> get props => [invoiceLineItem, returnedQuantity];
 }
 
+/// Represents a Sales Return (Credit Note) voucher created locally.
+///
+/// Logged when a customer returns goods on the route due to damage, incorrect item, or surplus.
 class SalesReturn extends Equatable {
+  /// Unique identifier of the sales return record.
   final String id;
+
+  /// Human-readable credit note reference number.
   final String creditNoteNumber;
+
+  /// The customer ID.
   final String customerId;
+
+  /// Display name of the customer.
   final String customerName;
+
+  /// Date the return was processed.
   final DateTime date;
+
+  /// Collection of returned line items.
   final List<SalesReturnLineItem> items;
+
+  /// Description/reason for the return.
   final String reason;
+
+  /// Flag indicating if the return is pending synchronization with Zoho Books.
   final bool isPendingSync;
 
+  /// Creates a new [SalesReturn] record.
   const SalesReturn({
     required this.id,
     required this.creditNoteNumber,
@@ -47,8 +75,10 @@ class SalesReturn extends Equatable {
     this.isPendingSync = false,
   });
 
+  /// Computes the final grand total return value.
   double get total => items.fold(0.0, (sum, item) => sum + item.total);
 
+  /// Creates a copy of this [SalesReturn] with replaced values for specific fields.
   SalesReturn copyWith({
     String? id,
     String? creditNoteNumber,
@@ -83,3 +113,4 @@ class SalesReturn extends Equatable {
         isPendingSync,
       ];
 }
+

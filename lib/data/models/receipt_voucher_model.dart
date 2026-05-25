@@ -1,12 +1,17 @@
 import '../../domain/models/receipt_voucher.dart';
 
+/// Data transfer object representing a [PaymentAllocation] entry.
+///
+/// Maps payment allocations to individual outstanding invoices when posting payment records.
 class PaymentAllocationModel extends PaymentAllocation {
+  /// Creates a new [PaymentAllocationModel] instance.
   const PaymentAllocationModel({
     required super.invoiceId,
     required super.invoiceNumber,
     required super.amountApplied,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into a [PaymentAllocationModel].
   factory PaymentAllocationModel.fromJson(Map<String, dynamic> json) {
     return PaymentAllocationModel(
       invoiceId: json['invoice_id'] ?? json['invoiceId'] ?? '',
@@ -15,6 +20,7 @@ class PaymentAllocationModel extends PaymentAllocation {
     );
   }
 
+  /// Converts this [PaymentAllocationModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'invoice_id': invoiceId,
@@ -23,6 +29,7 @@ class PaymentAllocationModel extends PaymentAllocation {
     };
   }
 
+  /// Translates a base domain [PaymentAllocation] entity into its [PaymentAllocationModel] DTO representation.
   factory PaymentAllocationModel.fromDomain(PaymentAllocation domain) {
     return PaymentAllocationModel(
       invoiceId: domain.invoiceId,
@@ -32,7 +39,11 @@ class PaymentAllocationModel extends PaymentAllocation {
   }
 }
 
+/// Data transfer object representing a [ReceiptVoucher] collection voucher.
+///
+/// Maps customer payments, multi-invoice allocations, and sync parameters for database storage and background uploading.
 class ReceiptVoucherModel extends ReceiptVoucher {
+  /// Creates a new [ReceiptVoucherModel] instance.
   const ReceiptVoucherModel({
     required super.id,
     required super.paymentNumber,
@@ -46,12 +57,14 @@ class ReceiptVoucherModel extends ReceiptVoucher {
     super.isPendingSync,
   });
 
+  /// Factory constructor to parse local database JSON maps into a [ReceiptVoucherModel].
   factory ReceiptVoucherModel.fromJson(Map<String, dynamic> json) {
     return ReceiptVoucherModel(
       id: json['payment_id'] ?? json['id'] ?? '',
       paymentNumber: json['payment_number'] ?? json['paymentNumber'] ?? '',
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       customerName: json['customer_name'] ?? json['customerName'] ?? '',
+      // Parses list of dynamic invoice objects into [PaymentAllocationModel] list.
       allocations: (json['invoices'] as List?)
               ?.map((item) => PaymentAllocationModel.fromJson(item))
               .toList() ??
@@ -64,6 +77,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
     );
   }
 
+  /// Converts this [ReceiptVoucherModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -76,12 +90,14 @@ class ReceiptVoucherModel extends ReceiptVoucher {
       'reference_number': referenceNumber,
       'date': date.toIso8601String().split('T')[0],
       'isPendingSync': isPendingSync,
+      // Transforms domain allocations back into JSON representation for storage.
       'invoices': allocations
           .map((item) => PaymentAllocationModel.fromDomain(item).toJson())
           .toList(),
     };
   }
 
+  /// Translates a base domain [ReceiptVoucher] entity into its [ReceiptVoucherModel] representation.
   factory ReceiptVoucherModel.fromDomain(ReceiptVoucher voucher) {
     return ReceiptVoucherModel(
       id: voucher.id,

@@ -1,6 +1,10 @@
 import '../../domain/models/payment_account.dart';
 
+/// Data transfer object representing a deposit [PaymentAccount].
+///
+/// Directs serialization of Zoho Chart of Accounts ledger structures for collection entry mapping.
 class PaymentAccountModel extends PaymentAccount {
+  /// Creates a new [PaymentAccountModel] instance.
   const PaymentAccountModel({
     required super.id,
     required super.name,
@@ -9,6 +13,9 @@ class PaymentAccountModel extends PaymentAccount {
     required super.paymentMode,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into a [PaymentAccountModel].
+  ///
+  /// Mappes Zoho ledger fields (`account_id`, `account_name`, `account_type`, `currency_code`, `payment_mode`) with fallback defaults.
   factory PaymentAccountModel.fromJson(Map<String, dynamic> json) {
     return PaymentAccountModel(
       id: json['account_id'] ?? json['id'] ?? '',
@@ -19,6 +26,7 @@ class PaymentAccountModel extends PaymentAccount {
     );
   }
 
+  /// Converts this [PaymentAccountModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -31,6 +39,7 @@ class PaymentAccountModel extends PaymentAccount {
     };
   }
 
+  /// Translates a base domain [PaymentAccount] entity into a serializable [PaymentAccountModel].
   factory PaymentAccountModel.fromDomain(PaymentAccount a) {
     return PaymentAccountModel(
       id: a.id,
@@ -41,3 +50,4 @@ class PaymentAccountModel extends PaymentAccount {
     );
   }
 }
+

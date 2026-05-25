@@ -6,9 +6,12 @@ import '../../../../domain/models/sales_invoice.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/sales_invoice_bloc.dart';
 import '../widgets/item_line_editor_dialog.dart';
 import '../widgets/item_search_dialog.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
+import '../../../../data/services/voucher_pdf_service.dart';
 
 /// Screen enabling Creation or Editing of a Sales Invoice.
 ///
@@ -17,7 +20,7 @@ import '../widgets/item_search_dialog.dart';
 /// 2. Customer Selector modal.
 /// 3. Dynamic multi-line items list.
 /// 4. Tap-to-adjust or swipe-to-delete line items.
-/// 5. Live pricing summary (Subtotal, GST, Total).
+/// 5. Live pricing summary (Subtotal, VAT, Total).
 /// 6. Save trigger with automatic van stock reconciliation.
 class SalesInvoiceEditorPage extends StatefulWidget {
   const SalesInvoiceEditorPage({super.key});
@@ -81,6 +84,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
   }
 
   void _showCustomerSelector(BuildContext context) {
+    final cs = context.org.currencySymbol;
     final allCustomers = _db.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -172,7 +176,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                                   subtitle: Text(customer.companyName),
                                   trailing: customer.outstandingBalance > 0
                                       ? Text(
-                                          'Outstanding: ₹${customer.outstandingBalance.toStringAsFixed(2)}',
+                                          'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
                                           style: const TextStyle(color: AppTheme.errorRose, fontSize: 11, fontWeight: FontWeight.bold),
                                         )
                                       : null,
@@ -281,14 +285,15 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
           }
         },
         builder: (context, state) {
+          final cs = context.org.currencySymbol;
           // Summary Totals
           double subtotal = 0.0;
-          double gst = 0.0;
+          double vat = 0.0;
           for (final line in state.editingItems) {
             subtotal += line.subTotal;
-            gst += line.taxAmount;
+            vat += line.taxAmount;
           }
-          final total = subtotal + gst;
+          final total = subtotal + vat;
 
           final customer = state.editingCustomer;
           final date = state.editingDate ?? DateTime.now();
@@ -486,7 +491,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                'SKU: ${line.item.sku} | Rate: ₹${line.rate.toStringAsFixed(2)} | GST: ${line.taxPercentage}%',
+                                                'SKU: ${line.item.sku} | Rate: $cs${line.rate.toStringAsFixed(2)} | VAT: ${line.taxPercentage}%',
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
@@ -504,7 +509,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              '₹${line.total.toStringAsFixed(2)}',
+                                              '$cs${line.total.toStringAsFixed(2)}',
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 13,
@@ -583,7 +588,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                                 color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                               ),
                             ),
-                            Text('₹${subtotal.toStringAsFixed(2)}'),
+                            Text('$cs${subtotal.toStringAsFixed(2)}'),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -591,13 +596,13 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'GST (Tax):',
+                              'VAT (Tax):',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                               ),
                             ),
-                            Text('₹${gst.toStringAsFixed(2)}'),
+                            Text('$cs${vat.toStringAsFixed(2)}'),
                           ],
                         ),
                         const Divider(height: 16),
@@ -609,7 +614,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                             ),
                             Text(
-                              '₹${total.toStringAsFixed(2)}',
+                              '$cs${total.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 18,
@@ -636,6 +641,36 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                             child: const Text('SAVE SALES INVOICE'),
                           ),
                         ),
+                        if (!state.isEditingNew) ...[
+                          const SizedBox(height: 16),
+                          VoucherPdfActionsWidget(
+                            type: VoucherType.salesInvoice,
+                            voucher: SalesInvoice(
+                              id: state.editingInvoiceId ?? '',
+                              invoiceNumber: state.invoices
+                                  .firstWhere(
+                                    (inv) => inv.id == state.editingInvoiceId,
+                                    orElse: () => SalesInvoice(
+                                      id: '',
+                                      invoiceNumber: 'INV-TEMP',
+                                      customerId: '',
+                                      customerName: '',
+                                      date: DateTime.now(),
+                                      dueDate: DateTime.now(),
+                                      items: const [],
+                                      notes: '',
+                                    ),
+                                  )
+                                  .invoiceNumber,
+                              customerId: customer?.id ?? '',
+                              customerName: customer?.name ?? '',
+                              date: date,
+                              dueDate: state.editingDate?.add(const Duration(days: 30)) ?? DateTime.now(),
+                              items: state.editingItems,
+                              notes: _notesController.text,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

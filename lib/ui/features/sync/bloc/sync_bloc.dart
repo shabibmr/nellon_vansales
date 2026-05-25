@@ -5,39 +5,62 @@ import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 
 // --- Events ---
+
+/// Base class for all sync-related events processed by [SyncBloc].
 abstract class SyncEvent extends Equatable {
   const SyncEvent();
   @override
   List<Object?> get props => [];
 }
 
+/// Fired on BLoC instantiation to establish status and count stream listeners from SyncRepository.
 class SyncStarted extends SyncEvent {}
 
+/// Fired to trigger an immediate upload sweep of all pending transaction queue tasks.
 class TriggerSync extends SyncEvent {}
 
+/// Fired to request a full master data cache refresh sequence from Zoho Books.
 class RefreshMasterDataRequested extends SyncEvent {}
 
+/// Fired internally by stream listeners to update the active synchronization status text.
 class SyncStatusUpdated extends SyncEvent {
+  /// The updated status string.
   final String statusMessage;
+
+  /// Creates a [SyncStatusUpdated] event.
   const SyncStatusUpdated(this.statusMessage);
   @override
   List<Object?> get props => [statusMessage];
 }
 
+/// Fired internally by stream listeners to update the remaining unsynced queue task counts.
 class PendingQueueCountUpdated extends SyncEvent {
+  /// Remaining items count.
   final int count;
+
+  /// Creates a [PendingQueueCountUpdated] event.
   const PendingQueueCountUpdated(this.count);
   @override
   List<Object?> get props => [count];
 }
 
 // --- States ---
+
+/// Holds state variables representing sync status logs, pending items counts, and current running queues.
 class SyncState extends Equatable {
+  /// Text message explaining sync state.
   final String statusMessage;
+
+  /// Number of pending unsynced queue items.
   final int pendingCount;
+
+  /// Loader flag indicating if a sync sequence is actively executing.
   final bool isSyncing;
+
+  /// The active sync queue items cache.
   final List<SyncQueueItem> queueItems;
 
+  /// Creates a [SyncState].
   const SyncState({
     this.statusMessage = 'Idle',
     this.pendingCount = 0,
@@ -45,6 +68,7 @@ class SyncState extends Equatable {
     this.queueItems = const [],
   });
 
+  /// Returns a copy of [SyncState] with replaced values for specified fields.
   SyncState copyWith({
     String? statusMessage,
     int? pendingCount,
@@ -64,13 +88,18 @@ class SyncState extends Equatable {
 }
 
 // --- Bloc ---
+
+/// Business Logic Component coordinating background sync triggers and monitoring queues.
+///
+/// Drives dashboard status notifications, master updates, and maps stream subscriptions.
 class SyncBloc extends Bloc<SyncEvent, SyncState> {
   final SyncRepository _syncRepository;
   StreamSubscription<String>? _statusSubscription;
   StreamSubscription<int>? _countSubscription;
 
+  /// Instantiates a new [SyncBloc] mapping sync streams.
   SyncBloc({
-    required SyncRepository this._syncRepository,
+    required this._syncRepository,
   })  : super(const SyncState()) {
     on<SyncStarted>(_onSyncStarted);
     on<TriggerSync>(_onTriggerSync);

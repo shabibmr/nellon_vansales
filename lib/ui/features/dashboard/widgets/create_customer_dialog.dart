@@ -6,11 +6,18 @@ import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../route/bloc/route_bloc.dart';
 
+/// Modal dialog for logging a new customer offline on the route.
+///
+/// Prompts fields for customer display name, company name, address, email, phone, and credit parameters.
+/// Instantly saves a local client record with a temporary client ID and pushes an upload job to the Sync Queue.
 class CreateCustomerDialog extends StatefulWidget {
+  /// Callback triggered when the customer creation transaction successfully completes.
   final VoidCallback onCustomerCreated;
 
+  /// Creates a new [CreateCustomerDialog].
   const CreateCustomerDialog({
     super.key,
     required this.onCustomerCreated,
@@ -124,6 +131,7 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = context.org.currencySymbol;
 
     return AlertDialog(
       title: Row(
@@ -209,7 +217,7 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                 const SizedBox(height: 12),
                 _buildField(
                   controller: _creditLimitController,
-                  label: 'Credit Limit (₹)',
+                  label: 'Credit Limit ($cs)',
                   icon: Icons.credit_score_outlined,
                   isDark: isDark,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),

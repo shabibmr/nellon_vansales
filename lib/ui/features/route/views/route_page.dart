@@ -3,7 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../bloc/route_bloc.dart';
 
+/// The Route Selection View.
+///
+/// Prompts sales agents to choose and lock their active daily delivery route on app launch or route shift.
 class RouteSelectionPage extends StatefulWidget {
+  /// Creates a new [RouteSelectionPage].
   const RouteSelectionPage({super.key});
 
   @override

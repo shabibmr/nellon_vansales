@@ -1,7 +1,11 @@
 import '../../domain/models/sales_invoice.dart';
 import 'item_model.dart';
 
+/// Data transfer object representing an [InvoiceLineItem].
+///
+/// Handles converting specific invoice row mappings, stock SKUs, and tax percentages to backend schemas.
 class InvoiceLineItemModel extends InvoiceLineItem {
+  /// Creates a new [InvoiceLineItemModel] instance.
   const InvoiceLineItemModel({
     required super.item,
     required super.quantity,
@@ -9,6 +13,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
     required super.taxPercentage,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into an [InvoiceLineItemModel].
   factory InvoiceLineItemModel.fromJson(Map<String, dynamic> json) {
     return InvoiceLineItemModel(
       item: ItemModel.fromJson(json['item'] ?? json),
@@ -18,6 +23,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
     );
   }
 
+  /// Converts this [InvoiceLineItemModel] into a serialization compatible JSON map.
   Map<String, dynamic> toJson() {
     return {
       'item_id': item.id,
@@ -28,6 +34,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
     };
   }
 
+  /// Translates a base domain [InvoiceLineItem] entity into its [InvoiceLineItemModel] DTO representation.
   factory InvoiceLineItemModel.fromDomain(InvoiceLineItem lineItem) {
     return InvoiceLineItemModel(
       item: lineItem.item,
@@ -38,7 +45,11 @@ class InvoiceLineItemModel extends InvoiceLineItem {
   }
 }
 
+/// Data transfer object representing a [SalesInvoice] voucher.
+///
+/// Marshals invoice rows, customer metadata, and sync flags into a database format.
 class SalesInvoiceModel extends SalesInvoice {
+  /// Creates a new [SalesInvoiceModel] instance.
   const SalesInvoiceModel({
     required super.id,
     required super.invoiceNumber,
@@ -51,6 +62,7 @@ class SalesInvoiceModel extends SalesInvoice {
     super.isPendingSync,
   });
 
+  /// Factory constructor to parse local database JSON maps into a [SalesInvoiceModel].
   factory SalesInvoiceModel.fromJson(Map<String, dynamic> json) {
     return SalesInvoiceModel(
       id: json['invoice_id'] ?? json['id'] ?? '',
@@ -68,6 +80,7 @@ class SalesInvoiceModel extends SalesInvoice {
     );
   }
 
+  /// Converts this [SalesInvoiceModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -85,6 +98,7 @@ class SalesInvoiceModel extends SalesInvoice {
     };
   }
 
+  /// Translates a base domain [SalesInvoice] entity into its [SalesInvoiceModel] representation.
   factory SalesInvoiceModel.fromDomain(SalesInvoice invoice) {
     return SalesInvoiceModel(
       id: invoice.id,
@@ -99,3 +113,4 @@ class SalesInvoiceModel extends SalesInvoice {
     );
   }
 }
+

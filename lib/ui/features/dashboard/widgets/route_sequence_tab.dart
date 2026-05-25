@@ -2,12 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../route/bloc/route_bloc.dart';
 
+/// The Route Sequence tab of the sales dashboard.
+///
+/// Displays the list of customers assigned to the currently selected route sequence.
+/// Prompts a real-time prefix-filter search text field and orders customers by their
+/// sequential trip number. Tapping a customer reveals their details and available transactions.
 class RouteSequenceTab extends StatelessWidget {
+  /// Visual style context flag.
   final bool isDark;
+
+  /// Callback triggered when a customer tile is tapped to open actions/details.
   final Function(Customer customer) onCustomerTap;
 
+  /// Creates a new [RouteSequenceTab] widget.
   const RouteSequenceTab({
     super.key,
     required this.isDark,
@@ -16,6 +26,7 @@ class RouteSequenceTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = context.org.currencySymbol;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600),
@@ -130,7 +141,7 @@ class RouteSequenceTab extends StatelessWidget {
                                         ),
                                       ),
                                       Text(
-                                        '₹${customer.outstandingBalance.toStringAsFixed(2)}',
+                                        '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
                                         style: TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w900,

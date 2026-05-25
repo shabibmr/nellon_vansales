@@ -1,15 +1,26 @@
 import 'package:equatable/equatable.dart';
 
-/// A Zoho Books bank or cash ledger used as `deposit_to` when creating
-/// a customer payment. The van app maps each UI payment mode
-/// (Cash / Cheque / Bank Transfer / Card) to one of these accounts.
+/// Represents a Zoho Books financial account used to deposit collections.
+///
+/// Serves as the target `deposit_to` account mapping for local payment entries
+/// (e.g. mapping cash, cheque, bank transfer, or card options to concrete ledgers).
 class PaymentAccount extends Equatable {
-  final String id; // Zoho account_id
-  final String name;
-  final String accountType; // bank | cash | other_current_asset
-  final String currencyCode;
-  final String paymentMode; // UI-facing label: Cash, Cheque, Bank Transfer, Card
+  /// Unique account identifier from Zoho (account_id).
+  final String id;
 
+  /// Display name of the deposit/payment account.
+  final String name;
+
+  /// Classification type of the ledger (e.g. "bank", "cash", "other_current_asset").
+  final String accountType;
+
+  /// Primary currency code of the account (e.g. "USD", "AED").
+  final String currencyCode;
+
+  /// UI-facing label categorization (e.g., "Cash", "Cheque", "Bank Transfer", "Card").
+  final String paymentMode;
+
+  /// Creates a new [PaymentAccount] mapping.
   const PaymentAccount({
     required this.id,
     required this.name,
@@ -18,6 +29,7 @@ class PaymentAccount extends Equatable {
     required this.paymentMode,
   });
 
+  /// Creates a copy of this [PaymentAccount] with replaced values for specific fields.
   PaymentAccount copyWith({
     String? id,
     String? name,
@@ -37,3 +49,4 @@ class PaymentAccount extends Equatable {
   @override
   List<Object?> get props => [id, name, accountType, currencyCode, paymentMode];
 }
+

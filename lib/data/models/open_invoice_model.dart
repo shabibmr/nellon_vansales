@@ -1,6 +1,10 @@
 import '../../domain/models/open_invoice.dart';
 
+/// Data transfer object representing an [OpenInvoice] outstanding billing record.
+///
+/// Implements date parsers and bridges remote Zoho Books Invoice API responses for offline collection sheets.
 class OpenInvoiceModel extends OpenInvoice {
+  /// Creates a new [OpenInvoiceModel] instance.
   const OpenInvoiceModel({
     required super.invoiceId,
     required super.invoiceNumber,
@@ -12,6 +16,9 @@ class OpenInvoiceModel extends OpenInvoice {
     required super.status,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into an [OpenInvoiceModel].
+  ///
+  /// Mappes keys (`invoice_id`, `invoice_number`, `customer_id`, `due_date`) cleanly with dynamic date parsers.
   factory OpenInvoiceModel.fromJson(Map<String, dynamic> json) {
     DateTime parseDate(dynamic v) {
       if (v == null) return DateTime.now();
@@ -31,6 +38,7 @@ class OpenInvoiceModel extends OpenInvoice {
     );
   }
 
+  /// Converts this [OpenInvoiceModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'invoice_id': invoiceId,
@@ -44,6 +52,7 @@ class OpenInvoiceModel extends OpenInvoice {
     };
   }
 
+  /// Translates a base domain [OpenInvoice] entity into its [OpenInvoiceModel] DTO representation.
   factory OpenInvoiceModel.fromDomain(OpenInvoice i) {
     return OpenInvoiceModel(
       invoiceId: i.invoiceId,
@@ -57,3 +66,4 @@ class OpenInvoiceModel extends OpenInvoice {
     );
   }
 }
+

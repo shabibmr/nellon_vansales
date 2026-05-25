@@ -2,23 +2,45 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'hive_database_service.dart';
 
+/// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
+///
+/// Implements standard JSON mappings, handles Zoho OAuth 2.0 access token self-refreshing retries, 
+/// and includes simulated sandbox datasets when running in mock credential modes.
 class ZohoApiClient {
   final Dio _dio = Dio();
   final HiveDatabaseService _dbService;
 
-  // Zoho OAuth 2.0 credentials (in a real-world scenario, read these from secure build config or env)
+  // Zoho OAuth 2.0 credentials (read from secure build configurations or environments in production)
   final String _accountsUrl = 'https://accounts.zoho.com/oauth/v2/token';
   final String _apiUrl = 'https://www.zohoapis.com/books/v3';
   
-  final String _clientId = '1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP';
-  final String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
+  String _clientId = '1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP';
+  String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
+  String _refreshToken = '1000.ccb7c895a473ba5569c55565c0aed87d.c2f3a5530356193d39a19c511efed856';
   final String _organizationId = '783019958';
 
-  // Milestone 1: transaction posting is mocked end-to-end while masters are wired up.
-  // Flip to false once invoice/receipt/return/expense/customer payloads are validated against Zoho.
+  /// Updates Zoho OAuth integration credentials on the fly (called upon loading server config).
+  void updateCredentials({
+    required String clientId,
+    required String clientSecret,
+    required String refreshToken,
+  }) {
+    _clientId = clientId;
+    _clientSecret = clientSecret;
+    _refreshToken = refreshToken;
+  }
+
+  /// Toggle this to mock transaction uploads (invoices, receipts, returns, expenses) to a sandbox,
+  /// preserving live connection configurations for master downloads.
   static const bool _mockTransactions = true;
 
-  ZohoApiClient({required HiveDatabaseService this._dbService}) {
+  /// Instantiates a new [ZohoApiClient].
+  ///
+  /// Configures connect/receive timeouts and sets up a robust interceptor to:
+  /// - Automatically inject active Zoho OAuth header strings (`Zoho-oauthtoken <token>`).
+  /// - Intercept `401 Unauthorized` responses and trigger transparent token-refresh workflows.
+  /// - Re-execute the original request with the fresh token without user interruption.
+  ZohoApiClient({required this._dbService}) {
     _dio.options.baseUrl = _apiUrl;
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
@@ -63,12 +85,15 @@ class ZohoApiClient {
     );
   }
 
+  /// Returns true if the client credentials remain the placeholder templates (forcing mock behavior).
   bool _isMockMode() {
     // Falls back to mock mode if credentials are still placeholder templates
     return _clientId.contains('YOUR_CLIENT_ID');
   }
 
   // --- OAuth 2.0 Handlers ---
+  
+  /// Fetches the cached OAuth access token or triggers a refresh workflow if expired.
   Future<String?> _getOrRefreshAccessToken() async {
     if (_isMockMode()) return 'mock_access_token';
 
@@ -86,10 +111,11 @@ class ZohoApiClient {
     return _refreshAccessToken();
   }
 
+  /// Standard OAuth refresh execution block that obtains a fresh access token from Zoho Accounts.
   Future<String?> _refreshAccessToken({bool force = false}) async {
     if (_isMockMode()) return 'mock_access_token';
 
-    const refreshToken = '1000.ccb7c895a473ba5569c55565c0aed87d.c2f3a5530356193d39a19c511efed856';
+    final refreshToken = _refreshToken;
     try {
       final response = await Dio().post(
         _accountsUrl,
@@ -143,15 +169,14 @@ class ZohoApiClient {
     ];
   }
 
-  // 2. Fetch Customers in Active Route
-  Future<List<Map<String, dynamic>>> fetchCustomers(String routeId) async {
+  // 2. Fetch All Customers
+  Future<List<Map<String, dynamic>>> fetchCustomers() async {
     if (!_isMockMode()) {
       try {
         final response = await _dio.get(
           '/contacts',
           queryParameters: {
             'contact_type': 'customer',
-            'cf_route_id': routeId, // assumes a custom contact field
             'per_page': 200,
           },
         );
@@ -159,11 +184,12 @@ class ZohoApiClient {
           final list = (response.data['contacts'] as List? ?? []);
           return list.map((c) => Map<String, dynamic>.from(c)).toList();
         }
+        throw Exception('Failed to fetch customers: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchCustomers error: $e');
+        throw Exception('Failed to fetch customers from Zoho: $e');
       }
-      return const [];
     }
 
     await Future.delayed(const Duration(milliseconds: 700));
@@ -232,29 +258,37 @@ class ZohoApiClient {
       }
     ];
 
-    return allCustomers.where((c) => c['route_id'] == routeId).toList();
+    return allCustomers;
   }
 
   // 3. Fetch Items in Van Warehouse (Zoho Books Warehouse Inventory API)
   Future<List<Map<String, dynamic>>> fetchItems(String warehouseId) async {
     if (!_isMockMode()) {
       try {
+        final queryParams = <String, dynamic>{
+          'per_page': 200,
+        };
+        // Only query by warehouse_id if it is a real numeric Zoho warehouse ID (not empty or mock prefix)
+        if (warehouseId.isNotEmpty &&
+            !warehouseId.startsWith('van_wh_') &&
+            RegExp(r'^\d+$').hasMatch(warehouseId)) {
+          queryParams['warehouse_id'] = warehouseId;
+        }
+
         final response = await _dio.get(
           '/items',
-          queryParameters: {
-            'warehouse_id': warehouseId,
-            'per_page': 200,
-          },
+          queryParameters: queryParams,
         );
         if (response.statusCode == 200) {
           final list = (response.data['items'] as List? ?? []);
           return list.map((i) => Map<String, dynamic>.from(i)).toList();
         }
+        throw Exception('Failed to fetch items: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchItems error: $e');
+        throw Exception('Failed to fetch items from Zoho: $e');
       }
-      return const [];
     }
 
     await Future.delayed(const Duration(milliseconds: 650));
@@ -268,7 +302,7 @@ class ZohoApiClient {
         'rate': 60.00,
         'stock_on_hand': 120, // Assigned stock for this van warehouse
         'description': 'Homogenized Pasteurised Whole Milk',
-        'tax_name': 'GST 5%',
+        'tax_name': 'VAT 5%',
         'tax_percentage': 5.0
       },
       {
@@ -278,7 +312,7 @@ class ZohoApiClient {
         'rate': 120.00,
         'stock_on_hand': 45,
         'description': 'Baked chocolate cookies with premium chips',
-        'tax_name': 'GST 12%',
+        'tax_name': 'VAT 12%',
         'tax_percentage': 12.0
       },
       {
@@ -288,7 +322,7 @@ class ZohoApiClient {
         'rate': 20.00,
         'stock_on_hand': 200,
         'description': 'Naturally filtered pure spring water',
-        'tax_name': 'GST 18%',
+        'tax_name': 'VAT 18%',
         'tax_percentage': 18.0
       },
       {
@@ -298,7 +332,7 @@ class ZohoApiClient {
         'rate': 240.00,
         'stock_on_hand': 30,
         'description': 'Aged sharp premium cheddar block',
-        'tax_name': 'GST 5%',
+        'tax_name': 'VAT 5%',
         'tax_percentage': 5.0
       },
       {
@@ -308,7 +342,7 @@ class ZohoApiClient {
         'rate': 90.00,
         'stock_on_hand': 15,
         'description': 'Artisanal high-fiber wheat sourdough loaf',
-        'tax_name': 'GST 5%',
+        'tax_name': 'VAT 5%',
         'tax_percentage': 5.0
       }
     ];
@@ -428,11 +462,12 @@ class ZohoApiClient {
           final list = (response.data['warehouses'] as List? ?? []);
           return list.map((w) => Map<String, dynamic>.from(w)).toList();
         }
+        throw Exception('Failed to fetch warehouses: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchWarehouses error: $e');
+        throw Exception('Failed to fetch warehouses from Zoho: $e');
       }
-      return const [];
     }
 
     await Future.delayed(const Duration(milliseconds: 300));
@@ -455,11 +490,12 @@ class ZohoApiClient {
           final list = (response.data['bankaccounts'] as List? ?? []);
           return list.map((a) => Map<String, dynamic>.from(a)).toList();
         }
+        throw Exception('Failed to fetch payment accounts: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchPaymentAccounts error: $e');
+        throw Exception('Failed to fetch payment accounts from Zoho: $e');
       }
-      return const [];
     }
 
     await Future.delayed(const Duration(milliseconds: 300));
@@ -490,18 +526,19 @@ class ZohoApiClient {
           final list = (response.data['taxes'] as List? ?? []);
           return list.map((t) => Map<String, dynamic>.from(t)).toList();
         }
+        throw Exception('Failed to fetch taxes: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchTaxes error: $e');
+        throw Exception('Failed to fetch taxes from Zoho: $e');
       }
-      return const [];
     }
 
     await Future.delayed(const Duration(milliseconds: 300));
     return [
-      {'tax_id': 'tax_5',  'tax_name': 'GST 5%',  'tax_percentage': 5.0,  'tax_type': 'tax', 'is_default_tax': true},
-      {'tax_id': 'tax_12', 'tax_name': 'GST 12%', 'tax_percentage': 12.0, 'tax_type': 'tax'},
-      {'tax_id': 'tax_18', 'tax_name': 'GST 18%', 'tax_percentage': 18.0, 'tax_type': 'tax'},
+      {'tax_id': 'tax_5',  'tax_name': 'VAT 5%',  'tax_percentage': 5.0,  'tax_type': 'tax', 'is_default_tax': true},
+      {'tax_id': 'tax_12', 'tax_name': 'VAT 12%', 'tax_percentage': 12.0, 'tax_type': 'tax'},
+      {'tax_id': 'tax_18', 'tax_name': 'VAT 18%', 'tax_percentage': 18.0, 'tax_type': 'tax'},
     ];
   }
 
@@ -517,11 +554,12 @@ class ZohoApiClient {
           final list = (response.data['chartofaccounts'] as List? ?? []);
           return list.map((a) => Map<String, dynamic>.from(a)).toList();
         }
+        throw Exception('Failed to fetch expense accounts: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchExpenseAccounts error: $e');
+        throw Exception('Failed to fetch expense accounts from Zoho: $e');
       }
-      return const [];
     }
 
     await Future.delayed(const Duration(milliseconds: 300));
@@ -543,11 +581,12 @@ class ZohoApiClient {
           final org = response.data['organization'];
           if (org != null) return Map<String, dynamic>.from(org);
         }
+        throw Exception('Failed to fetch organization: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchOrganization error: $e');
+        throw Exception('Failed to fetch organization from Zoho: $e');
       }
-      return null;
     }
 
     await Future.delayed(const Duration(milliseconds: 250));
@@ -561,7 +600,103 @@ class ZohoApiClient {
     };
   }
 
-  // 14. Open Invoices (GET /invoices?status=unpaid) — for receipt allocation
+  // 14. Customer Statement (GET /contacts/{id}/statements) — ledger report
+  Future<Map<String, dynamic>> fetchCustomerStatement(
+    String contactId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    if (!_isMockMode()) {
+      try {
+        final params = <String, dynamic>{};
+        if (startDate != null) {
+          params['from_date'] = startDate.toIso8601String().split('T')[0];
+        }
+        if (endDate != null) {
+          params['to_date'] = endDate.toIso8601String().split('T')[0];
+        }
+
+        final response = await _dio.get(
+          '/contacts/$contactId/statements',
+          queryParameters: params,
+        );
+        if (response.statusCode == 200) {
+          return Map<String, dynamic>.from(
+              response.data['contact_statement'] ?? {});
+        }
+        throw Exception('Failed to fetch statement: ${response.statusCode}');
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchCustomerStatement error: $e');
+        throw Exception('Failed to fetch customer statement from Zoho: $e');
+      }
+    }
+
+    // Mock data
+    await Future.delayed(const Duration(milliseconds: 800));
+    final now = DateTime.now();
+    final from = startDate ?? now.subtract(const Duration(days: 30));
+    return {
+      'contact_id': contactId,
+      'contact_name': 'Demo Customer',
+      'opening_balance': 5000.0,
+      'closing_balance': 2350.0,
+      'transactions': [
+        {
+          'transaction_id': 'tx_001',
+          'transaction_number': 'INV-2024-001',
+          'date': from.add(const Duration(days: 2)).toIso8601String().split('T')[0],
+          'transaction_type': 'invoice',
+          'debit': 3500.0,
+          'credit': 0.0,
+          'balance': 8500.0,
+          'description': 'Sales Invoice #INV-2024-001',
+        },
+        {
+          'transaction_id': 'tx_002',
+          'transaction_number': 'PAY-2024-001',
+          'date': from.add(const Duration(days: 5)).toIso8601String().split('T')[0],
+          'transaction_type': 'payment',
+          'debit': 0.0,
+          'credit': 2000.0,
+          'balance': 6500.0,
+          'description': 'Payment Received - Cash',
+        },
+        {
+          'transaction_id': 'tx_003',
+          'transaction_number': 'INV-2024-002',
+          'date': from.add(const Duration(days: 10)).toIso8601String().split('T')[0],
+          'transaction_type': 'invoice',
+          'debit': 1200.0,
+          'credit': 0.0,
+          'balance': 7700.0,
+          'description': 'Sales Invoice #INV-2024-002',
+        },
+        {
+          'transaction_id': 'tx_004',
+          'transaction_number': 'PAY-2024-002',
+          'date': from.add(const Duration(days: 15)).toIso8601String().split('T')[0],
+          'transaction_type': 'payment',
+          'debit': 0.0,
+          'credit': 4500.0,
+          'balance': 3200.0,
+          'description': 'Payment Received - Bank Transfer',
+        },
+        {
+          'transaction_id': 'tx_005',
+          'transaction_number': 'CN-2024-001',
+          'date': from.add(const Duration(days: 20)).toIso8601String().split('T')[0],
+          'transaction_type': 'credit_note',
+          'debit': 0.0,
+          'credit': 850.0,
+          'balance': 2350.0,
+          'description': 'Credit Note - Sales Return',
+        },
+      ],
+    };
+  }
+
+  // 15. Open Invoices (GET /invoices?status=unpaid) — for receipt allocation
   Future<List<Map<String, dynamic>>> fetchOpenInvoices() async {
     if (!_isMockMode()) {
       try {
@@ -576,11 +711,12 @@ class ZohoApiClient {
           final list = (response.data['invoices'] as List? ?? []);
           return list.map((i) => Map<String, dynamic>.from(i)).toList();
         }
+        throw Exception('Failed to fetch open invoices: Server returned status code ${response.statusCode}');
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchOpenInvoices error: $e');
+        throw Exception('Failed to fetch open invoices from Zoho: $e');
       }
-      return const [];
     }
 
     await Future.delayed(const Duration(milliseconds: 300));

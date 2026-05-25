@@ -1,12 +1,17 @@
 import '../../domain/models/sales_return.dart';
 import 'sales_invoice_model.dart';
 
+/// Data transfer object representing a [SalesReturnLineItem].
+///
+/// Converts credit note line details like items, return quantities, rates and nested invoices.
 class SalesReturnLineItemModel extends SalesReturnLineItem {
+  /// Creates a new [SalesReturnLineItemModel] instance.
   const SalesReturnLineItemModel({
     required super.invoiceLineItem,
     required super.returnedQuantity,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into a [SalesReturnLineItemModel].
   factory SalesReturnLineItemModel.fromJson(Map<String, dynamic> json) {
     return SalesReturnLineItemModel(
       invoiceLineItem: InvoiceLineItemModel.fromJson(json['invoiceLineItem'] ?? json),
@@ -14,6 +19,7 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
     );
   }
 
+  /// Converts this [SalesReturnLineItemModel] into a serialization compatible JSON map.
   Map<String, dynamic> toJson() {
     return {
       'item_id': invoiceLineItem.item.id,
@@ -23,6 +29,7 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
     };
   }
 
+  /// Translates a base domain [SalesReturnLineItem] entity into its [SalesReturnLineItemModel] representation.
   factory SalesReturnLineItemModel.fromDomain(SalesReturnLineItem lineItem) {
     return SalesReturnLineItemModel(
       invoiceLineItem: lineItem.invoiceLineItem,
@@ -31,7 +38,11 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
   }
 }
 
+/// Data transfer object representing a [SalesReturn] credit note log.
+///
+/// Translates credit note records, line item lists, and sync statuses into SQLite/Hive DB compatible JSON.
 class SalesReturnModel extends SalesReturn {
+  /// Creates a new [SalesReturnModel] instance.
   const SalesReturnModel({
     required super.id,
     required super.creditNoteNumber,
@@ -43,6 +54,7 @@ class SalesReturnModel extends SalesReturn {
     super.isPendingSync,
   });
 
+  /// Factory constructor to parse local database JSON maps into a [SalesReturnModel].
   factory SalesReturnModel.fromJson(Map<String, dynamic> json) {
     return SalesReturnModel(
       id: json['creditnote_id'] ?? json['id'] ?? '',
@@ -59,6 +71,7 @@ class SalesReturnModel extends SalesReturn {
     );
   }
 
+  /// Converts this [SalesReturnModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -75,6 +88,7 @@ class SalesReturnModel extends SalesReturn {
     };
   }
 
+  /// Translates a base domain [SalesReturn] entity into its [SalesReturnModel] representation.
   factory SalesReturnModel.fromDomain(SalesReturn salesReturn) {
     return SalesReturnModel(
       id: salesReturn.id,
@@ -88,3 +102,4 @@ class SalesReturnModel extends SalesReturn {
     );
   }
 }
+

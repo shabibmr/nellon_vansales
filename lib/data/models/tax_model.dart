@@ -1,6 +1,10 @@
 import '../../domain/models/tax.dart';
 
+/// Data transfer object representing a [Tax] configuration.
+///
+/// Handles JSON mappings for the Zoho Books Tax API endpoints and local caching structures.
 class TaxModel extends Tax {
+  /// Creates a new [TaxModel] instance.
   const TaxModel({
     required super.id,
     required super.name,
@@ -9,6 +13,9 @@ class TaxModel extends Tax {
     super.isDefault,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into a [TaxModel].
+  ///
+  /// Mappes keys (`tax_id`, `tax_percentage`, `is_default_tax`) to their parent domains.
   factory TaxModel.fromJson(Map<String, dynamic> json) {
     return TaxModel(
       id: json['tax_id'] ?? json['id'] ?? '',
@@ -19,6 +26,7 @@ class TaxModel extends Tax {
     );
   }
 
+  /// Converts this [TaxModel] into a serialization compatible JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -32,6 +40,7 @@ class TaxModel extends Tax {
     };
   }
 
+  /// Translates a base domain [Tax] entity into a serializable [TaxModel].
   factory TaxModel.fromDomain(Tax t) {
     return TaxModel(
       id: t.id,
@@ -42,3 +51,4 @@ class TaxModel extends Tax {
     );
   }
 }
+

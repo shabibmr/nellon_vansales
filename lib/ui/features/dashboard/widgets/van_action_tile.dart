@@ -1,14 +1,31 @@
 import 'package:flutter/material.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 
+/// A premium responsive quick-action list tile component.
+///
+/// Configures a clean layout featuring a colored leading circular badge icon,
+/// bold title, descriptive subtitle, and arrow indicator trailing icon.
+/// Typically used within dashboard panels to fire operation workflows.
 class VanActionTile extends StatelessWidget {
+  /// Header text outlining the action.
   final String title;
+
+  /// Details of the enqueued action or background context description.
   final String subtitle;
+
+  /// Vector graphic asset to represent the action.
   final IconData icon;
+
+  /// Primary color used for the leading icon and its background circle overlay.
   final Color color;
+
+  /// Visual theme context flag.
   final bool isDark;
+
+  /// Callback fired when the tile is tapped.
   final VoidCallback onTap;
 
+  /// Creates a new [VanActionTile] widget.
   const VanActionTile({
     super.key,
     required this.title,

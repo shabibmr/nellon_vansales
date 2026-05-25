@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 
 /// Interactive modal sheet/dialog to input or adjust the quantity of an invoice line item.
 ///
@@ -53,6 +54,7 @@ class _ItemLineEditorDialogState extends State<ItemLineEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = context.org.currencySymbol;
     final subtotal = widget.item.rate * (double.tryParse(_quantityController.text) ?? 0.0);
     final tax = subtotal * (widget.item.taxPercentage / 100);
     final total = subtotal + tax;
@@ -91,7 +93,7 @@ class _ItemLineEditorDialogState extends State<ItemLineEditorDialog> {
               ),
               const SizedBox(height: 4),
               Text(
-                'SKU: ${widget.item.sku} | Rate: ₹${widget.item.rate.toStringAsFixed(2)}',
+                'SKU: ${widget.item.sku} | Rate: $cs${widget.item.rate.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
@@ -157,15 +159,15 @@ class _ItemLineEditorDialogState extends State<ItemLineEditorDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Rate:', style: TextStyle(fontSize: 12)),
-                        Text('₹${widget.item.rate.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                        Text('$cs${widget.item.rate.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('GST (${widget.item.taxPercentage}%):', style: const TextStyle(fontSize: 12)),
-                        Text('₹${tax.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                        Text('VAT (${widget.item.taxPercentage}%):', style: const TextStyle(fontSize: 12)),
+                        Text('$cs${tax.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
                       ],
                     ),
                     const Divider(height: 16),
@@ -174,7 +176,7 @@ class _ItemLineEditorDialogState extends State<ItemLineEditorDialog> {
                       children: [
                         const Text('Total:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                         Text(
-                          '₹${total.toStringAsFixed(2)}',
+                          '$cs${total.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,

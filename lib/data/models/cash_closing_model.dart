@@ -1,6 +1,10 @@
 import '../../domain/models/cash_closing.dart';
 
+/// Data transfer object representing the daily [CashClosing] reconciliation.
+///
+/// Handles saving daily balance parameters, calculated expected balances, and notes to local JSON/Hive storage.
 class CashClosingModel extends CashClosing {
+  /// Creates a new [CashClosingModel] instance.
   const CashClosingModel({
     required super.id,
     required super.date,
@@ -13,6 +17,7 @@ class CashClosingModel extends CashClosing {
     super.isPendingSync,
   });
 
+  /// Factory constructor to parse local database JSON maps into a [CashClosingModel].
   factory CashClosingModel.fromJson(Map<String, dynamic> json) {
     return CashClosingModel(
       id: json['id'] ?? '',
@@ -27,6 +32,7 @@ class CashClosingModel extends CashClosing {
     );
   }
 
+  /// Converts this [CashClosingModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -43,6 +49,7 @@ class CashClosingModel extends CashClosing {
     };
   }
 
+  /// Translates a base domain [CashClosing] entity into its [CashClosingModel] representation.
   factory CashClosingModel.fromDomain(CashClosing closing) {
     return CashClosingModel(
       id: closing.id,
@@ -57,3 +64,4 @@ class CashClosingModel extends CashClosing {
     );
   }
 }
+

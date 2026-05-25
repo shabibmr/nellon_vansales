@@ -5,13 +5,26 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 
+/// Modal dialog for filing the daily end-of-trip [CashClosing] reconciliation.
+///
+/// Prompts the agent to count and input their physical cash in hand and compiles a detailed
+/// breakdown of opening cash, sales, payments, and expenses to flag surpluses or shortages.
 class CashClosingDialog extends StatefulWidget {
+  /// Daily sales invoice total.
   final double todaySales;
+
+  /// Daily collected receipts total.
   final double todayPayments;
+
+  /// Daily filed expenses total.
   final double todayExpenses;
+
+  /// Callback fired when the daily session is successfully compiled and saved.
   final VoidCallback onSessionReconciled;
 
+  /// Creates a new [CashClosingDialog].
   const CashClosingDialog({
     super.key,
     required this.todaySales,
@@ -38,6 +51,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = context.org.currencySymbol;
     const openingBalance = 1000.00; // Mock opening morning float in the van
     final expectedClosing = openingBalance + widget.todayPayments - widget.todayExpenses;
 
@@ -53,21 +67,21 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
               style: TextStyle(fontSize: 12),
             ),
             const Divider(height: 24, color: Color(0xFF334155)),
-            Text('Morning Cash Float: ₹${openingBalance.toStringAsFixed(2)}'),
-            Text('Total Invoiced Sales: ₹${widget.todaySales.toStringAsFixed(2)}'),
-            Text('Total Cash Collected: ₹${widget.todayPayments.toStringAsFixed(2)}'),
-            Text('Total Claimed Expenses: ₹${widget.todayExpenses.toStringAsFixed(2)}'),
+            Text('Morning Cash Float: $cs${openingBalance.toStringAsFixed(2)}'),
+            Text('Total Invoiced Sales: $cs${widget.todaySales.toStringAsFixed(2)}'),
+            Text('Total Cash Collected: $cs${widget.todayPayments.toStringAsFixed(2)}'),
+            Text('Total Claimed Expenses: $cs${widget.todayExpenses.toStringAsFixed(2)}'),
             const SizedBox(height: 6),
             Text(
-              'Expected Cash In Hand: ₹${expectedClosing.toStringAsFixed(2)}',
+              'Expected Cash In Hand: $cs${expectedClosing.toStringAsFixed(2)}',
               style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryIndigo),
             ),
             const Divider(height: 24, color: Color(0xFF334155)),
             TextFormField(
               controller: _physicalCashController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Physical Cash Counted (₹)',
+              decoration: InputDecoration(
+                labelText: 'Physical Cash Counted ($cs)',
                 hintText: 'Enter physical cash in hand',
               ),
             ),
@@ -130,7 +144,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
                 content: Text(
                   difference == 0
                       ? 'Session closed successfully with zero cash discrepancy!'
-                      : 'Session closed. Cash discrepancy detected: ${difference > 0 ? "+" : ""}₹${difference.toStringAsFixed(2)}. Discrepancy is logged for Zoho reconciliation.',
+                      : 'Session closed. Cash discrepancy detected: ${difference > 0 ? "+" : ""}$cs${difference.toStringAsFixed(2)}. Discrepancy is logged for Zoho reconciliation.',
                 ),
                 actions: [
                   ElevatedButton(

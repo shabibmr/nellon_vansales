@@ -15,10 +15,23 @@ import 'ui/features/route/bloc/route_bloc.dart';
 import 'ui/features/sales_invoice/bloc/sales_invoice_bloc.dart';
 import 'ui/features/expenses/bloc/expense_bloc.dart';
 import 'ui/features/receipts/bloc/receipt_bloc.dart';
+import 'ui/features/sales_return/bloc/sales_return_bloc.dart';
+import 'ui/features/ledger/bloc/customer_ledger_bloc.dart';
+import 'ui/core/cubit/organization_cubit.dart';
+import 'data/services/hive_database_service.dart';
+import 'data/services/zoho_api_client.dart';
 import 'ui/features/auth/views/login_page.dart';
 import 'ui/features/route/views/route_page.dart';
 import 'ui/features/dashboard/views/dashboard_page.dart';
 import 'ui/features/sync/views/masters_sync_page.dart';
+import 'data/services/local_storage_service.dart';
+import 'data/services/device_info_service.dart';
+import 'data/services/license_service.dart';
+import 'ui/features/licensing/cubit/license_cubit.dart';
+import 'ui/features/licensing/cubit/server_config_cubit.dart';
+import 'ui/features/licensing/views/license_gate.dart';
+import 'data/services/voucher_pdf_service.dart';
+import 'ui/features/voucher_pdf/bloc/voucher_pdf_bloc.dart';
 
 /// The root widget of the Van Sales Pro application.
 ///
@@ -48,6 +61,9 @@ class VanSalesApp extends StatelessWidget {
         providers: [
           BlocProvider<ThemeCubit>(
             create: (context) => ThemeCubit(),
+          ),
+          BlocProvider<OrganizationCubit>(
+            create: (context) => OrganizationCubit(sl<HiveDatabaseService>()),
           ),
           BlocProvider<AuthBloc>(
             create: (context) => AuthBloc(
@@ -82,15 +98,49 @@ class VanSalesApp extends StatelessWidget {
               syncRepository: context.read<SyncRepository>(),
             ),
           ),
+          BlocProvider<SalesReturnBloc>(
+            create: (context) => SalesReturnBloc(
+              salesRepository: context.read<SalesRepository>(),
+              syncRepository: context.read<SyncRepository>(),
+            ),
+          ),
+          BlocProvider<CustomerLedgerBloc>(
+            create: (context) => CustomerLedgerBloc(
+              salesRepository: context.read<SalesRepository>(),
+              apiClient: sl<ZohoApiClient>(),
+            ),
+          ),
+          BlocProvider<LicenseCubit>(
+            create: (context) => LicenseCubit(
+              licenseService: sl<LicenseService>(),
+              localStorageService: sl<LocalStorageService>(),
+              deviceInfoService: sl<DeviceInfoService>(),
+            ),
+          ),
+          BlocProvider<ServerConfigCubit>(
+            create: (context) => ServerConfigCubit(
+              apiClient: sl<ZohoApiClient>(),
+            ),
+          ),
+          BlocProvider<VoucherPdfBloc>(
+            create: (context) => VoucherPdfBloc(
+              pdfService: sl<VoucherPdfService>(),
+              dbService: sl<HiveDatabaseService>(),
+            ),
+          ),
         ],
-        child: BlocBuilder<ThemeCubit, ThemeMode>(
-          builder: (context, themeMode) {
+        child: BlocBuilder<ThemeCubit, AppThemeMode>(
+          builder: (context, appThemeMode) {
             return MaterialApp(
-              title: 'Van Sales Pro',
+              title: context.read<OrganizationCubit>().companyName,
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
-              themeMode: themeMode,
+              darkTheme: appThemeMode == AppThemeMode.glass
+                  ? AppTheme.glassmorphismTheme
+                  : AppTheme.darkTheme,
+              themeMode: appThemeMode == AppThemeMode.light
+                  ? ThemeMode.light
+                  : ThemeMode.dark,
               home: const SessionGateway(),
             );
           },
@@ -115,21 +165,24 @@ class SessionGateway extends StatelessWidget {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, authState) {
         if (authState is Authenticated) {
-          return BlocBuilder<RouteBloc, RouteState>(
-            builder: (context, routeState) {
-              if (routeState.isLoading) {
-                return const Scaffold(
-                  body: Center(
-                    child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
-                  ),
-                );
-              }
-              final hasMasters = context.read<SyncRepository>().hasCoreMasters();
-              if (!hasMasters) {
-                return const MastersSyncPage();
-              }
-              return const DashboardPage();
-            },
+          return LicenseGate(
+            user: authState.user,
+            child: BlocBuilder<RouteBloc, RouteState>(
+              builder: (context, routeState) {
+                if (routeState.isLoading) {
+                  return const Scaffold(
+                    body: Center(
+                      child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
+                    ),
+                  );
+                }
+                final hasMasters = context.read<SyncRepository>().hasCoreMasters();
+                if (!hasMasters) {
+                  return const MastersSyncPage();
+                }
+                return const DashboardPage();
+              },
+            ),
           );
         } else if (authState is AuthLoading) {
           return const Scaffold(

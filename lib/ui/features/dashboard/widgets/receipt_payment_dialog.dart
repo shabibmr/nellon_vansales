@@ -7,11 +7,21 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 
+/// Modal dialog for logging a [ReceiptVoucher] payment collection.
+///
+/// Prompts the field for the payment amount and permits choosing the payment mode
+/// (Cash, Cheque, Bank Transfer, Card). Updates the customer's outstanding balance
+/// instantly in the local Hive cache, and enqueues a sync job to post the payment to Zoho Books.
 class ReceiptPaymentDialog extends StatefulWidget {
+  /// The selected customer profile paying their invoice.
   final Customer customer;
+
+  /// Callback triggered when the payment collection is successfully registered and cached.
   final VoidCallback onPaymentLogged;
 
+  /// Creates a new [ReceiptPaymentDialog] widget.
   const ReceiptPaymentDialog({
     super.key,
     required this.customer,
@@ -35,6 +45,7 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = context.org.currencySymbol;
     return AlertDialog(
       title: Text('Receipt Payment: ${widget.customer.name}'),
       content: SingleChildScrollView(
@@ -49,17 +60,16 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
             TextFormField(
               controller: _amountController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Payment Amount (₹)',
-                prefixIcon: Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
+              decoration: InputDecoration(
+                labelText: 'Payment Amount ($cs)',
+                prefixIcon: const Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
               ),
             ),
             const SizedBox(height: 16),
 
             // Dropdown for payment modes
-            // ignore: deprecated_member_use
             DropdownButtonFormField<String>(
-              value: _paymentMode,
+              initialValue: _paymentMode,
               decoration: const InputDecoration(labelText: 'Payment Mode'),
               items: ['Cash', 'Cheque', 'Bank Transfer', 'Card']
                   .map((mode) => DropdownMenuItem(value: mode, child: Text(mode)))
@@ -119,7 +129,7 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 backgroundColor: AppTheme.successEmerald,
-                content: Text('Payment Voucher for ₹${amount.toStringAsFixed(2)} queued offline!'),
+                content: Text('Payment Voucher for $cs${amount.toStringAsFixed(2)} queued offline!'),
               ),
             );
             widget.onPaymentLogged();

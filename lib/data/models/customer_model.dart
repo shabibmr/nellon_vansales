@@ -1,6 +1,11 @@
 import '../../domain/models/customer.dart';
 
+/// Data transfer object for the [Customer] domain entity.
+///
+/// Implements robust JSON parsing to support both offline database hydration and
+/// remote Zoho CRM Contact API maps, resolving differences in naming conventions (snake_case vs camelCase).
 class CustomerModel extends Customer {
+  /// Creates a new [CustomerModel] instance matching fields of the parent.
   const CustomerModel({
     required super.id,
     required super.name,
@@ -15,6 +20,10 @@ class CustomerModel extends Customer {
     super.isPendingSync,
   });
 
+  /// Factory constructor to parse local/remote JSON payload into a [CustomerModel].
+  ///
+  /// Maps server keys (`contact_id`, `contact_name`, `outstanding_receivable_amount`) 
+  /// and local database representations fallback keys.
   factory CustomerModel.fromJson(Map<String, dynamic> json) {
     return CustomerModel(
       id: json['contact_id'] ?? json['id'] ?? '',
@@ -31,6 +40,7 @@ class CustomerModel extends Customer {
     );
   }
 
+  /// Converts this [CustomerModel] instance into a JSON compatible map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -49,6 +59,7 @@ class CustomerModel extends Customer {
     };
   }
 
+  /// Facilitates converting a base domain [Customer] entity into a serializable [CustomerModel].
   factory CustomerModel.fromDomain(Customer customer) {
     return CustomerModel(
       id: customer.id,
@@ -65,3 +76,4 @@ class CustomerModel extends Customer {
     );
   }
 }
+

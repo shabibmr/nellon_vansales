@@ -1,6 +1,10 @@
 import '../../domain/models/expense_account.dart';
 
+/// Data transfer object representing an [ExpenseAccount] ledger mapping.
+///
+/// Directs the translation between Zoho Books account objects and the local system accounts representation.
 class ExpenseAccountModel extends ExpenseAccount {
+  /// Creates a new [ExpenseAccountModel] instance.
   const ExpenseAccountModel({
     required super.id,
     required super.name,
@@ -8,6 +12,9 @@ class ExpenseAccountModel extends ExpenseAccount {
     required super.category,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into an [ExpenseAccountModel].
+  ///
+  /// Mappes Zoho ledger fields (`account_id`, `account_name`, `account_code`) with fallback defaults.
   factory ExpenseAccountModel.fromJson(Map<String, dynamic> json) {
     return ExpenseAccountModel(
       id: json['account_id'] ?? json['id'] ?? '',
@@ -17,6 +24,7 @@ class ExpenseAccountModel extends ExpenseAccount {
     );
   }
 
+  /// Converts this [ExpenseAccountModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -28,6 +36,7 @@ class ExpenseAccountModel extends ExpenseAccount {
     };
   }
 
+  /// Translates a base domain [ExpenseAccount] entity into a serializable [ExpenseAccountModel].
   factory ExpenseAccountModel.fromDomain(ExpenseAccount a) {
     return ExpenseAccountModel(
       id: a.id,
@@ -37,3 +46,4 @@ class ExpenseAccountModel extends ExpenseAccount {
     );
   }
 }
+

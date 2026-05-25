@@ -1,12 +1,23 @@
 import 'package:equatable/equatable.dart';
 import 'item.dart';
 
+/// Represents a single line item entry in a sales invoice.
+///
+/// Encapsulates the product, the quantity billed, the standard rate, and computed tax totals.
 class InvoiceLineItem extends Equatable {
+  /// The inventory product/item referenced.
   final Item item;
+
+  /// Quantity of items purchased.
   final int quantity;
+
+  /// Invoiced rate per unit item.
   final double rate;
+
+  /// Percentage of tax applied (e.g. 5.0).
   final double taxPercentage;
 
+  /// Creates a new [InvoiceLineItem].
   const InvoiceLineItem({
     required this.item,
     required this.quantity,
@@ -14,11 +25,19 @@ class InvoiceLineItem extends Equatable {
     required this.taxPercentage,
   });
 
+  /// Computes the cost excluding tax.
   double get subTotal => rate * quantity;
+
+  /// Computes the specific tax portion amount.
   double get taxAmount => subTotal * (taxPercentage / 100);
+
+  /// Hardcoded line item discount (currently default to 0.0).
   final double discount = 0.0;
+
+  /// Computes the gross line total including tax and subtracting discount.
   double get total => subTotal + taxAmount - discount;
 
+  /// Creates a copy of this [InvoiceLineItem] with replaced values for specific fields.
   InvoiceLineItem copyWith({
     Item? item,
     int? quantity,
@@ -37,17 +56,39 @@ class InvoiceLineItem extends Equatable {
   List<Object?> get props => [item, quantity, rate, taxPercentage];
 }
 
+/// Represents a Sales Invoice created during route delivery.
+///
+/// Contains details of the customer billed, payment terms (dates), invoice lines,
+/// and computed totals (subtotal, tax sum, grand total).
 class SalesInvoice extends Equatable {
+  /// Unique identifier of the sales invoice.
   final String id;
+
+  /// Human-readable billing voucher reference code.
   final String invoiceNumber;
+
+  /// The customer ID.
   final String customerId;
+
+  /// Display name of the customer.
   final String customerName;
+
+  /// The date when the invoice was issued.
   final DateTime date;
+
+  /// The payment deadline date.
   final DateTime dueDate;
+
+  /// Collection of invoiced product items.
   final List<InvoiceLineItem> items;
+
+  /// Customer notes or delivery remarks.
   final String notes;
+
+  /// Flag indicating if the invoice is pending synchronization with Zoho Books.
   final bool isPendingSync;
 
+  /// Creates a new [SalesInvoice].
   const SalesInvoice({
     required this.id,
     required this.invoiceNumber,
@@ -60,10 +101,16 @@ class SalesInvoice extends Equatable {
     this.isPendingSync = false,
   });
 
+  /// Computes sum of all sub-totals (excluding taxes).
   double get subTotal => items.fold(0.0, (sum, item) => sum + item.subTotal);
+
+  /// Computes total accumulated tax on this invoice.
   double get taxTotal => items.fold(0.0, (sum, item) => sum + item.taxAmount);
+
+  /// Computes the final grand total billed.
   double get total => items.fold(0.0, (sum, item) => sum + item.total);
 
+  /// Creates a copy of this [SalesInvoice] with replaced values for specific fields.
   SalesInvoice copyWith({
     String? id,
     String? invoiceNumber,
@@ -101,3 +148,4 @@ class SalesInvoice extends Equatable {
         isPendingSync,
       ];
 }
+

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../domain/models/expense_entry.dart';
@@ -8,11 +8,20 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 
+/// Modal dialog that logs a route trip expense log locally.
+///
+/// Permits choosing standard categories (Fuel, Tolls, Meals, Maintenance, Miscellaneous),
+/// inputting cost and remarks, and capturing/attaching receipts via the device camera/gallery.
 class ExpenseLogDialog extends StatefulWidget {
+  /// Visual context.
   final bool isDark;
+
+  /// Callback triggered when the expense record is successfully committed and cached.
   final VoidCallback onExpenseLogged;
 
+  /// Creates a new [ExpenseLogDialog].
   const ExpenseLogDialog({
     super.key,
     required this.isDark,
@@ -28,6 +37,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
   final _descController = TextEditingController();
   String _category = 'Fuel';
   String? _localImagePath;
+  Uint8List? _imageBytes;
   final ImagePicker _picker = ImagePicker();
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
 
@@ -77,11 +87,14 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                     );
                     if (!mounted) return;
                     if (image != null) {
+                      final bytes = await image.readAsBytes();
                       setDialogState(() {
                         _localImagePath = image.path;
+                        _imageBytes = bytes;
                       });
                     }
                   } catch (e) {
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Camera Access Error: $e')),
                     );
@@ -100,11 +113,14 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                     );
                     if (!mounted) return;
                     if (image != null) {
+                      final bytes = await image.readAsBytes();
                       setDialogState(() {
                         _localImagePath = image.path;
+                        _imageBytes = bytes;
                       });
                     }
                   } catch (e) {
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Gallery Access Error: $e')),
                     );
@@ -121,6 +137,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = context.org.currencySymbol;
     return AlertDialog(
       title: const Text('Log Van Expense'),
       content: StatefulBuilder(
@@ -132,12 +149,11 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                 TextFormField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Expense Amount (₹)'),
+                  decoration: InputDecoration(labelText: 'Expense Amount ($cs)'),
                 ),
                 const SizedBox(height: 12),
-                // ignore: deprecated_member_use
                 DropdownButtonFormField<String>(
-                  value: _category,
+                  initialValue: _category,
                   decoration: const InputDecoration(labelText: 'Category'),
                   items: ['Fuel', 'Tolls', 'Meals', 'Maintenance', 'Miscellaneous']
                       .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
@@ -204,12 +220,14 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                           child: Stack(
                             alignment: Alignment.topRight,
                             children: [
-                              Image.file(
-                                File(_localImagePath!),
-                                height: 140,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
+                              _imageBytes != null
+                                  ? Image.memory(
+                                      _imageBytes!,
+                                      height: 140,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(),
                               Container(
                                 margin: const EdgeInsets.all(8),
                                 decoration: const BoxDecoration(
@@ -221,6 +239,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                                   onPressed: () {
                                     setDialogState(() {
                                       _localImagePath = null;
+                                      _imageBytes = null;
                                     });
                                   },
                                 ),
@@ -278,7 +297,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 backgroundColor: AppTheme.successEmerald,
-                content: Text('Van expense for ₹${amount.toStringAsFixed(2)} queued offline!'),
+                content: Text('Van expense for $cs${amount.toStringAsFixed(2)} queued offline!'),
               ),
             );
             widget.onExpenseLogged();

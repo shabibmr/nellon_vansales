@@ -9,6 +9,8 @@ class OperationsTab extends StatelessWidget {
   final VoidCallback onManageInvoices;
   final VoidCallback onManageExpenses;
   final VoidCallback onManageReceipts;
+  final VoidCallback onManageReturns;
+  final VoidCallback onSyncMasters;
 
   const OperationsTab({
     super.key,
@@ -18,6 +20,8 @@ class OperationsTab extends StatelessWidget {
     required this.onManageInvoices,
     required this.onManageExpenses,
     required this.onManageReceipts,
+    required this.onManageReturns,
+    required this.onSyncMasters,
   });
 
   @override
@@ -35,6 +39,15 @@ class OperationsTab extends StatelessWidget {
               color: AppTheme.primaryIndigo,
               isDark: isDark,
               onTap: onManageInvoices,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
+              title: 'Manage Sales Returns',
+              subtitle: 'View, filter, edit, or create credit notes for returned goods.',
+              icon: Icons.assignment_return_outlined,
+              color: AppTheme.warningAmber,
+              isDark: isDark,
+              onTap: onManageReturns,
             ),
             const SizedBox(height: 16),
             VanActionTile(
@@ -62,6 +75,15 @@ class OperationsTab extends StatelessWidget {
               color: AppTheme.primaryIndigo,
               isDark: isDark,
               onTap: onCreateCustomer,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
+              title: 'Sync Master Data',
+              subtitle: 'Refresh customers, items, taxes and org data from Zoho Books.',
+              icon: Icons.cloud_sync_outlined,
+              color: AppTheme.infoSky,
+              isDark: isDark,
+              onTap: onSyncMasters,
             ),
             const SizedBox(height: 16),
             VanActionTile(

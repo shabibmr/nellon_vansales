@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import '../../../../domain/models/expense_entry.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/expense_bloc.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
+import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../domain/models/expense_entry.dart';
 
 class ExpenseEditorPage extends StatefulWidget {
   const ExpenseEditorPage({super.key});
@@ -17,6 +20,27 @@ class ExpenseEditorPage extends StatefulWidget {
 class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
   final ImagePicker _picker = ImagePicker();
+  late TextEditingController _amountController;
+  late TextEditingController _descriptionController;
+
+  static const _categories = ['Fuel', 'Tolls', 'Meals', 'Maintenance', 'Miscellaneous'];
+
+  @override
+  void initState() {
+    super.initState();
+    final s = context.read<ExpenseBloc>().state;
+    _amountController = TextEditingController(
+      text: s.editingAmount > 0 ? s.editingAmount.toStringAsFixed(2) : '',
+    );
+    _descriptionController = TextEditingController(text: s.editingDescription);
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _selectDate(DateTime current) async {
     final picked = await showDatePicker(
@@ -113,75 +137,6 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
     );
   }
 
-  void _showAddLineDialog(BuildContext context, bool isDark, {int? editIndex, ExpenseLineItem? existing}) {
-    final amountCtrl = TextEditingController(text: existing?.amount.toStringAsFixed(2) ?? '');
-    final descCtrl = TextEditingController(text: existing?.description ?? '');
-    String category = existing?.category ?? 'Fuel';
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setDlgState) {
-            return AlertDialog(
-              title: Text(editIndex == null ? 'Add Expense Line' : 'Edit Expense Line'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: amountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Amount (₹)',
-                        prefixIcon: Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: category,
-                      decoration: const InputDecoration(labelText: 'Category'),
-                      items: ['Fuel', 'Tolls', 'Meals', 'Maintenance', 'Miscellaneous']
-                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                          .toList(),
-                      onChanged: (v) => setDlgState(() => category = v ?? 'Fuel'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: descCtrl,
-                      decoration: const InputDecoration(labelText: 'Description / Remarks'),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-                ElevatedButton(
-                  onPressed: () {
-                    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
-                    if (amount <= 0) return;
-                    final line = ExpenseLineItem(
-                      category: category,
-                      amount: amount,
-                      description: descCtrl.text.trim(),
-                    );
-                    if (editIndex == null) {
-                      context.read<ExpenseBloc>().add(AddExpenseLine(line));
-                    } else {
-                      context.read<ExpenseBloc>().add(UpdateExpenseLine(editIndex, line));
-                    }
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('SAVE'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -217,6 +172,7 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
         },
         builder: (context, state) {
           final date = state.editingDate ?? DateTime.now();
+          final cs = context.org.currencySymbol;
 
           return Column(
             children: [
@@ -274,104 +230,49 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Expense lines header
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Expense Lines',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            TextButton.icon(
-                              onPressed: () => _showAddLineDialog(context, isDark),
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Add Line'),
-                              style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.primaryIndigo),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-
-                        if (state.editingLines.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(vertical: 32),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                  color: isDark
-                                      ? const Color(0xFF334155)
-                                      : const Color(0xFFE2E8F0)),
-                            ),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(Icons.add_circle_outline,
-                                      size: 36,
-                                      color: isDark
-                                          ? const Color(0xFF334155)
-                                          : const Color(0xFFCBD5E1)),
-                                  const SizedBox(height: 8),
-                                  Text('No expense lines yet',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: isDark
-                                            ? AppTheme.darkTextSecondary
-                                            : AppTheme.lightTextSecondary,
-                                      )),
-                                ],
-                              ),
-                            ),
-                          )
-                        else
-                          ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: state.editingLines.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
-                            itemBuilder: (context, i) {
-                              final line = state.editingLines[i];
-                              return Card(
-                                child: ListTile(
-                                  onTap: () => _showAddLineDialog(context, isDark,
-                                      editIndex: i, existing: line),
-                                  leading: CircleAvatar(
-                                    backgroundColor:
-                                        AppTheme.errorRose.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.receipt_outlined,
-                                        color: AppTheme.errorRose, size: 18),
-                                  ),
-                                  title: Text(line.category,
-                                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: line.description.isNotEmpty
-                                      ? Text(line.description,
-                                          style: const TextStyle(fontSize: 12))
-                                      : null,
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        '₹${line.amount.toStringAsFixed(2)}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.errorRose,
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete_outline,
-                                            color: AppTheme.errorRose, size: 20),
-                                        onPressed: () => context
-                                            .read<ExpenseBloc>()
-                                            .add(RemoveExpenseLine(i)),
-                                        constraints: const BoxConstraints(),
-                                        padding: const EdgeInsets.only(left: 8),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
+                        // Amount
+                        TextFormField(
+                          controller: _amountController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          onChanged: (v) {
+                            final amount = double.tryParse(v) ?? 0.0;
+                            context.read<ExpenseBloc>().add(SetEditingExpenseAmount(amount));
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Amount ($cs)',
+                            prefixIcon: Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
                           ),
+                        ),
+                        const SizedBox(height: 16),
 
+                        // Category
+                        DropdownButtonFormField<String>(
+                          initialValue: state.editingCategory,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                            prefixIcon: Icon(Icons.category_outlined, color: AppTheme.primaryIndigo),
+                          ),
+                          items: _categories
+                              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) {
+                              context.read<ExpenseBloc>().add(SetEditingExpenseCategory(v));
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Description
+                        TextFormField(
+                          controller: _descriptionController,
+                          onChanged: (v) =>
+                              context.read<ExpenseBloc>().add(SetEditingExpenseDescription(v)),
+                          decoration: const InputDecoration(
+                            labelText: 'Description / Remarks (optional)',
+                            prefixIcon: Icon(Icons.notes_outlined, color: AppTheme.primaryIndigo),
+                          ),
+                        ),
                         const SizedBox(height: 20),
 
                         // Receipt image
@@ -393,7 +294,7 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                 ),
               ),
 
-              // Bottom total + save
+              // Bottom amount + save
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -421,10 +322,10 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Total Amount:',
+                            const Text('Amount:',
                                 style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                             Text(
-                              '₹${state.editingTotal.toStringAsFixed(2)}',
+                              '$cs${state.editingAmount.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 18,
@@ -437,12 +338,9 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed:
-                                (state.editingLines.isEmpty || state.isLoading)
-                                    ? null
-                                    : () => context
-                                        .read<ExpenseBloc>()
-                                        .add(SaveExpense()),
+                            onPressed: (state.editingAmount <= 0 || state.isLoading)
+                                ? null
+                                : () => context.read<ExpenseBloc>().add(SaveExpense()),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.errorRose,
                               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -451,6 +349,24 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                                 style: TextStyle(color: Colors.white)),
                           ),
                         ),
+                        if (!state.isEditingNew) ...[
+                          const SizedBox(height: 16),
+                          VoucherPdfActionsWidget(
+                            type: VoucherType.expenseVoucher,
+                            voucher: ExpenseEntry(
+                              id: state.editingId ?? '',
+                              date: state.editingDate ?? DateTime.now(),
+                              lines: [
+                                ExpenseLineItem(
+                                  category: state.editingCategory,
+                                  amount: state.editingAmount,
+                                  description: state.editingDescription,
+                                )
+                              ],
+                              receiptImagePath: state.editingReceiptImagePath,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

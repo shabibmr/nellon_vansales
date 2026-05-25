@@ -1,13 +1,24 @@
 import 'package:equatable/equatable.dart';
 
-/// A Zoho Books expense ledger. The van app maps each UI expense category
-/// (Fuel / Tolls / Meals / Maintenance / Miscellaneous) to one of these.
+/// Represents a Zoho Books expense ledger account.
+///
+/// The mobile application maps each local user-interface expense category
+/// (e.g., Fuel, Tolls, Meals, Maintenance, Miscellaneous) to one of these concrete accounts
+/// for bookkeeping alignment.
 class ExpenseAccount extends Equatable {
-  final String id; // Zoho account_id
-  final String name;
-  final String accountCode;
-  final String category; // UI-facing category label
+  /// Unique ledger account identifier from Zoho (account_id).
+  final String id;
 
+  /// The official name of the expense ledger account.
+  final String name;
+
+  /// System account code associated with this ledger.
+  final String accountCode;
+
+  /// The user-facing classification category label.
+  final String category;
+
+  /// Creates a new [ExpenseAccount] mapping ledger.
   const ExpenseAccount({
     required this.id,
     required this.name,
@@ -15,6 +26,7 @@ class ExpenseAccount extends Equatable {
     required this.category,
   });
 
+  /// Creates a copy of this [ExpenseAccount] with replaced values for specific fields.
   ExpenseAccount copyWith({
     String? id,
     String? name,
@@ -32,3 +44,4 @@ class ExpenseAccount extends Equatable {
   @override
   List<Object?> get props => [id, name, accountCode, category];
 }
+

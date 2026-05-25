@@ -41,34 +41,33 @@ class SetEditingExpenseDate extends ExpenseEvent {
   List<Object?> get props => [date];
 }
 
+class SetEditingExpenseAmount extends ExpenseEvent {
+  final double amount;
+  const SetEditingExpenseAmount(this.amount);
+  @override
+  List<Object?> get props => [amount];
+}
+
+class SetEditingExpenseCategory extends ExpenseEvent {
+  final String category;
+  const SetEditingExpenseCategory(this.category);
+  @override
+  List<Object?> get props => [category];
+}
+
+class SetEditingExpenseDescription extends ExpenseEvent {
+  final String description;
+  const SetEditingExpenseDescription(this.description);
+  @override
+  List<Object?> get props => [description];
+}
+
 class SetReceiptImage extends ExpenseEvent {
   final String? path;
   final Uint8List? bytes;
   const SetReceiptImage({this.path, this.bytes});
   @override
   List<Object?> get props => [path];
-}
-
-class AddExpenseLine extends ExpenseEvent {
-  final ExpenseLineItem line;
-  const AddExpenseLine(this.line);
-  @override
-  List<Object?> get props => [line];
-}
-
-class UpdateExpenseLine extends ExpenseEvent {
-  final int index;
-  final ExpenseLineItem line;
-  const UpdateExpenseLine(this.index, this.line);
-  @override
-  List<Object?> get props => [index, line];
-}
-
-class RemoveExpenseLine extends ExpenseEvent {
-  final int index;
-  const RemoveExpenseLine(this.index);
-  @override
-  List<Object?> get props => [index];
 }
 
 class SaveExpense extends ExpenseEvent {}
@@ -88,7 +87,9 @@ class ExpenseState extends Equatable {
   // Editor fields
   final String? editingId;
   final DateTime? editingDate;
-  final List<ExpenseLineItem> editingLines;
+  final double editingAmount;
+  final String editingCategory;
+  final String editingDescription;
   final String? editingReceiptImagePath;
   final Uint8List? editingReceiptImageBytes;
   final bool isEditingNew;
@@ -102,13 +103,13 @@ class ExpenseState extends Equatable {
     this.successMessage,
     this.editingId,
     this.editingDate,
-    this.editingLines = const [],
+    this.editingAmount = 0.0,
+    this.editingCategory = 'Fuel',
+    this.editingDescription = '',
     this.editingReceiptImagePath,
     this.editingReceiptImageBytes,
     this.isEditingNew = false,
   });
-
-  double get editingTotal => editingLines.fold(0.0, (sum, l) => sum + l.amount);
 
   List<ExpenseEntry> get filteredExpenses {
     return expenses.where((exp) {
@@ -134,7 +135,9 @@ class ExpenseState extends Equatable {
     String? successMessage,
     String? editingId,
     DateTime? editingDate,
-    List<ExpenseLineItem>? editingLines,
+    double? editingAmount,
+    String? editingCategory,
+    String? editingDescription,
     String? editingReceiptImagePath,
     Uint8List? editingReceiptImageBytes,
     bool? isEditingNew,
@@ -151,7 +154,9 @@ class ExpenseState extends Equatable {
       successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
       editingId: editingId ?? this.editingId,
       editingDate: editingDate ?? this.editingDate,
-      editingLines: editingLines ?? this.editingLines,
+      editingAmount: editingAmount ?? this.editingAmount,
+      editingCategory: editingCategory ?? this.editingCategory,
+      editingDescription: editingDescription ?? this.editingDescription,
       editingReceiptImagePath: clearReceiptImage ? null : (editingReceiptImagePath ?? this.editingReceiptImagePath),
       editingReceiptImageBytes: clearReceiptImage ? null : (editingReceiptImageBytes ?? this.editingReceiptImageBytes),
       isEditingNew: isEditingNew ?? this.isEditingNew,
@@ -168,7 +173,9 @@ class ExpenseState extends Equatable {
         successMessage,
         editingId,
         editingDate,
-        editingLines,
+        editingAmount,
+        editingCategory,
+        editingDescription,
         editingReceiptImagePath,
         isEditingNew,
       ];
@@ -191,10 +198,10 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     on<StartNewExpense>(_onStartNewExpense);
     on<StartEditExpense>(_onStartEditExpense);
     on<SetEditingExpenseDate>(_onSetEditingDate);
+    on<SetEditingExpenseAmount>(_onSetEditingAmount);
+    on<SetEditingExpenseCategory>(_onSetEditingCategory);
+    on<SetEditingExpenseDescription>(_onSetEditingDescription);
     on<SetReceiptImage>(_onSetReceiptImage);
-    on<AddExpenseLine>(_onAddExpenseLine);
-    on<UpdateExpenseLine>(_onUpdateExpenseLine);
-    on<RemoveExpenseLine>(_onRemoveExpenseLine);
     on<SaveExpense>(_onSaveExpense);
     on<ClearExpenseMessages>(_onClearMessages);
   }
@@ -220,20 +227,25 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
       endDate: state.endDate,
       editingId: 'temp_exp_${DateTime.now().millisecondsSinceEpoch}',
       editingDate: DateTime.now(),
-      editingLines: const [],
+      editingAmount: 0.0,
+      editingCategory: 'Fuel',
+      editingDescription: '',
       isEditingNew: true,
     ));
   }
 
   void _onStartEditExpense(StartEditExpense event, Emitter<ExpenseState> emit) {
     final exp = event.expense;
+    final firstLine = exp.lines.isNotEmpty ? exp.lines.first : null;
     emit(ExpenseState(
       expenses: state.expenses,
       startDate: state.startDate,
       endDate: state.endDate,
       editingId: exp.id,
       editingDate: exp.date,
-      editingLines: List.from(exp.lines),
+      editingAmount: firstLine?.amount ?? exp.amount,
+      editingCategory: firstLine?.category ?? 'Fuel',
+      editingDescription: firstLine?.description ?? '',
       editingReceiptImagePath: exp.receiptImagePath,
       isEditingNew: false,
     ));
@@ -241,6 +253,18 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
 
   void _onSetEditingDate(SetEditingExpenseDate event, Emitter<ExpenseState> emit) {
     emit(state.copyWith(editingDate: event.date));
+  }
+
+  void _onSetEditingAmount(SetEditingExpenseAmount event, Emitter<ExpenseState> emit) {
+    emit(state.copyWith(editingAmount: event.amount));
+  }
+
+  void _onSetEditingCategory(SetEditingExpenseCategory event, Emitter<ExpenseState> emit) {
+    emit(state.copyWith(editingCategory: event.category));
+  }
+
+  void _onSetEditingDescription(SetEditingExpenseDescription event, Emitter<ExpenseState> emit) {
+    emit(state.copyWith(editingDescription: event.description));
   }
 
   void _onSetReceiptImage(SetReceiptImage event, Emitter<ExpenseState> emit) {
@@ -254,40 +278,24 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     }
   }
 
-  void _onAddExpenseLine(AddExpenseLine event, Emitter<ExpenseState> emit) {
-    final lines = List<ExpenseLineItem>.from(state.editingLines)..add(event.line);
-    emit(state.copyWith(editingLines: lines, clearError: true));
-  }
-
-  void _onUpdateExpenseLine(UpdateExpenseLine event, Emitter<ExpenseState> emit) {
-    final lines = List<ExpenseLineItem>.from(state.editingLines);
-    if (event.index >= 0 && event.index < lines.length) {
-      lines[event.index] = event.line;
-    }
-    emit(state.copyWith(editingLines: lines));
-  }
-
-  void _onRemoveExpenseLine(RemoveExpenseLine event, Emitter<ExpenseState> emit) {
-    final lines = List<ExpenseLineItem>.from(state.editingLines);
-    if (event.index >= 0 && event.index < lines.length) {
-      lines.removeAt(event.index);
-    }
-    emit(state.copyWith(editingLines: lines));
-  }
-
   Future<void> _onSaveExpense(SaveExpense event, Emitter<ExpenseState> emit) async {
-    if (state.editingLines.isEmpty) {
-      emit(state.copyWith(errorMessage: 'Please add at least one expense line'));
+    if (state.editingAmount <= 0) {
+      emit(state.copyWith(errorMessage: 'Please enter a valid amount'));
       return;
     }
 
     emit(state.copyWith(isLoading: true));
     try {
       final tempId = state.editingId ?? 'temp_exp_${DateTime.now().millisecondsSinceEpoch}';
+      final line = ExpenseLineItem(
+        category: state.editingCategory,
+        amount: state.editingAmount,
+        description: state.editingDescription,
+      );
       final expense = ExpenseEntry(
         id: tempId,
         date: state.editingDate ?? DateTime.now(),
-        lines: state.editingLines,
+        lines: [line],
         receiptImagePath: state.editingReceiptImagePath,
         isPendingSync: true,
       );

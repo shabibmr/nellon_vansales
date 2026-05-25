@@ -13,19 +13,31 @@ import '../models/organization_model.dart';
 import '../models/open_invoice_model.dart';
 import '../../domain/models/route.dart';
 
+/// Enumerates all types of Master data configurations synced from the backend.
 enum MasterType {
+  /// General organization settings (Currency symbols, names, formatting context).
   organization,
+  /// Synced Zoho Books warehouses/van compartments.
   warehouses,
+  /// Deposit ledger accounts maps for receipts.
   paymentAccounts,
+  /// Organization Tax configurations.
   taxes,
+  /// Ledger expense ledger accounts.
   expenseAccounts,
+  /// Configured delivery routes list.
   routes,
+  /// Inventory items with rates and van stock quantities.
   items,
+  /// Customer entities.
   customers,
+  /// Unpaid invoices snapshot.
   openInvoices,
 }
 
+/// Extension providing human-readable labels for master datatypes.
 extension MasterTypeLabel on MasterType {
+  /// Gets a readable description category label.
   String get label {
     switch (this) {
       case MasterType.organization:    return 'Organization';
@@ -41,20 +53,31 @@ extension MasterTypeLabel on MasterType {
   }
 }
 
+/// The core offline synchronisation engine of the application.
+///
+/// Runs background listeners to automatically push transactions to the Zoho Books server 
+/// whenever the device regains a network connection.
+/// Tracks sync statistics and manages dependency resolution during uploads.
 class SyncWorker {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
   final Connectivity _connectivity = Connectivity();
   
   final _syncStatusController = StreamController<String>.broadcast();
+  /// Broadcast stream communicating structural progress status text (e.g. "Syncing Invoice...").
   Stream<String> get syncStatusStream => _syncStatusController.stream;
 
   final _syncCountController = StreamController<int>.broadcast();
+  /// Broadcast stream indicating the remaining count of unsynced queue tasks.
   Stream<int> get syncCountStream => _syncCountController.stream;
 
   bool _isSyncing = false;
+  /// Returns true if a background sync sequence is actively running.
   bool get isSyncing => _isSyncing;
 
+  /// Instantiates a new [SyncWorker] background controller.
+  ///
+  /// Installs network change connectivity listeners to automatically fire syncs when regaining access.
   SyncWorker({
     required this._dbService,
     required this._apiClient,
@@ -67,6 +90,13 @@ class SyncWorker {
     });
   }
 
+  /// Iterates through the pending local transaction queue and pushes items sequentially.
+  ///
+  /// Relational dependency management:
+  /// - Sorts the queue to ensure newly created offline Customers are synced first.
+  /// - Captures newly assigned Zoho IDs from successful customer creations.
+  /// - Automatically scans subsequent queued transactions (invoices, receipts) and replaces
+  ///   their temporary local client customer IDs with the permanent Zoho Contacts ID.
   Future<void> syncPendingItems() async {
     if (_isSyncing) return;
 
@@ -152,7 +182,7 @@ class SyncWorker {
     }
   }
 
-  // Helper: Relational Integrity ID Updater
+  /// Scans the unsynced queue payload maps and swaps out temporary customer keys with permanent server IDs.
   Future<void> _resolveTempCustomerIdsInQueue(String tempCustomerId, String permanentZohoId) async {
     final currentQueue = _dbService.getSyncQueue();
     for (final item in currentQueue) {
@@ -177,7 +207,7 @@ class SyncWorker {
     }
   }
 
-  // Fetch a single master from Zoho Books and save into Hive.
+  /// Fetches a specific configuration master from the Zoho Books REST endpoints and updates local Hive boxes.
   Future<void> syncMaster(MasterType type) async {
     _syncStatusController.add('Syncing ${type.label}...');
     try {
@@ -249,12 +279,10 @@ class SyncWorker {
     }
   }
 
-  // Pull all masters that don't require an active route/warehouse selection.
-  // Items/customers are pulled here too when the selection exists.
+  /// Triggers a full, sequential download of all configurations, settings, items, and route listings.
   Future<void> refreshMasterData() async {
     _syncStatusController.add('Refreshing master data...');
     for (final type in MasterType.values) {
-
       try {
         await syncMaster(type);
       } catch (_) {

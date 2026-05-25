@@ -3,11 +3,18 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../ui/core/widgets/async_search_widget.dart';
 
+/// Draggable search sheet that mounts the debounced [AsyncSearchWidget] for finding clients or inventory.
 class GlobalSearchSheet extends StatelessWidget {
+  /// Visual context.
   final bool isDark;
+
+  /// Callback triggered when a customer record is tapped and selected.
   final ValueChanged<Customer> onCustomerSelected;
+
+  /// Callback triggered when an inventory product item is tapped and selected.
   final ValueChanged<Item> onItemSelected;
 
+  /// Creates a new [GlobalSearchSheet].
   const GlobalSearchSheet({
     super.key,
     required this.isDark,

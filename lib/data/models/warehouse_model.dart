@@ -1,6 +1,10 @@
 import '../../domain/models/warehouse.dart';
 
+/// Data transfer object representing a [Warehouse] entity.
+///
+/// Converts between raw API responses and the local representation of stock rooms/van inventory chambers.
 class WarehouseModel extends Warehouse {
+  /// Creates a new [WarehouseModel] instance.
   const WarehouseModel({
     required super.id,
     required super.name,
@@ -8,6 +12,9 @@ class WarehouseModel extends Warehouse {
     super.isPrimary,
   });
 
+  /// Factory constructor to parse local/remote JSON maps into a [WarehouseModel].
+  ///
+  /// Mappes Zoho API keys (`warehouse_id`, `warehouse_name`, `is_primary`) to their parent domains.
   factory WarehouseModel.fromJson(Map<String, dynamic> json) {
     return WarehouseModel(
       id: json['warehouse_id'] ?? json['id'] ?? '',
@@ -17,6 +24,7 @@ class WarehouseModel extends Warehouse {
     );
   }
 
+  /// Converts this [WarehouseModel] instance into a serializable JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -28,6 +36,7 @@ class WarehouseModel extends Warehouse {
     };
   }
 
+  /// Translates a base domain [Warehouse] entity into a serializable [WarehouseModel].
   factory WarehouseModel.fromDomain(Warehouse w) {
     return WarehouseModel(
       id: w.id,
@@ -37,3 +46,4 @@ class WarehouseModel extends Warehouse {
     );
   }
 }
+

@@ -3,6 +3,7 @@ import '../../../../domain/models/item.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import 'item_line_editor_dialog.dart';
 
 /// Modal dialog that allows searching for inventory items in van stock.
@@ -64,6 +65,7 @@ class _ItemSearchDialogState extends State<ItemSearchDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = context.org.currencySymbol;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -149,7 +151,7 @@ class _ItemSearchDialogState extends State<ItemSearchDialog> {
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          'SKU: ${item.sku} | Rate: ₹${item.rate.toStringAsFixed(2)}',
+                                          'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}',
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,

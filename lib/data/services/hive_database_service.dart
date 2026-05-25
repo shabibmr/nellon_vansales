@@ -29,6 +29,12 @@ import '../models/organization_model.dart';
 import '../models/open_invoice_model.dart';
 import '../models/sync_queue_item.dart';
 
+/// Database service backing the application's offline-first capabilities using Hive boxes.
+///
+/// Manages three distinct storage areas:
+/// 1. `_masterBox`: Stores cached Zoho Books configurations, settings, items, and customer routes.
+/// 2. `_syncQueueBox`: Manages sequential tasks/payloads waiting to sync when online.
+/// 3. `_localHistoryBox`: Records locally created transactions instantly so UI displays them with zero latency.
 class HiveDatabaseService {
   static const String _masterBoxName = 'master_data_box';
   static const String _syncQueueBoxName = 'sync_queue_box';
@@ -38,6 +44,7 @@ class HiveDatabaseService {
   late Box _syncQueueBox;
   late Box _localHistoryBox;
 
+  /// Initializes the local database bindings and opens Hive boxes.
   Future<void> init() async {
     await Hive.initFlutter();
     _masterBox = await Hive.openBox(_masterBoxName);
@@ -45,25 +52,30 @@ class HiveDatabaseService {
     _localHistoryBox = await Hive.openBox(_localHistoryBoxName);
   }
 
-  // --- Clear Database ---
+  /// Clears all local caches, queues, and transaction histories.
   Future<void> clearAll() async {
     await _masterBox.clear();
     await _syncQueueBox.clear();
     await _localHistoryBox.clear();
   }
 
-  // --- Active Session Keys (Route, Van Warehouse, etc.) ---
+  /// Gets the ID of the selected active delivery route.
   String? get activeRouteId => _masterBox.get('active_route_id');
+
+  /// Saves the active delivery route ID.
   Future<void> setActiveRouteId(String? routeId) async {
     await _masterBox.put('active_route_id', routeId);
   }
 
+  /// Gets the physical warehouse ID mapped to the van.
   String? get assignedWarehouseId => _masterBox.get('assigned_warehouse_id');
+
+  /// Mapps a specific Zoho warehouse ID to this local van sales session.
   Future<void> setAssignedWarehouseId(String? warehouseId) async {
     await _masterBox.put('assigned_warehouse_id', warehouseId);
   }
 
-  // --- Master: Customers ---
+  /// Retrieves the list of synced master customer records.
   List<Customer> getCustomers() {
     final rawList = _masterBox.get('customers', defaultValue: []);
     return (rawList as List)
@@ -71,6 +83,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Saves or refreshes customer master lists.
   Future<void> saveCustomers(List<Customer> customers) async {
     final serialized = customers
         .map((c) => jsonEncode(CustomerModel.fromDomain(c).toJson()))
@@ -78,7 +91,7 @@ class HiveDatabaseService {
     await _masterBox.put('customers', serialized);
   }
 
-  // --- Master: Items (Inventory) ---
+  /// Retrieves the list of synced master stocked inventory products.
   List<Item> getItems() {
     final rawList = _masterBox.get('items', defaultValue: []);
     return (rawList as List)
@@ -86,6 +99,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Saves or refreshes inventory items list.
   Future<void> saveItems(List<Item> items) async {
     final serialized = items
         .map((i) => jsonEncode(ItemModel.fromDomain(i).toJson()))
@@ -93,7 +107,7 @@ class HiveDatabaseService {
     await _masterBox.put('items', serialized);
   }
 
-  // --- Master: Routes ---
+  /// Retrieves the list of synced master routes.
   List<RouteModel> getRoutes() {
     final rawList = _masterBox.get('routes', defaultValue: []);
     return (rawList as List)
@@ -108,6 +122,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Saves master delivery routes list.
   Future<void> saveRoutes(List<RouteModel> routes) async {
     final serialized = routes
         .map((r) => jsonEncode({'id': r.id, 'name': r.name, 'description': r.description}))
@@ -115,7 +130,7 @@ class HiveDatabaseService {
     await _masterBox.put('routes', serialized);
   }
 
-  // --- Master: Warehouses ---
+  /// Retrieves list of synced warehouses.
   List<Warehouse> getWarehouses() {
     final rawList = _masterBox.get('warehouses', defaultValue: []);
     return (rawList as List)
@@ -123,6 +138,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Saves master warehouses list.
   Future<void> saveWarehouses(List<Warehouse> warehouses) async {
     final serialized = warehouses
         .map((w) => jsonEncode(WarehouseModel.fromDomain(w).toJson()))
@@ -130,7 +146,7 @@ class HiveDatabaseService {
     await _masterBox.put('warehouses', serialized);
   }
 
-  // --- Master: Payment Accounts (Bank / Cash ledgers for receipts) ---
+  /// Retrieves payment/bank ledgers for receipt mapping.
   List<PaymentAccount> getPaymentAccounts() {
     final rawList = _masterBox.get('payment_accounts', defaultValue: []);
     return (rawList as List)
@@ -138,6 +154,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Saves synced deposit payment accounts/ledgers.
   Future<void> savePaymentAccounts(List<PaymentAccount> accounts) async {
     final serialized = accounts
         .map((a) => jsonEncode(PaymentAccountModel.fromDomain(a).toJson()))
@@ -145,7 +162,7 @@ class HiveDatabaseService {
     await _masterBox.put('payment_accounts', serialized);
   }
 
-  // --- Master: Taxes ---
+  /// Retrieves the list of synced VAT/Tax configurations.
   List<Tax> getTaxes() {
     final rawList = _masterBox.get('taxes', defaultValue: []);
     return (rawList as List)
@@ -153,6 +170,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Saves synced tax brackets.
   Future<void> saveTaxes(List<Tax> taxes) async {
     final serialized = taxes
         .map((t) => jsonEncode(TaxModel.fromDomain(t).toJson()))
@@ -160,7 +178,7 @@ class HiveDatabaseService {
     await _masterBox.put('taxes', serialized);
   }
 
-  // --- Master: Expense Accounts (Expense ledgers) ---
+  /// Retrieves list of synced expense account ledgers.
   List<ExpenseAccount> getExpenseAccounts() {
     final rawList = _masterBox.get('expense_accounts', defaultValue: []);
     return (rawList as List)
@@ -168,6 +186,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Saves synced expense ledgers.
   Future<void> saveExpenseAccounts(List<ExpenseAccount> accounts) async {
     final serialized = accounts
         .map((a) => jsonEncode(ExpenseAccountModel.fromDomain(a).toJson()))
@@ -175,13 +194,14 @@ class HiveDatabaseService {
     await _masterBox.put('expense_accounts', serialized);
   }
 
-  // --- Master: Organization (Currency, fiscal year, etc.) ---
+  /// Retrieves active Organization configurations.
   Organization? getOrganization() {
     final raw = _masterBox.get('organization');
     if (raw == null) return null;
     return OrganizationModel.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
   }
 
+  /// Caches active Organization configurations.
   Future<void> saveOrganization(Organization org) async {
     await _masterBox.put(
       'organization',
@@ -189,7 +209,9 @@ class HiveDatabaseService {
     );
   }
 
-  // --- Master: Open Invoices (per customer, for receipt allocation) ---
+  /// Retrieves synced outstanding customer invoices snapshot.
+  ///
+  /// Optionally filters outstanding invoices down to a specific [customerId].
   List<OpenInvoice> getOpenInvoices({String? customerId}) {
     final rawList = _masterBox.get('open_invoices', defaultValue: []);
     final all = (rawList as List)
@@ -199,6 +221,7 @@ class HiveDatabaseService {
     return all.where((inv) => inv.customerId == customerId).toList();
   }
 
+  /// Overwrites current cached unpaid invoices snapshot.
   Future<void> saveOpenInvoices(List<OpenInvoice> invoices) async {
     final serialized = invoices
         .map((i) => jsonEncode(OpenInvoiceModel.fromDomain(i).toJson()))
@@ -206,7 +229,7 @@ class HiveDatabaseService {
     await _masterBox.put('open_invoices', serialized);
   }
 
-  // --- Sync Queue (Post data offline queue) ---
+  /// Retrieves a list of all sequential tasks awaiting synchronization.
   List<SyncQueueItem> getSyncQueue() {
     final keys = _syncQueueBox.keys.toList();
     return keys.map((key) {
@@ -215,19 +238,22 @@ class HiveDatabaseService {
     }).toList();
   }
 
+  /// Enqueues a new background task to the synchronization queue.
   Future<void> enqueueSyncItem(SyncQueueItem item) async {
     await _syncQueueBox.put(item.id, jsonEncode(item.toJson()));
   }
 
+  /// Re-saves a task to update its execution status or failure logs.
   Future<void> updateSyncItem(SyncQueueItem item) async {
     await _syncQueueBox.put(item.id, jsonEncode(item.toJson()));
   }
 
+  /// Deletes a task from the queue once it has successfully synchronised.
   Future<void> dequeueSyncItem(String id) async {
     await _syncQueueBox.delete(id);
   }
 
-  // --- Local Transaction History (For dashboards & instant offline display) ---
+  /// Retrieves list of invoices recorded locally.
   List<SalesInvoice> getLocalInvoices() {
     final rawList = _localHistoryBox.get('invoices', defaultValue: []);
     return (rawList as List)
@@ -235,13 +261,16 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Caches a newly created sales invoice locally and immediately updates corresponding item stock level in the van.
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {
     final current = getLocalInvoices();
     final model = SalesInvoiceModel.fromDomain(invoice);
     
     // Add or update
     final index = current.indexWhere((inv) => inv.id == invoice.id);
+    SalesInvoice? oldInvoice;
     if (index >= 0) {
+      oldInvoice = current[index];
       current[index] = model;
     } else {
       current.insert(0, model);
@@ -252,6 +281,15 @@ class HiveDatabaseService {
     
     // Update local cached item inventory stock instantly!
     final localItems = getItems();
+    if (oldInvoice != null) {
+      for (final line in oldInvoice.items) {
+        final itemIndex = localItems.indexWhere((it) => it.id == line.item.id);
+        if (itemIndex >= 0) {
+          final existingItem = localItems[itemIndex];
+          localItems[itemIndex] = existingItem.copyWith(stock: existingItem.stock + line.quantity);
+        }
+      }
+    }
     for (final line in invoice.items) {
       final itemIndex = localItems.indexWhere((it) => it.id == line.item.id);
       if (itemIndex >= 0) {
@@ -263,6 +301,7 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
+  /// Retrieves all collection receipts recorded locally.
   List<ReceiptVoucher> getLocalReceipts() {
     final rawList = _localHistoryBox.get('receipts', defaultValue: []);
     return (rawList as List)
@@ -270,6 +309,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Caches a newly created receipt locally and instantly decrements the matching customer's outstanding balance in memory.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {
     final current = getLocalReceipts();
     final model = ReceiptVoucherModel.fromDomain(voucher);
@@ -297,6 +337,7 @@ class HiveDatabaseService {
     await saveCustomers(localCustomers);
   }
 
+  /// Retrieves list of sales returns recorded locally.
   List<SalesReturn> getLocalReturns() {
     final rawList = _localHistoryBox.get('returns', defaultValue: []);
     return (rawList as List)
@@ -304,6 +345,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Caches a sales return locally and immediately restores returned product stock levels back in the local inventory.
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {
     final current = getLocalReturns();
     final model = SalesReturnModel.fromDomain(salesReturn);
@@ -330,6 +372,7 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
+  /// Retrieves all Filed route expenses.
   List<ExpenseEntry> getLocalExpenses() {
     final rawList = _localHistoryBox.get('expenses', defaultValue: []);
     return (rawList as List)
@@ -337,6 +380,7 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Caches a new expense voucher locally.
   Future<void> saveLocalExpense(ExpenseEntry expense) async {
     final current = getLocalExpenses();
     final model = ExpenseEntryModel.fromDomain(expense);
@@ -352,24 +396,31 @@ class HiveDatabaseService {
     await _localHistoryBox.put('expenses', serialized);
   }
 
+  /// Retrieves the end-of-trip daily cash closing record, if filed.
   CashClosing? getLocalCashClosing() {
     final raw = _localHistoryBox.get('cash_closing');
     if (raw == null) return null;
     return CashClosingModel.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
   }
 
+  /// Caches the daily cash closing reconciliation record.
   Future<void> saveLocalCashClosing(CashClosing closing) async {
     final model = CashClosingModel.fromDomain(closing);
     await _localHistoryBox.put('cash_closing', jsonEncode(model.toJson()));
   }
 
-  // --- OAuth 2.0 Token Storage ---
+  /// Gets the cached OAuth 2.0 Access Token for Zoho Books.
   String? get oauthAccessToken => _masterBox.get('oauth_access_token');
+
+  /// Saves the cached OAuth 2.0 Access Token for Zoho Books.
   Future<void> setOauthAccessToken(String? token) async {
     await _masterBox.put('oauth_access_token', token);
   }
 
+  /// Gets the token expiry timestamp in milliseconds.
   int? get oauthTokenExpiry => _masterBox.get('oauth_token_expiry');
+
+  /// Saves the token expiry timestamp in milliseconds.
   Future<void> setOauthTokenExpiry(int? expiryMillis) async {
     await _masterBox.put('oauth_token_expiry', expiryMillis);
   }

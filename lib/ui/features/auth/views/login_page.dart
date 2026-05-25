@@ -3,7 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../bloc/auth_bloc.dart';
 
+/// The Login Screen of the Van Sales application.
+///
+/// Implements beautiful glassmorphism gradients, input forms with field validation, 
+/// and maps submittals directly to the [AuthBloc] trigger.
 class LoginPage extends StatefulWidget {
+  /// Creates a new [LoginPage].
   const LoginPage({super.key});
 
   @override
@@ -22,6 +27,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  /// Triggers credential validation and fires [LoginRequested] event to Auth Bloc.
   void _onSubmit() {
     if (_formKey.currentState!.validate()) {
       context.read<AuthBloc>().add(
@@ -35,7 +41,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(

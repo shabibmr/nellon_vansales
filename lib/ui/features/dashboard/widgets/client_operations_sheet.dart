@@ -1,14 +1,28 @@
 import 'package:flutter/material.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 
+/// Draggable bottom drawer displaying customer-specific operations/actions.
+///
+/// Prompts shortcuts to launch a new invoice billing cart, log customer collection payments, or register sales returns.
 class ClientOperationsSheet extends StatelessWidget {
+  /// The customer profile selected.
   final Customer customer;
+
+  /// Visual context.
   final bool isDark;
+
+  /// Callback to trigger new invoice flows.
   final VoidCallback onNewInvoiceTap;
+
+  /// Callback to trigger receipt allocations.
   final VoidCallback onReceiptPaymentTap;
+
+  /// Callback to process product returns.
   final VoidCallback onSalesReturnTap;
 
+  /// Creates a new [ClientOperationsSheet].
   const ClientOperationsSheet({
     super.key,
     required this.customer,
@@ -26,6 +40,7 @@ class ClientOperationsSheet extends StatelessWidget {
       maxChildSize: 0.85,
       expand: false,
       builder: (context, scrollController) {
+        final cs = context.org.currencySymbol;
         return SingleChildScrollView(
           controller: scrollController,
           padding: const EdgeInsets.all(24.0),
@@ -59,19 +74,26 @@ class ClientOperationsSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Outstanding: ₹${customer.outstandingBalance.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: customer.outstandingBalance > 0 ? AppTheme.errorRose : AppTheme.successEmerald,
+                  Flexible(
+                    child: Text(
+                      'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: customer.outstandingBalance > 0 ? AppTheme.errorRose : AppTheme.successEmerald,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Text(
-                    'Credit Limit: ₹${customer.creditLimit.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      'Limit: $cs${customer.creditLimit.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                    ),
                   ),
                 ],
               ),

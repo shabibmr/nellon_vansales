@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/receipt_bloc.dart';
 import 'receipt_editor_page.dart';
 
@@ -64,6 +65,7 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = context.org.currencySymbol;
 
     return Scaffold(
       appBar: AppBar(
@@ -312,7 +314,7 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          '₹${receipt.amount.toStringAsFixed(2)}',
+                                          '$cs${receipt.amount.toStringAsFixed(2)}',
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w900,
                                             fontSize: 16,

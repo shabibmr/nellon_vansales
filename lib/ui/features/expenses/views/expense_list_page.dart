@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/expense_bloc.dart';
 import 'expense_editor_page.dart';
 
@@ -64,6 +65,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = context.org.currencySymbol;
 
     return Scaffold(
       appBar: AppBar(
@@ -205,10 +207,9 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final expense = list[index];
-                          final categories = expense.lines
-                              .map((l) => l.category)
-                              .toSet()
-                              .join(', ');
+                          final firstLine = expense.lines.isNotEmpty ? expense.lines.first : null;
+                          final category = firstLine?.category ?? '';
+                          final description = firstLine?.description ?? '';
 
                           return Card(
                             child: InkWell(
@@ -266,15 +267,17 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                             ],
                                           ),
                                           const SizedBox(height: 4),
-                                          Text(categories,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: isDark
-                                                    ? AppTheme.darkTextSecondary
-                                                    : AppTheme.lightTextSecondary,
-                                              )),
-                                          if (expense.lines.length > 1)
-                                            Text('${expense.lines.length} line items',
+                                          if (category.isNotEmpty)
+                                            Text(category,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark
+                                                      ? AppTheme.darkTextSecondary
+                                                      : AppTheme.lightTextSecondary,
+                                                )),
+                                          if (description.isNotEmpty)
+                                            Text(description,
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   color: isDark
@@ -288,7 +291,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          '₹${expense.amount.toStringAsFixed(2)}',
+                                          '$cs${expense.amount.toStringAsFixed(2)}',
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w900,
                                             fontSize: 16,

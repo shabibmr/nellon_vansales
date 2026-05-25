@@ -163,4 +163,32 @@ void main() {
     // Verify all 9 categories of master data successfully saved locally
     expect(fakeDb.savedData.length, 9);
   });
+
+  test('SyncWorker syncMaster propagates exceptions and broadcasts error status when API fails', () async {
+    final fakeDb = FakeHiveDatabaseService();
+    final fakeApi = FakeFailingZohoApiClient();
+    final worker = SyncWorker(dbService: fakeDb, apiClient: fakeApi);
+
+    final List<String> statusLogs = [];
+    final subscription = worker.syncStatusStream.listen((status) {
+      statusLogs.add(status);
+    });
+
+    expect(() => worker.syncMaster(MasterType.items), throwsException);
+
+    await Future.delayed(Duration.zero);
+    await subscription.cancel();
+
+    expect(statusLogs, contains('Syncing Items...'));
+    expect(statusLogs.any((log) => log.contains('Items sync failed: Exception: API Connection timeout')), isTrue);
+  });
+}
+
+class FakeFailingZohoApiClient extends ZohoApiClient {
+  FakeFailingZohoApiClient() : super(dbService: FakeHiveDatabaseService());
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchItems(String warehouseId) async {
+    throw Exception('API Connection timeout');
+  }
 }

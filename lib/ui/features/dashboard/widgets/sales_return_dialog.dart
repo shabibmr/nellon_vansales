@@ -9,10 +9,19 @@ import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 
+/// Modal dialog for logging a [SalesReturn] credit note.
+///
+/// Prompts selection of a returned item from the active warehouse product catalog
+/// and inputting the returned quantity. Prepares a sales return payload, updates
+/// client credit balance or stock in local cache, and enqueues a sync job to post to Zoho.
 class SalesReturnDialog extends StatefulWidget {
+  /// The selected customer profile returning inventory.
   final Customer customer;
+
+  /// Callback triggered when the sales return transaction is successfully processed and cached.
   final VoidCallback onReturnConfirmed;
 
+  /// Creates a new [SalesReturnDialog] widget.
   const SalesReturnDialog({
     super.key,
     required this.customer,
@@ -51,9 +60,8 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
           children: [
             const Text('Select returned item and quantity to credit.'),
             const SizedBox(height: 16),
-            // ignore: deprecated_member_use
             DropdownButtonFormField<Item>(
-              value: _selectedItem,
+              initialValue: _selectedItem,
               decoration: const InputDecoration(labelText: 'Returned Item'),
               items: _items
                   .map((item) => DropdownMenuItem(value: item, child: Text(item.name)))

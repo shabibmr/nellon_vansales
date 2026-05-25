@@ -2,14 +2,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/extensions/org_context_extension.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/models/item.dart';
 import '../../../domain/repositories/sales_repository.dart';
 
+/// Reusable stateful widget that facilitates asynchronous search queries.
+///
+/// Implements a performant, debounced text search field that lets users search
+/// for either [Customer]s or [Item]s within local cached directories.
 class AsyncSearchWidget extends StatefulWidget {
+  /// Callback triggered when a customer contact is selected from search results.
   final Function(Customer)? onCustomerSelected;
+
+  /// Callback triggered when an inventory product is selected from search results.
   final Function(Item)? onItemSelected;
 
+  /// Creates a new [AsyncSearchWidget].
   const AsyncSearchWidget({
     super.key,
     this.onCustomerSelected,
@@ -20,7 +29,13 @@ class AsyncSearchWidget extends StatefulWidget {
   State<AsyncSearchWidget> createState() => _AsyncSearchWidgetState();
 }
 
-enum SearchType { customers, items }
+/// Enumerates the search category modes.
+enum SearchType { 
+  /// Query customers list.
+  customers, 
+  /// Query van inventory list.
+  items 
+}
 
 class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
   final _searchController = TextEditingController();
@@ -39,7 +54,10 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
     super.dispose();
   }
 
-  // Performance-Optimized Debounce Trigger
+  /// Triggers a debounced search function whenever the text changes.
+  ///
+  /// Delays search execution by 400ms after the user stops typing to prevent
+  /// continuous database/cache search operations.
   void _onSearchChanged(String query) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     
@@ -63,7 +81,9 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
     });
   }
 
-  // Simulated Async REST / Cache fetch
+  /// Queries the local [SalesRepository] for customer or inventory records matching the search term.
+  ///
+  /// Normalizes queries to lowercase and performs substring matching on key properties (name, sku, company, phone).
   Future<void> _executeAsyncSearch(String query) async {
     final salesRepo = context.read<SalesRepository>();
     final lowercaseQuery = query.toLowerCase();
@@ -173,6 +193,7 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
   }
 
   Widget _buildResultsSection(bool isDark) {
+    final cs = context.org.currencySymbol;
     if (_isLoading) {
       return const Center(
         child: Column(
@@ -203,7 +224,8 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Type to find sequential ${_activeSearchType.name}',
+              'Type to find ${_activeSearchType.name}',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
                 color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
@@ -241,7 +263,7 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
                 children: [
                   const Text('Outstanding', style: TextStyle(fontSize: 10)),
                   Text(
-                    '₹${customer.outstandingBalance.toStringAsFixed(2)}',
+                    '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -288,7 +310,7 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
                     ),
                   ),
                   Text(
-                    '₹${item.rate.toStringAsFixed(2)}',
+                    '$cs${item.rate.toStringAsFixed(2)}',
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryIndigo),
                   )
                 ],

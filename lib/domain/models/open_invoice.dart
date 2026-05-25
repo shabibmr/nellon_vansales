@@ -1,17 +1,35 @@
 import 'package:equatable/equatable.dart';
 
-/// Lightweight snapshot of an unpaid invoice — used for receipt allocation
-/// against a customer when offline. Refreshed per route load.
+/// Lightweight snapshot of an unpaid invoice, synchronized from the server.
+///
+/// Used specifically for allocating payments locally/offline against particular outstanding
+/// customer accounts during a route.
 class OpenInvoice extends Equatable {
+  /// Unique identifier of the invoice.
   final String invoiceId;
-  final String invoiceNumber;
-  final String customerId;
-  final DateTime date;
-  final DateTime dueDate;
-  final double total;
-  final double balance;
-  final String status; // unpaid | partially_paid | overdue
 
+  /// Human-readable invoice voucher reference number.
+  final String invoiceNumber;
+
+  /// The customer ID this invoice was billed to.
+  final String customerId;
+
+  /// The date the invoice was generated.
+  final DateTime date;
+
+  /// The deadline date for invoice payment.
+  final DateTime dueDate;
+
+  /// The original grand total of the invoice.
+  final double total;
+
+  /// The remaining unpaid balance on this invoice.
+  final double balance;
+
+  /// The current payment state (e.g., "unpaid", "partially_paid", "overdue").
+  final String status;
+
+  /// Creates a new [OpenInvoice] snapshot.
   const OpenInvoice({
     required this.invoiceId,
     required this.invoiceNumber,
@@ -23,6 +41,7 @@ class OpenInvoice extends Equatable {
     required this.status,
   });
 
+  /// Creates a copy of this [OpenInvoice] with replaced values for specific fields.
   OpenInvoice copyWith({
     String? invoiceId,
     String? invoiceNumber,
@@ -49,3 +68,4 @@ class OpenInvoice extends Equatable {
   List<Object?> get props =>
       [invoiceId, invoiceNumber, customerId, date, dueDate, total, balance, status];
 }
+

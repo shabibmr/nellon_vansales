@@ -1,15 +1,42 @@
 import 'package:equatable/equatable.dart';
 
-enum SyncStatus { pending, syncing, failed, completed }
+/// Enumerates all sync progression states of local transaction logs.
+enum SyncStatus { 
+  /// Scheduled to upload.
+  pending, 
+  /// Currently uploading via Sync Worker.
+  syncing, 
+  /// Failed due to API limits, network dropout, or validation error.
+  failed, 
+  /// Completed successfully.
+  completed 
+}
 
+/// Represents an offline-first record pushed to a sync queue box.
+///
+/// Wraps arbitrary payloads (sales invoice, receipt, return, expense, cash closing)
+/// along with metadata (sync state, timestamps, error trace logs) so background workers
+/// can process uploads sequentially when network state is favorable.
 class SyncQueueItem extends Equatable {
+  /// Unique identifier of the sync queue task.
   final String id;
-  final String type; // 'invoice', 'receipt', 'return', 'expense', 'closing', 'customer'
+
+  /// Entity name type to distinguish what parser to invoke (e.g. "invoice", "receipt", "return", "expense", "closing", "customer").
+  final String type;
+
+  /// The raw JSON map object of the transaction data to sync.
   final Map<String, dynamic> payload;
+
+  /// Current sync execution state.
   final SyncStatus status;
+
+  /// Error details or message if the sync status is [SyncStatus.failed].
   final String? errorMessage;
+
+  /// Date-time when this sync action was generated.
   final DateTime timestamp;
 
+  /// Creates a new [SyncQueueItem] to manage offline syncing.
   const SyncQueueItem({
     required this.id,
     required this.type,
@@ -19,6 +46,7 @@ class SyncQueueItem extends Equatable {
     required this.timestamp,
   });
 
+  /// Returns a copied [SyncQueueItem] instance with replaced values for specified fields.
   SyncQueueItem copyWith({
     String? id,
     String? type,
@@ -37,6 +65,7 @@ class SyncQueueItem extends Equatable {
     );
   }
 
+  /// Parses local database JSON map into a [SyncQueueItem] task.
   factory SyncQueueItem.fromJson(Map<String, dynamic> json) {
     return SyncQueueItem(
       id: json['id'] ?? '',
@@ -53,6 +82,7 @@ class SyncQueueItem extends Equatable {
     );
   }
 
+  /// Formats the task metadata and payload to a database compatible JSON map.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -67,3 +97,4 @@ class SyncQueueItem extends Equatable {
   @override
   List<Object?> get props => [id, type, payload, status, errorMessage, timestamp];
 }
+

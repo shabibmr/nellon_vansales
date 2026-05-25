@@ -10,10 +10,14 @@ import '../../domain/repositories/sales_repository.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
 
+/// Concrete implementation of [SalesRepository] backed by a local Hive database cache.
+///
+/// Implements swift read/write interfaces utilizing [HiveDatabaseService] for fast offline performance.
 class SalesRepositoryImpl implements SalesRepository {
   final HiveDatabaseService _dbService;
 
-  SalesRepositoryImpl({required HiveDatabaseService this._dbService});
+  /// Creates a new [SalesRepositoryImpl] wrapping the Hive local database provider.
+  SalesRepositoryImpl({required this._dbService});
 
   @override
   List<RouteModel> getRoutes() => _dbService.getRoutes();
@@ -72,3 +76,4 @@ class SalesRepositoryImpl implements SalesRepository {
   @override
   List<SyncQueueItem> getSyncQueue() => _dbService.getSyncQueue();
 }
+
