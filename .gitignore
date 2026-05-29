@@ -1,3 +1,7 @@
+# Environment / secrets
+.env
+zoho_endpoints/responses/
+
 # Miscellaneous
 *.class
 *.log

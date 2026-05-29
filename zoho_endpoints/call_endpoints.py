@@ -14,12 +14,20 @@ import json
 import os
 import time
 import requests
+from dotenv import load_dotenv
 
-# -- Credentials (from zoho_api_client.dart) ----------------------------------
-CLIENT_ID     = "1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP"
-CLIENT_SECRET = "1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103"
-REFRESH_TOKEN = "1000.ccb7c895a473ba5569c55565c0aed87d.c2f3a5530356193d39a19c511efed856"
-ORG_ID        = "783019958"
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+def _require_env(key: str) -> str:
+    val = os.getenv(key)
+    if not val:
+        raise RuntimeError(f"Missing required env var: {key}  (set it in zoho_endpoints/.env)")
+    return val
+
+CLIENT_ID     = _require_env("ZOHO_CLIENT_ID")
+CLIENT_SECRET = _require_env("ZOHO_CLIENT_SECRET")
+REFRESH_TOKEN = _require_env("ZOHO_REFRESH_TOKEN")
+ORG_ID        = _require_env("ZOHO_ORG_ID")
 TOKEN_URL     = "https://accounts.zoho.com/oauth/v2/token"
 API_BASE      = "https://www.zohoapis.com/books/v3"
 
