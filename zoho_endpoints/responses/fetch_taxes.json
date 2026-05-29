@@ -1,0 +1,59 @@
+{
+  "code": 0,
+  "message": "success",
+  "page_context": {
+    "page": 1,
+    "per_page": 200,
+    "has_more_page": false,
+    "report_name": "Taxes",
+    "applied_filter": "Taxes.Active",
+    "as_of_date": "2026-05-26",
+    "to_date": "2026-05-26",
+    "sort_column": "tax_name",
+    "sort_order": "A"
+  },
+  "taxes": [
+    {
+      "tax_id": "3331482000000075238",
+      "tax_display_name": "",
+      "tax_name": "Standard Rate",
+      "tax_percentage": 5,
+      "tax_type": "tax",
+      "tax_specific_type": "",
+      "tax_authority_id": "3331482000000075228",
+      "tax_authority_name": "FTA",
+      "is_inactive": false,
+      "country": "United Arab Emirates",
+      "country_code": "AE",
+      "is_default_tax": true,
+      "is_editable": true,
+      "last_modified_time": "2022-06-25T20:06:17+0400",
+      "status": "Active",
+      "description": "",
+      "reference_id": ""
+    },
+    {
+      "tax_id": "3331482000000075242",
+      "tax_display_name": "",
+      "tax_name": "Zero Rate",
+      "tax_percentage": 0,
+      "tax_type": "tax",
+      "tax_specific_type": "",
+      "tax_authority_id": "3331482000000075228",
+      "tax_authority_name": "FTA",
+      "is_inactive": false,
+      "country": "United Arab Emirates",
+      "country_code": "AE",
+      "is_default_tax": false,
+      "is_editable": true,
+      "last_modified_time": "2022-06-25T20:06:18+0400",
+      "status": "Active",
+      "description": "",
+      "reference_id": ""
+    }
+  ],
+  "_pagination": {
+    "total_records": 2,
+    "pages_fetched": 1
+  }
+}

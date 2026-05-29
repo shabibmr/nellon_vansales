@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../domain/models/sales_invoice.dart';
 import '../../domain/models/sales_return.dart';
@@ -78,30 +77,38 @@ class VoucherPdfService {
   }
 
   /// Triggers generic system-wide share sheet with the PDF attachment.
-  Future<ShareResult> sharePdfFile(File file, String subject) async {
-    final xFile = XFile(file.path, mimeType: 'application/pdf');
-    return Share.shareXFiles(
-      [xFile],
+  Future<bool> sharePdfFile(File file, String subject) async {
+    final bytes = await file.readAsBytes();
+    return Printing.sharePdf(
+      bytes: bytes,
+      filename: _basename(file.path),
       subject: subject,
     );
   }
 
   /// Launches platform share sheet configured specifically for Email routing.
-  Future<ShareResult> shareViaEmail(File file, String subject, String body) async {
-    final xFile = XFile(file.path, mimeType: 'application/pdf');
-    return Share.shareXFiles(
-      [xFile],
+  Future<bool> shareViaEmail(File file, String subject, String body) async {
+    final bytes = await file.readAsBytes();
+    return Printing.sharePdf(
+      bytes: bytes,
+      filename: _basename(file.path),
       subject: subject,
-      text: body,
+      body: body,
     );
   }
 
   /// Launches platform share sheet configured specifically for WhatsApp routing.
-  Future<ShareResult> shareViaWhatsApp(File file, String message) async {
-    final xFile = XFile(file.path, mimeType: 'application/pdf');
-    return Share.shareXFiles(
-      [xFile],
-      text: message,
+  Future<bool> shareViaWhatsApp(File file, String message) async {
+    final bytes = await file.readAsBytes();
+    return Printing.sharePdf(
+      bytes: bytes,
+      filename: _basename(file.path),
+      body: message,
     );
+  }
+
+  String _basename(String path) {
+    final idx = path.lastIndexOf(RegExp(r'[\\/]'));
+    return idx >= 0 ? path.substring(idx + 1) : path;
   }
 }

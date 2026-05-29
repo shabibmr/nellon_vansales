@@ -1,0 +1,17 @@
+id,title,method,path,extra_params,description
+1,fetch_organization,GET,/organizations/783019958,,Fetch organization details (currency, timezone, fiscal year)
+2,fetch_warehouses,GET,/settings/warehouses,per_page=200,List all configured warehouses
+3,fetch_payment_accounts,GET,/bankaccounts,per_page=200,List bank and cash accounts for receipt allocation
+4,fetch_taxes,GET,/settings/taxes,per_page=200,List all tax configurations
+5,fetch_expense_accounts,GET,/chartofaccounts,filter_by=AccountType.Expense&per_page=200,Chart of accounts filtered to Expense type
+6,fetch_items,GET,/items,per_page=200,List inventory items with rates and stock
+7,fetch_customers,GET,/contacts,contact_type=customer&per_page=200,List all customer contacts
+8,fetch_open_invoices,GET,/invoices,status=unpaid&per_page=200,List unpaid invoices for receipt allocation
+9,fetch_customer_payments,GET,/customerpayments,per_page=200,List recorded customer payments
+10,fetch_credit_notes,GET,/creditnotes,per_page=200,List credit notes (sales returns)
+11,fetch_expenses,GET,/expenses,per_page=200,List expense entries
+12,fetch_invoices_by_customer,GET,/invoices,customer_id=PLACEHOLDER_CUSTOMER_ID&per_page=200,List all invoices for a specific customer (replace PLACEHOLDER_CUSTOMER_ID)
+13,fetch_invoices_by_item,GET,/invoices,item_id=PLACEHOLDER_ITEM_ID&per_page=200,List all invoices containing a specific item (replace PLACEHOLDER_ITEM_ID)
+14,fetch_sales_returns_by_date,GET,/creditnotes,date_start=2026-04-01&date_end=CURRENT_DATE&per_page=200,List sales returns (credit notes) filtered by date range
+15,fetch_expense_payments_by_date,GET,/expenses,date_start=2026-04-01&date_end=CURRENT_DATE&per_page=200,List expense entries filtered by date range
+16,fetch_invoice_receipts_by_date,GET,/customerpayments,date_start=2026-04-01&date_end=CURRENT_DATE&per_page=200,List customer payments (invoice receipts) filtered by date range

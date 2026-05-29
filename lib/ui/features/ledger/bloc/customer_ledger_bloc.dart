@@ -55,9 +55,15 @@ class CustomerLedgerState extends Equatable {
     this.ledger,
     this.isLoading = false,
     this.errorMessage,
-  })  : startDate = startDate ??
-            DateTime(DateTime.now().year, DateTime.now().month, 1),
+  })  : startDate = startDate ?? _currentFinancialYearStart(),
         endDate = endDate ?? DateTime.now();
+
+  /// Returns April 1 of the current financial year (India FY starts in April).
+  static DateTime _currentFinancialYearStart() {
+    final now = DateTime.now();
+    final year = now.month >= 4 ? now.year : now.year - 1;
+    return DateTime(year, 4, 1);
+  }
 
   bool get canFetch => selectedCustomer != null && !isLoading;
 

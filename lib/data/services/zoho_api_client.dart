@@ -144,6 +144,55 @@ class ZohoApiClient {
     return null;
   }
 
+  // --- Generic helpers ---
+
+  /// Fetches all pages from a Zoho list endpoint. Returns a single flat list of records.
+  /// The records are read from the first list-valued key in the response payload
+  /// (e.g. `invoices`, `customerpayments`, `creditnotes`).
+  Future<List<Map<String, dynamic>>> _fetchAllPages(
+    String path,
+    Map<String, dynamic> baseParams,
+  ) async {
+    final all = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      final params = <String, dynamic>{
+        ...baseParams,
+        'per_page': 200,
+        'page': page,
+      };
+      final response = await _dio.get(path, queryParameters: params);
+      if (response.statusCode != 200) {
+        throw Exception('GET $path failed: ${response.statusCode}');
+      }
+      final data = response.data as Map<String, dynamic>;
+      List<dynamic>? listVal;
+      for (final v in data.values) {
+        if (v is List) {
+          listVal = v;
+          break;
+        }
+      }
+      if (listVal != null) {
+        all.addAll(listVal.map((e) => Map<String, dynamic>.from(e as Map)));
+      }
+      final pageContext = data['page_context'] as Map?;
+      final hasMore = pageContext?['has_more_page'] == true;
+      if (!hasMore) break;
+      page += 1;
+    }
+    return all;
+  }
+
+  /// Fetches a single contact detail record (needed for opening_balance_amount).
+  Future<Map<String, dynamic>> _fetchContactDetail(String contactId) async {
+    final response = await _dio.get('/contacts/$contactId');
+    if (response.statusCode != 200) {
+      throw Exception('GET /contacts/$contactId failed: ${response.statusCode}');
+    }
+    return Map<String, dynamic>.from(response.data['contact'] ?? {});
+  }
+
   // --- Zoho Books REST APIs ---
 
   // 1. Fetch Routes (Simulated since Zoho Books doesn't have a native Route entity, we map to custom Contact Fields)
@@ -600,7 +649,14 @@ class ZohoApiClient {
     };
   }
 
-  // 14. Customer Statement (GET /contacts/{id}/statements) — ledger report
+  // 14. Customer Statement — composed locally from primary records.
+  //
+  // Zoho Books does not expose a JSON ledger endpoint. We build it Option-A style:
+  //   1) Fetch contact detail (for opening_balance_amount)
+  //   2) Fetch all invoices, customer payments, and credit notes for this contact
+  //   3) Opening = contact.opening_balance + Σ(invoices before from) − Σ(payments+credit_notes before from)
+  //   4) Merge in-period rows, sort by date, compute running balance
+  //   5) Return the same JSON shape that CustomerLedger.fromJson consumes
   Future<Map<String, dynamic>> fetchCustomerStatement(
     String contactId, {
     DateTime? startDate,
@@ -608,23 +664,119 @@ class ZohoApiClient {
   }) async {
     if (!_isMockMode()) {
       try {
-        final params = <String, dynamic>{};
-        if (startDate != null) {
-          params['from_date'] = startDate.toIso8601String().split('T')[0];
-        }
-        if (endDate != null) {
-          params['to_date'] = endDate.toIso8601String().split('T')[0];
+        final from = startDate ?? DateTime(DateTime.now().year, 1, 1);
+        final to = endDate ?? DateTime.now();
+
+        final results = await Future.wait([
+          _fetchContactDetail(contactId),
+          _fetchAllPages('/invoices', {'customer_id': contactId}),
+          _fetchAllPages('/customerpayments', {'customer_id': contactId}),
+          _fetchAllPages('/creditnotes', {'customer_id': contactId}),
+        ]);
+
+        final contact = results[0] as Map<String, dynamic>;
+        final invoices = results[1] as List<Map<String, dynamic>>;
+        final payments = results[2] as List<Map<String, dynamic>>;
+        final creditNotes = results[3] as List<Map<String, dynamic>>;
+
+        final contactName =
+            (contact['contact_name'] ?? contact['company_name'] ?? '') as String;
+        final baseOpening =
+            (contact['opening_balance_amount'] ?? 0).toDouble();
+
+        DateTime parseDate(String? s) =>
+            s == null || s.isEmpty ? DateTime(1970) : DateTime.parse(s);
+
+        bool before(DateTime d) => d.isBefore(DateTime(from.year, from.month, from.day));
+        bool inRange(DateTime d) {
+          final f = DateTime(from.year, from.month, from.day);
+          final t = DateTime(to.year, to.month, to.day, 23, 59, 59);
+          return !d.isBefore(f) && !d.isAfter(t);
         }
 
-        final response = await _dio.get(
-          '/contacts/$contactId/statements',
-          queryParameters: params,
-        );
-        if (response.statusCode == 200) {
-          return Map<String, dynamic>.from(
-              response.data['contact_statement'] ?? {});
+        // Compute opening balance: contact's books-start opening + everything before `from`.
+        double opening = baseOpening;
+        for (final inv in invoices) {
+          final d = parseDate(inv['date'] as String?);
+          if (before(d)) opening += (inv['total'] ?? 0).toDouble();
         }
-        throw Exception('Failed to fetch statement: ${response.statusCode}');
+        for (final pay in payments) {
+          final d = parseDate(pay['date'] as String?);
+          if (before(d)) opening -= (pay['amount'] ?? 0).toDouble();
+        }
+        for (final cn in creditNotes) {
+          final d = parseDate(cn['date'] as String?);
+          if (before(d)) opening -= (cn['total'] ?? 0).toDouble();
+        }
+
+        // Build in-period rows.
+        final rows = <Map<String, dynamic>>[];
+        for (final inv in invoices) {
+          final d = parseDate(inv['date'] as String?);
+          if (!inRange(d)) continue;
+          final number = (inv['invoice_number'] ?? '') as String;
+          rows.add({
+            'transaction_id': inv['invoice_id'] ?? '',
+            'transaction_number': number,
+            'date': inv['date'],
+            'transaction_type': 'invoice',
+            'debit': (inv['total'] ?? 0).toDouble(),
+            'credit': 0.0,
+            'description': 'Sales Invoice $number'.trim(),
+            '_sort': d.millisecondsSinceEpoch,
+          });
+        }
+        for (final pay in payments) {
+          final d = parseDate(pay['date'] as String?);
+          if (!inRange(d)) continue;
+          final number = (pay['payment_number'] ?? '') as String;
+          final mode = (pay['payment_mode'] ?? '') as String;
+          rows.add({
+            'transaction_id': pay['payment_id'] ?? '',
+            'transaction_number': number,
+            'date': pay['date'],
+            'transaction_type': 'payment',
+            'debit': 0.0,
+            'credit': (pay['amount'] ?? 0).toDouble(),
+            'description': mode.isEmpty
+                ? 'Payment Received'
+                : 'Payment Received — $mode',
+            '_sort': d.millisecondsSinceEpoch,
+          });
+        }
+        for (final cn in creditNotes) {
+          final d = parseDate(cn['date'] as String?);
+          if (!inRange(d)) continue;
+          final number = (cn['creditnote_number'] ?? '') as String;
+          rows.add({
+            'transaction_id': cn['creditnote_id'] ?? '',
+            'transaction_number': number,
+            'date': cn['date'],
+            'transaction_type': 'credit_note',
+            'debit': 0.0,
+            'credit': (cn['total'] ?? 0).toDouble(),
+            'description': 'Credit Note $number'.trim(),
+            '_sort': d.millisecondsSinceEpoch,
+          });
+        }
+
+        rows.sort((a, b) => (a['_sort'] as int).compareTo(b['_sort'] as int));
+
+        // Running balance
+        double running = opening;
+        for (final r in rows) {
+          running += (r['debit'] as double) - (r['credit'] as double);
+          r['balance'] = running;
+          r.remove('_sort');
+        }
+
+        return {
+          'contact_id': contactId,
+          'contact_name': contactName,
+          'opening_balance': opening,
+          'closing_balance': running,
+          'transactions': rows,
+        };
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchCustomerStatement error: $e');
