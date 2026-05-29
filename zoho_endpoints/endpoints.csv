@@ -15,3 +15,8 @@ id,title,method,path,extra_params,description
 14,fetch_sales_returns_by_date,GET,/creditnotes,date_start=2026-04-01&date_end=CURRENT_DATE&per_page=200,List sales returns (credit notes) filtered by date range
 15,fetch_expense_payments_by_date,GET,/expenses,date_start=2026-04-01&date_end=CURRENT_DATE&per_page=200,List expense entries filtered by date range
 16,fetch_invoice_receipts_by_date,GET,/customerpayments,date_start=2026-04-01&date_end=CURRENT_DATE&per_page=200,List customer payments (invoice receipts) filtered by date range
+17,fetch_single_invoice,GET,/invoices/PLACEHOLDER_INVOICE_ID,,Fetch full details of the last invoice
+18,fetch_single_invoice_receipt,GET,/customerpayments/PLACEHOLDER_INVOICE_RECEIPT_ID,,Fetch full details of the last invoice receipt (customer payment by date)
+19,fetch_single_expense,GET,/expenses/PLACEHOLDER_EXPENSE_ID,,Fetch full details of the last expense
+20,fetch_single_payment,GET,/customerpayments/PLACEHOLDER_PAYMENT_ID,,Fetch full details of the last customer payment
+21,fetch_single_credit_note,GET,/creditnotes/PLACEHOLDER_CREDIT_NOTE_ID,,Fetch full details of the last credit note

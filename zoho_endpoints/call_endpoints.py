@@ -34,15 +34,47 @@ API_BASE      = "https://www.zohoapis.com/books/v3"
 RESPONSES_DIR = os.path.join(os.path.dirname(__file__), "responses")
 ENDPOINTS_CSV = os.path.join(os.path.dirname(__file__), "endpoints.csv")
 
-# Override placeholder IDs here before running, or pass via CLI:
-#   python call_endpoints.py --customer-id 123456789 --item-id 987654321
-SAMPLE_CUSTOMER_ID = ""
-SAMPLE_ITEM_ID     = ""
-
 # Date range is fixed: 2026-04-01 -> today (auto-resolved at runtime)
 DATE_START = "2026-04-01"
 
 os.makedirs(RESPONSES_DIR, exist_ok=True)
+
+# Placeholder → (response_file, list_key, id_field, selector)
+# selector: "last" picks the final record; "max:<field>" picks the record with highest numeric field
+PLACEHOLDER_SOURCES: dict[str, tuple[str, str, str, str]] = {
+    "PLACEHOLDER_CUSTOMER_ID":        ("fetch_customers",                "contacts",          "contact_id",     "max:outstanding_receivable_amount"),
+    "PLACEHOLDER_ITEM_ID":            ("fetch_items",                    "items",              "item_id",        "max:stock_on_hand"),
+    "PLACEHOLDER_INVOICE_ID":         ("fetch_open_invoices",            "invoices",           "invoice_id",     "last"),
+    "PLACEHOLDER_INVOICE_RECEIPT_ID": ("fetch_invoice_receipts_by_date", "customerpayments",   "payment_id",     "last"),
+    "PLACEHOLDER_EXPENSE_ID":         ("fetch_expenses",                  "expenses",           "expense_id",    "last"),
+    "PLACEHOLDER_PAYMENT_ID":         ("fetch_customer_payments",         "customerpayments",   "payment_id",    "last"),
+    "PLACEHOLDER_CREDIT_NOTE_ID":     ("fetch_credit_notes",              "creditnotes",        "creditnote_id", "last"),
+}
+
+
+def _load_placeholder_ids() -> dict[str, str]:
+    """Read stored response files and resolve all placeholder IDs."""
+    resolved: dict[str, str] = {}
+    for placeholder, (fname, list_key, id_field, selector) in PLACEHOLDER_SOURCES.items():
+        path = os.path.join(RESPONSES_DIR, f"{fname}.json")
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        records = data.get(list_key, [])
+        if not records:
+            continue
+        if selector == "last":
+            record = records[-1]
+        elif selector.startswith("max:"):
+            field = selector[4:]
+            record = max(records, key=lambda r: r.get(field) or 0)
+        else:
+            record = records[-1]
+        resolved[placeholder] = str(record[id_field])
+        print(f"  [ID]   {placeholder:<40} = {resolved[placeholder]}"
+              f"  (from {fname}, selector={selector})")
+    return resolved
 
 
 def get_access_token() -> str:
@@ -85,12 +117,12 @@ def call_endpoint(title: str, path: str, extra_params: str, token: str) -> dict:
     """Call a GET endpoint with full pagination (200 records/page) and save all records."""
     url = f"{API_BASE}{path}"
 
-    base_params: dict = {"organization_id": ORG_ID, "per_page": 200}
+    base_params: dict = {"organization_id": ORG_ID, "per_page": 200, "page": 1}
     if extra_params:
         for pair in extra_params.split("&"):
             if "=" in pair:
                 k, v = pair.split("=", 1)
-                base_params[k] = v  # per_page from CSV overrides default if present
+                base_params[k] = v
 
     headers = {
         "Authorization": f"Zoho-oauthtoken {token}",
@@ -99,58 +131,43 @@ def call_endpoint(title: str, path: str, extra_params: str, token: str) -> dict:
 
     all_records = []
     list_key = None
-    page = 1
     last_data = {}
     start = time.time()
 
     try:
-        while True:
-            params = {**base_params, "page": page}
-            resp = requests.get(url, headers=headers, params=params, timeout=30)
-            data = resp.json()
+        resp = requests.get(url, headers=headers, params=base_params, timeout=30)
+        data = resp.json()
 
-            if resp.status_code != 200:
-                elapsed = round(time.time() - start, 2)
-                _save_json(title, data)
-                print(f"  [FAIL] {title:<35} -> HTTP {resp.status_code}  ({elapsed}s)  {data.get('message', '')}")
-                return {
-                    "title": title, "url": resp.url,
-                    "http_status": resp.status_code, "elapsed_s": elapsed,
-                    "zoho_code": data.get("code"), "zoho_msg": data.get("message", ""),
-                    "ok": False,
-                }
+        if resp.status_code != 200:
+            elapsed = round(time.time() - start, 2)
+            _save_json(title, data)
+            print(f"  [FAIL] {title:<35} -> HTTP {resp.status_code}  ({elapsed}s)  {data.get('message', '')}")
+            return {
+                "title": title, "url": resp.url,
+                "http_status": resp.status_code, "elapsed_s": elapsed,
+                "zoho_code": data.get("code"), "zoho_msg": data.get("message", ""),
+                "ok": False,
+            }
 
-            # Detect the records key on first page
-            if list_key is None:
-                list_key = _find_list_key(data)
-
-            page_records = data.get(list_key, []) if list_key else []
-            all_records.extend(page_records)
-            last_data = data
-
-            has_more = data.get("page_context", {}).get("has_more_page", False)
-            print(f"    page {page}: {len(page_records)} records  (total so far: {len(all_records)})", end="\r")
-
-            if not has_more:
-                break
-            page += 1
+        list_key = _find_list_key(data)
+        all_records = data.get(list_key, []) if list_key else []
+        last_data = data
 
         elapsed = round(time.time() - start, 2)
 
-        # Build merged response: keep metadata from last page, replace records list with full set
         merged = {k: v for k, v in last_data.items() if not isinstance(v, list)}
         if list_key:
             merged[list_key] = all_records
-        merged["_pagination"] = {"total_records": len(all_records), "pages_fetched": page}
+        merged["_pagination"] = {"total_records": len(all_records), "pages_fetched": 1}
         _save_json(title, merged)
 
-        print(f"  [OK]   {title:<35} -> {len(all_records)} records  ({page} page{'s' if page > 1 else ''}, {elapsed}s)")
+        print(f"  [OK]   {title:<35} -> {len(all_records)} records  ({elapsed}s)")
         return {
             "title":         title,
             "url":           url,
             "http_status":   200,
             "elapsed_s":     elapsed,
-            "pages_fetched": page,
+            "pages_fetched": 1,
             "total_records": len(all_records),
             "ok":            True,
         }
@@ -165,55 +182,61 @@ def call_endpoint(title: str, path: str, extra_params: str, token: str) -> dict:
         }
 
 
-def resolve_placeholders(extra_params: str) -> str | None:
-    """Replace placeholder tokens with runtime values.
-    Returns None if a required placeholder has no value set (endpoint will be skipped)."""
+def resolve_placeholders(text: str, ids: dict[str, str]) -> str | None:
+    """Replace placeholder tokens in path or extra_params with resolved values.
+    Returns None if a required placeholder has no resolved value (endpoint will be skipped)."""
     today = time.strftime("%Y-%m-%d")
-    replacements = {
-        "PLACEHOLDER_CUSTOMER_ID": SAMPLE_CUSTOMER_ID,
-        "PLACEHOLDER_ITEM_ID":     SAMPLE_ITEM_ID,
-        "CURRENT_DATE":            today,
-    }
-    for token, value in replacements.items():
-        if token in extra_params:
+    text = text.replace("CURRENT_DATE", today)
+    for token in PLACEHOLDER_SOURCES:
+        if token in text:
+            value = ids.get(token, "")
             if not value:
                 return None
-            extra_params = extra_params.replace(token, value)
-    return extra_params
+            text = text.replace(token, value)
+    return text
 
 
 def main():
-    global SAMPLE_CUSTOMER_ID, SAMPLE_ITEM_ID
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--customer-id", default=SAMPLE_CUSTOMER_ID, help="Zoho customer_id for filtered invoice lookups")
-    parser.add_argument("--item-id",     default=SAMPLE_ITEM_ID,     help="Zoho item_id for filtered invoice lookups")
+    parser.add_argument("--customer-id", default="", help="Zoho customer_id for filtered invoice lookups (auto-resolved if omitted)")
+    parser.add_argument("--item-id",     default="", help="Zoho item_id for filtered invoice lookups (auto-resolved if omitted)")
     args = parser.parse_args()
-
-    SAMPLE_CUSTOMER_ID = args.customer_id
-    SAMPLE_ITEM_ID     = args.item_id
 
     today = time.strftime("%Y-%m-%d")
     print(f"Date filter: {DATE_START} to {today}\n")
 
     token = get_access_token()
 
+    # Seed CLI overrides into the ids dict (empty string = auto-resolve from file)
+    ids: dict[str, str] = {}
+    if args.customer_id:
+        ids["PLACEHOLDER_CUSTOMER_ID"] = args.customer_id
+    if args.item_id:
+        ids["PLACEHOLDER_ITEM_ID"] = args.item_id
+
     results = []
     with open(ENDPOINTS_CSV, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row["method"].upper() != "GET":
-                continue  # skip POST endpoints to avoid creating test records
+                continue
 
-            extra_params = resolve_placeholders(row["extra_params"].strip())
-            if extra_params is None:
-                print(f"  [SKIP] {row['title']:<30} -> no sample ID set (use --customer-id / --item-id)")
+            # Refresh resolved IDs from any responses saved so far this run
+            ids.update({k: v for k, v in _load_placeholder_ids().items() if k not in ids})
+
+            path         = resolve_placeholders(row["path"],              ids)
+            extra_params = resolve_placeholders(row["extra_params"].strip(), ids)
+
+            if path is None or extra_params is None:
+                missing = "path ID" if path is None else "extra_params ID"
+                print(f"  [SKIP] {row['title']:<30} -> no {missing} resolved yet")
                 results.append({"title": row["title"], "ok": None, "skipped": True})
                 continue
 
             result = call_endpoint(
                 title=row["title"],
-                path=row["path"],
+                path=path,
                 extra_params=extra_params,
                 token=token,
             )
