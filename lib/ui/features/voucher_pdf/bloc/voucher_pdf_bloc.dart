@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/voucher_pdf_service.dart';
 import '../../../../domain/models/sales_invoice.dart';
+import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/customer.dart';
@@ -31,6 +32,8 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     String? customerId;
     if (type == VoucherType.salesInvoice) {
       customerId = (voucher as SalesInvoice).customerId;
+    } else if (type == VoucherType.salesOrder) {
+      customerId = (voucher as SalesOrder).customerId;
     } else if (type == VoucherType.salesReturn) {
       customerId = (voucher as SalesReturn).customerId;
     } else if (type == VoucherType.paymentReceipt) {

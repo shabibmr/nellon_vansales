@@ -9,6 +9,8 @@ import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/sales_order_bloc.dart';
 import '../widgets/item_line_editor_dialog.dart';
 import '../widgets/item_search_dialog.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
+import '../../../../data/services/voucher_pdf_service.dart';
 import '../../dashboard/widgets/create_customer_dialog.dart';
 
 /// Screen enabling Creation or Editing of a Sales Order.
@@ -657,6 +659,36 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                             child: const Text('SAVE SALES ORDER'),
                           ),
                         ),
+                        if (!state.isEditingNew) ...[
+                          const SizedBox(height: 16),
+                          VoucherPdfActionsWidget(
+                            type: VoucherType.salesOrder,
+                            voucher: SalesOrder(
+                              id: state.editingOrderId ?? '',
+                              orderNumber: state.orders
+                                  .firstWhere(
+                                    (ord) => ord.id == state.editingOrderId,
+                                    orElse: () => SalesOrder(
+                                      id: '',
+                                      orderNumber: 'SO-TEMP',
+                                      customerId: '',
+                                      customerName: '',
+                                      date: DateTime.now(),
+                                      shipmentDate: DateTime.now(),
+                                      items: const [],
+                                      notes: '',
+                                    ),
+                                  )
+                                  .orderNumber,
+                              customerId: customer?.id ?? '',
+                              customerName: customer?.name ?? '',
+                              date: date,
+                              shipmentDate: state.editingDate?.add(const Duration(days: 7)) ?? DateTime.now(),
+                              items: state.editingItems,
+                              notes: _notesController.text,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
