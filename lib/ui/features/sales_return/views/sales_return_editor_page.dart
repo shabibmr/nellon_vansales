@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/sales_return_bloc.dart';
-import '../widgets/return_item_line_editor_dialog.dart';
 import '../widgets/return_item_search_dialog.dart';
+import '../widgets/return_invoice_selector_dialog.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../data/services/voucher_pdf_service.dart';
 
@@ -190,33 +189,47 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
   }
 
   Future<void> _openItemSearch(List<SalesReturnLineItem> editingItems) async {
+    final customer = context.read<SalesReturnBloc>().state.editingCustomer;
+    if (customer == null) return;
+
     final excludedIds = editingItems.map((line) => line.invoiceLineItem.item.id).toList();
-    final result = await showDialog<MapEntry<Item, int>>(
+    final result = await showDialog<List<SalesReturnLineItem>>(
       context: context,
-      builder: (context) => ReturnItemSearchDialog(excludedItemIds: excludedIds),
+      builder: (context) => ReturnItemSearchDialog(
+        customerId: customer.id,
+        excludedItemIds: excludedIds,
+      ),
     );
 
-    if (result != null && mounted) {
-      context.read<SalesReturnBloc>().add(AddOrUpdateReturnLineItem(
-            item: result.key,
-            quantity: result.value,
+    if (result != null && result.isNotEmpty && mounted) {
+      final selectedItem = result.first.invoiceLineItem.item;
+      context.read<SalesReturnBloc>().add(SetReturnLineItemsForProduct(
+            item: selectedItem,
+            lines: result,
           ));
     }
   }
 
   Future<void> _editLineItem(SalesReturnLineItem lineItem) async {
-    final newQty = await showDialog<int>(
+    final customer = context.read<SalesReturnBloc>().state.editingCustomer;
+    if (customer == null) return;
+
+    final editingItems = context.read<SalesReturnBloc>().state.editingItems;
+    final itemLines = editingItems.where((line) => line.invoiceLineItem.item.id == lineItem.invoiceLineItem.item.id).toList();
+
+    final result = await showDialog<List<SalesReturnLineItem>>(
       context: context,
-      builder: (context) => ReturnItemLineEditorDialog(
+      builder: (context) => ReturnInvoiceSelectorDialog(
+        customer: customer,
         item: lineItem.invoiceLineItem.item,
-        initialQuantity: lineItem.returnedQuantity,
+        currentLines: itemLines,
       ),
     );
 
-    if (newQty != null && mounted) {
-      context.read<SalesReturnBloc>().add(AddOrUpdateReturnLineItem(
+    if (result != null && mounted) {
+      context.read<SalesReturnBloc>().add(SetReturnLineItemsForProduct(
             item: lineItem.invoiceLineItem.item,
-            quantity: newQty,
+            lines: result,
           ));
     }
   }
@@ -449,6 +462,17 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                                                   color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                                                 ),
                                               ),
+                                              if (line.invoiceNumber != null) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  'Invoice: ${line.invoiceNumber}',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppTheme.warningAmber,
+                                                  ),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                         ),

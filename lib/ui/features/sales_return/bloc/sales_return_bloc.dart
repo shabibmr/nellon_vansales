@@ -64,6 +64,15 @@ class AddOrUpdateReturnLineItem extends SalesReturnEvent {
   List<Object?> get props => [item, quantity];
 }
 
+class SetReturnLineItemsForProduct extends SalesReturnEvent {
+  final Item item;
+  final List<SalesReturnLineItem> lines;
+  const SetReturnLineItemsForProduct({required this.item, required this.lines});
+
+  @override
+  List<Object?> get props => [item, lines];
+}
+
 class RemoveReturnLineItem extends SalesReturnEvent {
   final Item item;
   const RemoveReturnLineItem(this.item);
@@ -195,6 +204,7 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     on<UpdateReturnDate>(_onUpdateReturnDate);
     on<UpdateReturnCustomer>(_onUpdateReturnCustomer);
     on<AddOrUpdateReturnLineItem>(_onAddOrUpdateLineItem);
+    on<SetReturnLineItemsForProduct>(_onSetLineItemsForProduct);
     on<RemoveReturnLineItem>(_onRemoveLineItem);
     on<SaveReturn>(_onSaveReturn);
     on<ClearReturnMessages>(_onClearMessages);
@@ -288,6 +298,15 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
         ));
       }
     }
+    emit(state.copyWith(editingItems: items, errorMessage: null));
+  }
+
+  void _onSetLineItemsForProduct(SetReturnLineItemsForProduct event, Emitter<SalesReturnState> emit) {
+    final items = List<SalesReturnLineItem>.from(state.editingItems);
+    // Remove existing returns of this item
+    items.removeWhere((line) => line.invoiceLineItem.item.id == event.item.id);
+    // Add the new returns from specific invoices
+    items.addAll(event.lines.where((line) => line.returnedQuantity > 0));
     emit(state.copyWith(editingItems: items, errorMessage: null));
   }
 

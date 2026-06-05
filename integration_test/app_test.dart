@@ -7,6 +7,7 @@ import 'package:van_sales/ui/features/route/views/route_page.dart';
 import 'package:van_sales/domain/repositories/auth_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/models/open_invoice.dart';
 import 'package:van_sales/domain/models/user.dart';
 import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/customer.dart';
@@ -126,6 +127,9 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveLocalCashClosing(CashClosing closing) async {}
+
+  @override
+  List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
 
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) async {}

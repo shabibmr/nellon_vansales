@@ -6,6 +6,7 @@ import '../models/receipt_voucher.dart';
 import '../models/sales_return.dart';
 import '../models/expense_entry.dart';
 import '../models/cash_closing.dart';
+import '../models/open_invoice.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract managing local van sales data access and session tracking.
@@ -69,5 +70,8 @@ abstract class SalesRepository {
 
   /// Retrieves the current collection of pending synchronization items.
   List<SyncQueueItem> getSyncQueue();
+
+  /// Retrieves open (unpaid) customer invoices.
+  List<OpenInvoice> getOpenInvoices({String? customerId});
 }
 

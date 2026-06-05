@@ -11,10 +11,18 @@ class SalesReturnLineItem extends Equatable {
   /// Quantity of items returned by the customer.
   final int returnedQuantity;
 
+  /// The ID of the sales invoice from which the item is returned.
+  final String? invoiceId;
+
+  /// The number of the sales invoice from which the item is returned.
+  final String? invoiceNumber;
+
   /// Creates a new [SalesReturnLineItem].
   const SalesReturnLineItem({
     required this.invoiceLineItem,
     required this.returnedQuantity,
+    this.invoiceId,
+    this.invoiceNumber,
   });
 
   /// Computes the total return value (rate * quantity returned) for this line.
@@ -24,15 +32,19 @@ class SalesReturnLineItem extends Equatable {
   SalesReturnLineItem copyWith({
     InvoiceLineItem? invoiceLineItem,
     int? returnedQuantity,
+    String? invoiceId,
+    String? invoiceNumber,
   }) {
     return SalesReturnLineItem(
       invoiceLineItem: invoiceLineItem ?? this.invoiceLineItem,
       returnedQuantity: returnedQuantity ?? this.returnedQuantity,
+      invoiceId: invoiceId ?? this.invoiceId,
+      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
     );
   }
 
   @override
-  List<Object?> get props => [invoiceLineItem, returnedQuantity];
+  List<Object?> get props => [invoiceLineItem, returnedQuantity, invoiceId, invoiceNumber];
 }
 
 /// Represents a Sales Return (Credit Note) voucher created locally.

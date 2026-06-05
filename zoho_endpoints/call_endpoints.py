@@ -155,20 +155,37 @@ def call_endpoint(title: str, path: str, extra_params: str, token: str) -> dict:
 
         elapsed = round(time.time() - start, 2)
 
+        # Detect single-record responses (dict-valued payload like {"invoice": {...}})
+        single_record = None
+        if not list_key:
+            for k, v in data.items():
+                if isinstance(v, dict) and k not in ("page_context",):
+                    single_record = k
+                    break
+
         merged = {k: v for k, v in last_data.items() if not isinstance(v, list)}
         if list_key:
             merged[list_key] = all_records
-        merged["_pagination"] = {"total_records": len(all_records), "pages_fetched": 1}
+        merged["_pagination"] = {
+            "total_records": len(all_records) if list_key else (1 if single_record else 0),
+            "pages_fetched": 1,
+            "single_record_key": single_record,
+        }
         _save_json(title, merged)
 
-        print(f"  [OK]   {title:<35} -> {len(all_records)} records  ({elapsed}s)")
+        if list_key:
+            print(f"  [OK]   {title:<35} -> {len(all_records)} records  ({elapsed}s)")
+        elif single_record:
+            print(f"  [OK]   {title:<35} -> 1 record  (key='{single_record}', {elapsed}s)")
+        else:
+            print(f"  [OK]   {title:<35} -> (object response, {elapsed}s)")
         return {
             "title":         title,
             "url":           url,
             "http_status":   200,
             "elapsed_s":     elapsed,
             "pages_fetched": 1,
-            "total_records": len(all_records),
+            "total_records": len(all_records) if list_key else (1 if single_record else 0),
             "ok":            True,
         }
 
@@ -208,39 +225,47 @@ def main():
 
     token = get_access_token()
 
-    # Seed CLI overrides into the ids dict (empty string = auto-resolve from file)
+    # CLI overrides (empty = auto-resolve from response files)
     ids: dict[str, str] = {}
     if args.customer_id:
         ids["PLACEHOLDER_CUSTOMER_ID"] = args.customer_id
     if args.item_id:
         ids["PLACEHOLDER_ITEM_ID"] = args.item_id
 
-    results = []
+    # Load all GET rows and partition: rows with PLACEHOLDER_*_ID run AFTER list fetches
     with open(ENDPOINTS_CSV, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if row["method"].upper() != "GET":
-                continue
+        all_rows = [r for r in csv.DictReader(f) if r["method"].upper() == "GET"]
 
-            # Refresh resolved IDs from any responses saved so far this run
-            ids.update({k: v for k, v in _load_placeholder_ids().items() if k not in ids})
+    def needs_id(row: dict) -> bool:
+        combined = row["path"] + row["extra_params"]
+        return any(p in combined for p in PLACEHOLDER_SOURCES)
 
-            path         = resolve_placeholders(row["path"],              ids)
-            extra_params = resolve_placeholders(row["extra_params"].strip(), ids)
+    phase1 = [r for r in all_rows if not needs_id(r)]
+    phase2 = [r for r in all_rows if needs_id(r)]
 
-            if path is None or extra_params is None:
-                missing = "path ID" if path is None else "extra_params ID"
-                print(f"  [SKIP] {row['title']:<30} -> no {missing} resolved yet")
-                results.append({"title": row["title"], "ok": None, "skipped": True})
-                continue
+    def run_row(row: dict) -> dict:
+        path         = resolve_placeholders(row["path"],                   ids)
+        extra_params = resolve_placeholders(row["extra_params"].strip(),   ids)
+        if path is None or extra_params is None:
+            print(f"  [SKIP] {row['title']:<35} -> placeholder ID could not be resolved")
+            return {"title": row["title"], "ok": None, "skipped": True}
+        return call_endpoint(
+            title=row["title"], path=path, extra_params=extra_params, token=token,
+        )
 
-            result = call_endpoint(
-                title=row["title"],
-                path=path,
-                extra_params=extra_params,
-                token=token,
-            )
-            results.append(result)
+    results = []
+    print(f"=== Phase 1: list/date endpoints ({len(phase1)}) ===")
+    for row in phase1:
+        results.append(run_row(row))
+
+    print(f"\n=== Resolving placeholder IDs from saved responses ===")
+    resolved = _load_placeholder_ids()
+    for k, v in resolved.items():
+        ids.setdefault(k, v)
+
+    print(f"\n=== Phase 2: placeholder/single endpoints ({len(phase2)}) ===")
+    for row in phase2:
+        results.append(run_row(row))
 
     # Write summary
     summary_path = _save_json("summary", {

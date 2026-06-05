@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 import '../../../../domain/models/item.dart';
+import '../../../../domain/models/sales_return.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
-import 'return_item_line_editor_dialog.dart';
+import 'return_invoice_selector_dialog.dart';
 
 /// Modal dialog for searching van inventory items to add to a sales return.
 class ReturnItemSearchDialog extends StatefulWidget {
+  final String customerId;
   final List<String> excludedItemIds;
 
-  const ReturnItemSearchDialog({super.key, this.excludedItemIds = const []});
+  const ReturnItemSearchDialog({
+    super.key,
+    required this.customerId,
+    this.excludedItemIds = const [],
+  });
 
   @override
   State<ReturnItemSearchDialog> createState() => _ReturnItemSearchDialogState();
@@ -25,7 +31,18 @@ class _ReturnItemSearchDialogState extends State<ReturnItemSearchDialog> {
   @override
   void initState() {
     super.initState();
+    // Get all local invoices for this customer
+    final invoices = _db.getLocalInvoices()
+        .where((inv) => inv.customerId == widget.customerId)
+        .toList();
+    // Get all unique item IDs from these invoices
+    final purchasedItemIds = invoices
+        .expand((inv) => inv.items)
+        .map((line) => line.item.id)
+        .toSet();
+
     _allItems = _db.getItems()
+        .where((item) => purchasedItemIds.contains(item.id))
         .where((item) => !widget.excludedItemIds.contains(item.id))
         .toList();
     _filteredItems = _allItems;
@@ -46,13 +63,18 @@ class _ReturnItemSearchDialogState extends State<ReturnItemSearchDialog> {
   }
 
   Future<void> _selectItem(Item item) async {
-    final qty = await showDialog<int>(
+    final customer = _db.getCustomers().firstWhere((c) => c.id == widget.customerId);
+    final result = await showDialog<List<SalesReturnLineItem>>(
       context: context,
-      builder: (context) => ReturnItemLineEditorDialog(item: item),
+      builder: (context) => ReturnInvoiceSelectorDialog(
+        customer: customer,
+        item: item,
+        currentLines: const [],
+      ),
     );
 
-    if (qty != null && qty > 0 && mounted) {
-      Navigator.pop(context, MapEntry(item, qty));
+    if (result != null && result.isNotEmpty && mounted) {
+      Navigator.pop(context, result);
     }
   }
 

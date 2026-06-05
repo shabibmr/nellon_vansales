@@ -2,6 +2,9 @@
 .env
 zoho_endpoints/responses/
 
+# Antigravity CLI tool artifacts
+.antigravitycli/
+
 # Miscellaneous
 *.class
 *.log

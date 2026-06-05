@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
@@ -69,6 +70,13 @@ class SetEditingReceiptDate extends ReceiptEvent {
   List<Object?> get props => [date];
 }
 
+class UpdateReceiptAllocations extends ReceiptEvent {
+  final List<PaymentAllocation> allocations;
+  const UpdateReceiptAllocations(this.allocations);
+  @override
+  List<Object?> get props => [allocations];
+}
+
 class SaveReceipt extends ReceiptEvent {}
 
 class ClearReceiptMessages extends ReceiptEvent {}
@@ -90,6 +98,7 @@ class ReceiptState extends Equatable {
   final double editingAmount;
   final String editingPaymentMode;
   final String editingReferenceNumber;
+  final List<PaymentAllocation> editingAllocations;
   final bool isEditingNew;
 
   const ReceiptState({
@@ -105,6 +114,7 @@ class ReceiptState extends Equatable {
     this.editingAmount = 0.0,
     this.editingPaymentMode = 'Cash',
     this.editingReferenceNumber = '',
+    this.editingAllocations = const [],
     this.isEditingNew = false,
   });
 
@@ -136,6 +146,7 @@ class ReceiptState extends Equatable {
     double? editingAmount,
     String? editingPaymentMode,
     String? editingReferenceNumber,
+    List<PaymentAllocation>? editingAllocations,
     bool? isEditingNew,
     bool clearError = false,
     bool clearSuccess = false,
@@ -153,6 +164,7 @@ class ReceiptState extends Equatable {
       editingAmount: editingAmount ?? this.editingAmount,
       editingPaymentMode: editingPaymentMode ?? this.editingPaymentMode,
       editingReferenceNumber: editingReferenceNumber ?? this.editingReferenceNumber,
+      editingAllocations: editingAllocations ?? this.editingAllocations,
       isEditingNew: isEditingNew ?? this.isEditingNew,
     );
   }
@@ -171,6 +183,7 @@ class ReceiptState extends Equatable {
         editingAmount,
         editingPaymentMode,
         editingReferenceNumber,
+        editingAllocations,
         isEditingNew,
       ];
 }
@@ -196,6 +209,7 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
     on<SetEditingPaymentMode>(_onSetPaymentMode);
     on<SetEditingReference>(_onSetReference);
     on<SetEditingReceiptDate>(_onSetDate);
+    on<UpdateReceiptAllocations>(_onUpdateAllocations);
     on<SaveReceipt>(_onSaveReceipt);
     on<ClearReceiptMessages>(_onClearMessages);
   }
@@ -257,16 +271,28 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
       editingAmount: rec.amount,
       editingPaymentMode: rec.paymentMode,
       editingReferenceNumber: rec.referenceNumber,
+      editingAllocations: rec.allocations,
       isEditingNew: false,
     ));
   }
 
   void _onSetCustomer(SetEditingReceiptCustomer event, Emitter<ReceiptState> emit) {
-    emit(state.copyWith(editingCustomer: event.customer));
+    final allocations = _autoAllocate(event.customer.id, state.editingAmount);
+    emit(state.copyWith(
+      editingCustomer: event.customer,
+      editingAllocations: allocations,
+    ));
   }
 
   void _onSetAmount(SetEditingAmount event, Emitter<ReceiptState> emit) {
-    emit(state.copyWith(editingAmount: event.amount));
+    final customerId = state.editingCustomer?.id;
+    final allocations = customerId != null
+        ? _autoAllocate(customerId, event.amount)
+        : const <PaymentAllocation>[];
+    emit(state.copyWith(
+      editingAmount: event.amount,
+      editingAllocations: allocations,
+    ));
   }
 
   void _onSetPaymentMode(SetEditingPaymentMode event, Emitter<ReceiptState> emit) {
@@ -279,6 +305,40 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
 
   void _onSetDate(SetEditingReceiptDate event, Emitter<ReceiptState> emit) {
     emit(state.copyWith(editingDate: event.date));
+  }
+
+  void _onUpdateAllocations(UpdateReceiptAllocations event, Emitter<ReceiptState> emit) {
+    emit(state.copyWith(editingAllocations: event.allocations));
+  }
+
+  List<PaymentAllocation> _autoAllocate(String customerId, double amount) {
+    if (amount <= 0) return const [];
+    try {
+      final openInvoices = _salesRepository.getOpenInvoices(customerId: customerId);
+      final sortedInvoices = List<OpenInvoice>.from(openInvoices)
+        ..sort((a, b) => a.date.compareTo(b.date));
+
+      final List<PaymentAllocation> allocations = [];
+      double remainingAmount = amount;
+
+      for (final invoice in sortedInvoices) {
+        if (remainingAmount <= 0) break;
+        final balance = invoice.balance;
+        if (balance <= 0) continue;
+
+        final allocated = remainingAmount >= balance ? balance : remainingAmount;
+        allocations.add(PaymentAllocation(
+          invoiceId: invoice.invoiceId,
+          invoiceNumber: invoice.invoiceNumber,
+          amountApplied: double.parse(allocated.toStringAsFixed(2)),
+        ));
+        remainingAmount -= allocated;
+        remainingAmount = double.parse(remainingAmount.toStringAsFixed(2));
+      }
+      return allocations;
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> _onSaveReceipt(SaveReceipt event, Emitter<ReceiptState> emit) async {
@@ -327,7 +387,7 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
         paymentNumber: paymentNum,
         customerId: state.editingCustomer!.id,
         customerName: state.editingCustomer!.name,
-        allocations: const [],
+        allocations: state.editingAllocations,
         amount: state.editingAmount,
         paymentMode: state.editingPaymentMode,
         referenceNumber: refNum,

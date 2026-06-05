@@ -9,6 +9,8 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
   const SalesReturnLineItemModel({
     required super.invoiceLineItem,
     required super.returnedQuantity,
+    super.invoiceId,
+    super.invoiceNumber,
   });
 
   /// Factory constructor to parse local/remote JSON maps into a [SalesReturnLineItemModel].
@@ -16,6 +18,8 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
     return SalesReturnLineItemModel(
       invoiceLineItem: InvoiceLineItemModel.fromJson(json['invoiceLineItem'] ?? json),
       returnedQuantity: json['returned_quantity'] ?? json['quantity'] ?? 1,
+      invoiceId: json['invoice_id'],
+      invoiceNumber: json['invoice_number'],
     );
   }
 
@@ -25,6 +29,8 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
       'item_id': invoiceLineItem.item.id,
       'quantity': returnedQuantity,
       'rate': invoiceLineItem.rate,
+      'invoice_id': invoiceId,
+      'invoice_number': invoiceNumber,
       'invoiceLineItem': InvoiceLineItemModel.fromDomain(invoiceLineItem).toJson(),
     };
   }
@@ -34,6 +40,8 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
     return SalesReturnLineItemModel(
       invoiceLineItem: lineItem.invoiceLineItem,
       returnedQuantity: lineItem.returnedQuantity,
+      invoiceId: lineItem.invoiceId,
+      invoiceNumber: lineItem.invoiceNumber,
     );
   }
 }

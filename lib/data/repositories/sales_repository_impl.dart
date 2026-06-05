@@ -6,6 +6,7 @@ import '../../domain/models/receipt_voucher.dart';
 import '../../domain/models/sales_return.dart';
 import '../../domain/models/expense_entry.dart';
 import '../../domain/models/cash_closing.dart';
+import '../../domain/models/open_invoice.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
@@ -75,5 +76,9 @@ class SalesRepositoryImpl implements SalesRepository {
 
   @override
   List<SyncQueueItem> getSyncQueue() => _dbService.getSyncQueue();
+
+  @override
+  List<OpenInvoice> getOpenInvoices({String? customerId}) =>
+      _dbService.getOpenInvoices(customerId: customerId);
 }
 
