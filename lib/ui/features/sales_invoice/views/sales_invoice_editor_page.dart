@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
@@ -10,6 +9,7 @@ import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../bloc/sales_invoice_bloc.dart';
 import '../widgets/item_line_editor_dialog.dart';
 import '../widgets/item_search_dialog.dart';
+import '../../dashboard/widgets/create_customer_dialog.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../data/services/voucher_pdf_service.dart';
 
@@ -155,6 +155,29 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                       ),
                     ),
                     const Divider(),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryIndigo.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.person_add_rounded, color: AppTheme.primaryIndigo, size: 20),
+                      ),
+                      title: const Text(
+                        'Create New Customer',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryIndigo),
+                      ),
+                      subtitle: const Text('Add a new customer and use it for this invoice'),
+                      onTap: () async {
+                        Navigator.pop(context); // close the search sheet
+                        final created = await CreateCustomerDialog.show(this.context);
+                        if (created != null && mounted) {
+                          this.context.read<SalesInvoiceBloc>().add(UpdateInvoiceCustomer(created));
+                        }
+                      },
+                    ),
+                    const Divider(height: 1),
                     Expanded(
                       child: filtered.isEmpty
                           ? Center(
@@ -200,10 +223,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
 
   Future<void> _openItemSearch(List<InvoiceLineItem> editingItems) async {
     final excludedIds = editingItems.map((line) => line.item.id).toList();
-    final result = await showDialog<MapEntry<Item, int>>(
-      context: context,
-      builder: (context) => ItemSearchDialog(excludedItemIds: excludedIds),
-    );
+    final result = await ItemSearchDialog.show(context, excludedItemIds: excludedIds);
 
     if (result != null && mounted) {
       context.read<SalesInvoiceBloc>().add(AddOrUpdateLineItem(

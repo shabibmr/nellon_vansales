@@ -222,18 +222,9 @@ class ZohoApiClient {
   Future<List<Map<String, dynamic>>> fetchCustomers() async {
     if (!_isMockMode()) {
       try {
-        final response = await _dio.get(
-          '/contacts',
-          queryParameters: {
-            'contact_type': 'customer',
-            'per_page': 200,
-          },
-        );
-        if (response.statusCode == 200) {
-          final list = (response.data['contacts'] as List? ?? []);
-          return list.map((c) => Map<String, dynamic>.from(c)).toList();
-        }
-        throw Exception('Failed to fetch customers: Server returned status code ${response.statusCode}');
+        return await _fetchAllPages('/contacts', {
+          'contact_type': 'customer',
+        });
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchCustomers error: $e');
@@ -314,9 +305,7 @@ class ZohoApiClient {
   Future<List<Map<String, dynamic>>> fetchItems(String warehouseId) async {
     if (!_isMockMode()) {
       try {
-        final queryParams = <String, dynamic>{
-          'per_page': 200,
-        };
+        final queryParams = <String, dynamic>{};
         // Only query by warehouse_id if it is a real numeric Zoho warehouse ID (not empty or mock prefix)
         if (warehouseId.isNotEmpty &&
             !warehouseId.startsWith('van_wh_') &&
@@ -324,15 +313,7 @@ class ZohoApiClient {
           queryParams['warehouse_id'] = warehouseId;
         }
 
-        final response = await _dio.get(
-          '/items',
-          queryParameters: queryParams,
-        );
-        if (response.statusCode == 200) {
-          final list = (response.data['items'] as List? ?? []);
-          return list.map((i) => Map<String, dynamic>.from(i)).toList();
-        }
-        throw Exception('Failed to fetch items: Server returned status code ${response.statusCode}');
+        return await _fetchAllPages('/items', queryParams);
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchItems error: $e');
@@ -431,6 +412,24 @@ class ZohoApiClient {
     // Mock response
     await Future.delayed(const Duration(seconds: 1));
     return 'zoho_inv_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // 5b. Zoho Books Sales Orders API: Sync Sales Order
+  Future<String> syncSalesOrder(Map<String, dynamic> salesOrderJson) async {
+    if (!_isMockMode() && !_mockTransactions) {
+      try {
+        final response = await _dio.post('/salesorders', data: salesOrderJson);
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          return response.data['salesorder']['salesorder_id'];
+        }
+      } catch (e) {
+        throw Exception('Zoho Books Sales Order Sync Failed: $e');
+      }
+    }
+
+    // Mock response
+    await Future.delayed(const Duration(seconds: 1));
+    return 'zoho_so_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // 6. Zoho Books Customer Payments API: Sync Receipt Voucher

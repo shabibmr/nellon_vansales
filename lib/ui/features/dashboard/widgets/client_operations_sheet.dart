@@ -16,6 +16,9 @@ class ClientOperationsSheet extends StatelessWidget {
   /// Callback to trigger new invoice flows.
   final VoidCallback onNewInvoiceTap;
 
+  /// Callback to trigger new sales order flows.
+  final VoidCallback onNewOrderTap;
+
   /// Callback to trigger receipt allocations.
   final VoidCallback onReceiptPaymentTap;
 
@@ -28,6 +31,7 @@ class ClientOperationsSheet extends StatelessWidget {
     required this.customer,
     required this.isDark,
     required this.onNewInvoiceTap,
+    required this.onNewOrderTap,
     required this.onReceiptPaymentTap,
     required this.onSalesReturnTap,
   });
@@ -106,6 +110,14 @@ class ClientOperationsSheet extends StatelessWidget {
                 icon: Icons.description_rounded,
                 color: AppTheme.primaryIndigo,
                 onTap: onNewInvoiceTap,
+              ),
+              const SizedBox(height: 14),
+              _buildOperationItem(
+                title: 'New Sales Order',
+                subtitle: 'Create offline sales order and enqueue for Zoho sync.',
+                icon: Icons.assignment_rounded,
+                color: AppTheme.primaryIndigo,
+                onTap: onNewOrderTap,
               ),
               const SizedBox(height: 14),
               _buildOperationItem(

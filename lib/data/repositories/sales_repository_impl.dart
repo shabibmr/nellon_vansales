@@ -7,6 +7,7 @@ import '../../domain/models/sales_return.dart';
 import '../../domain/models/expense_entry.dart';
 import '../../domain/models/cash_closing.dart';
 import '../../domain/models/open_invoice.dart';
+import '../../domain/models/sales_order.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
@@ -46,6 +47,12 @@ class SalesRepositoryImpl implements SalesRepository {
 
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) => _dbService.saveLocalInvoice(invoice);
+
+  @override
+  List<SalesOrder> getLocalOrders() => _dbService.getLocalOrders();
+
+  @override
+  Future<void> saveLocalOrder(SalesOrder order) => _dbService.saveLocalOrder(order);
 
   @override
   List<ReceiptVoucher> getLocalReceipts() => _dbService.getLocalReceipts();

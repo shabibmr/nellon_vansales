@@ -7,6 +7,7 @@ import '../models/sales_return.dart';
 import '../models/expense_entry.dart';
 import '../models/cash_closing.dart';
 import '../models/open_invoice.dart';
+import '../models/sales_order.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract managing local van sales data access and session tracking.
@@ -40,6 +41,12 @@ abstract class SalesRepository {
 
   /// Logs a new sales invoice locally and pushes it to local database cache.
   Future<void> saveLocalInvoice(SalesInvoice invoice);
+
+  /// Gets all sales orders recorded locally.
+  List<SalesOrder> getLocalOrders();
+
+  /// Logs a new sales order locally and caches it.
+  Future<void> saveLocalOrder(SalesOrder order);
   
   /// Gets all receipt vouchers collected locally.
   List<ReceiptVoucher> getLocalReceipts();

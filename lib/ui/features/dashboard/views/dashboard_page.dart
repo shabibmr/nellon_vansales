@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/theme/theme_cubit.dart';
-import 'dart:ui';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../data/services/hive_database_service.dart';
@@ -21,9 +20,11 @@ import '../widgets/client_operations_sheet.dart';
 import '../widgets/invoice_flow_sheet.dart';
 import '../widgets/receipt_payment_dialog.dart';
 import '../widgets/sales_return_dialog.dart';
-import '../widgets/create_customer_dialog.dart';
 import '../widgets/cash_closing_dialog.dart';
 import '../../sales_invoice/views/sales_invoice_list_page.dart';
+import '../../sales_order/views/sales_order_list_page.dart';
+import '../../sales_order/bloc/sales_order_bloc.dart';
+import '../../sales_order/views/sales_order_editor_page.dart';
 import '../../sales_return/bloc/sales_return_bloc.dart';
 import '../../sales_return/views/sales_return_list_page.dart';
 import '../../reports/views/item_sales_report_page.dart';
@@ -124,6 +125,10 @@ class _DashboardPageState extends State<DashboardPage> {
             Navigator.pop(context);
             _launchInvoiceFlow(customer, isDark);
           },
+          onNewOrderTap: () {
+            Navigator.pop(context);
+            _launchSalesOrderFlow(customer);
+          },
           onReceiptPaymentTap: () {
             Navigator.pop(context);
             _launchPaymentFlow(customer, isDark);
@@ -135,6 +140,21 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       },
     );
+  }
+
+  void _launchSalesOrderFlow(Customer customer) {
+    final bloc = context.read<SalesOrderBloc>();
+    bloc.add(StartNewOrder());
+    bloc.add(UpdateOrderCustomer(customer));
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SalesOrderEditorPage(),
+      ),
+    ).then((_) {
+      _loadDailyStats();
+    });
   }
 
   void _launchInvoiceFlow(Customer customer, bool isDark) {
@@ -175,17 +195,6 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (context) => SalesReturnDialog(
         customer: customer,
         onReturnConfirmed: () {
-          _loadDailyStats();
-        },
-      ),
-    );
-  }
-
-  void _showCreateCustomerForm(bool isDark) {
-    showDialog(
-      context: context,
-      builder: (context) => CreateCustomerDialog(
-        onCustomerCreated: () {
           _loadDailyStats();
         },
       ),
@@ -260,6 +269,12 @@ class _DashboardPageState extends State<DashboardPage> {
     final isDark = themeMode == AppThemeMode.dark;
     final isGlass = themeMode == AppThemeMode.glass;
 
+    final (themeIcon, themeColor, themeTooltip) = switch (themeMode) {
+      AppThemeMode.light => (Icons.dark_mode_outlined, AppTheme.primaryIndigo, 'Switch to Dark'),
+      AppThemeMode.dark => (Icons.blur_on_rounded, Colors.amber, 'Switch to Glass'),
+      AppThemeMode.glass => (Icons.light_mode_outlined, Colors.cyanAccent, 'Switch to Light'),
+    };
+
     final tabs = [
       RouteSequenceTab(
         isDark: isDark || isGlass,
@@ -278,12 +293,10 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       OperationsTab(
         isDark: isDark || isGlass,
-        onCreateCustomer: () => _showCreateCustomerForm(isDark),
         onCashClosing: () => _showCashClosingForm(isDark),
         onManageExpenses: _showExpenseListPage,
         onManageReceipts: _showReceiptListPage,
         onManageReturns: _showSalesReturnListPage,
-        onSyncMasters: _showMastersSyncPage,
         onManageInvoices: () {
           Navigator.push(
             context,
@@ -294,10 +307,65 @@ class _DashboardPageState extends State<DashboardPage> {
             _loadDailyStats();
           });
         },
+        onManageOrders: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const SalesOrderListPage(),
+            ),
+          ).then((_) {
+            _loadDailyStats();
+          });
+        },
       ),
     ];
 
     return Scaffold(
+      drawer: Drawer(
+        backgroundColor: isGlass
+            ? AppTheme.glassBackground2
+            : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.local_shipping_rounded, color: AppTheme.primaryIndigo, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        context.org.companyName,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(
+                  Icons.search_rounded,
+                  color: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
+                ),
+                title: const Text('Global Database Search'),
+                onTap: () {
+                  Navigator.pop(context); // close the drawer
+                  _showGlobalSearchSheet(isDark);
+                },
+              ),
+              ListTile(
+                leading: Icon(themeIcon, color: themeColor),
+                title: Text(themeTooltip),
+                onTap: () => context.read<ThemeCubit>().toggleTheme(),
+              ),
+            ],
+          ),
+        ),
+      ),
       appBar: AppBar(
         title: Row(
           children: [
@@ -313,25 +381,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Global Database Search',
-            icon: const Icon(Icons.search_rounded, color: AppTheme.primaryIndigo),
-            onPressed: () => _showGlobalSearchSheet(isDark),
-          ),
-          BlocBuilder<ThemeCubit, AppThemeMode>(
-            builder: (context, appThemeMode) {
-              final (icon, color, tooltip) = switch (appThemeMode) {
-                AppThemeMode.light => (Icons.dark_mode_outlined, AppTheme.primaryIndigo, 'Switch to Dark'),
-                AppThemeMode.dark => (Icons.blur_on_rounded, Colors.amber, 'Switch to Glass'),
-                AppThemeMode.glass => (Icons.light_mode_outlined, Colors.cyanAccent, 'Switch to Light'),
-              };
-              return IconButton(
-                tooltip: tooltip,
-                icon: Icon(icon, color: color),
-                onPressed: () => context.read<ThemeCubit>().toggleTheme(),
-              );
-            },
-          ),
           BlocBuilder<SyncBloc, SyncState>(
             builder: (context, syncState) {
               final isSyncing = syncState.isSyncing;
@@ -342,10 +391,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
               return Tooltip(
                 message: isSyncing
-                    ? 'Syncing...'
-                    : (hasPending ? '${syncState.pendingCount} items pending sync' : 'All synced'),
+                    ? 'Syncing… · Tap to open Sync Masters'
+                    : (hasPending
+                        ? '${syncState.pendingCount} items pending · Tap to open Sync Masters'
+                        : 'All synced · Tap to open Sync Masters'),
                 child: InkWell(
-                  onTap: () => context.read<SyncBloc>().add(TriggerSync()),
+                  onTap: _showMastersSyncPage,
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -384,29 +435,14 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(width: 4),
         ],
       ),
-      body: isGlass
-          ? Stack(
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppTheme.glassBackground1,
-                        AppTheme.glassBackground2,
-                        Color(0xFF0F2027),
-                      ],
-                    ),
-                  ),
-                ),
-                tabs[_currentIndex],
-              ],
-            )
-          : tabs[_currentIndex],
+      // The app-wide AnimatedGlowBackground (mounted in MaterialApp.builder)
+      // now provides the animated backdrop for every theme, including glass.
+      body: tabs[_currentIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: isGlass ? AppTheme.glassBackground2 : null,
+          color: isGlass
+              ? AppTheme.glassBackground2
+              : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
           border: Border(
             top: BorderSide(
               color: isGlass
@@ -416,38 +452,39 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          backgroundColor: isGlass
-              ? Colors.transparent
-              : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
-          selectedItemColor: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
-          unselectedItemColor: isGlass
-              ? AppTheme.glassTextSecondary
-              : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-          elevation: 0,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.people_outline),
-              activeIcon: Icon(Icons.people),
-              label: 'Customers',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.analytics_outlined),
-              activeIcon: Icon(Icons.analytics),
-              label: 'Daily Reports',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings_suggest_outlined),
-              activeIcon: Icon(Icons.settings_suggest),
-              label: 'Operations',
-            ),
-          ],
+        child: SafeArea(
+          top: false,
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            backgroundColor: Colors.transparent,
+            selectedItemColor: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
+            unselectedItemColor: isGlass
+                ? AppTheme.glassTextSecondary
+                : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            elevation: 0,
+            onTap: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.people_outline),
+                activeIcon: Icon(Icons.people),
+                label: 'Customers',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.analytics_outlined),
+                activeIcon: Icon(Icons.analytics),
+                label: 'Daily Reports',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings_suggest_outlined),
+                activeIcon: Icon(Icons.settings_suggest),
+                label: 'Operations',
+              ),
+            ],
+          ),
         ),
       ),
     );

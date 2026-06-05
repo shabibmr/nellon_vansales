@@ -161,14 +161,18 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
         title: const Text('Sync Master Data'),
         backgroundColor: AppTheme.primaryIndigo,
         foregroundColor: Colors.white,
+        elevation: 0,
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           tabs: const [
-            Tab(icon: Icon(Icons.cloud_sync, size: 18), text: 'Sync Masters'),
-            Tab(icon: Icon(Icons.list_alt, size: 18), text: 'Sync Queue'),
+            Tab(icon: Icon(Icons.cloud_sync_rounded, size: 18), text: 'Sync Masters'),
+            Tab(icon: Icon(Icons.list_alt_rounded, size: 18), text: 'Sync Queue'),
           ],
         ),
       ),
@@ -182,12 +186,141 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
     );
   }
 
+  // --- Sync Masters Tab ---
+
   Widget _buildSyncMastersTab(bool isDark, bool hasMasters) {
+    final syncedCount = _syncedTypes.length;
+    final totalCount = MasterType.values.length;
+
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: SizedBox(
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            children: [
+              _buildHeroCard(isDark, syncedCount, totalCount),
+              if (_bulkSyncStatus != null) ...[
+                const SizedBox(height: 16),
+                _buildStatusBanner(isDark),
+              ],
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 10),
+                child: Row(
+                  children: [
+                    Text(
+                      'DATA CATEGORIES',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '$syncedCount / $totalCount',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...MasterType.values.map(
+                (type) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _buildMasterCard(type, isDark),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildConsoleLogs(),
+        _buildBottomBar(hasMasters),
+      ],
+    );
+  }
+
+  Widget _buildHeroCard(bool isDark, int syncedCount, int totalCount) {
+    final progress = totalCount == 0 ? 0.0 : syncedCount / totalCount;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.primaryIndigo, AppTheme.primaryDarkIndigo],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryIndigo.withAlpha(70),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(40),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.cloud_sync_rounded, color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Master Data',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Download the latest catalog from Zoho Books',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Text(
+                '$syncedCount of $totalCount synced',
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              Text(
+                '${(progress * 100).round()}%',
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: _bulkInFlight && progress == 0 ? null : progress,
+              minHeight: 8,
+              backgroundColor: Colors.white.withAlpha(50),
+              valueColor: const AlwaysStoppedAnimation(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: _bulkInFlight ? null : _syncAll,
@@ -195,161 +328,275 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryIndigo),
                     )
-                  : const Icon(Icons.cloud_sync),
+                  : const Icon(Icons.sync_rounded),
               label: Text(_bulkInFlight ? 'Syncing all…' : 'Sync All Masters'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: AppTheme.primaryIndigo,
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: AppTheme.primaryIndigo,
+                disabledBackgroundColor: Colors.white.withAlpha(180),
+                disabledForegroundColor: AppTheme.primaryIndigo,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),
           ),
-        ),
-        if (_bulkSyncStatus != null) ...[
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: _bulkSyncSuccess == true
-                  ? (isDark ? Colors.green.withAlpha(40) : const Color(0xFFE8F5E9))
-                  : _bulkSyncSuccess == false
-                      ? (isDark ? AppTheme.errorRose.withAlpha(40) : const Color(0xFFFFEBEE))
-                      : (isDark ? AppTheme.primaryIndigo.withAlpha(40) : const Color(0xFFE8EAF6)),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _bulkSyncSuccess == true
-                    ? Colors.green.withAlpha(100)
-                    : _bulkSyncSuccess == false
-                        ? AppTheme.errorRose.withAlpha(100)
-                        : AppTheme.primaryIndigo.withAlpha(100),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _bulkSyncSuccess == true
-                      ? Icons.check_circle_rounded
-                      : _bulkSyncSuccess == false
-                          ? Icons.error_outline_rounded
-                          : Icons.sync_outlined,
-                  color: _bulkSyncSuccess == true
-                      ? Colors.green
-                      : _bulkSyncSuccess == false
-                          ? AppTheme.errorRose
-                          : AppTheme.primaryIndigo,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _bulkSyncStatus!,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _bulkSyncSuccess == true
-                          ? (isDark ? Colors.green[200] : const Color(0xFF2E7D32))
-                          : _bulkSyncSuccess == false
-                              ? (isDark ? Colors.red[200] : const Color(0xFFC62828))
-                              : (isDark ? Colors.indigo[200] : AppTheme.primaryIndigo),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
         ],
-        const Divider(height: 1),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: MasterType.values.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final type = MasterType.values[index];
-              final isBusy = _inFlight.contains(type) || _bulkInFlight;
-              final error = _lastError[type];
-              return ListTile(
-                leading: const Icon(Icons.dataset, color: AppTheme.primaryIndigo),
-                title: Text(type.label),
-                subtitle: error != null
-                    ? Text(error, style: const TextStyle(color: Colors.red, fontSize: 12))
-                    : null,
-                trailing: isBusy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : _syncedTypes.contains(type) && error == null
-                        ? const Icon(Icons.check_circle, color: Colors.green)
-                        : IconButton(
-                            icon: const Icon(Icons.sync, color: AppTheme.primaryIndigo),
-                            onPressed: () => _syncOne(type),
-                          ),
-                onTap: isBusy ? null : () => _syncOne(type),
-              );
-            },
-          ),
-        ),
-        _buildConsoleLogs(),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(12),
-                blurRadius: 10,
-                offset: const Offset(0, -5),
-              )
-            ],
-          ),
-          child: SafeArea(
-            top: false,
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      context.read<AuthBloc>().add(LogoutRequested());
-                    },
-                    icon: const Icon(Icons.logout),
-                    label: const Text('LOG OUT'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      foregroundColor: AppTheme.errorRose,
-                      side: const BorderSide(color: AppTheme.errorRose),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 3,
-                  child: ElevatedButton.icon(
-                    onPressed: hasMasters
-                        ? () {
-                            context.read<RouteBloc>().add(LoadRoutes());
-                          }
-                        : null,
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text('PROCEED'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: AppTheme.primaryIndigo,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
+
+  Widget _buildStatusBanner(bool isDark) {
+    final success = _bulkSyncSuccess;
+    final Color bg = success == true
+        ? (isDark ? AppTheme.successEmerald.withAlpha(40) : const Color(0xFFE8F5E9))
+        : success == false
+            ? (isDark ? AppTheme.errorRose.withAlpha(40) : const Color(0xFFFFEBEE))
+            : (isDark ? AppTheme.primaryIndigo.withAlpha(40) : const Color(0xFFE8EAF6));
+    final Color border = success == true
+        ? AppTheme.successEmerald.withAlpha(100)
+        : success == false
+            ? AppTheme.errorRose.withAlpha(100)
+            : AppTheme.primaryIndigo.withAlpha(100);
+    final Color fg = success == true
+        ? (isDark ? Colors.green[200]! : const Color(0xFF2E7D32))
+        : success == false
+            ? (isDark ? Colors.red[200]! : const Color(0xFFC62828))
+            : (isDark ? Colors.indigo[200]! : AppTheme.primaryIndigo);
+    final IconData icon = success == true
+        ? Icons.check_circle_rounded
+        : success == false
+            ? Icons.error_outline_rounded
+            : Icons.sync_outlined;
+    final Color iconColor = success == true
+        ? AppTheme.successEmerald
+        : success == false
+            ? AppTheme.errorRose
+            : AppTheme.primaryIndigo;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: iconColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _bulkSyncStatus!,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: fg),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMasterCard(MasterType type, bool isDark) {
+    final isBusy = _inFlight.contains(type) || _bulkInFlight;
+    final error = _lastError[type];
+    final isSynced = _syncedTypes.contains(type) && error == null;
+
+    final cardColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    Color accent;
+    Widget trailing;
+    if (isBusy) {
+      accent = AppTheme.infoSky;
+      trailing = const SizedBox(
+        width: 22,
+        height: 22,
+        child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.infoSky),
+      );
+    } else if (isSynced) {
+      accent = AppTheme.successEmerald;
+      trailing = _statusPill('Synced', AppTheme.successEmerald, Icons.check_circle_rounded);
+    } else if (error != null) {
+      accent = AppTheme.errorRose;
+      trailing = _statusPill('Retry', AppTheme.errorRose, Icons.refresh_rounded);
+    } else {
+      accent = AppTheme.primaryIndigo;
+      trailing = _statusPill('Sync', AppTheme.primaryIndigo, Icons.sync_rounded);
+    }
+
+    return Material(
+      color: cardColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: isBusy ? null : () => _syncOne(type),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: error != null ? AppTheme.errorRose.withAlpha(120) : borderColor,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: accent.withAlpha(isDark ? 50 : 30),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_iconForType(type), color: accent, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      type.label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      error ?? _descForType(type),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: error != null
+                            ? AppTheme.errorRose
+                            : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              trailing,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusPill(String label, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withAlpha(30),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconForType(MasterType type) {
+    switch (type) {
+      case MasterType.organization:    return Icons.business_rounded;
+      case MasterType.warehouses:      return Icons.warehouse_rounded;
+      case MasterType.paymentAccounts: return Icons.account_balance_wallet_rounded;
+      case MasterType.taxes:           return Icons.percent_rounded;
+      case MasterType.expenseAccounts: return Icons.request_quote_rounded;
+      case MasterType.routes:          return Icons.route_rounded;
+      case MasterType.items:           return Icons.inventory_2_rounded;
+      case MasterType.customers:       return Icons.people_alt_rounded;
+      case MasterType.openInvoices:    return Icons.description_rounded;
+    }
+  }
+
+  String _descForType(MasterType type) {
+    switch (type) {
+      case MasterType.organization:    return 'Currency, formatting & org settings';
+      case MasterType.warehouses:      return 'Van compartments & stock locations';
+      case MasterType.paymentAccounts: return 'Bank & cash accounts for receipts';
+      case MasterType.taxes:           return 'VAT rates & tax configurations';
+      case MasterType.expenseAccounts: return 'Categories for on-route expenses';
+      case MasterType.routes:          return 'Delivery routes & sequences';
+      case MasterType.items:           return 'Product catalog & van stock';
+      case MasterType.customers:       return 'Contacts, balances & credit limits';
+      case MasterType.openInvoices:    return 'Outstanding invoices for collection';
+    }
+  }
+
+  Widget _buildBottomBar(bool hasMasters) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(12),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  context.read<AuthBloc>().add(LogoutRequested());
+                },
+                icon: const Icon(Icons.logout),
+                label: const Text('LOG OUT'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  foregroundColor: AppTheme.errorRose,
+                  side: const BorderSide(color: AppTheme.errorRose),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: ElevatedButton.icon(
+                onPressed: hasMasters
+                    ? () {
+                        context.read<RouteBloc>().add(LoadRoutes());
+                      }
+                    : null,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('PROCEED'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  backgroundColor: AppTheme.primaryIndigo,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- Sync Queue Tab ---
 
   Widget _buildSyncQueueTab(bool isDark) {
     return BlocBuilder<SyncBloc, SyncState>(
@@ -362,15 +609,33 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle_outline_rounded,
-                      size: 56,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppTheme.successEmerald.withAlpha(30),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 48,
+                      color: AppTheme.successEmerald,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   Text(
-                    'Sync queue is empty.\nAll local work is synchronized with Zoho Books!',
+                    'All caught up!',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'All local work is synchronized with Zoho Books.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                     ),
                   ),
@@ -380,54 +645,118 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
           );
         }
 
-        return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
           itemCount: list.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (context, index) {
             final syncItem = list[index];
-            final shortId = syncItem.id.length > 8
-                ? syncItem.id.substring(syncItem.id.length - 8)
-                : syncItem.id;
-            return ListTile(
-              dense: true,
-              leading: Icon(
-                syncItem.type == 'invoice'
-                    ? Icons.description
-                    : (syncItem.type == 'receipt'
-                        ? Icons.receipt_long
-                        : (syncItem.type == 'expense'
-                            ? Icons.local_gas_station
-                            : Icons.person_add)),
-                color: AppTheme.primaryIndigo,
-              ),
-              title: Text(
-                '${syncItem.type.toUpperCase()} #$shortId',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                syncItem.status == SyncStatus.failed
-                    ? 'Failed: ${syncItem.errorMessage}'
-                    : 'Status: ${syncItem.status.name}',
-                style: TextStyle(
-                  color: syncItem.status == SyncStatus.failed
-                      ? AppTheme.errorRose
-                      : (syncItem.status == SyncStatus.syncing
-                          ? AppTheme.infoSky
-                          : AppTheme.warningAmber),
-                  fontSize: 11,
-                ),
-              ),
-              trailing: Text(
-                DateFormat('hh:mm a').format(syncItem.timestamp),
-                style: const TextStyle(fontSize: 11),
-              ),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildQueueCard(syncItem, isDark),
             );
           },
         );
       },
     );
   }
+
+  Widget _buildQueueCard(SyncQueueItem syncItem, bool isDark) {
+    final shortId = syncItem.id.length > 8
+        ? syncItem.id.substring(syncItem.id.length - 8)
+        : syncItem.id;
+
+    final cardColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    final Color statusColor = syncItem.status == SyncStatus.failed
+        ? AppTheme.errorRose
+        : (syncItem.status == SyncStatus.syncing ? AppTheme.infoSky : AppTheme.warningAmber);
+
+    final IconData typeIcon = syncItem.type == 'invoice'
+        ? Icons.description_rounded
+        : (syncItem.type == 'receipt'
+            ? Icons.receipt_long_rounded
+            : (syncItem.type == 'expense'
+                ? Icons.local_gas_station_rounded
+                : (syncItem.type == 'sales_order'
+                    ? Icons.assignment_rounded
+                    : (syncItem.type == 'return'
+                        ? Icons.assignment_return_rounded
+                        : Icons.person_add_rounded))));
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryIndigo.withAlpha(isDark ? 50 : 30),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(typeIcon, color: AppTheme.primaryIndigo, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${syncItem.type.toUpperCase().replaceAll('_', ' ')} #$shortId',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _statusPill(
+                      syncItem.status == SyncStatus.failed
+                          ? 'Failed'
+                          : (syncItem.status.name[0].toUpperCase() + syncItem.status.name.substring(1)),
+                      statusColor,
+                      syncItem.status == SyncStatus.failed
+                          ? Icons.error_outline_rounded
+                          : (syncItem.status == SyncStatus.syncing
+                              ? Icons.sync_rounded
+                              : Icons.schedule_rounded),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      DateFormat('hh:mm a').format(syncItem.timestamp),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                if (syncItem.status == SyncStatus.failed && syncItem.errorMessage != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    syncItem.errorMessage!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppTheme.errorRose),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Diagnostic Console ---
 
   Widget _buildConsoleLogs() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -436,7 +765,7 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: isDark ? Colors.black : const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade800),
       ),
       child: Column(
@@ -447,8 +776,8 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
             decoration: BoxDecoration(
               color: Colors.grey.shade900,
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
+                topLeft: Radius.circular(11),
+                topRight: Radius.circular(11),
               ),
             ),
             child: Row(
@@ -456,7 +785,7 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.terminal, color: Colors.greenAccent, size: 16),
+                    Icon(Icons.terminal_rounded, color: Colors.greenAccent, size: 16),
                     SizedBox(width: 8),
                     Text(
                       'DIAGNOSTIC LOGS',

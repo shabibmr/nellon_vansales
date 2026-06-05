@@ -14,6 +14,7 @@ import '../../domain/models/tax.dart';
 import '../../domain/models/expense_account.dart';
 import '../../domain/models/organization.dart';
 import '../../domain/models/open_invoice.dart';
+import '../../domain/models/sales_order.dart';
 import '../models/customer_model.dart';
 import '../models/item_model.dart';
 import '../models/sales_invoice_model.dart';
@@ -27,6 +28,7 @@ import '../models/tax_model.dart';
 import '../models/expense_account_model.dart';
 import '../models/organization_model.dart';
 import '../models/open_invoice_model.dart';
+import '../models/sales_order_model.dart';
 import '../models/sync_queue_item.dart';
 
 /// Database service backing the application's offline-first capabilities using Hive boxes.
@@ -299,6 +301,33 @@ class HiveDatabaseService {
       }
     }
     await saveItems(localItems);
+  }
+
+  /// Retrieves list of sales orders recorded locally.
+  List<SalesOrder> getLocalOrders() {
+    final rawList = _localHistoryBox.get('sales_orders', defaultValue: []);
+    return (rawList as List)
+        .map((item) => SalesOrderModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .toList();
+  }
+
+  /// Caches a newly created sales order locally.
+  ///
+  /// Note: Unlike Sales Invoices, creating a Sales Order does not directly deduct physical inventory stock levels immediately.
+  Future<void> saveLocalOrder(SalesOrder order) async {
+    final current = getLocalOrders();
+    final model = SalesOrderModel.fromDomain(order);
+    
+    // Add or update
+    final index = current.indexWhere((ord) => ord.id == order.id);
+    if (index >= 0) {
+      current[index] = model;
+    } else {
+      current.insert(0, model);
+    }
+    
+    final serialized = current.map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson())).toList();
+    await _localHistoryBox.put('sales_orders', serialized);
   }
 
   /// Retrieves all collection receipts recorded locally.

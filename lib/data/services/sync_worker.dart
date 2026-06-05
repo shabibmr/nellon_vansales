@@ -146,6 +146,9 @@ class SyncWorker {
             case 'invoice':
               remoteId = await _apiClient.syncInvoice(item.payload);
               break;
+            case 'sales_order':
+              remoteId = await _apiClient.syncSalesOrder(item.payload);
+              break;
             case 'receipt':
               remoteId = await _apiClient.syncReceiptVoucher(item.payload);
               break;

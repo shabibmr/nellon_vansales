@@ -6,13 +6,13 @@ import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import 'item_line_editor_dialog.dart';
 
-/// Bottom sheet that allows searching for inventory items in van stock.
+/// Bottom sheet that allows searching for inventory items in van stock for a Sales Order.
 ///
-/// Selecting an item opens the [ItemLineEditorDialog] to capture the desired quantity.
-class ItemSearchDialog extends StatefulWidget {
-  final List<String> excludedItemIds; // Do not show items already present in the invoice
+/// Selecting an item opens the [ItemOrderLineEditorDialog] to capture the desired quantity.
+class ItemOrderSearchDialog extends StatefulWidget {
+  final List<String> excludedItemIds;
 
-  const ItemSearchDialog({super.key, this.excludedItemIds = const []});
+  const ItemOrderSearchDialog({super.key, this.excludedItemIds = const []});
 
   /// Presents the item search as a modal bottom sheet, matching the
   /// customer selector styling. Returns the selected item and quantity.
@@ -28,15 +28,15 @@ class ItemSearchDialog extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => ItemSearchDialog(excludedItemIds: excludedItemIds),
+      builder: (context) => ItemOrderSearchDialog(excludedItemIds: excludedItemIds),
     );
   }
 
   @override
-  State<ItemSearchDialog> createState() => _ItemSearchDialogState();
+  State<ItemOrderSearchDialog> createState() => _ItemOrderSearchDialogState();
 }
 
-class _ItemSearchDialogState extends State<ItemSearchDialog> {
+class _ItemOrderSearchDialogState extends State<ItemOrderSearchDialog> {
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
   late List<Item> _allItems;
   List<Item> _filteredItems = [];
@@ -45,7 +45,6 @@ class _ItemSearchDialogState extends State<ItemSearchDialog> {
   @override
   void initState() {
     super.initState();
-    // Retrieve all items and filter out excluded ones
     _allItems = _db.getItems()
         .where((item) => !widget.excludedItemIds.contains(item.id))
         .toList();
@@ -70,7 +69,7 @@ class _ItemSearchDialogState extends State<ItemSearchDialog> {
   Future<void> _selectItem(Item item) async {
     final qty = await showDialog<int>(
       context: context,
-      builder: (context) => ItemLineEditorDialog(item: item),
+      builder: (context) => ItemOrderLineEditorDialog(item: item),
     );
 
     if (qty != null && qty > 0) {
@@ -106,7 +105,7 @@ class _ItemSearchDialogState extends State<ItemSearchDialog> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Search Van Inventory',
+              'Search Items',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Padding(

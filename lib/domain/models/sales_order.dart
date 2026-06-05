@@ -1,0 +1,150 @@
+import 'package:equatable/equatable.dart';
+import 'item.dart';
+
+/// Represents a single line item entry in a sales order.
+///
+/// Encapsulates the product, the quantity ordered, the standard rate, and computed tax totals.
+class OrderLineItem extends Equatable {
+  /// The inventory product/item referenced.
+  final Item item;
+
+  /// Quantity of items ordered.
+  final int quantity;
+
+  /// Ordered rate per unit item.
+  final double rate;
+
+  /// Percentage of tax applied (e.g. 5.0).
+  final double taxPercentage;
+
+  /// Creates a new [OrderLineItem].
+  const OrderLineItem({
+    required this.item,
+    required this.quantity,
+    required this.rate,
+    required this.taxPercentage,
+  });
+
+  /// Computes the cost excluding tax.
+  double get subTotal => rate * quantity;
+
+  /// Computes the specific tax portion amount.
+  double get taxAmount => subTotal * (taxPercentage / 100);
+
+  /// Hardcoded line item discount (currently default to 0.0).
+  final double discount = 0.0;
+
+  /// Computes the gross line total including tax and subtracting discount.
+  double get total => subTotal + taxAmount - discount;
+
+  /// Creates a copy of this [OrderLineItem] with replaced values for specific fields.
+  OrderLineItem copyWith({
+    Item? item,
+    int? quantity,
+    double? rate,
+    double? taxPercentage,
+  }) {
+    return OrderLineItem(
+      item: item ?? this.item,
+      quantity: quantity ?? this.quantity,
+      rate: rate ?? this.rate,
+      taxPercentage: taxPercentage ?? this.taxPercentage,
+    );
+  }
+
+  @override
+  List<Object?> get props => [item, quantity, rate, taxPercentage];
+}
+
+/// Represents a Sales Order created during route delivery.
+///
+/// Contains details of the customer, shipment details, order lines,
+/// and computed totals (subtotal, tax sum, grand total).
+class SalesOrder extends Equatable {
+  /// Unique identifier of the sales order.
+  final String id;
+
+  /// Human-readable billing voucher reference code.
+  final String orderNumber;
+
+  /// The customer ID.
+  final String customerId;
+
+  /// Display name of the customer.
+  final String customerName;
+
+  /// The date when the order was issued.
+  final DateTime date;
+
+  /// The shipment date.
+  final DateTime shipmentDate;
+
+  /// Collection of ordered product items.
+  final List<OrderLineItem> items;
+
+  /// Customer notes or delivery remarks.
+  final String notes;
+
+  /// Flag indicating if the order is pending synchronization with Zoho Books.
+  final bool isPendingSync;
+
+  /// Creates a new [SalesOrder].
+  const SalesOrder({
+    required this.id,
+    required this.orderNumber,
+    required this.customerId,
+    required this.customerName,
+    required this.date,
+    required this.shipmentDate,
+    required this.items,
+    required this.notes,
+    this.isPendingSync = false,
+  });
+
+  /// Computes sum of all sub-totals (excluding taxes).
+  double get subTotal => items.fold(0.0, (sum, item) => sum + item.subTotal);
+
+  /// Computes total accumulated tax on this order.
+  double get taxTotal => items.fold(0.0, (sum, item) => sum + item.taxAmount);
+
+  /// Computes the final grand total billed.
+  double get total => items.fold(0.0, (sum, item) => sum + item.total);
+
+  /// Creates a copy of this [SalesOrder] with replaced values for specific fields.
+  SalesOrder copyWith({
+    String? id,
+    String? orderNumber,
+    String? customerId,
+    String? customerName,
+    DateTime? date,
+    DateTime? shipmentDate,
+    List<OrderLineItem>? items,
+    String? notes,
+    bool? isPendingSync,
+  }) {
+    return SalesOrder(
+      id: id ?? this.id,
+      orderNumber: orderNumber ?? this.orderNumber,
+      customerId: customerId ?? this.customerId,
+      customerName: customerName ?? this.customerName,
+      date: date ?? this.date,
+      shipmentDate: shipmentDate ?? this.shipmentDate,
+      items: items ?? this.items,
+      notes: notes ?? this.notes,
+      isPendingSync: isPendingSync ?? this.isPendingSync,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        id,
+        orderNumber,
+        customerId,
+        customerName,
+        date,
+        shipmentDate,
+        items,
+        notes,
+        isPendingSync,
+      ];
+}

@@ -46,3 +46,21 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Brand the generated release APK as app-nellon-release.apk.
+// AGP 9 removed the variant outputFileName API, so we copy after packaging.
+afterEvaluate {
+    tasks.named("assembleRelease").configure {
+        doLast {
+            val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val original = releaseDir.resolve("app-release.apk")
+            if (original.exists()) {
+                original.copyTo(releaseDir.resolve("app-nellon-release.apk"), overwrite = true)
+                // Also place a branded copy alongside Flutter's flutter-apk output.
+                val flutterApkDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
+                flutterApkDir.mkdirs()
+                original.copyTo(flutterApkDir.resolve("app-nellon-release.apk"), overwrite = true)
+            }
+        }
+    }
+}

@@ -4,24 +4,22 @@ import 'van_action_tile.dart';
 
 class OperationsTab extends StatelessWidget {
   final bool isDark;
-  final VoidCallback onCreateCustomer;
   final VoidCallback onCashClosing;
   final VoidCallback onManageInvoices;
+  final VoidCallback onManageOrders;
   final VoidCallback onManageExpenses;
   final VoidCallback onManageReceipts;
   final VoidCallback onManageReturns;
-  final VoidCallback onSyncMasters;
 
   const OperationsTab({
     super.key,
     required this.isDark,
-    required this.onCreateCustomer,
     required this.onCashClosing,
     required this.onManageInvoices,
+    required this.onManageOrders,
     required this.onManageExpenses,
     required this.onManageReceipts,
     required this.onManageReturns,
-    required this.onSyncMasters,
   });
 
   @override
@@ -33,7 +31,7 @@ class OperationsTab extends StatelessWidget {
           padding: const EdgeInsets.all(20.0),
           children: [
             VanActionTile(
-              title: 'Manage Sales Invoices',
+              title: 'Sales Invoices',
               subtitle: 'View, filter, edit, or create offline sales invoices.',
               icon: Icons.description_outlined,
               color: AppTheme.primaryIndigo,
@@ -42,7 +40,16 @@ class OperationsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             VanActionTile(
-              title: 'Manage Sales Returns',
+              title: 'Sales Orders',
+              subtitle: 'View, filter, edit, or create offline sales orders.',
+              icon: Icons.assignment_outlined,
+              color: AppTheme.primaryIndigo,
+              isDark: isDark,
+              onTap: onManageOrders,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
+              title: 'Sales Returns',
               subtitle: 'View, filter, edit, or create credit notes for returned goods.',
               icon: Icons.assignment_return_outlined,
               color: AppTheme.warningAmber,
@@ -51,7 +58,7 @@ class OperationsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             VanActionTile(
-              title: 'Manage Expenses',
+              title: 'Expenses',
               subtitle: 'View and log van trip expenses with receipt capture.',
               icon: Icons.local_gas_station_outlined,
               color: AppTheme.errorRose,
@@ -60,30 +67,12 @@ class OperationsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             VanActionTile(
-              title: 'Manage Receipts',
+              title: 'Receipts',
               subtitle: 'View and log customer payment receipt vouchers.',
               icon: Icons.payments_outlined,
               color: AppTheme.successEmerald,
               isDark: isDark,
               onTap: onManageReceipts,
-            ),
-            const SizedBox(height: 16),
-            VanActionTile(
-              title: 'Register New Customer',
-              subtitle: 'Create customer details offline. Enqueues instantly to Zoho.',
-              icon: Icons.person_add_alt_outlined,
-              color: AppTheme.primaryIndigo,
-              isDark: isDark,
-              onTap: onCreateCustomer,
-            ),
-            const SizedBox(height: 16),
-            VanActionTile(
-              title: 'Sync Master Data',
-              subtitle: 'Refresh customers, items, taxes and org data from Zoho Books.',
-              icon: Icons.cloud_sync_outlined,
-              color: AppTheme.infoSky,
-              isDark: isDark,
-              onTap: onSyncMasters,
             ),
             const SizedBox(height: 16),
             VanActionTile(

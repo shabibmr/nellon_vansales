@@ -14,14 +14,26 @@ import '../../route/bloc/route_bloc.dart';
 /// Prompts fields for customer display name, company name, address, email, phone, and credit parameters.
 /// Instantly saves a local client record with a temporary client ID and pushes an upload job to the Sync Queue.
 class CreateCustomerDialog extends StatefulWidget {
-  /// Callback triggered when the customer creation transaction successfully completes.
-  final VoidCallback onCustomerCreated;
+  /// Optional callback triggered when the customer creation transaction successfully completes.
+  final VoidCallback? onCustomerCreated;
 
   /// Creates a new [CreateCustomerDialog].
   const CreateCustomerDialog({
     super.key,
-    required this.onCustomerCreated,
+    this.onCustomerCreated,
   });
+
+  /// Presents the dialog and resolves to the newly created [Customer], or
+  /// `null` if the user cancelled.
+  static Future<Customer?> show(
+    BuildContext context, {
+    VoidCallback? onCustomerCreated,
+  }) {
+    return showDialog<Customer>(
+      context: context,
+      builder: (_) => CreateCustomerDialog(onCustomerCreated: onCustomerCreated),
+    );
+  }
 
   @override
   State<CreateCustomerDialog> createState() => _CreateCustomerDialogState();
@@ -117,7 +129,7 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
 
     setState(() => _isSaving = false);
 
-    navigator.pop();
+    navigator.pop(newCustomer);
     messenger.showSnackBar(
       SnackBar(
         backgroundColor: AppTheme.successEmerald,
@@ -125,7 +137,7 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
       ),
     );
 
-    widget.onCustomerCreated();
+    widget.onCustomerCreated?.call();
   }
 
   @override

@@ -81,7 +81,8 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: glassBackground1,
+      // Transparent so the app-wide AnimatedGlowBackground shows through.
+      scaffoldBackgroundColor: Colors.transparent,
       colorScheme: const ColorScheme.dark(
         primary: primaryIndigo,
         secondary: infoSky,
@@ -151,7 +152,8 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: darkBackground,
+      // Transparent so the app-wide AnimatedGlowBackground shows through.
+      scaffoldBackgroundColor: Colors.transparent,
       colorScheme: const ColorScheme.dark(
         primary: primaryIndigo,
         secondary: infoSky,
@@ -221,7 +223,8 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      scaffoldBackgroundColor: lightBackground,
+      // Transparent so the app-wide AnimatedGlowBackground shows through.
+      scaffoldBackgroundColor: Colors.transparent,
       colorScheme: const ColorScheme.light(
         primary: primaryIndigo,
         secondary: infoSky,

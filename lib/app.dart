@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'data/services/injection.dart';
 import 'ui/core/theme/app_theme.dart';
 import 'ui/core/theme/theme_cubit.dart';
+import 'ui/core/widgets/animated_glow_background.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/sync_repository.dart';
 import 'domain/repositories/sales_repository.dart';
@@ -13,6 +14,7 @@ import 'ui/features/auth/bloc/auth_bloc.dart';
 import 'ui/features/sync/bloc/sync_bloc.dart';
 import 'ui/features/route/bloc/route_bloc.dart';
 import 'ui/features/sales_invoice/bloc/sales_invoice_bloc.dart';
+import 'ui/features/sales_order/bloc/sales_order_bloc.dart';
 import 'ui/features/expenses/bloc/expense_bloc.dart';
 import 'ui/features/receipts/bloc/receipt_bloc.dart';
 import 'ui/features/sales_return/bloc/sales_return_bloc.dart';
@@ -86,6 +88,12 @@ class VanSalesApp extends StatelessWidget {
               syncRepository: context.read<SyncRepository>(),
             ),
           ),
+          BlocProvider<SalesOrderBloc>(
+            create: (context) => SalesOrderBloc(
+              salesRepository: context.read<SalesRepository>(),
+              syncRepository: context.read<SyncRepository>(),
+            ),
+          ),
           BlocProvider<ExpenseBloc>(
             create: (context) => ExpenseBloc(
               salesRepository: context.read<SalesRepository>(),
@@ -141,6 +149,10 @@ class VanSalesApp extends StatelessWidget {
               themeMode: appThemeMode == AppThemeMode.light
                   ? ThemeMode.light
                   : ThemeMode.dark,
+              builder: (context, child) => AnimatedGlowBackground(
+                themeMode: appThemeMode,
+                child: child ?? const SizedBox.shrink(),
+              ),
               home: const SessionGateway(),
             );
           },

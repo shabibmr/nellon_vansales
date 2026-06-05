@@ -7,7 +7,7 @@ import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import 'return_invoice_selector_dialog.dart';
 
-/// Modal dialog for searching van inventory items to add to a sales return.
+/// Bottom sheet for searching van inventory items to add to a sales return.
 class ReturnItemSearchDialog extends StatefulWidget {
   final String customerId;
   final List<String> excludedItemIds;
@@ -17,6 +17,28 @@ class ReturnItemSearchDialog extends StatefulWidget {
     required this.customerId,
     this.excludedItemIds = const [],
   });
+
+  /// Presents the return item search as a modal bottom sheet, matching the
+  /// customer selector styling. Returns the selected return line items.
+  static Future<List<SalesReturnLineItem>?> show(
+    BuildContext context, {
+    required String customerId,
+    List<String> excludedItemIds = const [],
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return showModalBottomSheet<List<SalesReturnLineItem>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => ReturnItemSearchDialog(
+        customerId: customerId,
+        excludedItemIds: excludedItemIds,
+      ),
+    );
+  }
 
   @override
   State<ReturnItemSearchDialog> createState() => _ReturnItemSearchDialogState();
@@ -83,38 +105,46 @@ class _ReturnItemSearchDialogState extends State<ReturnItemSearchDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 600),
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Select Return Item',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              onChanged: _onSearchChanged,
-              decoration: const InputDecoration(
-                hintText: 'Search items by name or SKU...',
-                prefixIcon: Icon(Icons.search, color: AppTheme.warningAmber),
               ),
             ),
             const SizedBox(height: 16),
+            const Text(
+              'Select Return Item',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: TextField(
+                autofocus: true,
+                onChanged: _onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: 'Search items by name or SKU...',
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.warningAmber),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const Divider(),
             Expanded(
               child: _filteredItems.isEmpty
                   ? Center(
@@ -139,53 +169,25 @@ class _ReturnItemSearchDialogState extends State<ReturnItemSearchDialog> {
                       ),
                     )
                   : ListView.separated(
+                      controller: scrollController,
                       itemCount: _filteredItems.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 8),
+                      separatorBuilder: (context, index) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = _filteredItems[index];
-                        return Card(
-                          margin: EdgeInsets.zero,
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                          child: InkWell(
-                            onTap: () => _selectItem(item),
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                        return ListTile(
+                          title: Text(
+                            item.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
+                          subtitle: Text('SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}'),
+                          onTap: () => _selectItem(item),
                         );
                       },
                     ),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 }
