@@ -106,11 +106,9 @@ class CustomerLedgerBloc
   final ZohoApiClient _apiClient;
 
   CustomerLedgerBloc({
-    required SalesRepository salesRepository,
-    required ZohoApiClient apiClient,
-  }) : _salesRepository = salesRepository,
-       _apiClient = apiClient,
-       super(CustomerLedgerState()) {
+    required this._salesRepository,
+    required this._apiClient,
+  }) : super(CustomerLedgerState()) {
     on<SetLedgerCustomer>(_onSetCustomer);
     on<SetLedgerStartDate>(_onSetStartDate);
     on<SetLedgerEndDate>(_onSetEndDate);

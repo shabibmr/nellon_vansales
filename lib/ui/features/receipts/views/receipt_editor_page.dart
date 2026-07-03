@@ -83,8 +83,9 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
           status: '',
         ),
       );
-      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance)
+      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance) {
         return false;
+      }
       totalAllocated += alloc.amountApplied;
     }
     if (double.parse(totalAllocated.toStringAsFixed(2)) >
@@ -457,8 +458,9 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                               final openInvoices = _db.getOpenInvoices(
                                 customerId: customer.id,
                               );
-                              if (openInvoices.isEmpty)
+                              if (openInvoices.isEmpty) {
                                 return const SizedBox.shrink();
+                              }
 
                               final totalAllocated = state.editingAllocations
                                   .fold(0.0, (sum, a) => sum + a.amountApplied);

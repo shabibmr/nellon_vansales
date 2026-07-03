@@ -67,6 +67,7 @@ class SalesOrderModel extends SalesOrder {
     super.status,
     super.convertedInvoiceNumber,
     super.zohoOrderId,
+    super.locationId,
   });
 
   /// Factory constructor to parse local database JSON maps into a [SalesOrderModel].
@@ -92,6 +93,7 @@ class SalesOrderModel extends SalesOrder {
       status: _statusFromString(json['status']),
       convertedInvoiceNumber: json['converted_invoice_number'],
       zohoOrderId: json['zoho_order_id'],
+      locationId: json['location_id'],
     );
   }
 
@@ -121,6 +123,7 @@ class SalesOrderModel extends SalesOrder {
       'status': status == SalesOrderStatus.invoiced ? 'invoiced' : 'open',
       'converted_invoice_number': convertedInvoiceNumber,
       'zoho_order_id': zohoOrderId,
+      'location_id': locationId,
     };
   }
 
@@ -139,6 +142,7 @@ class SalesOrderModel extends SalesOrder {
       status: order.status,
       convertedInvoiceNumber: order.convertedInvoiceNumber,
       zohoOrderId: order.zohoOrderId,
+      locationId: order.locationId,
     );
   }
 }

@@ -132,7 +132,7 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                           : ListView.separated(
                               controller: scrollCtrl,
                               itemCount: filtered.length,
-                              separatorBuilder: (_, __) =>
+                              separatorBuilder: (_, _) =>
                                   const Divider(height: 1),
                               itemBuilder: (_, i) {
                                 final customer = filtered[i];

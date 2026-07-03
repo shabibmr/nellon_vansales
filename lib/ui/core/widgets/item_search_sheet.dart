@@ -159,7 +159,7 @@ class _ItemSearchSheetState extends State<ItemSearchSheet> {
                   : ListView.separated(
                       controller: scrollController,
                       itemCount: _filtered.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = _filtered[index];
                         return ListTile(

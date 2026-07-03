@@ -141,7 +141,7 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
                             top: 8.0,
                           ),
                           itemCount: list.length,
-                          separatorBuilder: (_, __) =>
+                          separatorBuilder: (_, _) =>
                               const SizedBox(height: 12),
                           itemBuilder: (context, index) {
                             final order = list[index];

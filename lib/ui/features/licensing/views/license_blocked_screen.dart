@@ -72,17 +72,17 @@ class LicenseBlockedScreen extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(24.0),
                       decoration: BoxDecoration(
-                        color: AppTheme.darkSurface.withOpacity(0.6),
+                        color: AppTheme.darkSurface.withValues(alpha: 0.6),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.errorRose.withOpacity(0.3),
+                            color: AppTheme.errorRose.withValues(alpha: 0.3),
                             blurRadius: 30,
                             spreadRadius: 2,
                           ),
                         ],
                         border: Border.all(
-                          color: AppTheme.errorRose.withOpacity(0.4),
+                          color: AppTheme.errorRose.withValues(alpha: 0.4),
                           width: 1.5,
                         ),
                       ),
@@ -112,10 +112,10 @@ class LicenseBlockedScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(24.0),
                     decoration: BoxDecoration(
-                      color: AppTheme.darkSurface.withOpacity(0.5),
+                      color: AppTheme.darkSurface.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: const Color(0xFF334155).withOpacity(0.4),
+                        color: const Color(0xFF334155).withValues(alpha: 0.4),
                         width: 1,
                       ),
                     ),

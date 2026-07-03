@@ -21,7 +21,8 @@ class Customer extends Equatable {
   /// Primary contact phone number.
   final String phone;
 
-  /// Street address or delivery coordinates of the customer.
+  /// Street / textual billing or delivery address of the customer.
+  /// GPS coordinates are stored separately in [latitude] / [longitude].
   final String address;
 
   /// The current unpaid balance of this customer.
@@ -35,6 +36,12 @@ class Customer extends Equatable {
 
   /// The sequence order of this customer on the route.
   final int sequence;
+
+  /// Optional GPS latitude captured for this customer (decimal degrees).
+  final double? latitude;
+
+  /// Optional GPS longitude captured for this customer (decimal degrees).
+  final double? longitude;
 
   /// Flag indicating if any local updates are waiting to sync to the server.
   final bool isPendingSync;
@@ -51,6 +58,8 @@ class Customer extends Equatable {
     required this.creditLimit,
     required this.routeId,
     required this.sequence,
+    this.latitude,
+    this.longitude,
     this.isPendingSync = false,
   });
 
@@ -66,6 +75,8 @@ class Customer extends Equatable {
     double? creditLimit,
     String? routeId,
     int? sequence,
+    double? latitude,
+    double? longitude,
     bool? isPendingSync,
   }) {
     return Customer(
@@ -79,6 +90,8 @@ class Customer extends Equatable {
       creditLimit: creditLimit ?? this.creditLimit,
       routeId: routeId ?? this.routeId,
       sequence: sequence ?? this.sequence,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       isPendingSync: isPendingSync ?? this.isPendingSync,
     );
   }
@@ -95,6 +108,8 @@ class Customer extends Equatable {
     creditLimit,
     routeId,
     sequence,
+    latitude,
+    longitude,
     isPendingSync,
   ];
 }

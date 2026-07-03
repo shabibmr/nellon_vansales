@@ -9,6 +9,7 @@ import '../../domain/models/sales_return.dart';
 import '../../domain/models/expense_entry.dart';
 import '../../domain/models/cash_closing.dart';
 import '../../domain/models/warehouse.dart';
+import '../../domain/models/salesperson.dart';
 import '../../domain/models/payment_account.dart';
 import '../../domain/models/tax.dart';
 import '../../domain/models/expense_account.dart';
@@ -23,6 +24,7 @@ import '../models/sales_return_model.dart';
 import '../models/expense_entry_model.dart';
 import '../models/cash_closing_model.dart';
 import '../models/warehouse_model.dart';
+import '../models/salesperson_model.dart';
 import '../models/payment_account_model.dart';
 import '../models/tax_model.dart';
 import '../models/expense_account_model.dart';
@@ -97,6 +99,22 @@ class HiveDatabaseService {
     await _masterBox.put('customers', serialized);
   }
 
+  /// Updates latitude/longitude for a specific customer (by id) and persists.
+  /// If the customer is not found, this is a no-op.
+  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {
+    final current = getCustomers();
+    final index = current.indexWhere((c) => c.id == customerId);
+    if (index < 0) return;
+
+    final updated = current[index].copyWith(
+      latitude: latitude,
+      longitude: longitude,
+    );
+    final newList = List<Customer>.from(current);
+    newList[index] = updated;
+    await saveCustomers(newList);
+  }
+
   /// Retrieves the list of synced master stocked inventory products.
   List<Item> getItems() {
     final rawList = _masterBox.get('items', defaultValue: []);
@@ -160,6 +178,43 @@ class HiveDatabaseService {
         .map((w) => jsonEncode(WarehouseModel.fromDomain(w).toJson()))
         .toList();
     await _masterBox.put('warehouses', serialized);
+  }
+
+  /// Retrieves the master list of all synced Zoho Books salespersons (sales users).
+  List<Salesperson> getSalespersons() {
+    final rawList = _masterBox.get('salespersons', defaultValue: []);
+    return (rawList as List)
+        .map(
+          (s) => SalespersonModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(s)),
+          ),
+        )
+        .toList();
+  }
+
+  /// Saves or refreshes the master salespersons list.
+  Future<void> saveSalespersons(List<Salesperson> salespersons) async {
+    final serialized = salespersons
+        .map((s) => jsonEncode(SalespersonModel.fromDomain(s).toJson()))
+        .toList();
+    await _masterBox.put('salespersons', serialized);
+  }
+
+  /// Retrieves the resolved salesperson record for the currently logged-in session, if any.
+  Salesperson? getCurrentSalesperson() {
+    final raw = _masterBox.get('current_salesperson');
+    if (raw == null) return null;
+    return SalespersonModel.fromJson(
+      Map<String, dynamic>.from(jsonDecode(raw)),
+    );
+  }
+
+  /// Caches the resolved active salesperson for the current session.
+  Future<void> saveCurrentSalesperson(Salesperson salesperson) async {
+    await _masterBox.put(
+      'current_salesperson',
+      jsonEncode(SalespersonModel.fromDomain(salesperson).toJson()),
+    );
   }
 
   /// Retrieves payment/bank ledgers for receipt mapping.
@@ -283,8 +338,23 @@ class HiveDatabaseService {
     await _syncQueueBox.delete(id);
   }
 
-  /// Retrieves list of invoices recorded locally.
-  List<SalesInvoice> getLocalInvoices() {
+  /// Filters a list of location-taggable records down to the active session location.
+  ///
+  /// Records with no `locationId` (legacy, pre-dating this field) always pass through.
+  /// When no location is active for the session, no filtering is applied.
+  List<T> _filterByActiveLocation<T>(
+    List<T> items,
+    String? Function(T) locationIdOf,
+  ) {
+    final active = assignedWarehouseId;
+    if (active == null) return items;
+    return items
+        .where((i) => locationIdOf(i) == null || locationIdOf(i) == active)
+        .toList();
+  }
+
+  /// Retrieves the full, unfiltered list of invoices recorded locally (for internal read-modify-write use).
+  List<SalesInvoice> _getAllLocalInvoices() {
     final rawList = _localHistoryBox.get('invoices', defaultValue: []);
     return (rawList as List)
         .map(
@@ -295,13 +365,20 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Retrieves list of invoices recorded locally, scoped to the active session location.
+  List<SalesInvoice> getLocalInvoices() =>
+      _filterByActiveLocation(_getAllLocalInvoices(), (inv) => inv.locationId);
+
   /// Caches a newly created sales invoice locally and immediately updates corresponding item stock level in the van.
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {
-    final current = getLocalInvoices();
-    final model = SalesInvoiceModel.fromDomain(invoice);
+    final stamped = invoice.locationId == null && assignedWarehouseId != null
+        ? invoice.copyWith(locationId: assignedWarehouseId)
+        : invoice;
+    final current = _getAllLocalInvoices();
+    final model = SalesInvoiceModel.fromDomain(stamped);
 
     // Add or update
-    final index = current.indexWhere((inv) => inv.id == invoice.id);
+    final index = current.indexWhere((inv) => inv.id == stamped.id);
     SalesInvoice? oldInvoice;
     if (index >= 0) {
       oldInvoice = current[index];
@@ -328,7 +405,7 @@ class HiveDatabaseService {
         }
       }
     }
-    for (final line in invoice.items) {
+    for (final line in stamped.items) {
       final itemIndex = localItems.indexWhere((it) => it.id == line.item.id);
       if (itemIndex >= 0) {
         final existingItem = localItems[itemIndex];
@@ -341,8 +418,8 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
-  /// Retrieves list of sales orders recorded locally.
-  List<SalesOrder> getLocalOrders() {
+  /// Retrieves the full, unfiltered list of sales orders recorded locally (for internal read-modify-write use).
+  List<SalesOrder> _getAllLocalOrders() {
     final rawList = _localHistoryBox.get('sales_orders', defaultValue: []);
     return (rawList as List)
         .map(
@@ -353,15 +430,22 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Retrieves list of sales orders recorded locally, scoped to the active session location.
+  List<SalesOrder> getLocalOrders() =>
+      _filterByActiveLocation(_getAllLocalOrders(), (ord) => ord.locationId);
+
   /// Caches a newly created sales order locally.
   ///
   /// Note: Unlike Sales Invoices, creating a Sales Order does not directly deduct physical inventory stock levels immediately.
   Future<void> saveLocalOrder(SalesOrder order) async {
-    final current = getLocalOrders();
-    final model = SalesOrderModel.fromDomain(order);
+    final stamped = order.locationId == null && assignedWarehouseId != null
+        ? order.copyWith(locationId: assignedWarehouseId)
+        : order;
+    final current = _getAllLocalOrders();
+    final model = SalesOrderModel.fromDomain(stamped);
 
     // Add or update
-    final index = current.indexWhere((ord) => ord.id == order.id);
+    final index = current.indexWhere((ord) => ord.id == stamped.id);
     if (index >= 0) {
       current[index] = model;
     } else {
@@ -380,7 +464,7 @@ class HiveDatabaseService {
   /// preserved untouched; everything else is replaced by the authoritative remote set.
   /// Remote orders are matched against local ones by `zohoOrderId` to avoid duplicates.
   Future<void> saveRemoteOrders(List<SalesOrder> remote) async {
-    final pendingLocal = getLocalOrders()
+    final pendingLocal = _getAllLocalOrders()
         .where((o) => o.isPendingSync)
         .toList();
 
@@ -399,8 +483,8 @@ class HiveDatabaseService {
     await _localHistoryBox.put('sales_orders', serialized);
   }
 
-  /// Retrieves all collection receipts recorded locally.
-  List<ReceiptVoucher> getLocalReceipts() {
+  /// Retrieves the full, unfiltered list of receipts recorded locally (for internal read-modify-write use).
+  List<ReceiptVoucher> _getAllLocalReceipts() {
     final rawList = _localHistoryBox.get('receipts', defaultValue: []);
     return (rawList as List)
         .map(
@@ -411,12 +495,21 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Retrieves all collection receipts recorded locally, scoped to the active session location.
+  List<ReceiptVoucher> getLocalReceipts() => _filterByActiveLocation(
+    _getAllLocalReceipts(),
+    (rec) => rec.locationId,
+  );
+
   /// Caches a newly created receipt locally and instantly decrements the matching customer's outstanding balance in memory.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {
-    final current = getLocalReceipts();
-    final model = ReceiptVoucherModel.fromDomain(voucher);
+    final stamped = voucher.locationId == null && assignedWarehouseId != null
+        ? voucher.copyWith(locationId: assignedWarehouseId)
+        : voucher;
+    final current = _getAllLocalReceipts();
+    final model = ReceiptVoucherModel.fromDomain(stamped);
 
-    final index = current.indexWhere((rec) => rec.id == voucher.id);
+    final index = current.indexWhere((rec) => rec.id == stamped.id);
     if (index >= 0) {
       current[index] = model;
     } else {
@@ -443,8 +536,8 @@ class HiveDatabaseService {
     await saveCustomers(localCustomers);
   }
 
-  /// Retrieves list of sales returns recorded locally.
-  List<SalesReturn> getLocalReturns() {
+  /// Retrieves the full, unfiltered list of sales returns recorded locally (for internal read-modify-write use).
+  List<SalesReturn> _getAllLocalReturns() {
     final rawList = _localHistoryBox.get('returns', defaultValue: []);
     return (rawList as List)
         .map(
@@ -455,12 +548,20 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Retrieves list of sales returns recorded locally, scoped to the active session location.
+  List<SalesReturn> getLocalReturns() =>
+      _filterByActiveLocation(_getAllLocalReturns(), (ret) => ret.locationId);
+
   /// Caches a sales return locally and immediately restores returned product stock levels back in the local inventory.
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {
-    final current = getLocalReturns();
-    final model = SalesReturnModel.fromDomain(salesReturn);
+    final stamped =
+        salesReturn.locationId == null && assignedWarehouseId != null
+        ? salesReturn.copyWith(locationId: assignedWarehouseId)
+        : salesReturn;
+    final current = _getAllLocalReturns();
+    final model = SalesReturnModel.fromDomain(stamped);
 
-    final index = current.indexWhere((ret) => ret.id == salesReturn.id);
+    final index = current.indexWhere((ret) => ret.id == stamped.id);
     if (index >= 0) {
       current[index] = model;
     } else {
@@ -474,7 +575,7 @@ class HiveDatabaseService {
 
     // Restore stock in local cached inventory instantly!
     final localItems = getItems();
-    for (final line in salesReturn.items) {
+    for (final line in stamped.items) {
       final itemIndex = localItems.indexWhere(
         (it) => it.id == line.invoiceLineItem.item.id,
       );
@@ -488,8 +589,8 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
-  /// Retrieves all Filed route expenses.
-  List<ExpenseEntry> getLocalExpenses() {
+  /// Retrieves the full, unfiltered list of expenses recorded locally (for internal read-modify-write use).
+  List<ExpenseEntry> _getAllLocalExpenses() {
     final rawList = _localHistoryBox.get('expenses', defaultValue: []);
     return (rawList as List)
         .map(
@@ -500,12 +601,19 @@ class HiveDatabaseService {
         .toList();
   }
 
+  /// Retrieves all Filed route expenses, scoped to the active session location.
+  List<ExpenseEntry> getLocalExpenses() =>
+      _filterByActiveLocation(_getAllLocalExpenses(), (exp) => exp.locationId);
+
   /// Caches a new expense voucher locally.
   Future<void> saveLocalExpense(ExpenseEntry expense) async {
-    final current = getLocalExpenses();
-    final model = ExpenseEntryModel.fromDomain(expense);
+    final stamped = expense.locationId == null && assignedWarehouseId != null
+        ? expense.copyWith(locationId: assignedWarehouseId)
+        : expense;
+    final current = _getAllLocalExpenses();
+    final model = ExpenseEntryModel.fromDomain(stamped);
 
-    final index = current.indexWhere((exp) => exp.id == expense.id);
+    final index = current.indexWhere((exp) => exp.id == stamped.id);
     if (index >= 0) {
       current[index] = model;
     } else {

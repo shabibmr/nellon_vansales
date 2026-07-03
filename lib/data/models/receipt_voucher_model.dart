@@ -56,6 +56,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
     required super.referenceNumber,
     required super.date,
     super.isPendingSync,
+    super.locationId,
   });
 
   /// Factory constructor to parse local database JSON maps into a [ReceiptVoucherModel].
@@ -79,6 +80,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
           ? DateTime.parse(json['date'])
           : DateTime.now(),
       isPendingSync: json['isPendingSync'] ?? false,
+      locationId: json['location_id'],
     );
   }
 
@@ -95,6 +97,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
       'reference_number': referenceNumber,
       'date': date.toIso8601String().split('T')[0],
       'isPendingSync': isPendingSync,
+      'location_id': locationId,
       // Transforms domain allocations back into JSON representation for storage.
       'invoices': allocations
           .map((item) => PaymentAllocationModel.fromDomain(item).toJson())
@@ -115,6 +118,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
       referenceNumber: voucher.referenceNumber,
       date: voucher.date,
       isPendingSync: voucher.isPendingSync,
+      locationId: voucher.locationId,
     );
   }
 }

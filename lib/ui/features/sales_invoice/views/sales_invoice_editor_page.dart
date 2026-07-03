@@ -67,9 +67,10 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
       showCreateOption: true,
       createOptionSubtitle: 'Add a new customer and use it for this invoice',
       onCreateTap: () async {
+        final bloc = context.read<SalesInvoiceBloc>();
         final created = await CreateCustomerDialog.show(context);
-        if (created != null && mounted) {
-          context.read<SalesInvoiceBloc>().add(UpdateInvoiceCustomer(created));
+        if (created != null) {
+          bloc.add(UpdateInvoiceCustomer(created));
         }
       },
     );

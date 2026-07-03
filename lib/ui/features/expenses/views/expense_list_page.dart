@@ -122,7 +122,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                           bottom: 80,
                         ),
                         itemCount: list.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final expense = list[index];
                           final firstLine = expense.lines.isNotEmpty

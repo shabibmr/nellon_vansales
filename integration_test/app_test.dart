@@ -153,6 +153,9 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   List<SyncQueueItem> getSyncQueue() => [];
+
+  @override
+  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
 }
 
 void main() {

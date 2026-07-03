@@ -70,5 +70,7 @@
 	<string>This app requires access to the camera to capture receipt photos for claim expense logging.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app requires access to the photo library to upload receipt images for claim expense logging.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to record precise GPS coordinates for customer delivery / visit points.</string>
 </dict>
 </plist>

@@ -41,6 +41,9 @@ class ExpenseEntry extends Equatable {
   /// Flag indicating if the expense voucher has been uploaded/synchronized with the server.
   final bool isPendingSync;
 
+  /// The Zoho Location ID of the salesperson/van that logged this expense.
+  final String? locationId;
+
   /// Creates a new [ExpenseEntry] voucher.
   const ExpenseEntry({
     required this.id,
@@ -48,6 +51,7 @@ class ExpenseEntry extends Equatable {
     required this.lines,
     this.receiptImagePath,
     this.isPendingSync = false,
+    this.locationId,
   });
 
   /// Computes the total combined cost of all line items contained in this entry.
@@ -60,6 +64,7 @@ class ExpenseEntry extends Equatable {
     List<ExpenseLineItem>? lines,
     String? receiptImagePath,
     bool? isPendingSync,
+    String? locationId,
   }) {
     return ExpenseEntry(
       id: id ?? this.id,
@@ -67,9 +72,17 @@ class ExpenseEntry extends Equatable {
       lines: lines ?? this.lines,
       receiptImagePath: receiptImagePath ?? this.receiptImagePath,
       isPendingSync: isPendingSync ?? this.isPendingSync,
+      locationId: locationId ?? this.locationId,
     );
   }
 
   @override
-  List<Object?> get props => [id, date, lines, receiptImagePath, isPendingSync];
+  List<Object?> get props => [
+    id,
+    date,
+    lines,
+    receiptImagePath,
+    isPendingSync,
+    locationId,
+  ];
 }

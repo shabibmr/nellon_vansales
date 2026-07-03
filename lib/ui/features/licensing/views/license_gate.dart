@@ -106,7 +106,7 @@ class _LicenseGateState extends State<LicenseGate> {
             Text(
               'Please wait a moment',
               style: TextStyle(
-                color: AppTheme.darkTextSecondary.withOpacity(0.7),
+                color: AppTheme.darkTextSecondary.withValues(alpha: 0.7),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -148,7 +148,7 @@ class _LicenseGateState extends State<LicenseGate> {
                 color: AppTheme.darkSurface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppTheme.errorRose.withOpacity(0.3),
+                  color: AppTheme.errorRose.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),

@@ -64,6 +64,7 @@ class SalesReturnModel extends SalesReturn {
     required super.items,
     required super.reason,
     super.isPendingSync,
+    super.locationId,
   });
 
   /// Factory constructor to parse local database JSON maps into a [SalesReturnModel].
@@ -84,6 +85,7 @@ class SalesReturnModel extends SalesReturn {
           [],
       reason: json['reason'] ?? '',
       isPendingSync: json['isPendingSync'] ?? false,
+      locationId: json['location_id'],
     );
   }
 
@@ -101,6 +103,7 @@ class SalesReturnModel extends SalesReturn {
           .toList(),
       'reason': reason,
       'isPendingSync': isPendingSync,
+      'location_id': locationId,
     };
   }
 
@@ -115,6 +118,7 @@ class SalesReturnModel extends SalesReturn {
       items: salesReturn.items,
       reason: salesReturn.reason,
       isPendingSync: salesReturn.isPendingSync,
+      locationId: salesReturn.locationId,
     );
   }
 }

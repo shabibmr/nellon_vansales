@@ -17,14 +17,71 @@ class CustomerModel extends Customer {
     required super.creditLimit,
     required super.routeId,
     required super.sequence,
+    super.latitude,
+    super.longitude,
     super.isPendingSync,
   });
+
+  /// Helper to robustly parse a nullable double from common representations.
+  static double? _parseLatLng(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
+  }
+
+  /// Extracts GPS latitude/longitude from Zoho contact JSON.
+  ///
+  /// Supports multiple shapes seen in practice:
+  /// - top-level cf_latitude / latitude / lat
+  /// - custom_field_hash map
+  /// - custom_fields array of {api_name, value} or {label, value}
+  static (double?, double?) _extractGps(Map<String, dynamic> json) {
+    double? lat = _parseLatLng(json['cf_latitude'] ??
+        json['latitude'] ??
+        json['lat'] ??
+        json['custom_field_hash']?['cf_latitude'] ??
+        json['custom_field_hash']?['latitude']);
+
+    double? lng = _parseLatLng(json['cf_longitude'] ??
+        json['longitude'] ??
+        json['lng'] ??
+        json['long'] ??
+        json['custom_field_hash']?['cf_longitude'] ??
+        json['custom_field_hash']?['longitude']);
+
+    // Fallback: scan custom_fields array
+    final cfs = json['custom_fields'];
+    if (cfs is List && (lat == null || lng == null)) {
+      for (final item in cfs) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+        final api = (m['api_name'] ?? m['field_name'] ?? '').toString().toLowerCase();
+        final label = (m['label'] ?? '').toString().toLowerCase();
+        final val = m['value'];
+
+        if (lat == null &&
+            (api.contains('latitude') || label.contains('latitude') || api == 'cf_latitude')) {
+          lat = _parseLatLng(val);
+        }
+        if (lng == null &&
+            (api.contains('longitude') || label.contains('longitude') || api == 'cf_longitude')) {
+          lng = _parseLatLng(val);
+        }
+      }
+    }
+
+    return (lat, lng);
+  }
 
   /// Factory constructor to parse local/remote JSON payload into a [CustomerModel].
   ///
   /// Maps server keys (`contact_id`, `contact_name`, `outstanding_receivable_amount`)
-  /// and local database representations fallback keys.
+  /// and local database representations fallback keys. Also extracts GPS from
+  /// custom fields (cf_latitude / cf_longitude or custom_fields array).
   factory CustomerModel.fromJson(Map<String, dynamic> json) {
+    final (lat, lng) = _extractGps(json);
+
     return CustomerModel(
       id: json['contact_id'] ?? json['id'] ?? '',
       name: json['contact_name'] ?? json['name'] ?? '',
@@ -42,13 +99,15 @@ class CustomerModel extends Customer {
           .toDouble(),
       routeId: json['route_id'] ?? json['routeId'] ?? '',
       sequence: json['sequence'] ?? 0,
+      latitude: lat,
+      longitude: lng,
       isPendingSync: json['isPendingSync'] ?? false,
     );
   }
 
   /// Converts this [CustomerModel] instance into a JSON compatible map.
   Map<String, dynamic> toJson() {
-    return {
+    final map = <String, dynamic>{
       'id': id,
       'contact_id': id,
       'name': name,
@@ -63,6 +122,12 @@ class CustomerModel extends Customer {
       'sequence': sequence,
       'isPendingSync': isPendingSync,
     };
+    if (latitude != null) map['latitude'] = latitude;
+    if (longitude != null) map['longitude'] = longitude;
+    // Also expose cf_ keys for direct Zoho payload convenience in some flows
+    if (latitude != null) map['cf_latitude'] = latitude;
+    if (longitude != null) map['cf_longitude'] = longitude;
+    return map;
   }
 
   /// Facilitates converting a base domain [Customer] entity into a serializable [CustomerModel].
@@ -78,6 +143,8 @@ class CustomerModel extends Customer {
       creditLimit: customer.creditLimit,
       routeId: customer.routeId,
       sequence: customer.sequence,
+      latitude: customer.latitude,
+      longitude: customer.longitude,
       isPendingSync: customer.isPendingSync,
     );
   }

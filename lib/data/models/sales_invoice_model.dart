@@ -64,6 +64,7 @@ class SalesInvoiceModel extends SalesInvoice {
     required super.items,
     required super.notes,
     super.isPendingSync,
+    super.locationId,
   });
 
   /// Factory constructor to parse local database JSON maps into a [SalesInvoiceModel].
@@ -86,6 +87,7 @@ class SalesInvoiceModel extends SalesInvoice {
           [],
       notes: json['notes'] ?? '',
       isPendingSync: json['isPendingSync'] ?? false,
+      locationId: json['location_id'],
     );
   }
 
@@ -105,6 +107,7 @@ class SalesInvoiceModel extends SalesInvoice {
       'notes': notes,
       'isPendingSync': isPendingSync,
       'round_off': roundOff,
+      'location_id': locationId,
     };
   }
 
@@ -120,6 +123,7 @@ class SalesInvoiceModel extends SalesInvoice {
       items: invoice.items,
       notes: invoice.notes,
       isPendingSync: invoice.isPendingSync,
+      locationId: invoice.locationId,
     );
   }
 }

@@ -528,6 +528,8 @@ class _MastersSyncPageState extends State<MastersSyncPage>
         return Icons.people_alt_rounded;
       case MasterType.openInvoices:
         return Icons.description_rounded;
+      case MasterType.salespersons:
+        return Icons.badge_rounded;
     }
   }
 
@@ -551,6 +553,8 @@ class _MastersSyncPageState extends State<MastersSyncPage>
         return 'Contacts, balances & credit limits';
       case MasterType.openInvoices:
         return 'Outstanding invoices for collection';
+      case MasterType.salespersons:
+        return 'Sales users & location assignments';
     }
   }
 

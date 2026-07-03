@@ -7,9 +7,11 @@ import 'voucher_pdf_service.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/sync_repository.dart';
 import '../../domain/repositories/sales_repository.dart';
+import '../../domain/repositories/salesperson_repository.dart';
 import '../repositories/auth_repository_impl.dart';
 import '../repositories/sync_repository_impl.dart';
 import '../repositories/sales_repository_impl.dart';
+import '../repositories/salesperson_repository_impl.dart';
 import 'local_storage_service.dart';
 import 'device_info_service.dart';
 import 'license_service.dart';
@@ -52,6 +54,9 @@ Future<void> setupDependencyInjection() async {
   );
   sl.registerLazySingleton<SalesRepository>(
     () => SalesRepositoryImpl(dbService: sl(), apiClient: sl()),
+  );
+  sl.registerLazySingleton<SalespersonRepository>(
+    () => SalespersonRepositoryImpl(dbService: sl(), apiClient: sl()),
   );
 
   // 6. Licensing & Device Services

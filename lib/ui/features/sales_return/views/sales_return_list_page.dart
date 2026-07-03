@@ -128,7 +128,7 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
                           top: 8,
                         ),
                         itemCount: list.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final ret = list[index];
                           final dateStr = _dateFormat.format(ret.date);

@@ -194,11 +194,9 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
   final SyncRepository _syncRepository;
 
   ExpenseBloc({
-    required SalesRepository salesRepository,
-    required SyncRepository syncRepository,
-  }) : _salesRepository = salesRepository,
-       _syncRepository = syncRepository,
-       super(const ExpenseState()) {
+    required this._salesRepository,
+    required this._syncRepository,
+  }) : super(const ExpenseState()) {
     on<LoadExpenses>(_onLoadExpenses);
     on<SetExpenseDateFilter>(_onSetDateFilter);
     on<StartNewExpense>(_onStartNewExpense);

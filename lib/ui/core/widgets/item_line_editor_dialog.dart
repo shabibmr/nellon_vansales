@@ -165,11 +165,13 @@ class _SharedItemLineEditorDialogState
                     ),
                   ),
                   validator: (val) {
-                    if (val == null || val.isEmpty)
+                    if (val == null || val.isEmpty) {
                       return 'Please enter quantity';
+                    }
                     final qty = int.tryParse(val);
-                    if (qty == null || qty <= 0)
+                    if (qty == null || qty <= 0) {
                       return 'Quantity must be greater than 0';
+                    }
                     if (!widget.allowUnlimitedQuantity &&
                         qty > _maxAllowedStock) {
                       return 'Exceeds available van stock ($_maxAllowedStock)';
@@ -200,8 +202,9 @@ class _SharedItemLineEditorDialogState
                   validator: (val) {
                     if (val == null || val.isEmpty) return 'Please enter rate';
                     final parsedRate = double.tryParse(val);
-                    if (parsedRate == null || parsedRate <= 0)
+                    if (parsedRate == null || parsedRate <= 0) {
                       return 'Rate must be greater than 0';
+                    }
                     return null;
                   },
                 ),
@@ -226,11 +229,13 @@ class _SharedItemLineEditorDialogState
                     ),
                   ),
                   validator: (val) {
-                    if (val == null || val.isEmpty)
+                    if (val == null || val.isEmpty) {
                       return 'Please enter discount';
+                    }
                     final parsedDiscount = double.tryParse(val);
-                    if (parsedDiscount == null || parsedDiscount < 0)
+                    if (parsedDiscount == null || parsedDiscount < 0) {
                       return 'Discount must be 0 or greater';
+                    }
                     final qty = int.tryParse(_quantityController.text) ?? 0;
                     final currentRate =
                         double.tryParse(_rateController.text) ?? 0.0;

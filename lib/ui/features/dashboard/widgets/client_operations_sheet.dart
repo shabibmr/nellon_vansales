@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
@@ -96,6 +97,22 @@ class ClientOperationsSheet extends StatelessWidget {
                   ),
                 ],
               ),
+
+              // GPS location (if captured)
+              if (customer.latitude != null && customer.longitude != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.my_location, size: 14, color: AppTheme.primaryIndigo),
+                    const SizedBox(width: 4),
+                    Text(
+                      'GPS: ${customer.latitude!.toStringAsFixed(5)}, ${customer.longitude!.toStringAsFixed(5)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+
               const Divider(height: 32, color: Color(0xFF334155)),
 
               VanActionTile(
@@ -137,6 +154,25 @@ class ClientOperationsSheet extends StatelessWidget {
                 isDark: isDark,
                 onTap: onSalesReturnTap,
               ),
+
+              // Optional navigate using GPS
+              if (customer.latitude != null && customer.longitude != null) ...[
+                const SizedBox(height: 14),
+                VanActionTile(
+                  title: 'Navigate to Customer',
+                  subtitle: 'Open GPS location in maps app',
+                  icon: Icons.directions,
+                  color: AppTheme.primaryIndigo,
+                  isDark: isDark,
+                  onTap: () async {
+                    final uri = Uri.parse(
+                      'https://www.google.com/maps/search/?api=1&query=${customer.latitude},${customer.longitude}',
+                    );
+                    Navigator.pop(context);
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                ),
+              ],
             ],
           ),
         );

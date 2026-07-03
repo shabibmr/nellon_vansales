@@ -112,9 +112,10 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
       showCreateOption: true,
       createOptionSubtitle: 'Add a new customer and use it for this order',
       onCreateTap: () async {
+        final bloc = context.read<SalesOrderBloc>();
         final created = await CreateCustomerDialog.show(context);
-        if (created != null && mounted) {
-          context.read<SalesOrderBloc>().add(UpdateOrderCustomer(created));
+        if (created != null) {
+          bloc.add(UpdateOrderCustomer(created));
         }
       },
     );

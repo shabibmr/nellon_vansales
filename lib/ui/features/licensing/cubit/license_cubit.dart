@@ -17,14 +17,11 @@ class LicenseCubit extends Cubit<LicenseState> {
   final Uuid _uuidGenerator;
 
   LicenseCubit({
-    required LicenseService licenseService,
-    required LocalStorageService localStorageService,
-    required DeviceInfoService deviceInfoService,
+    required this._licenseService,
+    required this._localStorageService,
+    required this._deviceInfoService,
     Uuid? uuidGenerator,
-  }) : _licenseService = licenseService,
-       _localStorageService = localStorageService,
-       _deviceInfoService = deviceInfoService,
-       _uuidGenerator = uuidGenerator ?? const Uuid(),
+  }) : _uuidGenerator = uuidGenerator ?? const Uuid(),
        super(LicenseInitial());
 
   /// Triggers standard license check workflow.

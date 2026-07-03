@@ -123,7 +123,7 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
                           top: 8.0,
                         ),
                         itemCount: list.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final invoice = list[index];
                           return DocumentListCard(

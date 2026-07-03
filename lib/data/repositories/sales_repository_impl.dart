@@ -114,4 +114,8 @@ class SalesRepositoryImpl implements SalesRepository {
   @override
   List<OpenInvoice> getOpenInvoices({String? customerId}) =>
       _dbService.getOpenInvoices(customerId: customerId);
+
+  @override
+  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) =>
+      _dbService.updateCustomerGps(customerId, latitude, longitude);
 }

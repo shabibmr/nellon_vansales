@@ -46,6 +46,11 @@ class FakeSalesRepository implements SalesRepository {
   }
 
   @override
+  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {
+    // No-op for tests
+  }
+
+  @override
   List<SyncQueueItem> getSyncQueue() => syncQueue;
 
   // Stub other methods

@@ -20,6 +20,8 @@ import 'ui/features/receipts/bloc/receipt_bloc.dart';
 import 'ui/features/sales_return/bloc/sales_return_bloc.dart';
 import 'ui/features/ledger/bloc/customer_ledger_bloc.dart';
 import 'ui/core/cubit/organization_cubit.dart';
+import 'ui/core/cubit/salesperson_cubit.dart';
+import 'domain/repositories/salesperson_repository.dart';
 import 'data/services/hive_database_service.dart';
 import 'data/services/zoho_api_client.dart';
 import 'ui/features/auth/views/login_page.dart';
@@ -58,6 +60,9 @@ class VanSalesApp extends StatelessWidget {
         RepositoryProvider<SalesRepository>(
           create: (context) => sl<SalesRepository>(),
         ),
+        RepositoryProvider<SalespersonRepository>(
+          create: (context) => sl<SalespersonRepository>(),
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -65,10 +70,14 @@ class VanSalesApp extends StatelessWidget {
           BlocProvider<OrganizationCubit>(
             create: (context) => OrganizationCubit(sl<HiveDatabaseService>()),
           ),
+          BlocProvider<SalespersonCubit>(
+            create: (context) => SalespersonCubit(sl<HiveDatabaseService>()),
+          ),
           BlocProvider<AuthBloc>(
-            create: (context) =>
-                AuthBloc(authRepository: context.read<AuthRepository>())
-                  ..add(AppStarted()),
+            create: (context) => AuthBloc(
+              authRepository: context.read<AuthRepository>(),
+              salespersonRepository: context.read<SalespersonRepository>(),
+            )..add(AppStarted()),
           ),
           BlocProvider<SyncBloc>(
             create: (context) =>
@@ -171,41 +180,50 @@ class SessionGateway extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AuthBloc, AuthState>(
-      builder: (context, authState) {
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, authState) {
         if (authState is Authenticated) {
-          return LicenseGate(
-            user: authState.user,
-            child: BlocBuilder<RouteBloc, RouteState>(
-              builder: (context, routeState) {
-                if (routeState.isLoading) {
-                  return const Scaffold(
-                    body: Center(
-                      child: CircularProgressIndicator(
-                        color: AppTheme.primaryIndigo,
-                      ),
-                    ),
-                  );
-                }
-                final hasMasters = context
-                    .read<SyncRepository>()
-                    .hasCoreMasters();
-                if (!hasMasters) {
-                  return const MastersSyncPage();
-                }
-                return const DashboardPage();
-              },
-            ),
-          );
-        } else if (authState is AuthLoading) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
-            ),
-          );
+          context.read<SalespersonCubit>().refresh(sl<HiveDatabaseService>());
         }
-        return const LoginPage();
       },
+      child: BlocBuilder<AuthBloc, AuthState>(
+        builder: (context, authState) {
+          if (authState is Authenticated) {
+            return LicenseGate(
+              user: authState.user,
+              child: BlocBuilder<RouteBloc, RouteState>(
+                builder: (context, routeState) {
+                  if (routeState.isLoading) {
+                    return const Scaffold(
+                      body: Center(
+                        child: CircularProgressIndicator(
+                          color: AppTheme.primaryIndigo,
+                        ),
+                      ),
+                    );
+                  }
+                  final hasMasters = context
+                      .read<SyncRepository>()
+                      .hasCoreMasters();
+                  if (!hasMasters) {
+                    return const MastersSyncPage();
+                  }
+                  return const DashboardPage();
+                },
+              ),
+            );
+          } else if (authState is AuthLoading) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.primaryIndigo,
+                ),
+              ),
+            );
+          }
+          return const LoginPage();
+        },
+      ),
     );
   }
 }

@@ -168,8 +168,9 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
           status: '',
         ),
       );
-      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance)
+      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance) {
         return false;
+      }
       totalAllocated += alloc.amountApplied;
     }
     if (double.parse(totalAllocated.toStringAsFixed(2)) >

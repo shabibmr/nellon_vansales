@@ -67,6 +67,7 @@ class ExpenseEntryModel extends ExpenseEntry {
     required super.lines,
     super.receiptImagePath,
     super.isPendingSync,
+    super.locationId,
   });
 
   /// Factory constructor to parse local database JSON maps into an [ExpenseEntryModel].
@@ -83,6 +84,7 @@ class ExpenseEntryModel extends ExpenseEntry {
           [],
       receiptImagePath: json['receiptImagePath'],
       isPendingSync: json['isPendingSync'] ?? false,
+      locationId: json['location_id'],
     );
   }
 
@@ -94,6 +96,7 @@ class ExpenseEntryModel extends ExpenseEntry {
       'date': date.toIso8601String().split('T')[0],
       'receiptImagePath': receiptImagePath,
       'isPendingSync': isPendingSync,
+      'location_id': locationId,
       'amount': amount, // Summed dynamically from lines
       'lines': lines
           .map((item) => ExpenseLineItemModel.fromDomain(item).toJson())
@@ -109,6 +112,7 @@ class ExpenseEntryModel extends ExpenseEntry {
       lines: expense.lines,
       receiptImagePath: expense.receiptImagePath,
       isPendingSync: expense.isPendingSync,
+      locationId: expense.locationId,
     );
   }
 }

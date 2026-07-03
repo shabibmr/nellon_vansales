@@ -10,9 +10,8 @@ import 'server_config_state.dart';
 class ServerConfigCubit extends Cubit<ServerConfigState> {
   final ZohoApiClient _apiClient;
 
-  ServerConfigCubit({required ZohoApiClient apiClient})
-    : _apiClient = apiClient,
-      super(ServerConfigInitial());
+  ServerConfigCubit({required this._apiClient})
+    : super(ServerConfigInitial());
 
   /// Configures the active server credentials mapping, updating [ZohoApiClient].
   void setConfig(ServerConfig? config) {

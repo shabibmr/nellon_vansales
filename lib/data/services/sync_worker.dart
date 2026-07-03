@@ -6,6 +6,7 @@ import '../models/sync_queue_item.dart';
 import '../models/item_model.dart';
 import '../models/customer_model.dart';
 import '../models/warehouse_model.dart';
+import '../models/salesperson_model.dart';
 import '../models/payment_account_model.dart';
 import '../models/tax_model.dart';
 import '../models/expense_account_model.dart';
@@ -41,6 +42,9 @@ enum MasterType {
 
   /// Unpaid invoices snapshot.
   openInvoices,
+
+  /// Master list of all Zoho Books salespersons (sales users).
+  salespersons,
 }
 
 /// Extension providing human-readable labels for master datatypes.
@@ -66,6 +70,8 @@ extension MasterTypeLabel on MasterType {
         return 'Customers';
       case MasterType.openInvoices:
         return 'Open Invoices';
+      case MasterType.salespersons:
+        return 'Salespersons';
     }
   }
 }
@@ -167,6 +173,15 @@ class SyncWorker {
               remoteId = await _apiClient.syncCustomer(item.payload);
               // CRITICAL: Replace temporary offline customer ID with permanent Zoho ID in all subsequent queue items!
               await _resolveTempCustomerIdsInQueue(item.id, remoteId);
+              break;
+            case 'customer_gps_update':
+              // Lightweight GPS enrichment update (contact must already exist in Zoho)
+              final cid = item.payload['contact_id']?.toString() ?? item.payload['customer_id']?.toString();
+              final lat = (item.payload['latitude'] as num?)?.toDouble();
+              final lng = (item.payload['longitude'] as num?)?.toDouble();
+              if (cid != null && lat != null && lng != null) {
+                await _apiClient.updateCustomerGps(cid, lat, lng);
+              }
               break;
             case 'invoice':
               remoteId = await _apiClient.syncInvoice(item.payload);
@@ -371,6 +386,12 @@ class SyncWorker {
           final list = await _apiClient.fetchOpenInvoices();
           await _dbService.saveOpenInvoices(
             list.map((i) => OpenInvoiceModel.fromJson(i)).toList(),
+          );
+          break;
+        case MasterType.salespersons:
+          final list = await _apiClient.fetchSalespersons();
+          await _dbService.saveSalespersons(
+            list.map((s) => SalespersonModel.fromJson(s)).toList(),
           );
           break;
       }

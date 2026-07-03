@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
@@ -7,6 +9,7 @@ import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/app_text_field.dart';
 import '../../route/bloc/route_bloc.dart';
 
@@ -46,8 +49,55 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _creditLimitController = TextEditingController(text: '2000');
+  final _latController = TextEditingController();
+  final _lngController = TextEditingController();
 
   bool _isSaving = false;
+  bool _isCapturingGps = false;
+
+  Future<void> _captureGps() async {
+    setState(() => _isCapturingGps = true);
+
+    try {
+      // Permission
+      var status = await Permission.locationWhenInUse.status;
+      if (!status.isGranted) {
+        status = await Permission.locationWhenInUse.request();
+      }
+      if (!status.isGranted) {
+        if (mounted) {
+          showSuccessSnackBar(context, 'Location permission denied. You can enter coordinates manually.');
+        }
+        return;
+      }
+
+      // Service enabled?
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (mounted) {
+          showSuccessSnackBar(context, 'Location services are disabled on this device.');
+        }
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 12),
+      );
+
+      _latController.text = pos.latitude.toStringAsFixed(6);
+      _lngController.text = pos.longitude.toStringAsFixed(6);
+
+      if (mounted) {
+        showSuccessSnackBar(context, 'GPS captured: ${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}');
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorSnackBar(context, 'Failed to get location: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isCapturingGps = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -57,6 +107,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
     _phoneController.dispose();
     _addressController.dispose();
     _creditLimitController.dispose();
+    _latController.dispose();
+    _lngController.dispose();
     super.dispose();
   }
 
@@ -86,6 +138,9 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
     final creditLimit =
         double.tryParse(_creditLimitController.text.trim()) ?? 2000.0;
 
+    final lat = double.tryParse(_latController.text.trim());
+    final lng = double.tryParse(_lngController.text.trim());
+
     final newCustomer = Customer(
       id: tempId,
       name: name,
@@ -97,6 +152,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
       creditLimit: creditLimit,
       routeId: activeRouteId,
       sequence: localCustomers.length + 1,
+      latitude: lat,
+      longitude: lng,
       isPendingSync: true,
     );
 
@@ -104,19 +161,28 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
     await salesRepo.saveCustomers([...localCustomers, newCustomer]);
 
     // Enqueue for Zoho sync
+    final customerPayload = <String, dynamic>{
+      'contact_name': name,
+      'company_name': company,
+      'email': email,
+      'phone': phone,
+      'billing_address': {'address': address},
+      'route_id': activeRouteId,
+      'credit_limit': creditLimit,
+      'isPendingSync': true,
+    };
+
+    if (lat != null && lng != null) {
+      customerPayload['custom_fields'] = [
+        {'api_name': 'cf_latitude', 'value': lat.toString()},
+        {'api_name': 'cf_longitude', 'value': lng.toString()},
+      ];
+    }
+
     final syncItem = SyncQueueItem(
       id: tempId,
       type: 'customer',
-      payload: {
-        'contact_name': name,
-        'company_name': company,
-        'email': email,
-        'phone': phone,
-        'billing_address': {'address': address},
-        'route_id': activeRouteId,
-        'credit_limit': creditLimit,
-        'isPendingSync': true,
-      },
+      payload: customerPayload,
       status: SyncStatus.pending,
       timestamp: DateTime.now(),
     );
@@ -182,10 +248,12 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   label: 'Full Contact Name',
                   icon: Icons.person_outline_rounded,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty)
+                    if (v == null || v.trim().isEmpty) {
                       return 'Name is required';
-                    if (v.trim().length < 2)
+                    }
+                    if (v.trim().length < 2) {
                       return 'Enter at least 2 characters';
+                    }
                     return null;
                   },
                 ),
@@ -195,8 +263,9 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   label: 'Company / Shop Name',
                   icon: Icons.storefront_outlined,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty)
+                    if (v == null || v.trim().isEmpty) {
                       return 'Company name is required';
+                    }
                     return null;
                   },
                 ),
@@ -207,8 +276,9 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty)
+                    if (v == null || v.trim().isEmpty) {
                       return 'Phone is required';
+                    }
                     final digits = v.trim().replaceAll(RegExp(r'\D'), '');
                     if (digits.length < 7) return 'Enter a valid phone number';
                     return null;
@@ -223,8 +293,9 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
                     final emailRegex = RegExp(r'^[\w.-]+@[\w.-]+\.\w{2,}$');
-                    if (!emailRegex.hasMatch(v.trim()))
+                    if (!emailRegex.hasMatch(v.trim())) {
                       return 'Enter a valid email';
+                    }
                     return null;
                   },
                 ),
@@ -236,6 +307,52 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
+
+                // GPS section (supports on-the-fly capture for new customers)
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        controller: _latController,
+                        label: 'Latitude (optional)',
+                        icon: Icons.my_location,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                          signed: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _lngController,
+                        label: 'Longitude (optional)',
+                        icon: Icons.my_location,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                          signed: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _isCapturingGps || _isSaving ? null : _captureGps,
+                    icon: _isCapturingGps
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.gps_fixed, size: 18),
+                    label: const Text('CAPTURE CURRENT LOCATION'),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
                 AppTextField(
                   controller: _creditLimitController,
                   label: 'Credit Limit ($cs)',
@@ -244,10 +361,12 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                     decimal: true,
                   ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty)
+                    if (v == null || v.trim().isEmpty) {
                       return 'Credit limit is required';
-                    if (double.tryParse(v.trim()) == null)
+                    }
+                    if (double.tryParse(v.trim()) == null) {
                       return 'Enter a valid number';
+                    }
                     return null;
                   },
                 ),

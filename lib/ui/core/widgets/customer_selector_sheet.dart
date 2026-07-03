@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../domain/models/customer.dart';
+import '../../../domain/repositories/sales_repository.dart';
+import '../../../data/models/sync_queue_item.dart';
+import '../../../data/services/injection.dart';
+import '../../../data/services/sync_worker.dart';
+import '../../../data/services/zoho_api_client.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
+import '../utils/snackbars.dart';
 
 /// Generic customer-selector bottom sheet shared by all editor flows.
 class CustomerSelectorSheet extends StatelessWidget {
@@ -162,7 +170,7 @@ class CustomerSelectorSheet extends StatelessWidget {
                       : ListView.separated(
                           controller: scrollController,
                           itemCount: filtered.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          separatorBuilder: (_, _) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final customer = filtered[index];
                             return ListTile(
@@ -183,9 +191,25 @@ class CustomerSelectorSheet extends StatelessWidget {
                                       ),
                                     )
                                   : null,
-                              onTap: () {
-                                onSelected(customer);
-                                Navigator.pop(context);
+                              onTap: () async {
+                                final navigator = Navigator.of(context);
+                                Customer toSelect = customer;
+
+                                // If GPS missing, prompt for immediate capture + Zoho update
+                                if (customer.latitude == null || customer.longitude == null) {
+                                  final enriched = await _showGpsCapturePrompt(
+                                    context,
+                                    customer,
+                                    isDark,
+                                  );
+                                  if (enriched != null) {
+                                    toSelect = enriched;
+                                  }
+                                  // If null returned or user skipped, still use original
+                                }
+
+                                onSelected(toSelect);
+                                navigator.pop();
                               },
                             );
                           },
@@ -198,4 +222,137 @@ class CustomerSelectorSheet extends StatelessWidget {
       },
     );
   }
+}
+
+/// Shows a modal prompt offering to capture GPS for a customer that is missing it.
+/// On successful capture: updates local + attempts immediate Zoho update (via updateCustomerGps).
+/// Returns the enriched Customer (with lat/lng) or null if user skipped / failed.
+Future<Customer?> _showGpsCapturePrompt(
+  BuildContext context,
+  Customer customer,
+  bool isDark,
+) async {
+  final repo = sl<SalesRepository>();
+  double? capturedLat;
+  double? capturedLng;
+  bool capturing = false;
+
+  return showDialog<Customer>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogCtx) => StatefulBuilder(
+      builder: (ctx, setState) {
+        Future<void> doCapture() async {
+          setState(() => capturing = true);
+
+          try {
+            var status = await Permission.locationWhenInUse.status;
+            if (!status.isGranted) {
+              status = await Permission.locationWhenInUse.request();
+            }
+            if (!status.isGranted) {
+              if (ctx.mounted) {
+                showSuccessSnackBar(ctx, 'Location permission denied.');
+              }
+              return;
+            }
+
+            if (!await Geolocator.isLocationServiceEnabled()) {
+              if (ctx.mounted) {
+                showSuccessSnackBar(ctx, 'Enable location services to capture GPS.');
+              }
+              return;
+            }
+
+            final pos = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high,
+              timeLimit: const Duration(seconds: 12),
+            );
+
+            capturedLat = pos.latitude;
+            capturedLng = pos.longitude;
+
+            // 1. Update local cache immediately
+            await repo.updateCustomerGps(customer.id, capturedLat!, capturedLng!);
+
+            // 2. Immediate Zoho update (best effort). Falls back to queue below.
+            bool remoteUpdated = false;
+            if (customer.id.isNotEmpty && !customer.id.startsWith('temp_')) {
+              try {
+                final api = sl<ZohoApiClient>();
+                await api.updateCustomerGps(customer.id, capturedLat!, capturedLng!);
+                remoteUpdated = true;
+              } catch (_) {}
+            }
+
+            // 3. Enqueue fallback + kick sync if remote didn't succeed right now
+            if (!remoteUpdated) {
+              final queueItem = SyncQueueItem(
+                id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
+                type: 'customer_gps_update',
+                payload: {
+                  'contact_id': customer.id,
+                  'latitude': capturedLat,
+                  'longitude': capturedLng,
+                },
+                status: SyncStatus.pending,
+                timestamp: DateTime.now(),
+              );
+              await repo.enqueueSyncItem(queueItem);
+              sl<SyncWorker>().syncPendingItems();
+            }
+
+            if (ctx.mounted) {
+              Navigator.of(ctx).pop(
+                customer.copyWith(latitude: capturedLat, longitude: capturedLng),
+              );
+            }
+          } catch (e) {
+            if (ctx.mounted) {
+              showErrorSnackBar(ctx, 'Capture failed: $e');
+            }
+          } finally {
+            if (ctx.mounted) setState(() => capturing = false);
+          }
+        }
+
+        return AlertDialog(
+          title: const Text('Add GPS Location?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${customer.name} (${customer.companyName})',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'This customer has no GPS location yet. Capture the current device location now to enrich the record and push it to Zoho Books.',
+              ),
+              const SizedBox(height: 12),
+              if (capturedLat != null)
+                Text(
+                  'Captured: ${capturedLat!.toStringAsFixed(6)}, ${capturedLng!.toStringAsFixed(6)}',
+                  style: const TextStyle(color: AppTheme.successEmerald),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null), // skip
+              child: const Text('SKIP'),
+            ),
+            FilledButton.icon(
+              onPressed: capturing ? null : doCapture,
+              icon: capturing
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.gps_fixed),
+              label: const Text('CAPTURE GPS'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }

@@ -327,8 +327,9 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                                       ),
                                       textAlign: TextAlign.center,
                                       validator: (val) {
-                                        if (val == null || val.isEmpty)
+                                        if (val == null || val.isEmpty) {
                                           return null;
+                                        }
                                         final qty = int.tryParse(val);
                                         if (qty == null) return 'Invalid';
                                         if (qty < 0) return 'Min 0';

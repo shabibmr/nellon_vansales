@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/auth_repository.dart';
+import '../../../../domain/repositories/salesperson_repository.dart';
 
 // --- Events ---
 
@@ -83,18 +84,36 @@ class AuthFailure extends AuthState {
 /// using an underlying [AuthRepository] implementation.
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
+  final SalespersonRepository _salespersonRepository;
 
-  /// Instantiates a new [AuthBloc] with the specified repository.
-  AuthBloc({required this._authRepository}) : super(AuthInitial()) {
+  /// Instantiates a new [AuthBloc] with the specified repositories.
+  AuthBloc({
+    required this._authRepository,
+    required this._salespersonRepository,
+  }) : super(AuthInitial()) {
     on<AppStarted>(_onAppStarted);
     on<LoginRequested>(_onLoginRequested);
     on<LogoutRequested>(_onLogoutRequested);
+  }
+
+  /// Best-effort resolution of the active salesperson/location mapping. Never
+  /// blocks or fails authentication — offline or unmapped users simply skip
+  /// filtering, and a slow network can't hold up app boot past the timeout.
+  Future<void> _resolveSalesperson(String email) async {
+    try {
+      await _salespersonRepository
+          .resolveActiveSalesperson(email)
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Ignore — location-based filtering degrades gracefully when unresolved.
+    }
   }
 
   /// Verifies active session on start.
   Future<void> _onAppStarted(AppStarted event, Emitter<AuthState> emit) async {
     final user = _authRepository.currentUser;
     if (user != null) {
+      await _resolveSalesperson(user.email);
       emit(Authenticated(user));
     } else {
       emit(Unauthenticated());
@@ -110,6 +129,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final user = await _authRepository.signIn(event.email, event.password);
       if (user != null) {
+        await _resolveSalesperson(user.email);
         emit(Authenticated(user));
       } else {
         emit(const AuthFailure('Login failed: Invalid credentials'));

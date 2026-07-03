@@ -91,6 +91,9 @@ class SalesInvoice extends Equatable {
   /// Flag indicating if the invoice is pending synchronization with Zoho Books.
   final bool isPendingSync;
 
+  /// The Zoho Location ID of the salesperson/van that created this invoice.
+  final String? locationId;
+
   /// Creates a new [SalesInvoice].
   const SalesInvoice({
     required this.id,
@@ -102,6 +105,7 @@ class SalesInvoice extends Equatable {
     required this.items,
     required this.notes,
     this.isPendingSync = false,
+    this.locationId,
   });
 
   /// Computes sum of all sub-totals (excluding taxes).
@@ -134,6 +138,7 @@ class SalesInvoice extends Equatable {
     List<InvoiceLineItem>? items,
     String? notes,
     bool? isPendingSync,
+    String? locationId,
   }) {
     return SalesInvoice(
       id: id ?? this.id,
@@ -145,6 +150,7 @@ class SalesInvoice extends Equatable {
       items: items ?? this.items,
       notes: notes ?? this.notes,
       isPendingSync: isPendingSync ?? this.isPendingSync,
+      locationId: locationId ?? this.locationId,
     );
   }
 
@@ -159,5 +165,6 @@ class SalesInvoice extends Equatable {
     items,
     notes,
     isPendingSync,
+    locationId,
   ];
 }

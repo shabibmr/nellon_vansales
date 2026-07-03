@@ -198,11 +198,9 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
   final SyncRepository _syncRepository;
 
   ReceiptBloc({
-    required SalesRepository salesRepository,
-    required SyncRepository syncRepository,
-  }) : _salesRepository = salesRepository,
-       _syncRepository = syncRepository,
-       super(const ReceiptState()) {
+    required this._salesRepository,
+    required this._syncRepository,
+  }) : super(const ReceiptState()) {
     on<LoadReceipts>(_onLoadReceipts);
     on<SetReceiptDateFilter>(_onSetDateFilter);
     on<StartNewReceipt>(_onStartNewReceipt);

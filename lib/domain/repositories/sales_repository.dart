@@ -30,6 +30,10 @@ abstract class SalesRepository {
   /// Saves or refreshes customer entities in local cache.
   Future<void> saveCustomers(List<Customer> customers);
 
+  /// Updates GPS coordinates for a single customer (by id) in local cache.
+  /// Used for on-the-fly enrichment when capturing location for existing customers.
+  Future<void> updateCustomerGps(String customerId, double latitude, double longitude);
+
   /// Retrieves list of inventory items currently stocked in the van.
   List<Item> getItems();
 

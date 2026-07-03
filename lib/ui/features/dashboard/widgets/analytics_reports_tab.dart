@@ -14,6 +14,7 @@ class AnalyticsReportsTab extends StatelessWidget {
   final VoidCallback onItemSalesReport;
   final VoidCallback onCustomerLedger;
   final VoidCallback onAgingReport;
+  final VoidCallback onStockReport;
 
   const AnalyticsReportsTab({
     super.key,
@@ -27,6 +28,7 @@ class AnalyticsReportsTab extends StatelessWidget {
     required this.onItemSalesReport,
     required this.onCustomerLedger,
     required this.onAgingReport,
+    required this.onStockReport,
   });
 
   @override
@@ -137,6 +139,15 @@ class AnalyticsReportsTab extends StatelessWidget {
                 color: AppTheme.warningAmber,
                 isDark: isDark,
                 onTap: onAgingReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Stock Report',
+                subtitle: 'Item stock and rates for your assigned location.',
+                icon: Icons.inventory_2_outlined,
+                color: AppTheme.successEmerald,
+                isDark: isDark,
+                onTap: onStockReport,
               ),
               const SizedBox(height: 24),
             ],

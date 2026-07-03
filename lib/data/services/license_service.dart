@@ -6,7 +6,7 @@ import '../../domain/models/server_config.dart';
 class LicenseService {
   final FirebaseFirestore? _firestore;
 
-  LicenseService({FirebaseFirestore? firestore}) : _firestore = firestore;
+  LicenseService({this._firestore});
 
   /// Lazily resolves active Firestore instance
   FirebaseFirestore get firestore => _firestore ?? FirebaseFirestore.instance;

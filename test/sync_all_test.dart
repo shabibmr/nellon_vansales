@@ -56,6 +56,11 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
   Future<void> saveCustomers(dynamic customers) async {
     savedData.add(customers);
   }
+
+  @override
+  Future<void> saveSalespersons(dynamic salespersons) async {
+    savedData.add(salespersons);
+  }
 }
 
 class FakeZohoApiClient extends ZohoApiClient {
@@ -146,6 +151,20 @@ class FakeZohoApiClient extends ZohoApiClient {
       {'invoice_id': 'inv_01', 'total': 100.0, 'balance': 100.0},
     ];
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchSalespersons() async {
+    callCounts['fetchSalespersons'] =
+        (callCounts['fetchSalespersons'] ?? 0) + 1;
+    return [
+      {
+        'salesperson_id': 'sp_01',
+        'salesperson_name': 'John Doe',
+        'salesperson_email': 'john@example.com',
+        'status': 'active',
+      },
+    ];
+  }
 }
 
 void main() {
@@ -170,9 +189,10 @@ void main() {
       expect(fakeApi.callCounts['fetchItems'], 1);
       expect(fakeApi.callCounts['fetchCustomers'], 1);
       expect(fakeApi.callCounts['fetchOpenInvoices'], 1);
+      expect(fakeApi.callCounts['fetchSalespersons'], 1);
 
-      // Verify all 9 categories of master data successfully saved locally
-      expect(fakeDb.savedData.length, 9);
+      // Verify all 10 categories of master data successfully saved locally
+      expect(fakeDb.savedData.length, 10);
     },
   );
 

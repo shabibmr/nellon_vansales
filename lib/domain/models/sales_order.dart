@@ -105,6 +105,9 @@ class SalesOrder extends Equatable {
   /// The permanent Zoho `salesorder_id`, populated once the order syncs.
   final String? zohoOrderId;
 
+  /// The Zoho Location ID of the salesperson/van that created this order.
+  final String? locationId;
+
   /// Creates a new [SalesOrder].
   const SalesOrder({
     required this.id,
@@ -119,6 +122,7 @@ class SalesOrder extends Equatable {
     this.status = SalesOrderStatus.open,
     this.convertedInvoiceNumber,
     this.zohoOrderId,
+    this.locationId,
   });
 
   /// Whether this order has already been converted into an invoice.
@@ -157,6 +161,7 @@ class SalesOrder extends Equatable {
     SalesOrderStatus? status,
     String? convertedInvoiceNumber,
     String? zohoOrderId,
+    String? locationId,
   }) {
     return SalesOrder(
       id: id ?? this.id,
@@ -172,6 +177,7 @@ class SalesOrder extends Equatable {
       convertedInvoiceNumber:
           convertedInvoiceNumber ?? this.convertedInvoiceNumber,
       zohoOrderId: zohoOrderId ?? this.zohoOrderId,
+      locationId: locationId ?? this.locationId,
     );
   }
 
@@ -189,5 +195,6 @@ class SalesOrder extends Equatable {
     status,
     convertedInvoiceNumber,
     zohoOrderId,
+    locationId,
   ];
 }

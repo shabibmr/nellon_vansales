@@ -257,6 +257,9 @@ class ZohoApiClient {
         'credit_limit': 5000.00,
         'route_id': 'route_north',
         'sequence': 1,
+        // Sample GPS (for testing GPS location feature)
+        'cf_latitude': 12.9716,
+        'cf_longitude': 77.5946,
       },
       {
         'contact_id': 'cust_102',
@@ -269,6 +272,8 @@ class ZohoApiClient {
         'credit_limit': 1500.00,
         'route_id': 'route_north',
         'sequence': 2,
+        'latitude': 12.9720,
+        'longitude': 77.5950,
       },
       {
         'contact_id': 'cust_103',
@@ -419,6 +424,36 @@ class ZohoApiClient {
     // Mock response
     await Future.delayed(const Duration(seconds: 1));
     return 'zoho_cust_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  /// Update GPS (latitude/longitude) custom fields on an existing Zoho contact.
+  ///
+  /// Uses PUT /contacts/{contactId} sending only the custom_fields array to minimize
+  /// risk of overwriting other fields. Works for both live and (simulated) mock modes.
+  /// Returns the contact_id on success.
+  Future<String> updateCustomerGps(String contactId, double latitude, double longitude) async {
+    final payload = {
+      'custom_fields': [
+        {'api_name': 'cf_latitude', 'value': latitude.toString()},
+        {'api_name': 'cf_longitude', 'value': longitude.toString()},
+      ],
+    };
+
+    if (!_isMockMode() && !_mockTransactions) {
+      try {
+        final response = await _dio.put('/contacts/$contactId', data: payload);
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final returnedId = response.data['contact']?['contact_id']?.toString() ?? contactId;
+          return returnedId;
+        }
+      } catch (e) {
+        throw Exception('Zoho Books Customer GPS Update Failed: $e');
+      }
+    }
+
+    // Mock response (simulates immediate success for GPS enrichment)
+    await Future.delayed(const Duration(milliseconds: 400));
+    return contactId;
   }
 
   // 5. Zoho Books Invoices API: Sync Sales Invoice
@@ -747,6 +782,72 @@ class ZohoApiClient {
         'is_primary_location': true,
       },
     ];
+  }
+
+  // Salespersons (GET /salespersons)
+  Future<List<Map<String, dynamic>>> fetchSalespersons() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get('/salespersons');
+        if (response.statusCode == 200) {
+          // Zoho returns salespersons under `data` (verified against live API).
+          final list =
+              (response.data['data'] ?? response.data['salespersons'] ?? [])
+                  as List;
+          return list.map((s) => Map<String, dynamic>.from(s)).toList();
+        }
+        throw Exception(
+          'Failed to fetch salespersons: Server returned status code ${response.statusCode}',
+        );
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchSalespersons error: $e');
+        throw Exception('Failed to fetch salespersons from Zoho: $e');
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    return [
+      {
+        'salesperson_id': 'sp_mock_01',
+        'salesperson_name': 'Mock Sales Agent',
+        'salesperson_email': 'agent@example.com',
+        'status': 'active',
+      },
+    ];
+  }
+
+  // Salesperson-to-Location mapping (GET /cm_salesperson_location — custom module).
+  // Zoho auto-generated the module api_name `cm_salesperson_location` and returns
+  // records under `module_records`. Each record carries the salesperson email in the
+  // module's primary field `record_name` and the mapped location in `cf_location_id`.
+  Future<List<Map<String, dynamic>>> fetchSalespersonLocationMappings() async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get('/cm_salesperson_location');
+        if (response.statusCode == 200) {
+          final list =
+              (response.data['module_records'] ??
+                      response.data['data'] ??
+                      [])
+                  as List;
+          return list.map((m) => Map<String, dynamic>.from(m)).toList();
+        }
+        throw Exception(
+          'Failed to fetch salesperson location mappings: Server returned status code ${response.statusCode}',
+        );
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchSalespersonLocationMappings error: $e');
+        throw Exception(
+          'Failed to fetch salesperson location mappings from Zoho: $e',
+        );
+      }
+    }
+
+    // No sensible mock mapping default; mock-mode logins simply resolve without a location.
+    await Future.delayed(const Duration(milliseconds: 300));
+    return [];
   }
 
   // 10. Payment Accounts (GET /bankaccounts — bank + cash accounts for receipts)
@@ -1156,6 +1257,110 @@ class ZohoApiClient {
         'total': 2850.00,
         'balance': 2850.00,
         'status': 'unpaid',
+      },
+    ];
+  }
+
+  // 16. Single invoice detail (GET /invoices/{id}) — the list endpoint only
+  // returns invoice headers, so line items must be fetched per-invoice.
+  Future<Map<String, dynamic>> fetchInvoiceDetail(String invoiceId) async {
+    final response = await _dio.get('/invoices/$invoiceId');
+    if (response.statusCode != 200) {
+      throw Exception(
+        'GET /invoices/$invoiceId failed: ${response.statusCode}',
+      );
+    }
+    return Map<String, dynamic>.from(response.data['invoice'] ?? {});
+  }
+
+  // 17. Full invoice list with line items — powers the Item Sales Report.
+  Future<List<Map<String, dynamic>>> fetchInvoices() async {
+    if (!_isMockMode()) {
+      try {
+        final headers = await _fetchAllPages('/invoices', {});
+        final details = <Map<String, dynamic>>[];
+        for (final header in headers) {
+          final id = header['invoice_id']?.toString();
+          if (id == null || id.isEmpty) continue;
+          try {
+            details.add(await fetchInvoiceDetail(id));
+          } catch (e) {
+            // Skip invoices whose detail fails to load rather than failing the whole report.
+            // ignore: avoid_print
+            print('Zoho fetchInvoiceDetail($id) error: $e');
+          }
+        }
+        return details;
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchInvoices error: $e');
+        throw Exception('Failed to fetch invoices from Zoho: $e');
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    final now = DateTime.now();
+    return [
+      {
+        'invoice_id': 'inv_9001',
+        'invoice_number': 'INV-00001',
+        'customer_id': 'cust_101',
+        'customer_name': 'Metro Hypermarket',
+        'date': now
+            .subtract(const Duration(days: 3))
+            .toIso8601String()
+            .split('T')[0],
+        'due_date': now
+            .add(const Duration(days: 27))
+            .toIso8601String()
+            .split('T')[0],
+        'notes': '',
+        'line_items': [
+          {
+            'item_id': 'item_501',
+            'name': 'Premium Fresh Milk (1L)',
+            'sku': 'MLK-1L',
+            'quantity': 24,
+            'rate': 60.00,
+            'tax_percentage': 5.0,
+            'discount': 0.0,
+          },
+          {
+            'item_id': 'item_503',
+            'name': 'Mineral Spring Water (500ml)',
+            'sku': 'WTR-500',
+            'quantity': 48,
+            'rate': 20.00,
+            'tax_percentage': 18.0,
+            'discount': 0.0,
+          },
+        ],
+      },
+      {
+        'invoice_id': 'inv_9002',
+        'invoice_number': 'INV-00002',
+        'customer_id': 'cust_201',
+        'customer_name': 'Southside MegaMart',
+        'date': now
+            .subtract(const Duration(days: 1))
+            .toIso8601String()
+            .split('T')[0],
+        'due_date': now
+            .add(const Duration(days: 29))
+            .toIso8601String()
+            .split('T')[0],
+        'notes': '',
+        'line_items': [
+          {
+            'item_id': 'item_504',
+            'name': 'Organic Cheddar Cheese (200g)',
+            'sku': 'CHS-200',
+            'quantity': 12,
+            'rate': 240.00,
+            'tax_percentage': 5.0,
+            'discount': 0.0,
+          },
+        ],
       },
     ];
   }

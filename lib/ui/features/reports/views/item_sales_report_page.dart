@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../../data/models/sales_invoice_model.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
+import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/date_picker.dart';
+import '../../../../ui/core/utils/snackbars.dart';
 
 /// Aggregated row for a single item across all filtered invoices.
 class _ItemSalesRow {
@@ -29,9 +32,11 @@ enum _SortField { name, qty, amount, customers }
 
 /// Full-screen itemwise sales report page.
 ///
-/// Aggregates all local sales invoices by item and shows:
-/// total quantity sold, total amount, and number of customers per item.
-/// Supports date-range filtering and column sorting.
+/// Fetches every invoice (with line items) live from Zoho Books and
+/// aggregates them by item, showing total quantity sold, total amount, and
+/// number of customers per item. Supports date-range filtering and column
+/// sorting. The local invoice cache is painted instantly on open while the
+/// live fetch is in flight.
 class ItemSalesReportPage extends StatefulWidget {
   const ItemSalesReportPage({super.key});
 
@@ -41,19 +46,47 @@ class ItemSalesReportPage extends StatefulWidget {
 
 class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
+  final ZohoApiClient _apiClient = sl<ZohoApiClient>();
   final DateFormat _dateFmt = DateFormat('dd MMM yyyy');
 
   DateTime? _startDate;
   DateTime? _endDate;
   _SortField _sortField = _SortField.amount;
   bool _sortAscending = false;
+  bool _isLoading = false;
 
   List<SalesInvoice> _allInvoices = [];
 
   @override
   void initState() {
     super.initState();
+    // Paint the cached local snapshot instantly, then pull the live report from Zoho.
     _allInvoices = _db.getLocalInvoices();
+    _fetchFromZoho();
+  }
+
+  /// Fetches every invoice (with line items) live from Zoho Books.
+  ///
+  /// Offline-first: on failure, whatever data is already on screen is kept
+  /// and an error is surfaced rather than blanking the report.
+  Future<void> _fetchFromZoho() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    try {
+      final raw = await _apiClient.fetchInvoices();
+      final invoices = raw
+          .map((json) => SalesInvoiceModel.fromJson(json))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _allInvoices = invoices;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      showErrorSnackBar(context, 'Could not load report from Zoho: $e');
+    }
   }
 
   List<_ItemSalesRow> _buildReport() {
@@ -161,13 +194,23 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
       appBar: AppBar(
         title: const Text('Item Sales Report'),
         actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => setState(() {
-              _allInvoices = _db.getLocalInvoices();
-            }),
-          ),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              tooltip: 'Refresh from Zoho',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _fetchFromZoho,
+            ),
         ],
       ),
       body: Column(
@@ -439,7 +482,7 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     itemCount: rows.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final row = rows[index];
                       final pct = totalAmount > 0

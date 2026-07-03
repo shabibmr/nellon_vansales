@@ -57,6 +57,9 @@ class ReceiptVoucher extends Equatable {
   /// Flag indicating if the collection is pending backend synchronization.
   final bool isPendingSync;
 
+  /// The Zoho Location ID of the salesperson/van that created this receipt.
+  final String? locationId;
+
   /// Creates a new [ReceiptVoucher].
   const ReceiptVoucher({
     required this.id,
@@ -69,6 +72,7 @@ class ReceiptVoucher extends Equatable {
     required this.referenceNumber,
     required this.date,
     this.isPendingSync = false,
+    this.locationId,
   });
 
   /// Calculates the sum of all allocations applied to specific invoices.
@@ -90,6 +94,7 @@ class ReceiptVoucher extends Equatable {
     String? referenceNumber,
     DateTime? date,
     bool? isPendingSync,
+    String? locationId,
   }) {
     return ReceiptVoucher(
       id: id ?? this.id,
@@ -102,6 +107,7 @@ class ReceiptVoucher extends Equatable {
       referenceNumber: referenceNumber ?? this.referenceNumber,
       date: date ?? this.date,
       isPendingSync: isPendingSync ?? this.isPendingSync,
+      locationId: locationId ?? this.locationId,
     );
   }
 
@@ -117,5 +123,6 @@ class ReceiptVoucher extends Equatable {
     referenceNumber,
     date,
     isPendingSync,
+    locationId,
   ];
 }

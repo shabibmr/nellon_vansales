@@ -127,7 +127,7 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
                           bottom: 80,
                         ),
                         itemCount: list.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final receipt = list[index];
                           return DocumentListCard(
