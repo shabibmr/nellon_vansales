@@ -149,7 +149,8 @@ class SalesOrderPdfTemplate {
                     children: [
                       _buildTableCell('${i + 1}'),
                       _buildTableCell(
-                        '${order.items[i].item.name}\nSKU: ${order.items[i].item.sku}',
+                        '${order.items[i].item.name}\nSKU: ${order.items[i].item.sku}'
+                            '${order.items[i].discount > 0 ? ' | Disc: $currencySymbol${order.items[i].discount.toStringAsFixed(2)}' : ''}',
                         alignLeft: true,
                         isSubText: true,
                       ),
@@ -206,8 +207,16 @@ class SalesOrderPdfTemplate {
                   child: pw.Column(
                     children: [
                       _buildSummaryRow('Sub Total', '$currencySymbol${order.subTotal.toStringAsFixed(2)}'),
+                      if (order.discountTotal > 0) ...[
+                        pw.SizedBox(height: 4),
+                        _buildSummaryRow('Discount Total', '$currencySymbol${order.discountTotal.toStringAsFixed(2)}'),
+                      ],
                       pw.SizedBox(height: 4),
                       _buildSummaryRow('VAT / Tax Total', '$currencySymbol${order.taxTotal.toStringAsFixed(2)}'),
+                      if (order.roundOff != 0) ...[
+                        pw.SizedBox(height: 4),
+                        _buildSummaryRow('Round Off', '$currencySymbol${order.roundOff.toStringAsFixed(2)}'),
+                      ],
                       pw.SizedBox(height: 6),
                       pw.Divider(color: SharedPdfTemplate.borderSlate, thickness: 1),
                       pw.SizedBox(height: 6),

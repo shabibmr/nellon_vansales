@@ -42,7 +42,7 @@ Future<void> setupDependencyInjection() async {
   // 5. Repository Implementations
   sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(authService: sl()));
   sl.registerLazySingleton<SyncRepository>(() => SyncRepositoryImpl(syncWorker: sl(), dbService: sl()));
-  sl.registerLazySingleton<SalesRepository>(() => SalesRepositoryImpl(dbService: sl()));
+  sl.registerLazySingleton<SalesRepository>(() => SalesRepositoryImpl(dbService: sl(), apiClient: sl()));
 
   // 6. Licensing & Device Services
   sl.registerLazySingleton<LocalStorageService>(() => LocalStorageService());

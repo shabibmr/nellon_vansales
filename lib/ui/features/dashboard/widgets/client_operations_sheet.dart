@@ -2,30 +2,17 @@ import 'package:flutter/material.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import 'van_action_tile.dart';
 
 /// Draggable bottom drawer displaying customer-specific operations/actions.
-///
-/// Prompts shortcuts to launch a new invoice billing cart, log customer collection payments, or register sales returns.
 class ClientOperationsSheet extends StatelessWidget {
-  /// The customer profile selected.
   final Customer customer;
-
-  /// Visual context.
   final bool isDark;
-
-  /// Callback to trigger new invoice flows.
   final VoidCallback onNewInvoiceTap;
-
-  /// Callback to trigger new sales order flows.
   final VoidCallback onNewOrderTap;
-
-  /// Callback to trigger receipt allocations.
   final VoidCallback onReceiptPaymentTap;
-
-  /// Callback to process product returns.
   final VoidCallback onSalesReturnTap;
 
-  /// Creates a new [ClientOperationsSheet].
   const ClientOperationsSheet({
     super.key,
     required this.customer,
@@ -51,7 +38,6 @@ class ClientOperationsSheet extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Indicator handle
               Center(
                 child: Container(
                   width: 48,
@@ -64,7 +50,6 @@ class ClientOperationsSheet extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // Client Summary Header
               Text(
                 customer.name,
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -103,97 +88,45 @@ class ClientOperationsSheet extends StatelessWidget {
               ),
               const Divider(height: 32, color: Color(0xFF334155)),
 
-              // List of Agent Operations
-              _buildOperationItem(
+              VanActionTile(
                 title: 'New Sales Invoice',
                 subtitle: 'Create cart, calculate taxes, deduct stock, and sync invoice.',
                 icon: Icons.description_rounded,
                 color: AppTheme.primaryIndigo,
+                isDark: isDark,
                 onTap: onNewInvoiceTap,
               ),
               const SizedBox(height: 14),
-              _buildOperationItem(
+              VanActionTile(
                 title: 'New Sales Order',
                 subtitle: 'Create offline sales order and enqueue for Zoho sync.',
                 icon: Icons.assignment_rounded,
                 color: AppTheme.primaryIndigo,
+                isDark: isDark,
                 onTap: onNewOrderTap,
               ),
               const SizedBox(height: 14),
-              _buildOperationItem(
+              VanActionTile(
                 title: 'Receipt Voucher (Payment)',
                 subtitle: 'Collect payment against outstanding contact balances.',
                 icon: Icons.receipt_long_rounded,
                 color: AppTheme.successEmerald,
+                isDark: isDark,
                 onTap: onReceiptPaymentTap,
               ),
               const SizedBox(height: 14),
-              _buildOperationItem(
+              VanActionTile(
                 title: 'Sales Return (Credit Note)',
                 subtitle: 'Record returned stock and restore it back into the van.',
                 icon: Icons.assignment_return_rounded,
                 color: AppTheme.errorRose,
+                isDark: isDark,
                 onTap: onSalesReturnTap,
               ),
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildOperationItem({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 11, height: 1.3),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios, size: 14),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -9,6 +9,8 @@ import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/utils/currency.dart';
 
 /// Modal dialog that logs a route trip expense log locally.
 ///
@@ -95,9 +97,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                     }
                   } catch (e) {
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Camera Access Error: $e')),
-                    );
+                    showErrorSnackBar(context, 'Camera Access Error: $e');
                   }
                 },
               ),
@@ -121,9 +121,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                     }
                   } catch (e) {
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Gallery Access Error: $e')),
-                    );
+                    showErrorSnackBar(context, 'Gallery Access Error: $e');
                   }
                 },
               ),
@@ -294,12 +292,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
             sl<SyncWorker>().syncPendingItems();
 
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: AppTheme.successEmerald,
-                content: Text('Van expense for $cs${amount.toStringAsFixed(2)} queued offline!'),
-              ),
-            );
+            showSuccessSnackBar(context, 'Van expense for ${formatCurrency(amount, cs)} queued offline!');
             widget.onExpenseLogged();
           },
           child: const Text('SUBMIT CLAIM'),

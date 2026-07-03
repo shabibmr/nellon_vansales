@@ -34,6 +34,11 @@ class ZohoApiClient {
   /// preserving live connection configurations for master downloads.
   static const bool _mockTransactions = true;
 
+  /// Sales Order uploads (create / update / convert) use this flag instead of
+  /// [_mockTransactions], so they can be pushed live to Zoho independently of all
+  /// other transaction types. Still requires real credentials (`!_isMockMode()`).
+  static const bool _mockSalesOrderTransactions = false;
+
   /// Instantiates a new [ZohoApiClient].
   ///
   /// Configures connect/receive timeouts and sets up a robust interceptor to:
@@ -416,7 +421,7 @@ class ZohoApiClient {
 
   // 5b. Zoho Books Sales Orders API: Sync Sales Order
   Future<String> syncSalesOrder(Map<String, dynamic> salesOrderJson) async {
-    if (!_isMockMode() && !_mockTransactions) {
+    if (!_isMockMode() && !_mockSalesOrderTransactions) {
       try {
         final response = await _dio.post('/salesorders', data: salesOrderJson);
         if (response.statusCode == 201 || response.statusCode == 200) {
@@ -430,6 +435,130 @@ class ZohoApiClient {
     // Mock response
     await Future.delayed(const Duration(seconds: 1));
     return 'zoho_so_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // 5c. Zoho Books Sales Orders API: Convert a Sales Order to an Invoice.
+  //
+  // Atomically creates the invoice in Zoho AND flips the sales order status to
+  // "invoiced". Requires the permanent Zoho [salesOrderId]. An empty body
+  // converts the whole order. Returns the new invoice's `invoice_id`.
+  Future<String> convertSalesOrderToInvoice(
+    String salesOrderId, [
+    Map<String, dynamic>? body,
+  ]) async {
+    if (!_isMockMode() && !_mockSalesOrderTransactions) {
+      try {
+        final response = await _dio.post(
+          '/salesorders/$salesOrderId/converttoinvoice',
+          data: body ?? {},
+        );
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          return response.data['invoice']['invoice_id'];
+        }
+      } catch (e) {
+        throw Exception('Zoho Books Sales Order Conversion Failed: $e');
+      }
+    }
+
+    // Mock response
+    await Future.delayed(const Duration(seconds: 1));
+    return 'zoho_inv_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // 5d. Zoho Books Sales Orders API: List all sales orders (paginated).
+  Future<List<Map<String, dynamic>>> fetchSalesOrders() async {
+    if (!_isMockMode()) {
+      try {
+        return await _fetchAllPages('/salesorders', {});
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchSalesOrders error: $e');
+        throw Exception('Failed to fetch sales orders from Zoho: $e');
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    final now = DateTime.now();
+    return [
+      {
+        'salesorder_id': 'so_9001',
+        'salesorder_number': 'SO-00001',
+        'customer_id': 'cust_101',
+        'customer_name': 'Metro Hypermarket',
+        'date': now.subtract(const Duration(days: 3)).toIso8601String().split('T')[0],
+        'shipment_date': now.add(const Duration(days: 4)).toIso8601String().split('T')[0],
+        'status': 'open',
+        'notes': 'Standing weekly order',
+        'line_items': [
+          {'item_id': 'item_501', 'name': 'Premium Fresh Milk (1L)', 'quantity': 20, 'rate': 60.00, 'tax_percentage': 5.0, 'discount': 0.0},
+          {'item_id': 'item_503', 'name': 'Mineral Spring Water (500ml)', 'quantity': 50, 'rate': 20.00, 'tax_percentage': 18.0, 'discount': 0.0},
+        ],
+      },
+      {
+        'salesorder_id': 'so_9002',
+        'salesorder_number': 'SO-00002',
+        'customer_id': 'cust_201',
+        'customer_name': 'Southside MegaMart',
+        'date': now.subtract(const Duration(days: 1)).toIso8601String().split('T')[0],
+        'shipment_date': now.add(const Duration(days: 6)).toIso8601String().split('T')[0],
+        'status': 'invoiced',
+        'notes': '',
+        'line_items': [
+          {'item_id': 'item_504', 'name': 'Organic Cheddar Cheese (200g)', 'quantity': 10, 'rate': 240.00, 'tax_percentage': 5.0, 'discount': 0.0},
+        ],
+      },
+    ];
+  }
+
+  // 5e. Zoho Books Sales Orders API: Read a single sales order by id.
+  Future<Map<String, dynamic>> fetchSalesOrder(String salesOrderId) async {
+    if (!_isMockMode()) {
+      try {
+        final response = await _dio.get('/salesorders/$salesOrderId');
+        if (response.statusCode != 200) {
+          throw Exception('GET /salesorders/$salesOrderId failed: ${response.statusCode}');
+        }
+        return Map<String, dynamic>.from(response.data['salesorder'] ?? {});
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zoho fetchSalesOrder error: $e');
+        throw Exception('Failed to fetch sales order from Zoho: $e');
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 400));
+    final now = DateTime.now();
+    return {
+      'salesorder_id': salesOrderId,
+      'salesorder_number': 'SO-00001',
+      'customer_id': 'cust_101',
+      'customer_name': 'Metro Hypermarket',
+      'date': now.subtract(const Duration(days: 3)).toIso8601String().split('T')[0],
+      'shipment_date': now.add(const Duration(days: 4)).toIso8601String().split('T')[0],
+      'status': 'open',
+      'notes': 'Standing weekly order',
+      'line_items': [
+        {'item_id': 'item_501', 'name': 'Premium Fresh Milk (1L)', 'quantity': 20, 'rate': 60.00, 'tax_percentage': 5.0, 'discount': 0.0},
+      ],
+    };
+  }
+
+  // 5f. Zoho Books Sales Orders API: Update an existing sales order.
+  Future<String> updateSalesOrder(String salesOrderId, Map<String, dynamic> payload) async {
+    if (!_isMockMode() && !_mockSalesOrderTransactions) {
+      try {
+        final response = await _dio.put('/salesorders/$salesOrderId', data: payload);
+        if (response.statusCode == 200) {
+          return response.data['salesorder']['salesorder_id'];
+        }
+      } catch (e) {
+        throw Exception('Zoho Books Sales Order Update Failed: $e');
+      }
+    }
+
+    // Mock response: echo back the same id.
+    await Future.delayed(const Duration(seconds: 1));
+    return salesOrderId;
   }
 
   // 6. Zoho Books Customer Payments API: Sync Receipt Voucher
@@ -851,18 +980,7 @@ class ZohoApiClient {
   Future<List<Map<String, dynamic>>> fetchOpenInvoices() async {
     if (!_isMockMode()) {
       try {
-        final response = await _dio.get(
-          '/invoices',
-          queryParameters: {
-            'status': 'unpaid',
-            'per_page': 200,
-          },
-        );
-        if (response.statusCode == 200) {
-          final list = (response.data['invoices'] as List? ?? []);
-          return list.map((i) => Map<String, dynamic>.from(i)).toList();
-        }
-        throw Exception('Failed to fetch open invoices: Server returned status code ${response.statusCode}');
+        return await _fetchAllPages('/invoices', {'status': 'unpaid'});
       } catch (e) {
         // ignore: avoid_print
         print('Zoho fetchOpenInvoices error: $e');

@@ -11,6 +11,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
     required super.quantity,
     required super.rate,
     required super.taxPercentage,
+    super.discount = 0.0,
   });
 
   /// Factory constructor to parse local/remote JSON maps into an [InvoiceLineItemModel].
@@ -20,6 +21,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
       quantity: json['quantity'] ?? 1,
       rate: (json['rate'] ?? 0.0).toDouble(),
       taxPercentage: (json['tax_percentage'] ?? 0.0).toDouble(),
+      discount: (json['discount'] ?? 0.0).toDouble(),
     );
   }
 
@@ -30,6 +32,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
       'quantity': quantity,
       'rate': rate,
       'tax_percentage': taxPercentage,
+      'discount': discount,
       'item': ItemModel.fromDomain(item).toJson(),
     };
   }
@@ -41,6 +44,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
       quantity: lineItem.quantity,
       rate: lineItem.rate,
       taxPercentage: lineItem.taxPercentage,
+      discount: lineItem.discount,
     );
   }
 }
@@ -95,6 +99,7 @@ class SalesInvoiceModel extends SalesInvoice {
           .toList(),
       'notes': notes,
       'isPendingSync': isPendingSync,
+      'round_off': roundOff,
     };
   }
 

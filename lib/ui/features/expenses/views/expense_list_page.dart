@@ -3,6 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/date_picker.dart';
+import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/utils/currency.dart';
+import '../../../../ui/core/widgets/date_range_filter_card.dart';
+import '../../../../ui/core/widgets/empty_state.dart';
 import '../bloc/expense_bloc.dart';
 import 'expense_editor_page.dart';
 
@@ -23,35 +28,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
   }
 
   Future<void> _selectDate(bool isStart, DateTime? current) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Theme(
-          data: isDark
-              ? ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.darkSurface,
-                    onSurface: AppTheme.darkText,
-                  ),
-                )
-              : ThemeData.light().copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.lightSurface,
-                    onSurface: AppTheme.lightText,
-                  ),
-                ),
-          child: child!,
-        );
-      },
-    );
+    final picked = await showThemedDatePicker(context, initialDate: current);
     if (picked != null && mounted) {
       final bloc = context.read<ExpenseBloc>();
       if (isStart) {
@@ -81,15 +58,11 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
       body: BlocConsumer<ExpenseBloc, ExpenseState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(backgroundColor: AppTheme.errorRose, content: Text(state.errorMessage!)),
-            );
+            showErrorSnackBar(context, state.errorMessage!);
             context.read<ExpenseBloc>().add(ClearExpenseMessages());
           }
           if (state.successMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(backgroundColor: AppTheme.successEmerald, content: Text(state.successMessage!)),
-            );
+            showSuccessSnackBar(context, state.successMessage!);
             context.read<ExpenseBloc>().add(ClearExpenseMessages());
           }
         },
@@ -99,67 +72,14 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
 
           return Column(
             children: [
-              // Date filter card
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Card(
-                  elevation: isDark ? 0 : 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.filter_alt_outlined, size: 18, color: AppTheme.primaryIndigo),
-                            const SizedBox(width: 6),
-                            const Text('Filter by Date Range',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            const Spacer(),
-                            if (hasFilter)
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                onPressed: () => context
-                                    .read<ExpenseBloc>()
-                                    .add(const SetExpenseDateFilter()),
-                                child: const Text('Clear',
-                                    style: TextStyle(color: AppTheme.errorRose, fontSize: 12)),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: _DatePickerBox(
-                              isDark: isDark,
-                              label: state.startDate != null
-                                  ? _dateFormat.format(state.startDate!)
-                                  : 'Start Date',
-                              hasValue: state.startDate != null,
-                              onTap: () => _selectDate(true, state.startDate),
-                            )),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 8),
-                              child: Text('to', style: TextStyle(fontSize: 12)),
-                            ),
-                            Expanded(child: _DatePickerBox(
-                              isDark: isDark,
-                              label: state.endDate != null
-                                  ? _dateFormat.format(state.endDate!)
-                                  : 'End Date',
-                              hasValue: state.endDate != null,
-                              onTap: () => _selectDate(false, state.endDate),
-                            )),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              DateRangeFilterCard(
+                startDate: state.startDate,
+                endDate: state.endDate,
+                onStartTap: () => _selectDate(true, state.startDate),
+                onEndTap: () => _selectDate(false, state.endDate),
+                onClear: hasFilter
+                    ? () => context.read<ExpenseBloc>().add(const SetExpenseDateFilter())
+                    : null,
               ),
 
               if (state.isLoading)
@@ -168,32 +88,12 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                 )
               else if (list.isEmpty)
                 Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.receipt_outlined, size: 64,
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
-                        const SizedBox(height: 16),
-                        Text('No expenses found',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                            )),
-                        const SizedBox(height: 8),
-                        Text(
-                          hasFilter
-                              ? 'Try expanding your date range.'
-                              : 'Tap "+" to log your first expense.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: EmptyState(
+                    icon: Icons.receipt_outlined,
+                    title: 'No expenses found',
+                    message: hasFilter
+                        ? 'Try expanding your date range.'
+                        : 'Tap "+" to log your first expense.',
                   ),
                 )
               else
@@ -218,8 +118,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                 context.read<ExpenseBloc>().add(StartEditExpense(expense));
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                      builder: (_) => const ExpenseEditorPage()),
+                                  MaterialPageRoute(builder: (_) => const ExpenseEditorPage()),
                                 );
                               },
                               child: Padding(
@@ -291,7 +190,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          '$cs${expense.amount.toStringAsFixed(2)}',
+                                          formatCurrency(expense.amount, cs),
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w900,
                                             fontSize: 16,
@@ -334,54 +233,6 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
           );
         },
         child: const Icon(Icons.add),
-      ),
-    );
-  }
-}
-
-class _DatePickerBox extends StatelessWidget {
-  final bool isDark;
-  final String label;
-  final bool hasValue;
-  final VoidCallback onTap;
-
-  const _DatePickerBox({
-    required this.isDark,
-    required this.label,
-    required this.hasValue,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border.all(
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-          borderRadius: BorderRadius.circular(8),
-          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.date_range, size: 16, color: AppTheme.primaryIndigo),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: hasValue
-                      ? (isDark ? AppTheme.darkText : AppTheme.lightText)
-                      : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

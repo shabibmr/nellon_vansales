@@ -13,6 +13,7 @@ class AnalyticsReportsTab extends StatelessWidget {
   final int completedDeliveries;
   final VoidCallback onItemSalesReport;
   final VoidCallback onCustomerLedger;
+  final VoidCallback onAgingReport;
 
   const AnalyticsReportsTab({
     super.key,
@@ -25,6 +26,7 @@ class AnalyticsReportsTab extends StatelessWidget {
     required this.completedDeliveries,
     required this.onItemSalesReport,
     required this.onCustomerLedger,
+    required this.onAgingReport,
   });
 
   @override
@@ -127,6 +129,15 @@ class AnalyticsReportsTab extends StatelessWidget {
                 color: AppTheme.primaryIndigo,
                 isDark: isDark,
                 onTap: onCustomerLedger,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Agewise Receivables',
+                subtitle: 'Outstanding by age: 0-15, 15-30, 30-60 and >60 days.',
+                icon: Icons.hourglass_bottom_rounded,
+                color: AppTheme.warningAmber,
+                isDark: isDark,
+                onTap: onAgingReport,
               ),
               const SizedBox(height: 24),
             ],

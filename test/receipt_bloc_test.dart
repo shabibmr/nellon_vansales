@@ -9,6 +9,7 @@ import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
+import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
@@ -56,6 +57,10 @@ class FakeSalesRepository implements SalesRepository {
   @override Future<void> saveItems(List<Item> items) async {}
   @override List<SalesInvoice> getLocalInvoices() => [];
   @override Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
+  @override List<SalesOrder> getLocalOrders() => [];
+  @override Future<void> saveLocalOrder(SalesOrder order) async {}
+  @override Future<List<SalesOrder>> fetchRemoteOrders() async => [];
+  @override Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
   @override List<SalesReturn> getLocalReturns() => [];
   @override Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
   @override List<ExpenseEntry> getLocalExpenses() => [];

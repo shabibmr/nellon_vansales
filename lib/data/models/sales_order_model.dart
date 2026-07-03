@@ -11,6 +11,7 @@ class OrderLineItemModel extends OrderLineItem {
     required super.quantity,
     required super.rate,
     required super.taxPercentage,
+    super.discount = 0.0,
   });
 
   /// Factory constructor to parse local/remote JSON maps into an [OrderLineItemModel].
@@ -20,6 +21,7 @@ class OrderLineItemModel extends OrderLineItem {
       quantity: json['quantity'] ?? 1,
       rate: (json['rate'] ?? 0.0).toDouble(),
       taxPercentage: (json['tax_percentage'] ?? 0.0).toDouble(),
+      discount: (json['discount'] ?? 0.0).toDouble(),
     );
   }
 
@@ -30,6 +32,7 @@ class OrderLineItemModel extends OrderLineItem {
       'quantity': quantity,
       'rate': rate,
       'tax_percentage': taxPercentage,
+      'discount': discount,
       'item': ItemModel.fromDomain(item).toJson(),
     };
   }
@@ -41,6 +44,7 @@ class OrderLineItemModel extends OrderLineItem {
       quantity: lineItem.quantity,
       rate: lineItem.rate,
       taxPercentage: lineItem.taxPercentage,
+      discount: lineItem.discount,
     );
   }
 }
@@ -60,6 +64,9 @@ class SalesOrderModel extends SalesOrder {
     required super.items,
     required super.notes,
     super.isPendingSync,
+    super.status,
+    super.convertedInvoiceNumber,
+    super.zohoOrderId,
   });
 
   /// Factory constructor to parse local database JSON maps into a [SalesOrderModel].
@@ -77,7 +84,15 @@ class SalesOrderModel extends SalesOrder {
           [],
       notes: json['notes'] ?? '',
       isPendingSync: json['isPendingSync'] ?? false,
+      status: _statusFromString(json['status']),
+      convertedInvoiceNumber: json['converted_invoice_number'],
+      zohoOrderId: json['zoho_order_id'],
     );
+  }
+
+  /// Parses a stored status string into a [SalesOrderStatus], defaulting to open.
+  static SalesOrderStatus _statusFromString(dynamic value) {
+    return value == 'invoiced' ? SalesOrderStatus.invoiced : SalesOrderStatus.open;
   }
 
   /// Converts this [SalesOrderModel] instance into a serializable JSON map.
@@ -95,6 +110,10 @@ class SalesOrderModel extends SalesOrder {
           .toList(),
       'notes': notes,
       'isPendingSync': isPendingSync,
+      'round_off': roundOff,
+      'status': status == SalesOrderStatus.invoiced ? 'invoiced' : 'open',
+      'converted_invoice_number': convertedInvoiceNumber,
+      'zoho_order_id': zohoOrderId,
     };
   }
 
@@ -110,6 +129,9 @@ class SalesOrderModel extends SalesOrder {
       items: order.items,
       notes: order.notes,
       isPendingSync: order.isPendingSync,
+      status: order.status,
+      convertedInvoiceNumber: order.convertedInvoiceNumber,
+      zohoOrderId: order.zohoOrderId,
     );
   }
 }

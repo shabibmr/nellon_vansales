@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../../../domain/models/customer_ledger.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/date_picker.dart';
+import '../../../../ui/core/utils/snackbars.dart';
 import '../bloc/customer_ledger_bloc.dart';
 
 class CustomerLedgerPage extends StatefulWidget {
@@ -19,37 +21,11 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
   Future<void> _pickDate({required bool isStart}) async {
     final state = context.read<CustomerLedgerBloc>().state;
     final current = isStart ? state.startDate : state.endDate;
-
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showThemedDatePicker(
+      context,
       initialDate: current,
-      firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Theme(
-          data: isDark
-              ? ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.darkSurface,
-                    onSurface: AppTheme.darkText,
-                  ),
-                )
-              : ThemeData.light().copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.lightSurface,
-                    onSurface: AppTheme.lightText,
-                  ),
-                ),
-          child: child!,
-        );
-      },
     );
-
     if (picked != null && mounted) {
       if (isStart) {
         context.read<CustomerLedgerBloc>().add(SetLedgerStartDate(picked));
@@ -202,12 +178,7 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
         listenWhen: (p, c) => p.errorMessage != c.errorMessage,
         listener: (context, state) {
           if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: AppTheme.errorRose,
-                content: Text(state.errorMessage!),
-              ),
-            );
+            showErrorSnackBar(context, state.errorMessage!);
           }
         },
         builder: (context, state) {

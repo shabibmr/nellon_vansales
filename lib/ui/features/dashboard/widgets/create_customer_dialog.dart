@@ -7,6 +7,7 @@ import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/widgets/app_text_field.dart';
 import '../../route/bloc/route_bloc.dart';
 
 /// Modal dialog for logging a new customer offline on the route.
@@ -142,7 +143,6 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
 
     return AlertDialog(
@@ -168,11 +168,10 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildField(
+                AppTextField(
                   controller: _nameController,
                   label: 'Full Contact Name',
                   icon: Icons.person_outline_rounded,
-                  isDark: isDark,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Name is required';
                     if (v.trim().length < 2) return 'Enter at least 2 characters';
@@ -180,22 +179,20 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-                _buildField(
+                AppTextField(
                   controller: _companyController,
                   label: 'Company / Shop Name',
                   icon: Icons.storefront_outlined,
-                  isDark: isDark,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Company name is required';
                     return null;
                   },
                 ),
                 const SizedBox(height: 12),
-                _buildField(
+                AppTextField(
                   controller: _phoneController,
                   label: 'Phone Number',
                   icon: Icons.phone_outlined,
-                  isDark: isDark,
                   keyboardType: TextInputType.phone,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Phone is required';
@@ -205,33 +202,30 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-                _buildField(
+                AppTextField(
                   controller: _emailController,
                   label: 'Email Address (optional)',
                   icon: Icons.email_outlined,
-                  isDark: isDark,
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return null; // optional
+                    if (v == null || v.trim().isEmpty) return null;
                     final emailRegex = RegExp(r'^[\w.-]+@[\w.-]+\.\w{2,}$');
                     if (!emailRegex.hasMatch(v.trim())) return 'Enter a valid email';
                     return null;
                   },
                 ),
                 const SizedBox(height: 12),
-                _buildField(
+                AppTextField(
                   controller: _addressController,
                   label: 'Billing Address',
                   icon: Icons.location_on_outlined,
-                  isDark: isDark,
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
-                _buildField(
+                AppTextField(
                   controller: _creditLimitController,
                   label: 'Credit Limit ($cs)',
                   icon: Icons.credit_score_outlined,
-                  isDark: isDark,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Credit limit is required';
@@ -261,27 +255,6 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
           label: const Text('CREATE'),
         ),
       ],
-    );
-  }
-
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required bool isDark,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-    int maxLines = 1,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, size: 18, color: AppTheme.primaryIndigo),
-      ),
     );
   }
 }

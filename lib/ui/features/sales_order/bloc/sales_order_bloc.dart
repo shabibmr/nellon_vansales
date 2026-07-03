@@ -21,6 +21,9 @@ abstract class SalesOrderEvent extends Equatable {
 /// Fired to load local sales orders.
 class LoadOrders extends SalesOrderEvent {}
 
+/// Fired to download sales orders from Zoho and merge them into the local cache.
+class RefreshOrdersFromZoho extends SalesOrderEvent {}
+
 /// Fired to set the active date filter for listing.
 class SetDateFilter extends SalesOrderEvent {
   final DateTime? startDate;
@@ -65,10 +68,17 @@ class UpdateOrderCustomer extends SalesOrderEvent {
 class AddOrUpdateLineItem extends SalesOrderEvent {
   final Item item;
   final int quantity;
-  const AddOrUpdateLineItem({required this.item, required this.quantity});
+  final double? rate;
+  final double? discount;
+  const AddOrUpdateLineItem({
+    required this.item,
+    required this.quantity,
+    this.rate,
+    this.discount,
+  });
 
   @override
-  List<Object?> get props => [item, quantity];
+  List<Object?> get props => [item, quantity, rate, discount];
 }
 
 /// Fired to drop a specific line item.
@@ -203,6 +213,7 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
         _syncRepository = syncRepository,
         super(const SalesOrderState()) {
     on<LoadOrders>(_onLoadOrders);
+    on<RefreshOrdersFromZoho>(_onRefreshOrdersFromZoho);
     on<SetDateFilter>(_onSetDateFilter);
     on<StartNewOrder>(_onStartNewOrder);
     on<StartEditOrder>(_onStartEditOrder);
@@ -224,6 +235,22 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
       ));
     } catch (e) {
       emit(state.copyWith(
+        isLoading: false,
+        errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  Future<void> _onRefreshOrdersFromZoho(
+      RefreshOrdersFromZoho event, Emitter<SalesOrderState> emit) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      final loaded = await _salesRepository.fetchRemoteOrders();
+      emit(state.copyWith(orders: loaded, isLoading: false));
+    } catch (e) {
+      // Offline-first: surface the error but keep the cached list intact.
+      emit(state.copyWith(
+        orders: _salesRepository.getLocalOrders(),
         isLoading: false,
         errorMessage: e.toString(),
       ));
@@ -298,15 +325,20 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
       if (event.quantity <= 0) {
         items.removeAt(idx);
       } else {
-        items[idx] = items[idx].copyWith(quantity: event.quantity);
+        items[idx] = items[idx].copyWith(
+          quantity: event.quantity,
+          rate: event.rate,
+          discount: event.discount,
+        );
       }
     } else {
       if (event.quantity > 0) {
         items.add(OrderLineItem(
           item: event.item,
           quantity: event.quantity,
-          rate: event.item.rate,
+          rate: event.rate ?? event.item.rate,
           taxPercentage: event.item.taxPercentage,
+          discount: event.discount ?? 0.0,
         ));
       }
     }
@@ -335,11 +367,13 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
       final tempId = state.editingOrderId ?? 'temp_so_${DateTime.now().millisecondsSinceEpoch}';
 
       String orderNum;
+      String? existingZohoOrderId;
       if (isNew) {
         orderNum = 'SO-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
       } else {
         final originalOrder = state.orders.firstWhere((ord) => ord.id == tempId);
         orderNum = originalOrder.orderNumber;
+        existingZohoOrderId = originalOrder.zohoOrderId;
       }
 
       final order = SalesOrder(
@@ -352,14 +386,24 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
         items: state.editingItems,
         notes: event.notes,
         isPendingSync: true,
+        zohoOrderId: existingZohoOrderId,
       );
 
       await _salesRepository.saveLocalOrder(order);
 
+      // An order that has already synced (has a permanent zohoOrderId) is updated
+      // in place; otherwise it is a create still pending its first sync.
+      final isUpdate = existingZohoOrderId != null && existingZohoOrderId.isNotEmpty;
+      final payload = SalesOrderModel.fromDomain(order).toJson();
+      if (isUpdate) {
+        // Update routes to /salesorders/{realId}, so target the permanent Zoho id.
+        payload['salesorder_id'] = existingZohoOrderId;
+      }
+
       final syncItem = SyncQueueItem(
         id: tempId,
-        type: 'sales_order',
-        payload: SalesOrderModel.fromDomain(order).toJson(),
+        type: isUpdate ? 'update_sales_order' : 'sales_order',
+        payload: payload,
         status: SyncStatus.pending,
         timestamp: DateTime.now(),
       );

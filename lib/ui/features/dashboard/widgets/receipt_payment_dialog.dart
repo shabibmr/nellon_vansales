@@ -8,6 +8,8 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/utils/currency.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 
 /// Modal dialog for logging a [ReceiptVoucher] payment collection.
@@ -344,12 +346,7 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
             sl<SyncWorker>().syncPendingItems();
 
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: AppTheme.successEmerald,
-                content: Text('Payment Voucher for $cs${amount.toStringAsFixed(2)} queued offline!'),
-              ),
-            );
+            showSuccessSnackBar(context, 'Payment Voucher for ${formatCurrency(amount, cs)} queued offline!');
             widget.onPaymentLogged();
           },
           child: const Text('LOG RECEIPT'),

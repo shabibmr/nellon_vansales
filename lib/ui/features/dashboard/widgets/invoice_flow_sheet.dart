@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/utils/currency.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
@@ -38,11 +40,30 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
   late List<Item> _items;
   final Map<Item, int> _localCart = {};
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
     _items = _db.getItems();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Items filtered by the current search query, matching on name or SKU.
+  List<Item> get _visibleItems {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return _items;
+    return _items
+        .where((item) =>
+            item.name.toLowerCase().contains(query) ||
+            item.sku.toLowerCase().contains(query))
+        .toList();
   }
 
   @override
@@ -77,14 +98,52 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
               ),
               const SizedBox(height: 16),
 
+              // Item search bar — filters the catalog by name or SKU.
+              TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _query = value),
+                decoration: InputDecoration(
+                  hintText: 'Search items by name or SKU...',
+                  prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryIndigo),
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(
+                            Icons.cancel,
+                            size: 20,
+                            color: widget.isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
+                          ),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
+                        )
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 16),
+
               // Item Catalog Scroll
               Expanded(
-                child: ListView.separated(
+                child: _visibleItems.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No items match "$_query"',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: widget.isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
                   controller: scrollController,
-                  itemCount: _items.length,
+                  itemCount: _visibleItems.length,
                   separatorBuilder: (context, index) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
-                    final item = _items[index];
+                    final item = _visibleItems[index];
                     final cartQty = _localCart[item] ?? 0;
 
                     return Card(
@@ -161,9 +220,7 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                                           _localCart[item] = cartQty + 1;
                                         });
                                       } else {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Cannot exceed available van stock')),
-                                        );
+                                        showErrorSnackBar(context, 'Cannot exceed available van stock');
                                       }
                                     },
                                   ),
@@ -235,12 +292,7 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                               bloc.add(CheckoutRequested(customer: widget.customer, notes: 'Van Sales Checkout'));
 
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: AppTheme.successEmerald,
-                                  content: Text('Invoice generated & queued offline! Subtotal: $cs${cartTotal.toStringAsFixed(2)}'),
-                                ),
-                              );
+                              showSuccessSnackBar(context, 'Invoice generated & queued offline! Subtotal: ${formatCurrency(cartTotal, cs)}');
                               widget.onInvoiceSubmitted();
                             },
                       child: const Text('SUBMIT SALES INVOICE'),

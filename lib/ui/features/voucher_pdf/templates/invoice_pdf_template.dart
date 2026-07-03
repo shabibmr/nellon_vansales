@@ -149,7 +149,8 @@ class InvoicePdfTemplate {
                     children: [
                       _buildTableCell('${i + 1}'),
                       _buildTableCell(
-                        '${invoice.items[i].item.name}\nSKU: ${invoice.items[i].item.sku}',
+                        '${invoice.items[i].item.name}\nSKU: ${invoice.items[i].item.sku}'
+                            '${invoice.items[i].discount > 0 ? ' | Disc: $currencySymbol${invoice.items[i].discount.toStringAsFixed(2)}' : ''}',
                         alignLeft: true,
                         isSubText: true,
                       ),
@@ -206,8 +207,16 @@ class InvoicePdfTemplate {
                   child: pw.Column(
                     children: [
                       _buildSummaryRow('Sub Total', '$currencySymbol${invoice.subTotal.toStringAsFixed(2)}'),
+                      if (invoice.discountTotal > 0) ...[
+                        pw.SizedBox(height: 4),
+                        _buildSummaryRow('Discount Total', '$currencySymbol${invoice.discountTotal.toStringAsFixed(2)}'),
+                      ],
                       pw.SizedBox(height: 4),
                       _buildSummaryRow('VAT / Tax Total', '$currencySymbol${invoice.taxTotal.toStringAsFixed(2)}'),
+                      if (invoice.roundOff != 0) ...[
+                        pw.SizedBox(height: 4),
+                        _buildSummaryRow('Round Off', '$currencySymbol${invoice.roundOff.toStringAsFixed(2)}'),
+                      ],
                       pw.SizedBox(height: 6),
                       pw.Divider(color: SharedPdfTemplate.borderSlate, thickness: 1),
                       pw.SizedBox(height: 6),

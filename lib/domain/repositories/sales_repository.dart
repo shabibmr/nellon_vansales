@@ -47,6 +47,13 @@ abstract class SalesRepository {
 
   /// Logs a new sales order locally and caches it.
   Future<void> saveLocalOrder(SalesOrder order);
+
+  /// Downloads sales orders from Zoho Books, merges them into the local cache,
+  /// and returns the resulting local list.
+  Future<List<SalesOrder>> fetchRemoteOrders();
+
+  /// Reads a single sales order from Zoho Books by its permanent `zohoOrderId`.
+  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId);
   
   /// Gets all receipt vouchers collected locally.
   List<ReceiptVoucher> getLocalReceipts();

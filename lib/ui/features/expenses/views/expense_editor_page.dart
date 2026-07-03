@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/date_picker.dart';
+import '../../../../ui/core/utils/snackbars.dart';
 import '../bloc/expense_bloc.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../data/services/voucher_pdf_service.dart';
@@ -43,35 +45,7 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
   }
 
   Future<void> _selectDate(DateTime current) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Theme(
-          data: isDark
-              ? ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.darkSurface,
-                    onSurface: AppTheme.darkText,
-                  ),
-                )
-              : ThemeData.light().copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.lightSurface,
-                    onSurface: AppTheme.lightText,
-                  ),
-                ),
-          child: child!,
-        );
-      },
-    );
+    final picked = await showThemedDatePicker(context, initialDate: current);
     if (picked != null && mounted) {
       context.read<ExpenseBloc>().add(SetEditingExpenseDate(picked));
     }
@@ -154,19 +128,11 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
             p.successMessage != c.successMessage || p.errorMessage != c.errorMessage,
         listener: (context, state) {
           if (state.successMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  backgroundColor: AppTheme.successEmerald,
-                  content: Text(state.successMessage!)),
-            );
+            showSuccessSnackBar(context, state.successMessage!);
             context.read<ExpenseBloc>().add(ClearExpenseMessages());
             Navigator.pop(context);
           } else if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  backgroundColor: AppTheme.errorRose,
-                  content: Text(state.errorMessage!)),
-            );
+            showErrorSnackBar(context, state.errorMessage!);
             context.read<ExpenseBloc>().add(ClearExpenseMessages());
           }
         },

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/extensions/org_context_extension.dart';
+import 'empty_state.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/models/item.dart';
 import '../../../domain/repositories/sales_repository.dart';
@@ -176,7 +177,11 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
             prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryIndigo),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
-                    icon: const Icon(Icons.cancel, color: AppTheme.darkTextSecondary, size: 20),
+                    icon: Icon(
+                      Icons.cancel,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      size: 20,
+                    ),
                     onPressed: _clearSearch,
                   )
                 : null,
@@ -195,15 +200,18 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
   Widget _buildResultsSection(bool isDark) {
     final cs = context.org.currencySymbol;
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: AppTheme.primaryIndigo),
-            SizedBox(height: 12),
+            const CircularProgressIndicator(color: AppTheme.primaryIndigo),
+            const SizedBox(height: 12),
             Text(
               'Searching database records...',
-              style: TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
             )
           ],
         ),
@@ -326,15 +334,6 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
   }
 
   Widget _buildEmptyState(String message) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.info_outline, size: 36, color: AppTheme.warningAmber),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary))
-        ],
-      ),
-    );
+    return EmptyState(icon: Icons.info_outline, title: message);
   }
 }

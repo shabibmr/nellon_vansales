@@ -12,6 +12,7 @@ import '../models/expense_account_model.dart';
 import '../models/organization_model.dart';
 import '../models/open_invoice_model.dart';
 import '../../domain/models/route.dart';
+import '../../domain/models/sales_order.dart';
 
 /// Enumerates all types of Master data configurations synced from the backend.
 enum MasterType {
@@ -148,6 +149,18 @@ class SyncWorker {
               break;
             case 'sales_order':
               remoteId = await _apiClient.syncSalesOrder(item.payload);
+              // Persist the permanent Zoho salesorder_id on the local order and
+              // patch any pending conversion so it can target the real id.
+              await _persistOrderZohoId(item.id, remoteId);
+              await _resolveTempOrderIdsInQueue(item.id, remoteId);
+              break;
+            case 'update_sales_order':
+              remoteId = await _apiClient.updateSalesOrder(
+                item.payload['salesorder_id'], item.payload);
+              await _persistOrderZohoId(item.id, remoteId);
+              break;
+            case 'convert_so':
+              remoteId = await _apiClient.convertSalesOrderToInvoice(item.payload['salesorder_id']);
               break;
             case 'receipt':
               remoteId = await _apiClient.syncReceiptVoucher(item.payload);
@@ -204,6 +217,35 @@ class SyncWorker {
         }
 
         if (modified) {
+          await _dbService.updateSyncItem(item.copyWith(payload: updatedPayload));
+        }
+      }
+    }
+  }
+
+  /// Stores the permanent Zoho `salesorder_id` on the local order record once synced,
+  /// so a later conversion can target the real id.
+  Future<void> _persistOrderZohoId(String localOrderId, String zohoOrderId) async {
+    final orders = _dbService.getLocalOrders();
+    final index = orders.indexWhere((o) => o.id == localOrderId);
+    if (index >= 0) {
+      await _dbService.saveLocalOrder(orders[index].copyWith(
+        zohoOrderId: zohoOrderId,
+        isPendingSync: false,
+      ));
+    }
+  }
+
+  /// Patches any pending/failed `convert_so` queue items whose `salesorder_id`
+  /// still points at the temporary local order id, swapping in the permanent Zoho id.
+  Future<void> _resolveTempOrderIdsInQueue(String tempOrderId, String permanentZohoId) async {
+    final currentQueue = _dbService.getSyncQueue();
+    for (final item in currentQueue) {
+      if (item.type != 'convert_so') continue;
+      if (item.status == SyncStatus.pending || item.status == SyncStatus.failed) {
+        if (item.payload['salesorder_id'] == tempOrderId) {
+          final updatedPayload = Map<String, dynamic>.from(item.payload);
+          updatedPayload['salesorder_id'] = permanentZohoId;
           await _dbService.updateSyncItem(item.copyWith(payload: updatedPayload));
         }
       }

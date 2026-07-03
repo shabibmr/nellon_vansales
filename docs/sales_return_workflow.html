@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Return Entry — Workflow</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --indigo: #6366F1;
+      --slate-900: #0F172A;
+      --slate-600: #475569;
+      --slate-200: #E2E8F0;
+      --slate-50: #F8FAFC;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--slate-50);
+      color: var(--slate-900);
+      padding: 32px 16px 64px;
+    }
+    header {
+      max-width: 960px;
+      margin: 0 auto 24px;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 6px;
+    }
+    p.sub {
+      margin: 0;
+      color: var(--slate-600);
+      font-size: 14px;
+    }
+    .diagram {
+      max-width: 960px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid var(--slate-200);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      overflow-x: auto;
+    }
+    footer {
+      max-width: 960px;
+      margin: 20px auto 0;
+      color: var(--slate-600);
+      font-size: 12px;
+    }
+    code {
+      background: var(--slate-200);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Sales Return Entry — Step-by-Step Workflow</h1>
+    <p class="sub">Credit-note return flow from the dashboard customer quick action through local persistence and Zoho sync.</p>
+  </header>
+
+  <div class="diagram">
+    <pre class="mermaid">
+flowchart TD
+    A([User taps a customer on Dashboard]) --> B[Client Operations Sheet opens]
+    B --> C[Tap Sales Return Credit Note action]
+    C --> D[Open Sales Return Dialog]
+
+    D --> E["Load customer local invoices<br/>collect purchased item IDs<br/>filter catalog to purchased items"]
+    E --> F{Customer has<br/>purchase history?}
+    F -- No --> G["Show warning:<br/>returns allowed only for<br/>previously sold items"]
+    G --> H([CONFIRM disabled - exit])
+
+    F -- Yes --> I[Select returned item<br/>from dropdown]
+    I --> J["Find invoices containing that item<br/>sort newest first<br/>create a qty field per invoice"]
+    J --> K[Enter return quantity per invoice]
+    K --> L{"Each qty valid?<br/>0 to sold units"}
+    L -- No --> M["Inline field error<br/>such as Max N"]
+    M --> K
+
+    L -- Yes --> N[Tap CONFIRM RETURN]
+    N --> O{"Form valid AND<br/>total qty above zero?"}
+    O -- No --> P[Show error snackbar]
+    P --> K
+
+    O -- Yes --> Q["Build SalesReturn payload<br/>temp id plus temp credit-note number<br/>returned line items plus reason"]
+    Q --> R[("Save return to local Hive<br/>restore van stock instantly")]
+    R --> S[("Enqueue SyncQueueItem<br/>type return, status pending")]
+    S --> T[Trigger SyncWorker syncPendingItems]
+    T --> U["Close dialog<br/>success snackbar<br/>onReturnConfirmed callback"]
+
+    U --> V{Network available?}
+    V -- No --> W[Item stays queued<br/>retried on reconnect]
+    V -- Yes --> X[POST credit note to<br/>Zoho Books via syncSalesReturn]
+    X --> Y{Zoho accepted?}
+    Y -- Yes --> Z(["Mark synced<br/>replace temp id with Zoho id"])
+    Y -- No --> AA[Mark failed<br/>stays in queue for retry]
+
+    classDef start fill:#6366F1,stroke:#4F46E5,color:#fff;
+    classDef decision fill:#FEF3C7,stroke:#F59E0B,color:#0F172A;
+    classDef store fill:#D1FAE5,stroke:#10B981,color:#0F172A;
+    classDef warn fill:#FFE4E6,stroke:#F43F5E,color:#0F172A;
+
+    class A,H,Z start;
+    class F,L,O,V,Y decision;
+    class R,S store;
+    class G,W,AA warn;
+    </pre>
+  </div>
+
+  <footer>
+    Source: <code>lib/ui/features/dashboard/widgets/sales_return_dialog.dart</code> and
+    <code>data/services/sync_worker.dart</code>. Open this file in any browser to view.
+  </footer>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { useMaxWidth: true, htmlLabels: true } });
+  </script>
+</body>
+</html>

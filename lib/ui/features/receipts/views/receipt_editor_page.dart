@@ -5,6 +5,9 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/date_picker.dart';
+import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/widgets/customer_selector_sheet.dart';
 import '../bloc/receipt_bloc.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../data/services/voucher_pdf_service.dart';
@@ -117,152 +120,19 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
   }
 
   Future<void> _selectDate(DateTime current) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Theme(
-          data: isDark
-              ? ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.darkSurface,
-                    onSurface: AppTheme.darkText,
-                  ),
-                )
-              : ThemeData.light().copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.lightSurface,
-                    onSurface: AppTheme.lightText,
-                  ),
-                ),
-          child: child!,
-        );
-      },
-    );
+    final picked = await showThemedDatePicker(context, initialDate: current);
     if (picked != null && mounted) {
       context.read<ReceiptBloc>().add(SetEditingReceiptDate(picked));
     }
   }
 
   void _showCustomerSelector(BuildContext context, bool isDark) {
-    final cs = context.org.currencySymbol;
     final allCustomers = _db.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetCtx) {
-        var filtered = allCustomers;
-        final searchCtrl = TextEditingController();
-
-        return StatefulBuilder(
-          builder: (sheetCtx, setModal) {
-            void onSearch(String query) {
-              final q = query.toLowerCase();
-              setModal(() {
-                filtered = q.isEmpty
-                    ? allCustomers
-                    : allCustomers.where((c) {
-                        return c.name.toLowerCase().contains(q) ||
-                            c.companyName.toLowerCase().contains(q) ||
-                            c.phone.contains(query);
-                      }).toList();
-              });
-            }
-
-            return DraggableScrollableSheet(
-              initialChildSize: 0.7,
-              minChildSize: 0.4,
-              maxChildSize: 0.9,
-              expand: false,
-              builder: (_, scrollCtrl) {
-                return Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Select Customer',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: TextField(
-                        controller: searchCtrl,
-                        autofocus: true,
-                        onChanged: onSearch,
-                        decoration: InputDecoration(
-                          hintText: 'Search by name, company or phone...',
-                          prefixIcon: const Icon(Icons.search, color: AppTheme.primaryIndigo),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
-                    const Divider(),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? Center(
-                              child: Text('No customers found',
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? AppTheme.darkTextSecondary
-                                        : AppTheme.lightTextSecondary,
-                                  )))
-                          : ListView.separated(
-                              controller: scrollCtrl,
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (_, i) {
-                                final customer = filtered[i];
-                                return ListTile(
-                                  title: Text(customer.name,
-                                      style:
-                                          const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text(customer.companyName),
-                                  trailing: customer.outstandingBalance > 0
-                                      ? Text(
-                                          'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                              color: AppTheme.errorRose,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold),
-                                        )
-                                      : null,
-                                  onTap: () {
-                                    context
-                                        .read<ReceiptBloc>()
-                                        .add(SetEditingReceiptCustomer(customer));
-                                    Navigator.pop(sheetCtx);
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        );
+    CustomerSelectorSheet.show(
+      context,
+      customers: allCustomers,
+      onSelected: (customer) {
+        context.read<ReceiptBloc>().add(SetEditingReceiptCustomer(customer));
       },
     );
   }
@@ -282,19 +152,11 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
       body: BlocConsumer<ReceiptBloc, ReceiptState>(
         listener: (context, state) {
           if (state.successMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  backgroundColor: AppTheme.successEmerald,
-                  content: Text(state.successMessage!)),
-            );
+            showSuccessSnackBar(context, state.successMessage!);
             context.read<ReceiptBloc>().add(ClearReceiptMessages());
             Navigator.pop(context);
           } else if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  backgroundColor: AppTheme.errorRose,
-                  content: Text(state.errorMessage!)),
-            );
+            showErrorSnackBar(context, state.errorMessage!);
             context.read<ReceiptBloc>().add(ClearReceiptMessages());
           }
 

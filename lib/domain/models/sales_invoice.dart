@@ -17,12 +17,16 @@ class InvoiceLineItem extends Equatable {
   /// Percentage of tax applied (e.g. 5.0).
   final double taxPercentage;
 
+  /// Line item discount.
+  final double discount;
+
   /// Creates a new [InvoiceLineItem].
   const InvoiceLineItem({
     required this.item,
     required this.quantity,
     required this.rate,
     required this.taxPercentage,
+    this.discount = 0.0,
   });
 
   /// Computes the cost excluding tax.
@@ -30,9 +34,6 @@ class InvoiceLineItem extends Equatable {
 
   /// Computes the specific tax portion amount.
   double get taxAmount => subTotal * (taxPercentage / 100);
-
-  /// Hardcoded line item discount (currently default to 0.0).
-  final double discount = 0.0;
 
   /// Computes the gross line total including tax and subtracting discount.
   double get total => subTotal + taxAmount - discount;
@@ -43,17 +44,19 @@ class InvoiceLineItem extends Equatable {
     int? quantity,
     double? rate,
     double? taxPercentage,
+    double? discount,
   }) {
     return InvoiceLineItem(
       item: item ?? this.item,
       quantity: quantity ?? this.quantity,
       rate: rate ?? this.rate,
       taxPercentage: taxPercentage ?? this.taxPercentage,
+      discount: discount ?? this.discount,
     );
   }
 
   @override
-  List<Object?> get props => [item, quantity, rate, taxPercentage];
+  List<Object?> get props => [item, quantity, rate, taxPercentage, discount];
 }
 
 /// Represents a Sales Invoice created during route delivery.
@@ -107,8 +110,17 @@ class SalesInvoice extends Equatable {
   /// Computes total accumulated tax on this invoice.
   double get taxTotal => items.fold(0.0, (sum, item) => sum + item.taxAmount);
 
-  /// Computes the final grand total billed.
-  double get total => items.fold(0.0, (sum, item) => sum + item.total);
+  /// Computes total line-item discount on this invoice.
+  double get discountTotal => items.fold(0.0, (sum, item) => sum + item.discount);
+
+  /// Computes the unrounded grand total.
+  double get rawTotal => items.fold(0.0, (sum, item) => sum + item.total);
+
+  /// Computes the final grand total billed, rounded to the nearest integer.
+  double get total => rawTotal.roundToDouble();
+
+  /// Computes the round off adjustment.
+  double get roundOff => total - rawTotal;
 
   /// Creates a copy of this [SalesInvoice] with replaced values for specific fields.
   SalesInvoice copyWith({

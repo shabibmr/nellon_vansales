@@ -11,6 +11,7 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/utils/snackbars.dart';
 
 /// Modal dialog for logging a [SalesReturn] credit note.
 ///
@@ -125,12 +126,7 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
     }
 
     if (totalQty <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppTheme.errorRose,
-          content: Text('Please enter return quantity for at least one invoice.'),
-        ),
-      );
+      showErrorSnackBar(context, 'Please enter return quantity for at least one invoice.');
       return;
     }
 
@@ -164,12 +160,7 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
     sl<SyncWorker>().syncPendingItems();
 
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppTheme.successEmerald,
-        content: Text('Sales Return credit queued. ${_selectedItem!.name} stock restored!'),
-      ),
-    );
+    showSuccessSnackBar(context, 'Sales Return credit queued. ${_selectedItem!.name} stock restored!');
     widget.onReturnConfirmed();
   }
 

@@ -6,6 +6,8 @@ import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/sync_item_card.dart';
 import '../../route/bloc/route_bloc.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../bloc/sync_bloc.dart';
@@ -404,9 +406,6 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
     final error = _lastError[type];
     final isSynced = _syncedTypes.contains(type) && error == null;
 
-    final cardColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-
     Color accent;
     Widget trailing;
     if (isBusy) {
@@ -418,95 +417,23 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
       );
     } else if (isSynced) {
       accent = AppTheme.successEmerald;
-      trailing = _statusPill('Synced', AppTheme.successEmerald, Icons.check_circle_rounded);
+      trailing = const StatusPill(label: 'Synced', color: AppTheme.successEmerald, icon: Icons.check_circle_rounded);
     } else if (error != null) {
       accent = AppTheme.errorRose;
-      trailing = _statusPill('Retry', AppTheme.errorRose, Icons.refresh_rounded);
+      trailing = const StatusPill(label: 'Retry', color: AppTheme.errorRose, icon: Icons.refresh_rounded);
     } else {
       accent = AppTheme.primaryIndigo;
-      trailing = _statusPill('Sync', AppTheme.primaryIndigo, Icons.sync_rounded);
+      trailing = const StatusPill(label: 'Sync', color: AppTheme.primaryIndigo, icon: Icons.sync_rounded);
     }
 
-    return Material(
-      color: cardColor,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: isBusy ? null : () => _syncOne(type),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: error != null ? AppTheme.errorRose.withAlpha(120) : borderColor,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: accent.withAlpha(isDark ? 50 : 30),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(_iconForType(type), color: accent, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      type.label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      error ?? _descForType(type),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: error != null
-                            ? AppTheme.errorRose
-                            : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              trailing,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _statusPill(String label, Color color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
-          ),
-        ],
-      ),
+    return SyncItemCard(
+      icon: _iconForType(type),
+      title: type.label,
+      subtitle: error ?? _descForType(type),
+      accentColor: accent,
+      trailing: trailing,
+      onTap: isBusy ? null : () => _syncOne(type),
+      hasError: error != null,
     );
   }
 
@@ -665,12 +592,17 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
         ? syncItem.id.substring(syncItem.id.length - 8)
         : syncItem.id;
 
-    final cardColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-
     final Color statusColor = syncItem.status == SyncStatus.failed
         ? AppTheme.errorRose
         : (syncItem.status == SyncStatus.syncing ? AppTheme.infoSky : AppTheme.warningAmber);
+
+    final IconData statusIcon = syncItem.status == SyncStatus.failed
+        ? Icons.error_outline_rounded
+        : (syncItem.status == SyncStatus.syncing ? Icons.sync_rounded : Icons.schedule_rounded);
+
+    final String statusLabel = syncItem.status == SyncStatus.failed
+        ? 'Failed'
+        : (syncItem.status.name[0].toUpperCase() + syncItem.status.name.substring(1));
 
     final IconData typeIcon = syncItem.type == 'invoice'
         ? Icons.description_rounded
@@ -684,75 +616,42 @@ class _MastersSyncPageState extends State<MastersSyncPage> with SingleTickerProv
                         ? Icons.assignment_return_rounded
                         : Icons.person_add_rounded))));
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryIndigo.withAlpha(isDark ? 50 : 30),
-              borderRadius: BorderRadius.circular(12),
+    final subtitleWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            StatusPill(label: statusLabel, color: statusColor, icon: statusIcon),
+            const SizedBox(width: 8),
+            Text(
+              DateFormat('hh:mm a').format(syncItem.timestamp),
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
             ),
-            child: Icon(typeIcon, color: AppTheme.primaryIndigo, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${syncItem.type.toUpperCase().replaceAll('_', ' ')} #$shortId',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    _statusPill(
-                      syncItem.status == SyncStatus.failed
-                          ? 'Failed'
-                          : (syncItem.status.name[0].toUpperCase() + syncItem.status.name.substring(1)),
-                      statusColor,
-                      syncItem.status == SyncStatus.failed
-                          ? Icons.error_outline_rounded
-                          : (syncItem.status == SyncStatus.syncing
-                              ? Icons.sync_rounded
-                              : Icons.schedule_rounded),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat('hh:mm a').format(syncItem.timestamp),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                if (syncItem.status == SyncStatus.failed && syncItem.errorMessage != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    syncItem.errorMessage!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: AppTheme.errorRose),
-                  ),
-                ],
-              ],
-            ),
+          ],
+        ),
+        if (syncItem.status == SyncStatus.failed && syncItem.errorMessage != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            syncItem.errorMessage!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: AppTheme.errorRose),
           ),
         ],
-      ),
+      ],
+    );
+
+    return SyncItemCard(
+      icon: typeIcon,
+      title: '${syncItem.type.toUpperCase().replaceAll('_', ' ')} #$shortId',
+      subtitle: '',
+      subtitleWidget: subtitleWidget,
+      accentColor: AppTheme.primaryIndigo,
+      trailing: const SizedBox.shrink(),
+      hasError: syncItem.status == SyncStatus.failed,
     );
   }
 

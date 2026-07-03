@@ -5,6 +5,7 @@ import '../../../../data/services/injection.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/date_picker.dart';
 
 /// Aggregated row for a single item across all filtered invoices.
 class _ItemSalesRow {
@@ -108,35 +109,7 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
 
   Future<void> _pickDate(bool isStart) async {
     final current = isStart ? _startDate : _endDate;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      builder: (ctx, child) {
-        final dark = Theme.of(ctx).brightness == Brightness.dark;
-        return Theme(
-          data: dark
-              ? ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.darkSurface,
-                    onSurface: AppTheme.darkText,
-                  ),
-                )
-              : ThemeData.light().copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.lightSurface,
-                    onSurface: AppTheme.lightText,
-                  ),
-                ),
-          child: child!,
-        );
-      },
-    );
+    final picked = await showThemedDatePicker(context, initialDate: current);
     if (picked != null && mounted) {
       setState(() {
         if (isStart) {

@@ -6,6 +6,13 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/currency.dart';
+import '../../../../ui/core/utils/date_picker.dart';
+import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/widgets/customer_selector_sheet.dart';
+import '../../../../ui/core/widgets/editor_footer.dart';
+import '../../../../ui/core/widgets/empty_state.dart';
+import '../../../../ui/core/widgets/line_item_list.dart';
 import '../bloc/sales_invoice_bloc.dart';
 import '../widgets/item_line_editor_dialog.dart';
 import '../widgets/item_search_dialog.dart';
@@ -13,15 +20,6 @@ import '../../dashboard/widgets/create_customer_dialog.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../data/services/voucher_pdf_service.dart';
 
-/// Screen enabling Creation or Editing of a Sales Invoice.
-///
-/// Features:
-/// 1. Invoice Date Picker.
-/// 2. Customer Selector modal.
-/// 3. Dynamic multi-line items list.
-/// 4. Tap-to-adjust or swipe-to-delete line items.
-/// 5. Live pricing summary (Subtotal, VAT, Total).
-/// 6. Save trigger with automatic van stock reconciliation.
 class SalesInvoiceEditorPage extends StatefulWidget {
   const SalesInvoiceEditorPage({super.key});
 
@@ -48,175 +46,27 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
   }
 
   Future<void> _selectInvoiceDate(DateTime currentDate) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: currentDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Theme(
-          data: isDark
-              ? ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.darkSurface,
-                    onSurface: AppTheme.darkText,
-                  ),
-                )
-              : ThemeData.light().copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppTheme.primaryIndigo,
-                    onPrimary: Colors.white,
-                    surface: AppTheme.lightSurface,
-                    onSurface: AppTheme.lightText,
-                  ),
-                ),
-          child: child!,
-        );
-      },
-    );
-
+    final picked = await showThemedDatePicker(context, initialDate: currentDate);
     if (picked != null && mounted) {
       context.read<SalesInvoiceBloc>().add(UpdateInvoiceDate(picked));
     }
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final cs = context.org.currencySymbol;
     final allCustomers = _db.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        var filtered = allCustomers;
-        final searchController = TextEditingController();
-
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            void onSearch(String query) {
-              final q = query.toLowerCase();
-              setModalState(() {
-                filtered = q.isEmpty
-                    ? allCustomers
-                    : allCustomers.where((c) {
-                        return c.name.toLowerCase().contains(q) ||
-                            c.companyName.toLowerCase().contains(q) ||
-                            c.phone.contains(query);
-                      }).toList();
-              });
-            }
-
-            return DraggableScrollableSheet(
-              initialChildSize: 0.7,
-              minChildSize: 0.4,
-              maxChildSize: 0.9,
-              expand: false,
-              builder: (context, scrollController) {
-                return Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Select Customer',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: TextField(
-                        controller: searchController,
-                        autofocus: true,
-                        onChanged: onSearch,
-                        decoration: InputDecoration(
-                          hintText: 'Search by name, company or phone...',
-                          prefixIcon: const Icon(Icons.search, color: AppTheme.primaryIndigo),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryIndigo.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.person_add_rounded, color: AppTheme.primaryIndigo, size: 20),
-                      ),
-                      title: const Text(
-                        'Create New Customer',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryIndigo),
-                      ),
-                      subtitle: const Text('Add a new customer and use it for this invoice'),
-                      onTap: () async {
-                        Navigator.pop(context); // close the search sheet
-                        final created = await CreateCustomerDialog.show(this.context);
-                        if (created != null && mounted) {
-                          this.context.read<SalesInvoiceBloc>().add(UpdateInvoiceCustomer(created));
-                        }
-                      },
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No customers found',
-                                style: TextStyle(
-                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              controller: scrollController,
-                              itemCount: filtered.length,
-                              separatorBuilder: (context, index) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final customer = filtered[index];
-                                return ListTile(
-                                  title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text(customer.companyName),
-                                  trailing: customer.outstandingBalance > 0
-                                      ? Text(
-                                          'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
-                                          style: const TextStyle(color: AppTheme.errorRose, fontSize: 11, fontWeight: FontWeight.bold),
-                                        )
-                                      : null,
-                                  onTap: () {
-                                    this.context.read<SalesInvoiceBloc>().add(UpdateInvoiceCustomer(customer));
-                                    Navigator.pop(context);
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        );
+    CustomerSelectorSheet.show(
+      context,
+      customers: allCustomers,
+      onSelected: (customer) {
+        context.read<SalesInvoiceBloc>().add(UpdateInvoiceCustomer(customer));
+      },
+      showCreateOption: true,
+      createOptionSubtitle: 'Add a new customer and use it for this invoice',
+      onCreateTap: () async {
+        final created = await CreateCustomerDialog.show(context);
+        if (created != null && mounted) {
+          context.read<SalesInvoiceBloc>().add(UpdateInvoiceCustomer(created));
+        }
       },
     );
   }
@@ -224,12 +74,14 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
   Future<void> _openItemSearch(List<InvoiceLineItem> editingItems) async {
     final excludedIds = editingItems.map((line) => line.item.id).toList();
     final result = await ItemSearchDialog.show(context, excludedItemIds: excludedIds);
-
     if (result != null && mounted) {
+      final (item, qty, rate, discount) = result;
       context.read<SalesInvoiceBloc>().add(AddOrUpdateLineItem(
-            item: result.key,
-            quantity: result.value,
-          ));
+        item: item,
+        quantity: qty,
+        rate: rate,
+        discount: discount,
+      ));
     }
   }
 
@@ -239,7 +91,6 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
     String? editingInvoiceId,
     List<SalesInvoice> invoices,
   ) async {
-    // Determine if there was an original quantity in the original saved invoice
     int originalQty = 0;
     if (!isEditingNew && editingInvoiceId != null) {
       final originalInvoiceIndex = invoices.indexWhere((inv) => inv.id == editingInvoiceId);
@@ -252,20 +103,25 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
       }
     }
 
-    final newQty = await showDialog<int>(
+    final result = await showDialog<(int, double, double)>(
       context: context,
       builder: (context) => ItemLineEditorDialog(
         item: lineItem.item,
         initialQuantity: lineItem.quantity,
         originalQuantity: originalQty,
+        initialRate: lineItem.rate,
+        initialDiscount: lineItem.discount,
       ),
     );
 
-    if (newQty != null && mounted) {
+    if (result != null && mounted) {
+      final (newQty, newRate, newDiscount) = result;
       context.read<SalesInvoiceBloc>().add(AddOrUpdateLineItem(
-            item: lineItem.item,
-            quantity: newQty,
-          ));
+        item: lineItem.item,
+        quantity: newQty,
+        rate: newRate,
+        discount: newDiscount,
+      ));
     }
   }
 
@@ -277,51 +133,45 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
       appBar: AppBar(
         title: BlocBuilder<SalesInvoiceBloc, SalesInvoiceState>(
           buildWhen: (previous, current) => previous.isEditingNew != current.isEditingNew,
-          builder: (context, state) {
-            return Text(state.isEditingNew ? 'New Sales Invoice' : 'Edit Sales Invoice');
-          },
+          builder: (context, state) => Text(state.isEditingNew ? 'New Sales Invoice' : 'Edit Sales Invoice'),
         ),
       ),
       body: BlocConsumer<SalesInvoiceBloc, SalesInvoiceState>(
-        listenWhen: (previous, current) => previous.successMessage != current.successMessage || previous.errorMessage != current.errorMessage,
+        listenWhen: (previous, current) =>
+            previous.successMessage != current.successMessage || previous.errorMessage != current.errorMessage,
         listener: (context, state) {
           if (state.successMessage == 'Invoice saved successfully') {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: AppTheme.successEmerald,
-                content: Text(state.successMessage!),
-              ),
-            );
+            showSuccessSnackBar(context, state.successMessage!);
             context.read<SalesInvoiceBloc>().add(ClearMessages());
-            Navigator.pop(context); // Close the editor page on success
+            Navigator.pop(context);
           } else if (state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: AppTheme.errorRose,
-                content: Text(state.errorMessage!),
-              ),
-            );
+            showErrorSnackBar(context, state.errorMessage!);
             context.read<SalesInvoiceBloc>().add(ClearMessages());
           }
         },
         builder: (context, state) {
           final cs = context.org.currencySymbol;
-          // Summary Totals
-          double subtotal = 0.0;
-          double vat = 0.0;
-          for (final line in state.editingItems) {
-            subtotal += line.subTotal;
-            vat += line.taxAmount;
-          }
-          final total = subtotal + vat;
-
+          final tempInvoice = SalesInvoice(
+            id: '',
+            invoiceNumber: '',
+            customerId: state.editingCustomer?.id ?? '',
+            customerName: state.editingCustomer?.name ?? '',
+            date: state.editingDate ?? DateTime.now(),
+            dueDate: state.editingDate ?? DateTime.now(),
+            items: state.editingItems,
+            notes: '',
+          );
+          final subtotal = tempInvoice.subTotal;
+          final vat = tempInvoice.taxTotal;
+          final discountTotal = tempInvoice.discountTotal;
+          final roundOff = tempInvoice.roundOff;
+          final total = tempInvoice.total;
           final customer = state.editingCustomer;
           final date = state.editingDate ?? DateTime.now();
 
           return Column(
             children: [
-              if (state.isLoading)
-                const LinearProgressIndicator(color: AppTheme.primaryIndigo),
+              if (state.isLoading) const LinearProgressIndicator(color: AppTheme.primaryIndigo),
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -369,7 +219,7 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                                               color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                                             ),
                                           ),
-                                        ]
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -434,124 +284,43 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
-                              'Line Items',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
+                            const Text('Line Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                             TextButton.icon(
                               onPressed: customer == null ? null : () => _openItemSearch(state.editingItems),
                               icon: const Icon(Icons.add, size: 16),
                               label: const Text('Add Item'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppTheme.primaryIndigo,
-                              ),
+                              style: TextButton.styleFrom(foregroundColor: AppTheme.primaryIndigo),
                             ),
                           ],
                         ),
 
                         if (state.editingItems.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(vertical: 40.0),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.shopping_cart_outlined,
-                                    size: 40,
-                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    customer == null ? 'Select customer to add items' : 'No items added yet',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          EmptyStateCard(
+                            icon: Icons.shopping_cart_outlined,
+                            message: customer == null ? 'Select customer to add items' : 'No items added yet',
                           )
                         else
-                          ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: state.editingItems.length,
-                            separatorBuilder: (context, index) => const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final line = state.editingItems[index];
-
-                              return Card(
-                                child: InkWell(
-                                  onTap: () => _editLineItem(
-                                    line,
-                                    state.isEditingNew,
-                                    state.editingInvoiceId,
-                                    state.invoices,
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                line.item.name,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                'SKU: ${line.item.sku} | Rate: $cs${line.rate.toStringAsFixed(2)} | VAT: ${line.taxPercentage}%',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.end,
-                                          children: [
-                                            Text(
-                                              'Qty: ${line.quantity}',
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '$cs${line.total.toStringAsFixed(2)}',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                                color: AppTheme.primaryIndigo,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline, color: AppTheme.errorRose, size: 20),
-                                          onPressed: () {
-                                            context.read<SalesInvoiceBloc>().add(RemoveLineItem(line.item));
-                                          },
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
+                          LineItemList(
+                            items: state.editingItems
+                                .map((line) => LineItemRow(
+                                      name: line.item.name,
+                                      sku: line.item.sku,
+                                      rate: line.rate,
+                                      taxPercentage: line.taxPercentage,
+                                      quantity: line.quantity,
+                                      total: line.total,
+                                      discount: line.discount,
+                                    ))
+                                .toList(),
+                            currencySymbol: cs,
+                            onEdit: (index) => _editLineItem(
+                              state.editingItems[index],
+                              state.isEditingNew,
+                              state.editingInvoiceId,
+                              state.invoices,
+                            ),
+                            onRemove: (index) {
+                              context.read<SalesInvoiceBloc>().add(RemoveLineItem(state.editingItems[index].item));
                             },
                           ),
                         const SizedBox(height: 20),
@@ -573,128 +342,52 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                 ),
               ),
 
-              // Bottom Billing Calculation and Save Button Drawer
-              Container(
-                padding: const EdgeInsets.all(20.0),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Subtotal:',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                              ),
-                            ),
-                            Text('$cs${subtotal.toStringAsFixed(2)}'),
-                          ],
+              EditorFooter(
+                rows: [
+                  (label: 'Subtotal:', value: formatCurrency(subtotal, cs), emphasize: false),
+                  if (discountTotal > 0)
+                    (label: 'Discount Total:', value: formatCurrency(discountTotal, cs), emphasize: false),
+                  (label: 'VAT (Tax):', value: formatCurrency(vat, cs), emphasize: false),
+                  if (roundOff != 0)
+                    (label: 'Round Off:', value: formatCurrency(roundOff, cs), emphasize: false),
+                  (label: 'Total Amount:', value: formatCurrency(total, cs), emphasize: true),
+                ],
+                buttonLabel: 'SAVE SALES INVOICE',
+                buttonColor: AppTheme.primaryIndigo,
+                onSave: (customer == null || state.editingItems.isEmpty || state.isLoading)
+                    ? null
+                    : () {
+                        context.read<SalesInvoiceBloc>().add(SaveInvoice(notes: _notesController.text));
+                      },
+                trailing: !state.isEditingNew
+                    ? VoucherPdfActionsWidget(
+                        type: VoucherType.salesInvoice,
+                        voucher: SalesInvoice(
+                          id: state.editingInvoiceId ?? '',
+                          invoiceNumber: state.invoices
+                              .firstWhere(
+                                (inv) => inv.id == state.editingInvoiceId,
+                                orElse: () => SalesInvoice(
+                                  id: '',
+                                  invoiceNumber: 'INV-TEMP',
+                                  customerId: '',
+                                  customerName: '',
+                                  date: DateTime.now(),
+                                  dueDate: DateTime.now(),
+                                  items: const [],
+                                  notes: '',
+                                ),
+                              )
+                              .invoiceNumber,
+                          customerId: customer?.id ?? '',
+                          customerName: customer?.name ?? '',
+                          date: date,
+                          dueDate: state.editingDate?.add(const Duration(days: 30)) ?? DateTime.now(),
+                          items: state.editingItems,
+                          notes: _notesController.text,
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'VAT (Tax):',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                              ),
-                            ),
-                            Text('$cs${vat.toStringAsFixed(2)}'),
-                          ],
-                        ),
-                        const Divider(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Total Amount:',
-                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                            ),
-                            Text(
-                              '$cs${total.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                                color: AppTheme.primaryIndigo,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: (customer == null || state.editingItems.isEmpty || state.isLoading)
-                                ? null
-                                : () {
-                                    context.read<SalesInvoiceBloc>().add(SaveInvoice(
-                                          notes: _notesController.text,
-                                        ));
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primaryIndigo,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            child: const Text('SAVE SALES INVOICE'),
-                          ),
-                        ),
-                        if (!state.isEditingNew) ...[
-                          const SizedBox(height: 16),
-                          VoucherPdfActionsWidget(
-                            type: VoucherType.salesInvoice,
-                            voucher: SalesInvoice(
-                              id: state.editingInvoiceId ?? '',
-                              invoiceNumber: state.invoices
-                                  .firstWhere(
-                                    (inv) => inv.id == state.editingInvoiceId,
-                                    orElse: () => SalesInvoice(
-                                      id: '',
-                                      invoiceNumber: 'INV-TEMP',
-                                      customerId: '',
-                                      customerName: '',
-                                      date: DateTime.now(),
-                                      dueDate: DateTime.now(),
-                                      items: const [],
-                                      notes: '',
-                                    ),
-                                  )
-                                  .invoiceNumber,
-                              customerId: customer?.id ?? '',
-                              customerName: customer?.name ?? '',
-                              date: date,
-                              dueDate: state.editingDate?.add(const Duration(days: 30)) ?? DateTime.now(),
-                              items: state.editingItems,
-                              notes: _notesController.text,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
+                      )
+                    : null,
               ),
             ],
           );

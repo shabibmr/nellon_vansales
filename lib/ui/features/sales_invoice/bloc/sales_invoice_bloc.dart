@@ -2,6 +2,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../domain/models/sales_invoice.dart';
+import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/repositories/sales_repository.dart';
@@ -43,6 +44,15 @@ class StartEditInvoice extends SalesInvoiceEvent {
   List<Object?> get props => [invoice];
 }
 
+/// Fired to open a new invoice pre-filled from a sales order being converted.
+class StartInvoiceFromOrder extends SalesInvoiceEvent {
+  final SalesOrder order;
+  const StartInvoiceFromOrder(this.order);
+
+  @override
+  List<Object?> get props => [order];
+}
+
 /// Fired to update the active invoice date under editor.
 class UpdateInvoiceDate extends SalesInvoiceEvent {
   final DateTime date;
@@ -65,10 +75,17 @@ class UpdateInvoiceCustomer extends SalesInvoiceEvent {
 class AddOrUpdateLineItem extends SalesInvoiceEvent {
   final Item item;
   final int quantity;
-  const AddOrUpdateLineItem({required this.item, required this.quantity});
+  final double? rate;
+  final double? discount;
+  const AddOrUpdateLineItem({
+    required this.item,
+    required this.quantity,
+    this.rate,
+    this.discount,
+  });
 
   @override
-  List<Object?> get props => [item, quantity];
+  List<Object?> get props => [item, quantity, rate, discount];
 }
 
 /// Fired to drop a specific line item.
@@ -155,6 +172,11 @@ class SalesInvoiceState extends Equatable {
   final String editingNotes;
   final bool isEditingNew;
 
+  /// When the invoice is being created by converting a sales order, this holds
+  /// the source order so [SaveInvoice] can mark it invoiced and convert in Zoho.
+  final String? sourceOrderId;
+  final SalesOrder? sourceOrder;
+
   const SalesInvoiceState({
     this.invoices = const [],
     this.startDate,
@@ -168,6 +190,8 @@ class SalesInvoiceState extends Equatable {
     this.editingItems = const [],
     this.editingNotes = '',
     this.isEditingNew = false,
+    this.sourceOrderId,
+    this.sourceOrder,
   });
 
   /// Computes the legacy cart representation on the fly from editingItems.
@@ -204,6 +228,9 @@ class SalesInvoiceState extends Equatable {
     List<InvoiceLineItem>? editingItems,
     String? editingNotes,
     bool? isEditingNew,
+    String? sourceOrderId,
+    SalesOrder? sourceOrder,
+    bool clearSource = false,
   }) {
     return SalesInvoiceState(
       invoices: invoices ?? this.invoices,
@@ -218,6 +245,8 @@ class SalesInvoiceState extends Equatable {
       editingItems: editingItems ?? this.editingItems,
       editingNotes: editingNotes ?? this.editingNotes,
       isEditingNew: isEditingNew ?? this.isEditingNew,
+      sourceOrderId: clearSource ? null : (sourceOrderId ?? this.sourceOrderId),
+      sourceOrder: clearSource ? null : (sourceOrder ?? this.sourceOrder),
     );
   }
 
@@ -235,6 +264,8 @@ class SalesInvoiceState extends Equatable {
         editingItems,
         editingNotes,
         isEditingNew,
+        sourceOrderId,
+        sourceOrder,
       ];
 }
 
@@ -256,6 +287,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     on<SetDateFilter>(_onSetDateFilter);
     on<StartNewInvoice>(_onStartNewInvoice);
     on<StartEditInvoice>(_onStartEditInvoice);
+    on<StartInvoiceFromOrder>(_onStartInvoiceFromOrder);
     on<UpdateInvoiceDate>(_onUpdateInvoiceDate);
     on<UpdateInvoiceCustomer>(_onUpdateInvoiceCustomer);
     on<AddOrUpdateLineItem>(_onAddOrUpdateLineItem);
@@ -304,6 +336,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       isEditingNew: true,
       errorMessage: null,
       successMessage: null,
+      clearSource: true,
     ));
   }
 
@@ -332,6 +365,55 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       editingItems: List.from(event.invoice.items),
       editingNotes: event.invoice.notes,
       isEditingNew: false,
+      errorMessage: null,
+      successMessage: null,
+      clearSource: true,
+    ));
+  }
+
+  /// Pre-fills the editor from a sales order being converted to an invoice.
+  ///
+  /// Line items map 1:1 (identical fields) and are copied directly — this
+  /// deliberately bypasses the per-line van-stock cap, since converted invoices
+  /// provision stock to the van from the warehouse.
+  void _onStartInvoiceFromOrder(StartInvoiceFromOrder event, Emitter<SalesInvoiceState> emit) {
+    final order = event.order;
+    final customers = _salesRepository.getCustomers();
+    final customer = customers.firstWhere(
+      (c) => c.id == order.customerId,
+      orElse: () => Customer(
+        id: order.customerId,
+        name: order.customerName,
+        companyName: '',
+        email: '',
+        phone: '',
+        address: '',
+        outstandingBalance: 0,
+        creditLimit: 999999,
+        routeId: '',
+        sequence: 0,
+      ),
+    );
+
+    final items = order.items
+        .map((line) => InvoiceLineItem(
+              item: line.item,
+              quantity: line.quantity,
+              rate: line.rate,
+              taxPercentage: line.taxPercentage,
+              discount: line.discount,
+            ))
+        .toList();
+
+    emit(state.copyWith(
+      editingInvoiceId: 'temp_inv_${DateTime.now().millisecondsSinceEpoch}',
+      editingDate: DateTime.now(),
+      editingCustomer: customer,
+      editingItems: items,
+      editingNotes: order.notes,
+      isEditingNew: true,
+      sourceOrderId: order.id,
+      sourceOrder: order,
       errorMessage: null,
       successMessage: null,
     ));
@@ -382,15 +464,20 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       if (event.quantity <= 0) {
         items.removeAt(idx);
       } else {
-        items[idx] = items[idx].copyWith(quantity: event.quantity);
+        items[idx] = items[idx].copyWith(
+          quantity: event.quantity,
+          rate: event.rate,
+          discount: event.discount,
+        );
       }
     } else {
       if (event.quantity > 0) {
         items.add(InvoiceLineItem(
           item: event.item,
           quantity: event.quantity,
-          rate: event.item.rate,
+          rate: event.rate ?? event.item.rate,
           taxPercentage: event.item.taxPercentage,
+          discount: event.discount ?? 0.0,
         ));
       }
     }
@@ -440,14 +527,43 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
 
       await _salesRepository.saveLocalInvoice(invoice);
 
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'invoice',
-        payload: SalesInvoiceModel.fromDomain(invoice).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await _salesRepository.enqueueSyncItem(syncItem);
+      final sourceOrderId = state.sourceOrderId;
+      if (sourceOrderId != null) {
+        // Conversion path: mark the source order invoiced and enqueue a Zoho
+        // convert (not a plain invoice POST) so Zoho creates the invoice from
+        // the order and flips its status to "invoiced".
+        final orders = _salesRepository.getLocalOrders();
+        final order = orders.firstWhere(
+          (o) => o.id == sourceOrderId,
+          orElse: () => state.sourceOrder!,
+        );
+        await _salesRepository.saveLocalOrder(order.copyWith(
+          status: SalesOrderStatus.invoiced,
+          convertedInvoiceNumber: invoiceNum,
+        ));
+
+        final convertItem = SyncQueueItem(
+          id: tempId,
+          type: 'convert_so',
+          payload: {
+            'salesorder_id': order.zohoOrderId ?? order.id,
+            'source_order_id': order.id,
+            'local_invoice_id': invoice.id,
+          },
+          status: SyncStatus.pending,
+          timestamp: DateTime.now(),
+        );
+        await _salesRepository.enqueueSyncItem(convertItem);
+      } else {
+        final syncItem = SyncQueueItem(
+          id: tempId,
+          type: 'invoice',
+          payload: SalesInvoiceModel.fromDomain(invoice).toJson(),
+          status: SyncStatus.pending,
+          timestamp: DateTime.now(),
+        );
+        await _salesRepository.enqueueSyncItem(syncItem);
+      }
 
       _syncRepository.triggerSync();
 
@@ -457,6 +573,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
         invoices: updatedInvoices,
         isLoading: false,
         successMessage: 'Invoice saved successfully',
+        clearSource: true,
       ));
     } catch (e) {
       emit(state.copyWith(

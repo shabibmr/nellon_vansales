@@ -28,6 +28,7 @@ import '../../sales_order/views/sales_order_editor_page.dart';
 import '../../sales_return/bloc/sales_return_bloc.dart';
 import '../../sales_return/views/sales_return_list_page.dart';
 import '../../reports/views/item_sales_report_page.dart';
+import '../../reports/views/aging_receivables_report_page.dart';
 import '../../ledger/bloc/customer_ledger_bloc.dart';
 import '../../ledger/views/customer_ledger_page.dart';
 import '../../sync/views/masters_sync_page.dart';
@@ -208,6 +209,13 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _showAgingReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AgingReceivablesReportPage()),
+    );
+  }
+
   void _showSalesReturnListPage() {
     context.read<SalesReturnBloc>().add(LoadReturns());
     Navigator.push(
@@ -290,6 +298,7 @@ class _DashboardPageState extends State<DashboardPage> {
         completedDeliveries: _completedDeliveries,
         onItemSalesReport: _showItemSalesReport,
         onCustomerLedger: _showCustomerLedgerPage,
+        onAgingReport: _showAgingReport,
       ),
       OperationsTab(
         isDark: isDark || isGlass,

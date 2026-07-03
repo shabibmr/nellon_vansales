@@ -10,16 +10,22 @@ import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../models/sync_queue_item.dart';
+import '../models/sales_order_model.dart';
 import '../services/hive_database_service.dart';
+import '../services/zoho_api_client.dart';
 
 /// Concrete implementation of [SalesRepository] backed by a local Hive database cache.
 ///
 /// Implements swift read/write interfaces utilizing [HiveDatabaseService] for fast offline performance.
 class SalesRepositoryImpl implements SalesRepository {
   final HiveDatabaseService _dbService;
+  final ZohoApiClient _apiClient;
 
   /// Creates a new [SalesRepositoryImpl] wrapping the Hive local database provider.
-  SalesRepositoryImpl({required this._dbService});
+  SalesRepositoryImpl({
+    required this._dbService,
+    required this._apiClient,
+  });
 
   @override
   List<RouteModel> getRoutes() => _dbService.getRoutes();
@@ -53,6 +59,21 @@ class SalesRepositoryImpl implements SalesRepository {
 
   @override
   Future<void> saveLocalOrder(SalesOrder order) => _dbService.saveLocalOrder(order);
+
+  @override
+  Future<List<SalesOrder>> fetchRemoteOrders() async {
+    final raw = await _apiClient.fetchSalesOrders();
+    final orders = raw.map((json) => SalesOrderModel.fromJson(json)).toList();
+    await _dbService.saveRemoteOrders(orders);
+    return _dbService.getLocalOrders();
+  }
+
+  @override
+  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async {
+    final json = await _apiClient.fetchSalesOrder(zohoOrderId);
+    if (json.isEmpty) return null;
+    return SalesOrderModel.fromJson(json);
+  }
 
   @override
   List<ReceiptVoucher> getLocalReceipts() => _dbService.getLocalReceipts();

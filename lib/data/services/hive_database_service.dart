@@ -330,6 +330,27 @@ class HiveDatabaseService {
     await _localHistoryBox.put('sales_orders', serialized);
   }
 
+  /// Merges a freshly downloaded set of remote sales orders into the local cache.
+  ///
+  /// Offline-first rule: orders still awaiting their first sync (`isPendingSync`) are
+  /// preserved untouched; everything else is replaced by the authoritative remote set.
+  /// Remote orders are matched against local ones by `zohoOrderId` to avoid duplicates.
+  Future<void> saveRemoteOrders(List<SalesOrder> remote) async {
+    final pendingLocal = getLocalOrders().where((o) => o.isPendingSync).toList();
+
+    // Drop any pending-local order that the remote set already accounts for.
+    final remoteIds = remote.map((o) => o.id).toSet();
+    final keptLocal = pendingLocal
+        .where((o) => o.zohoOrderId == null || !remoteIds.contains(o.zohoOrderId))
+        .toList();
+
+    final merged = [...keptLocal, ...remote];
+    final serialized = merged
+        .map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson()))
+        .toList();
+    await _localHistoryBox.put('sales_orders', serialized);
+  }
+
   /// Retrieves all collection receipts recorded locally.
   List<ReceiptVoucher> getLocalReceipts() {
     final rawList = _localHistoryBox.get('receipts', defaultValue: []);
