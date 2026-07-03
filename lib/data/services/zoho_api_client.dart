@@ -311,16 +311,16 @@ class ZohoApiClient {
     return allCustomers;
   }
 
-  // 3. Fetch Items in Van Warehouse (Zoho Books Warehouse Inventory API)
+  // 3. Fetch Items in Van Warehouse (Zoho Books Locations API)
   Future<List<Map<String, dynamic>>> fetchItems(String warehouseId) async {
     if (!_isMockMode()) {
       try {
         final queryParams = <String, dynamic>{};
-        // Only query by warehouse_id if it is a real numeric Zoho warehouse ID (not empty or mock prefix)
+        // Only query by location_id if it is a real numeric Zoho location ID (not empty or mock prefix)
         if (warehouseId.isNotEmpty &&
             !warehouseId.startsWith('van_wh_') &&
             RegExp(r'^\d+$').hasMatch(warehouseId)) {
-          queryParams['warehouse_id'] = warehouseId;
+          queryParams['location_id'] = warehouseId;
         }
 
         return await _fetchAllPages('/items', queryParams);
@@ -388,6 +388,21 @@ class ZohoApiClient {
     ];
   }
 
+  Map<String, dynamic> _injectLocationIdIfNeeded(Map<String, dynamic> json) {
+    final activeLocationId = _dbService.assignedWarehouseId;
+    if (activeLocationId != null &&
+        activeLocationId.isNotEmpty &&
+        !activeLocationId.startsWith('van_wh_') &&
+        RegExp(r'^\d+$').hasMatch(activeLocationId)) {
+      final updatedJson = Map<String, dynamic>.from(json);
+      if (updatedJson['location_id'] == null) {
+        updatedJson['location_id'] = activeLocationId;
+      }
+      return updatedJson;
+    }
+    return json;
+  }
+
   // 4. Zoho Books Contacts API: Sync New Customer
   Future<String> syncCustomer(Map<String, dynamic> customerJson) async {
     if (!_isMockMode() && !_mockTransactions) {
@@ -408,6 +423,7 @@ class ZohoApiClient {
 
   // 5. Zoho Books Invoices API: Sync Sales Invoice
   Future<String> syncInvoice(Map<String, dynamic> invoiceJson) async {
+    invoiceJson = _injectLocationIdIfNeeded(invoiceJson);
     if (!_isMockMode() && !_mockTransactions) {
       try {
         final response = await _dio.post('/invoices', data: invoiceJson);
@@ -426,6 +442,7 @@ class ZohoApiClient {
 
   // 5b. Zoho Books Sales Orders API: Sync Sales Order
   Future<String> syncSalesOrder(Map<String, dynamic> salesOrderJson) async {
+    salesOrderJson = _injectLocationIdIfNeeded(salesOrderJson);
     if (!_isMockMode() && !_mockSalesOrderTransactions) {
       try {
         final response = await _dio.post('/salesorders', data: salesOrderJson);
@@ -451,6 +468,9 @@ class ZohoApiClient {
     String salesOrderId, [
     Map<String, dynamic>? body,
   ]) async {
+    if (body != null) {
+      body = _injectLocationIdIfNeeded(body);
+    }
     if (!_isMockMode() && !_mockSalesOrderTransactions) {
       try {
         final response = await _dio.post(
@@ -601,6 +621,7 @@ class ZohoApiClient {
     String salesOrderId,
     Map<String, dynamic> payload,
   ) async {
+    payload = _injectLocationIdIfNeeded(payload);
     if (!_isMockMode() && !_mockSalesOrderTransactions) {
       try {
         final response = await _dio.put(
@@ -622,6 +643,7 @@ class ZohoApiClient {
 
   // 6. Zoho Books Customer Payments API: Sync Receipt Voucher
   Future<String> syncReceiptVoucher(Map<String, dynamic> paymentJson) async {
+    paymentJson = _injectLocationIdIfNeeded(paymentJson);
     if (!_isMockMode() && !_mockTransactions) {
       try {
         final response = await _dio.post(
@@ -643,6 +665,7 @@ class ZohoApiClient {
 
   // 7. Zoho Books Credit Notes API: Sync Sales Return
   Future<String> syncSalesReturn(Map<String, dynamic> creditNoteJson) async {
+    creditNoteJson = _injectLocationIdIfNeeded(creditNoteJson);
     if (!_isMockMode() && !_mockTransactions) {
       try {
         final response = await _dio.post('/creditnotes', data: creditNoteJson);
@@ -661,6 +684,7 @@ class ZohoApiClient {
 
   // 8. Zoho Books Expenses API: Sync Expense Entry
   Future<String> syncExpense(Map<String, dynamic> expenseJson) async {
+    expenseJson = _injectLocationIdIfNeeded(expenseJson);
     if (!_isMockMode() && !_mockTransactions) {
       try {
         // Multi-part formatting in case a receipt image exists
@@ -695,32 +719,32 @@ class ZohoApiClient {
 
   // --- Master Data Fetchers ---
 
-  // 9. Warehouses (GET /settings/warehouses)
+  // 9. Warehouses/Locations (GET /locations)
   Future<List<Map<String, dynamic>>> fetchWarehouses() async {
     if (!_isMockMode()) {
       try {
-        final response = await _dio.get('/settings/warehouses');
+        final response = await _dio.get('/locations');
         if (response.statusCode == 200) {
-          final list = (response.data['warehouses'] as List? ?? []);
+          final list = (response.data['locations'] as List? ?? []);
           return list.map((w) => Map<String, dynamic>.from(w)).toList();
         }
         throw Exception(
-          'Failed to fetch warehouses: Server returned status code ${response.statusCode}',
+          'Failed to fetch locations: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
         // ignore: avoid_print
-        print('Zoho fetchWarehouses error: $e');
-        throw Exception('Failed to fetch warehouses from Zoho: $e');
+        print('Zoho fetchWarehouses (locations) error: $e');
+        throw Exception('Failed to fetch locations from Zoho: $e');
       }
     }
 
     await Future.delayed(const Duration(milliseconds: 300));
     return [
       {
-        'warehouse_id': 'van_wh_01',
-        'warehouse_name': 'Van Warehouse 01',
+        'location_id': 'van_wh_01',
+        'location_name': 'Van Warehouse 01',
         'address': 'Mobile / On-route',
-        'is_primary': true,
+        'is_primary_location': true,
       },
     ];
   }
