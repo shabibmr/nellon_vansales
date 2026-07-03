@@ -30,7 +30,7 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
             onPressed: () {
               context.read<RouteBloc>().add(LoadRoutes());
             },
-          )
+          ),
         ],
       ),
       body: SafeArea(
@@ -53,7 +53,9 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                 'Please select your assigned van route for today. This locks in the sequential customer database and active warehouse stock rules.',
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
                   height: 1.4,
                 ),
               ),
@@ -65,7 +67,9 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                   builder: (context, state) {
                     if (state.isLoading) {
                       return const Center(
-                        child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
+                        child: CircularProgressIndicator(
+                          color: AppTheme.primaryIndigo,
+                        ),
                       );
                     }
 
@@ -74,16 +78,24 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.map_outlined, size: 64, color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                            Icon(
+                              Icons.map_outlined,
+                              size: 64,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
+                            ),
                             const SizedBox(height: 16),
-                            const Text('No routes found in local database cache.'),
+                            const Text(
+                              'No routes found in local database cache.',
+                            ),
                             const SizedBox(height: 8),
                             ElevatedButton(
                               onPressed: () {
                                 context.read<RouteBloc>().add(LoadRoutes());
                               },
                               child: const Text('RETRY LOADING'),
-                            )
+                            ),
                           ],
                         ),
                       );
@@ -91,7 +103,8 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
 
                     return ListView.separated(
                       itemCount: state.routes.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 16),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 16),
                       itemBuilder: (context, index) {
                         final route = state.routes[index];
                         final isSelected = _selectedRouteId == route.id;
@@ -107,22 +120,29 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? AppTheme.primaryIndigo.withValues(alpha: 0.08)
-                                  : (isDark ? AppTheme.darkSurface : AppTheme.lightSurface),
+                                  ? AppTheme.primaryIndigo.withValues(
+                                      alpha: 0.08,
+                                    )
+                                  : (isDark
+                                        ? AppTheme.darkSurface
+                                        : AppTheme.lightSurface),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
                                 color: isSelected
                                     ? AppTheme.primaryIndigo
-                                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                                    : (isDark
+                                          ? const Color(0xFF334155)
+                                          : const Color(0xFFE2E8F0)),
                                 width: isSelected ? 2 : 1,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: AppTheme.primaryIndigo.withValues(alpha: 0.15),
+                                        color: AppTheme.primaryIndigo
+                                            .withValues(alpha: 0.15),
                                         blurRadius: 10,
                                         offset: const Offset(0, 4),
-                                      )
+                                      ),
                                     ]
                                   : null,
                             ),
@@ -133,13 +153,19 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
                                     color: isSelected
-                                        ? AppTheme.primaryIndigo.withValues(alpha: 0.15)
-                                        : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                                        ? AppTheme.primaryIndigo.withValues(
+                                            alpha: 0.15,
+                                          )
+                                        : (isDark
+                                              ? const Color(0xFF334155)
+                                              : const Color(0xFFF1F5F9)),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
                                     Icons.alt_route,
-                                    color: isSelected ? AppTheme.primaryIndigo : AppTheme.infoSky,
+                                    color: isSelected
+                                        ? AppTheme.primaryIndigo
+                                        : AppTheme.infoSky,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -147,14 +173,17 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                                 // Route Details
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         route.name,
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
-                                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                          color: isDark
+                                              ? AppTheme.darkText
+                                              : AppTheme.lightText,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -162,7 +191,9 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                                         route.description,
                                         style: TextStyle(
                                           fontSize: 13,
-                                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                          color: isDark
+                                              ? AppTheme.darkTextSecondary
+                                              : AppTheme.lightTextSecondary,
                                           height: 1.3,
                                         ),
                                       ),
@@ -192,7 +223,9 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                 onPressed: _selectedRouteId == null
                     ? null
                     : () {
-                        context.read<RouteBloc>().add(SelectActiveRoute(_selectedRouteId));
+                        context.read<RouteBloc>().add(
+                          SelectActiveRoute(_selectedRouteId),
+                        );
                       },
                 child: const Text('CONFIRM ACTIVE ROUTE'),
               ),

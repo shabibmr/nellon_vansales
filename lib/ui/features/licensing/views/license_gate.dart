@@ -17,11 +17,7 @@ class LicenseGate extends StatefulWidget {
   final User user;
   final Widget child;
 
-  const LicenseGate({
-    super.key,
-    required this.user,
-    required this.child,
-  });
+  const LicenseGate({super.key, required this.user, required this.child});
 
   @override
   State<LicenseGate> createState() => _LicenseGateState();

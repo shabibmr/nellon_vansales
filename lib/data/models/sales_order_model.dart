@@ -76,9 +76,14 @@ class SalesOrderModel extends SalesOrder {
       orderNumber: json['salesorder_number'] ?? json['orderNumber'] ?? '',
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       customerName: json['customer_name'] ?? json['customerName'] ?? '',
-      date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
-      shipmentDate: json['shipment_date'] != null ? DateTime.parse(json['shipment_date']) : DateTime.now(),
-      items: (json['line_items'] as List?)
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
+      shipmentDate: json['shipment_date'] != null
+          ? DateTime.parse(json['shipment_date'])
+          : DateTime.now(),
+      items:
+          (json['line_items'] as List?)
               ?.map((item) => OrderLineItemModel.fromJson(item))
               .toList() ??
           [],
@@ -92,7 +97,9 @@ class SalesOrderModel extends SalesOrder {
 
   /// Parses a stored status string into a [SalesOrderStatus], defaulting to open.
   static SalesOrderStatus _statusFromString(dynamic value) {
-    return value == 'invoiced' ? SalesOrderStatus.invoiced : SalesOrderStatus.open;
+    return value == 'invoiced'
+        ? SalesOrderStatus.invoiced
+        : SalesOrderStatus.open;
   }
 
   /// Converts this [SalesOrderModel] instance into a serializable JSON map.

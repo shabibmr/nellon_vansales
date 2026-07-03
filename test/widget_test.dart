@@ -59,8 +59,16 @@ void main() {
         referenceNumber: 'REF-101',
         date: DateTime.now(),
         allocations: const [
-          PaymentAllocation(invoiceId: 'inv_01', invoiceNumber: 'INV-01', amountApplied: 150.0),
-          PaymentAllocation(invoiceId: 'inv_02', invoiceNumber: 'INV-02', amountApplied: 80.0),
+          PaymentAllocation(
+            invoiceId: 'inv_01',
+            invoiceNumber: 'INV-01',
+            amountApplied: 150.0,
+          ),
+          PaymentAllocation(
+            invoiceId: 'inv_02',
+            invoiceNumber: 'INV-02',
+            amountApplied: 80.0,
+          ),
         ],
       );
 
@@ -73,8 +81,16 @@ void main() {
         id: 'exp_01',
         date: DateTime.now(),
         lines: const [
-          ExpenseLineItem(category: 'Fuel', amount: 50.0, description: 'Van refuel'),
-          ExpenseLineItem(category: 'Tolls', amount: 15.0, description: 'Highway toll'),
+          ExpenseLineItem(
+            category: 'Fuel',
+            amount: 50.0,
+            description: 'Van refuel',
+          ),
+          ExpenseLineItem(
+            category: 'Tolls',
+            amount: 15.0,
+            description: 'Highway toll',
+          ),
         ],
       );
 

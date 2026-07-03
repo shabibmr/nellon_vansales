@@ -28,10 +28,7 @@ class PrintVoucherPdfRequested extends VoucherPdfEvent {
   final VoucherType type;
   final dynamic voucher;
 
-  const PrintVoucherPdfRequested({
-    required this.type,
-    required this.voucher,
-  });
+  const PrintVoucherPdfRequested({required this.type, required this.voucher});
 
   @override
   List<Object?> get props => [type, voucher];
@@ -42,10 +39,7 @@ class ShareVoucherPdfRequested extends VoucherPdfEvent {
   final VoucherType type;
   final dynamic voucher;
 
-  const ShareVoucherPdfRequested({
-    required this.type,
-    required this.voucher,
-  });
+  const ShareVoucherPdfRequested({required this.type, required this.voucher});
 
   @override
   List<Object?> get props => [type, voucher];
@@ -56,10 +50,7 @@ class EmailVoucherPdfRequested extends VoucherPdfEvent {
   final VoucherType type;
   final dynamic voucher;
 
-  const EmailVoucherPdfRequested({
-    required this.type,
-    required this.voucher,
-  });
+  const EmailVoucherPdfRequested({required this.type, required this.voucher});
 
   @override
   List<Object?> get props => [type, voucher];

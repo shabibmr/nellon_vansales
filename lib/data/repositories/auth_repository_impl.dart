@@ -27,4 +27,3 @@ class AuthRepositoryImpl implements AuthRepository {
     return _authService.signOut();
   }
 }
-

@@ -22,7 +22,7 @@ class CustomerModel extends Customer {
 
   /// Factory constructor to parse local/remote JSON payload into a [CustomerModel].
   ///
-  /// Maps server keys (`contact_id`, `contact_name`, `outstanding_receivable_amount`) 
+  /// Maps server keys (`contact_id`, `contact_name`, `outstanding_receivable_amount`)
   /// and local database representations fallback keys.
   factory CustomerModel.fromJson(Map<String, dynamic> json) {
     return CustomerModel(
@@ -32,8 +32,14 @@ class CustomerModel extends Customer {
       email: json['email'] ?? '',
       phone: json['phone'] ?? '',
       address: json['address'] ?? json['billing_address']?['address'] ?? '',
-      outstandingBalance: (json['outstanding_receivable_amount'] ?? json['outstanding_balance'] ?? json['outstandingBalance'] ?? 0.0).toDouble(),
-      creditLimit: (json['credit_limit'] ?? json['creditLimit'] ?? 0.0).toDouble(),
+      outstandingBalance:
+          (json['outstanding_receivable_amount'] ??
+                  json['outstanding_balance'] ??
+                  json['outstandingBalance'] ??
+                  0.0)
+              .toDouble(),
+      creditLimit: (json['credit_limit'] ?? json['creditLimit'] ?? 0.0)
+          .toDouble(),
       routeId: json['route_id'] ?? json['routeId'] ?? '',
       sequence: json['sequence'] ?? 0,
       isPendingSync: json['isPendingSync'] ?? false,
@@ -76,4 +82,3 @@ class CustomerModel extends Customer {
     );
   }
 }
-

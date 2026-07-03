@@ -5,7 +5,7 @@ import '../bloc/auth_bloc.dart';
 
 /// The Login Screen of the Van Sales application.
 ///
-/// Implements beautiful glassmorphism gradients, input forms with field validation, 
+/// Implements beautiful glassmorphism gradients, input forms with field validation,
 /// and maps submittals directly to the [AuthBloc] trigger.
 class LoginPage extends StatefulWidget {
   /// Creates a new [LoginPage].
@@ -31,11 +31,11 @@ class _LoginPageState extends State<LoginPage> {
   void _onSubmit() {
     if (_formKey.currentState!.validate()) {
       context.read<AuthBloc>().add(
-            LoginRequested(
-              email: _emailController.text.trim(),
-              password: _passwordController.text.trim(),
-            ),
-          );
+        LoginRequested(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        ),
+      );
     }
   }
 
@@ -53,12 +53,20 @@ class _LoginPageState extends State<LoginPage> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: isDark
-                    ? [const Color(0xFF0F172A), const Color(0xFF1E1E38), const Color(0xFF110E24)]
-                    : [const Color(0xFFEEF2F6), const Color(0xFFE0E7FF), const Color(0xFFEEF2F6)],
+                    ? [
+                        const Color(0xFF0F172A),
+                        const Color(0xFF1E1E38),
+                        const Color(0xFF110E24),
+                      ]
+                    : [
+                        const Color(0xFFEEF2F6),
+                        const Color(0xFFE0E7FF),
+                        const Color(0xFFEEF2F6),
+                      ],
               ),
             ),
           ),
-          
+
           // Subtle glow decorations (glassmorphic aesthetic)
           Positioned(
             top: -100,
@@ -129,7 +137,9 @@ class _LoginPageState extends State<LoginPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        color: isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.lightTextSecondary,
                       ),
                     ),
                     const SizedBox(height: 40),
@@ -149,7 +159,9 @@ class _LoginPageState extends State<LoginPage> {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                  color: isDark
+                                      ? AppTheme.darkText
+                                      : AppTheme.lightText,
                                 ),
                               ),
                               const SizedBox(height: 24),
@@ -161,7 +173,10 @@ class _LoginPageState extends State<LoginPage> {
                                 decoration: const InputDecoration(
                                   labelText: 'Email Address',
                                   hintText: 'name@company.com',
-                                  prefixIcon: Icon(Icons.email_outlined, color: AppTheme.primaryIndigo),
+                                  prefixIcon: Icon(
+                                    Icons.email_outlined,
+                                    color: AppTheme.primaryIndigo,
+                                  ),
                                 ),
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
@@ -182,7 +197,10 @@ class _LoginPageState extends State<LoginPage> {
                                 decoration: const InputDecoration(
                                   labelText: 'Password',
                                   hintText: '••••••••',
-                                  prefixIcon: Icon(Icons.lock_outlined, color: AppTheme.primaryIndigo),
+                                  prefixIcon: Icon(
+                                    Icons.lock_outlined,
+                                    color: AppTheme.primaryIndigo,
+                                  ),
                                 ),
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
@@ -198,17 +216,31 @@ class _LoginPageState extends State<LoginPage> {
                                 builder: (context, state) {
                                   if (state is AuthFailure) {
                                     return Padding(
-                                      padding: const EdgeInsets.only(bottom: 16),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 16,
+                                      ),
                                       child: Container(
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color: AppTheme.errorRose.withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: AppTheme.errorRose.withValues(alpha: 0.3), width: 1),
+                                          color: AppTheme.errorRose.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: AppTheme.errorRose
+                                                .withValues(alpha: 0.3),
+                                            width: 1,
+                                          ),
                                         ),
                                         child: Row(
                                           children: [
-                                            const Icon(Icons.error_outline, color: AppTheme.errorRose, size: 20),
+                                            const Icon(
+                                              Icons.error_outline,
+                                              color: AppTheme.errorRose,
+                                              size: 20,
+                                            ),
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: Text(

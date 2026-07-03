@@ -20,10 +20,7 @@ class VoucherPdfReady extends VoucherPdfState {
   final Uint8List pdfBytes;
   final String filename;
 
-  const VoucherPdfReady({
-    required this.pdfBytes,
-    required this.filename,
-  });
+  const VoucherPdfReady({required this.pdfBytes, required this.filename});
 
   @override
   List<Object?> get props => [pdfBytes, filename];

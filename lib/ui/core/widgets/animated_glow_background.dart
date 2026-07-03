@@ -42,7 +42,8 @@ class _AnimatedGlowBackgroundState extends State<AnimatedGlowBackground>
   @override
   Widget build(BuildContext context) {
     // Respect the OS "reduce motion" setting: hold a static frame instead of animating.
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     if (reduceMotion && _controller.isAnimating) {
       _controller.stop();
     } else if (!reduceMotion && !_controller.isAnimating) {
@@ -123,7 +124,8 @@ class _GlowBackgroundPainter extends CustomPainter {
     for (final blob in _blobsFor(themeMode)) {
       // Slow Lissajous drift; y uses a different frequency so paths never repeat tightly.
       final dx = blob.amplitude.dx * math.sin((t + blob.phaseX) * 2 * math.pi);
-      final dy = blob.amplitude.dy * math.cos((t + blob.phaseY) * 1.4 * math.pi);
+      final dy =
+          blob.amplitude.dy * math.cos((t + blob.phaseY) * 1.4 * math.pi);
       final center = Offset(
         (blob.base.dx + dx) * size.width,
         (blob.base.dy + dy) * size.height,
@@ -136,11 +138,10 @@ class _GlowBackgroundPainter extends CustomPainter {
 
       final core = blob.color.withValues(alpha: blob.color.a * opacity);
       final paint = Paint()
-        ..shader = ui.Gradient.radial(
-          center,
-          radius,
-          [core, core.withValues(alpha: 0.0)],
-        )
+        ..shader = ui.Gradient.radial(center, radius, [
+          core,
+          core.withValues(alpha: 0.0),
+        ])
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.35);
       canvas.drawCircle(center, radius, paint);
     }

@@ -56,7 +56,8 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final allCustomers = _db.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
+    final allCustomers = _db.getCustomers()
+      ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,
       customers: allCustomers,
@@ -71,7 +72,9 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
     final customer = context.read<SalesReturnBloc>().state.editingCustomer;
     if (customer == null) return;
 
-    final excludedIds = editingItems.map((line) => line.invoiceLineItem.item.id).toList();
+    final excludedIds = editingItems
+        .map((line) => line.invoiceLineItem.item.id)
+        .toList();
     final result = await ReturnItemSearchDialog.show(
       context,
       customerId: customer.id,
@@ -80,7 +83,9 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
 
     if (result != null && result.isNotEmpty && mounted) {
       final selectedItem = result.first.invoiceLineItem.item;
-      context.read<SalesReturnBloc>().add(SetReturnLineItemsForProduct(item: selectedItem, lines: result));
+      context.read<SalesReturnBloc>().add(
+        SetReturnLineItemsForProduct(item: selectedItem, lines: result),
+      );
     }
   }
 
@@ -90,7 +95,10 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
 
     final editingItems = context.read<SalesReturnBloc>().state.editingItems;
     final itemLines = editingItems
-        .where((line) => line.invoiceLineItem.item.id == lineItem.invoiceLineItem.item.id)
+        .where(
+          (line) =>
+              line.invoiceLineItem.item.id == lineItem.invoiceLineItem.item.id,
+        )
         .toList();
 
     final result = await showDialog<List<SalesReturnLineItem>>(
@@ -103,10 +111,12 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
     );
 
     if (result != null && mounted) {
-      context.read<SalesReturnBloc>().add(SetReturnLineItemsForProduct(
-            item: lineItem.invoiceLineItem.item,
-            lines: result,
-          ));
+      context.read<SalesReturnBloc>().add(
+        SetReturnLineItemsForProduct(
+          item: lineItem.invoiceLineItem.item,
+          lines: result,
+        ),
+      );
     }
   }
 
@@ -117,13 +127,17 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
     return Scaffold(
       appBar: AppBar(
         title: BlocBuilder<SalesReturnBloc, SalesReturnState>(
-          buildWhen: (previous, current) => previous.isEditingNew != current.isEditingNew,
-          builder: (context, state) => Text(state.isEditingNew ? 'New Sales Return' : 'Edit Sales Return'),
+          buildWhen: (previous, current) =>
+              previous.isEditingNew != current.isEditingNew,
+          builder: (context, state) => Text(
+            state.isEditingNew ? 'New Sales Return' : 'Edit Sales Return',
+          ),
         ),
       ),
       body: BlocConsumer<SalesReturnBloc, SalesReturnState>(
         listenWhen: (previous, current) =>
-            previous.successMessage != current.successMessage || previous.errorMessage != current.errorMessage,
+            previous.successMessage != current.successMessage ||
+            previous.errorMessage != current.errorMessage,
         listener: (context, state) {
           if (state.successMessage == 'Return saved successfully') {
             showSuccessSnackBar(context, state.successMessage!);
@@ -136,13 +150,17 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
         },
         builder: (context, state) {
           final cs = context.org.currencySymbol;
-          final total = state.editingItems.fold(0.0, (sum, line) => sum + line.total);
+          final total = state.editingItems.fold(
+            0.0,
+            (sum, line) => sum + line.total,
+          );
           final customer = state.editingCustomer;
           final date = state.editingDate ?? DateTime.now();
 
           return Column(
             children: [
-              if (state.isLoading) const LinearProgressIndicator(color: AppTheme.warningAmber),
+              if (state.isLoading)
+                const LinearProgressIndicator(color: AppTheme.warningAmber),
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -153,33 +171,45 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                         // Customer Selector Card
                         Card(
                           child: InkWell(
-                            onTap: state.isEditingNew ? () => _showCustomerSelector(context) : null,
+                            onTap: state.isEditingNew
+                                ? () => _showCustomerSelector(context)
+                                : null,
                             borderRadius: BorderRadius.circular(16),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor: AppTheme.warningAmber.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.person, color: AppTheme.warningAmber),
+                                    backgroundColor: AppTheme.warningAmber
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(
+                                      Icons.person,
+                                      color: AppTheme.warningAmber,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'CUSTOMER',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
                                           customer?.name ?? 'Select Customer',
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         if (customer != null) ...[
                                           const SizedBox(height: 2),
@@ -187,7 +217,9 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                                             customer.companyName,
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                              color: isDark
+                                                  ? AppTheme.darkTextSecondary
+                                                  : AppTheme.lightTextSecondary,
                                             ),
                                           ),
                                         ],
@@ -197,7 +229,9 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                                   if (state.isEditingNew)
                                     Icon(
                                       Icons.keyboard_arrow_right,
-                                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      color: isDark
+                                          ? AppTheme.darkTextSecondary
+                                          : AppTheme.lightTextSecondary,
                                     ),
                                 ],
                               ),
@@ -216,33 +250,45 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor: AppTheme.infoSky.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.calendar_today, color: AppTheme.infoSky),
+                                    backgroundColor: AppTheme.infoSky
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(
+                                      Icons.calendar_today,
+                                      color: AppTheme.infoSky,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'RETURN DATE',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
                                           _dateFormat.format(date),
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
                                   Icon(
                                     Icons.keyboard_arrow_right,
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                    color: isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary,
                                   ),
                                 ],
                               ),
@@ -255,12 +301,22 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Return Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const Text(
+                              'Return Items',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
                             TextButton.icon(
-                              onPressed: customer == null ? null : () => _openItemSearch(state.editingItems),
+                              onPressed: customer == null
+                                  ? null
+                                  : () => _openItemSearch(state.editingItems),
                               icon: const Icon(Icons.add, size: 16),
                               label: const Text('Add Item'),
-                              style: TextButton.styleFrom(foregroundColor: AppTheme.warningAmber),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppTheme.warningAmber,
+                              ),
                             ),
                           ],
                         ),
@@ -268,27 +324,37 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                         if (state.editingItems.isEmpty)
                           EmptyStateCard(
                             icon: Icons.assignment_return_outlined,
-                            message: customer == null ? 'Select customer to add return items' : 'No items added yet',
+                            message: customer == null
+                                ? 'Select customer to add return items'
+                                : 'No items added yet',
                           )
                         else
                           LineItemList(
                             items: state.editingItems
-                                .map((line) => LineItemRow(
-                                      name: line.invoiceLineItem.item.name,
-                                      sku: line.invoiceLineItem.item.sku,
-                                      rate: line.invoiceLineItem.rate,
-                                      taxPercentage: 0,
-                                      quantity: line.returnedQuantity,
-                                      total: line.total,
-                                      accentColor: AppTheme.warningAmber,
-                                    ))
+                                .map(
+                                  (line) => LineItemRow(
+                                    name: line.invoiceLineItem.item.name,
+                                    sku: line.invoiceLineItem.item.sku,
+                                    rate: line.invoiceLineItem.rate,
+                                    taxPercentage: 0,
+                                    quantity: line.returnedQuantity,
+                                    total: line.total,
+                                    accentColor: AppTheme.warningAmber,
+                                  ),
+                                )
                                 .toList(),
                             currencySymbol: cs,
-                            onEdit: (index) => _editLineItem(state.editingItems[index]),
+                            onEdit: (index) =>
+                                _editLineItem(state.editingItems[index]),
                             onRemove: (index) {
                               context.read<SalesReturnBloc>().add(
-                                    RemoveReturnLineItem(state.editingItems[index].invoiceLineItem.item),
-                                  );
+                                RemoveReturnLineItem(
+                                  state
+                                      .editingItems[index]
+                                      .invoiceLineItem
+                                      .item,
+                                ),
+                              );
                             },
                           ),
                         const SizedBox(height: 20),
@@ -300,7 +366,10 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                           decoration: const InputDecoration(
                             labelText: 'Reason for Return',
                             hintText: 'Damaged goods, wrong item, surplus...',
-                            prefixIcon: Icon(Icons.notes, color: AppTheme.warningAmber),
+                            prefixIcon: Icon(
+                              Icons.notes,
+                              color: AppTheme.warningAmber,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 30),
@@ -312,15 +381,24 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
 
               EditorFooter(
                 rows: [
-                  (label: 'Return Total:', value: formatCurrency(total, cs), emphasize: true),
+                  (
+                    label: 'Return Total:',
+                    value: formatCurrency(total, cs),
+                    emphasize: true,
+                  ),
                 ],
                 buttonLabel: 'SAVE SALES RETURN',
                 buttonColor: AppTheme.warningAmber,
                 accentColor: AppTheme.warningAmber,
-                onSave: (customer == null || state.editingItems.isEmpty || state.isLoading)
+                onSave:
+                    (customer == null ||
+                        state.editingItems.isEmpty ||
+                        state.isLoading)
                     ? null
                     : () {
-                        context.read<SalesReturnBloc>().add(SaveReturn(reason: _reasonController.text));
+                        context.read<SalesReturnBloc>().add(
+                          SaveReturn(reason: _reasonController.text),
+                        );
                       },
                 trailing: !state.isEditingNew
                     ? VoucherPdfActionsWidget(

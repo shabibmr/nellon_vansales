@@ -23,11 +23,7 @@ class ServerConfig extends Equatable {
 
   /// Converts the [ServerConfig] to a map.
   Map<String, dynamic> toMap() {
-    return {
-      'client_id': clientId,
-      'client_secret': clientSecret,
-      'code': code,
-    };
+    return {'client_id': clientId, 'client_secret': clientSecret, 'code': code};
   }
 
   @override

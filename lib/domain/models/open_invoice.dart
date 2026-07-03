@@ -65,7 +65,14 @@ class OpenInvoice extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [invoiceId, invoiceNumber, customerId, date, dueDate, total, balance, status];
+  List<Object?> get props => [
+    invoiceId,
+    invoiceNumber,
+    customerId,
+    date,
+    dueDate,
+    total,
+    balance,
+    status,
+  ];
 }
-

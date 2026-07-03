@@ -127,7 +127,11 @@ class SalesReturnState extends Equatable {
     return returns.where((r) {
       final day = DateTime(r.date.year, r.date.month, r.date.day);
       if (startDate != null) {
-        final startDay = DateTime(startDate!.year, startDate!.month, startDate!.day);
+        final startDay = DateTime(
+          startDate!.year,
+          startDate!.month,
+          startDate!.day,
+        );
         if (day.isBefore(startDay)) return false;
       }
       if (endDate != null) {
@@ -170,19 +174,19 @@ class SalesReturnState extends Equatable {
 
   @override
   List<Object?> get props => [
-        returns,
-        startDate,
-        endDate,
-        isLoading,
-        errorMessage,
-        successMessage,
-        editingReturnId,
-        editingDate,
-        editingCustomer,
-        editingItems,
-        editingReason,
-        isEditingNew,
-      ];
+    returns,
+    startDate,
+    endDate,
+    isLoading,
+    errorMessage,
+    successMessage,
+    editingReturnId,
+    editingDate,
+    editingCustomer,
+    editingItems,
+    editingReason,
+    isEditingNew,
+  ];
 }
 
 // --- Bloc ---
@@ -194,9 +198,9 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
   SalesReturnBloc({
     required SalesRepository salesRepository,
     required SyncRepository syncRepository,
-  })  : _salesRepository = salesRepository,
-        _syncRepository = syncRepository,
-        super(const SalesReturnState()) {
+  }) : _salesRepository = salesRepository,
+       _syncRepository = syncRepository,
+       super(const SalesReturnState()) {
     on<LoadReturns>(_onLoadReturns);
     on<SetReturnDateFilter>(_onSetDateFilter);
     on<StartNewReturn>(_onStartNewReturn);
@@ -210,7 +214,10 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     on<ClearReturnMessages>(_onClearMessages);
   }
 
-  Future<void> _onLoadReturns(LoadReturns event, Emitter<SalesReturnState> emit) async {
+  Future<void> _onLoadReturns(
+    LoadReturns event,
+    Emitter<SalesReturnState> emit,
+  ) async {
     emit(state.copyWith(isLoading: true));
     try {
       final loaded = _salesRepository.getLocalReturns();
@@ -220,24 +227,32 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     }
   }
 
-  void _onSetDateFilter(SetReturnDateFilter event, Emitter<SalesReturnState> emit) {
+  void _onSetDateFilter(
+    SetReturnDateFilter event,
+    Emitter<SalesReturnState> emit,
+  ) {
     emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
   }
 
   void _onStartNewReturn(StartNewReturn event, Emitter<SalesReturnState> emit) {
-    emit(state.copyWith(
-      editingReturnId: 'temp_ret_${DateTime.now().millisecondsSinceEpoch}',
-      editingDate: DateTime.now(),
-      editingCustomer: null,
-      editingItems: const [],
-      editingReason: '',
-      isEditingNew: true,
-      errorMessage: null,
-      successMessage: null,
-    ));
+    emit(
+      state.copyWith(
+        editingReturnId: 'temp_ret_${DateTime.now().millisecondsSinceEpoch}',
+        editingDate: DateTime.now(),
+        editingCustomer: null,
+        editingItems: const [],
+        editingReason: '',
+        isEditingNew: true,
+        errorMessage: null,
+        successMessage: null,
+      ),
+    );
   }
 
-  void _onStartEditReturn(StartEditReturn event, Emitter<SalesReturnState> emit) {
+  void _onStartEditReturn(
+    StartEditReturn event,
+    Emitter<SalesReturnState> emit,
+  ) {
     final customers = _salesRepository.getCustomers();
     final customer = customers.firstWhere(
       (c) => c.id == event.salesReturn.customerId,
@@ -255,29 +270,42 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
       ),
     );
 
-    emit(state.copyWith(
-      editingReturnId: event.salesReturn.id,
-      editingDate: event.salesReturn.date,
-      editingCustomer: customer,
-      editingItems: List.from(event.salesReturn.items),
-      editingReason: event.salesReturn.reason,
-      isEditingNew: false,
-      errorMessage: null,
-      successMessage: null,
-    ));
+    emit(
+      state.copyWith(
+        editingReturnId: event.salesReturn.id,
+        editingDate: event.salesReturn.date,
+        editingCustomer: customer,
+        editingItems: List.from(event.salesReturn.items),
+        editingReason: event.salesReturn.reason,
+        isEditingNew: false,
+        errorMessage: null,
+        successMessage: null,
+      ),
+    );
   }
 
-  void _onUpdateReturnDate(UpdateReturnDate event, Emitter<SalesReturnState> emit) {
+  void _onUpdateReturnDate(
+    UpdateReturnDate event,
+    Emitter<SalesReturnState> emit,
+  ) {
     emit(state.copyWith(editingDate: event.date));
   }
 
-  void _onUpdateReturnCustomer(UpdateReturnCustomer event, Emitter<SalesReturnState> emit) {
+  void _onUpdateReturnCustomer(
+    UpdateReturnCustomer event,
+    Emitter<SalesReturnState> emit,
+  ) {
     emit(state.copyWith(editingCustomer: event.customer));
   }
 
-  void _onAddOrUpdateLineItem(AddOrUpdateReturnLineItem event, Emitter<SalesReturnState> emit) {
+  void _onAddOrUpdateLineItem(
+    AddOrUpdateReturnLineItem event,
+    Emitter<SalesReturnState> emit,
+  ) {
     final items = List<SalesReturnLineItem>.from(state.editingItems);
-    final idx = items.indexWhere((line) => line.invoiceLineItem.item.id == event.item.id);
+    final idx = items.indexWhere(
+      (line) => line.invoiceLineItem.item.id == event.item.id,
+    );
 
     if (idx >= 0) {
       if (event.quantity <= 0) {
@@ -287,21 +315,26 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
       }
     } else {
       if (event.quantity > 0) {
-        items.add(SalesReturnLineItem(
-          invoiceLineItem: InvoiceLineItem(
-            item: event.item,
-            quantity: event.quantity,
-            rate: event.item.rate,
-            taxPercentage: event.item.taxPercentage,
+        items.add(
+          SalesReturnLineItem(
+            invoiceLineItem: InvoiceLineItem(
+              item: event.item,
+              quantity: event.quantity,
+              rate: event.item.rate,
+              taxPercentage: event.item.taxPercentage,
+            ),
+            returnedQuantity: event.quantity,
           ),
-          returnedQuantity: event.quantity,
-        ));
+        );
       }
     }
     emit(state.copyWith(editingItems: items, errorMessage: null));
   }
 
-  void _onSetLineItemsForProduct(SetReturnLineItemsForProduct event, Emitter<SalesReturnState> emit) {
+  void _onSetLineItemsForProduct(
+    SetReturnLineItemsForProduct event,
+    Emitter<SalesReturnState> emit,
+  ) {
     final items = List<SalesReturnLineItem>.from(state.editingItems);
     // Remove existing returns of this item
     items.removeWhere((line) => line.invoiceLineItem.item.id == event.item.id);
@@ -310,13 +343,19 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     emit(state.copyWith(editingItems: items, errorMessage: null));
   }
 
-  void _onRemoveLineItem(RemoveReturnLineItem event, Emitter<SalesReturnState> emit) {
+  void _onRemoveLineItem(
+    RemoveReturnLineItem event,
+    Emitter<SalesReturnState> emit,
+  ) {
     final items = List<SalesReturnLineItem>.from(state.editingItems);
     items.removeWhere((line) => line.invoiceLineItem.item.id == event.item.id);
     emit(state.copyWith(editingItems: items));
   }
 
-  Future<void> _onSaveReturn(SaveReturn event, Emitter<SalesReturnState> emit) async {
+  Future<void> _onSaveReturn(
+    SaveReturn event,
+    Emitter<SalesReturnState> emit,
+  ) async {
     if (state.editingCustomer == null) {
       emit(state.copyWith(errorMessage: 'Please select a customer'));
       return;
@@ -329,11 +368,14 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     emit(state.copyWith(isLoading: true));
     try {
       final isNew = state.isEditingNew;
-      final tempId = state.editingReturnId ?? 'temp_ret_${DateTime.now().millisecondsSinceEpoch}';
+      final tempId =
+          state.editingReturnId ??
+          'temp_ret_${DateTime.now().millisecondsSinceEpoch}';
 
       String creditNoteNum;
       if (isNew) {
-        creditNoteNum = 'CN-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+        creditNoteNum =
+            'CN-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
       } else {
         final original = state.returns.firstWhere((r) => r.id == tempId);
         creditNoteNum = original.creditNoteNumber;
@@ -365,17 +407,22 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
 
       final updatedReturns = _salesRepository.getLocalReturns();
 
-      emit(state.copyWith(
-        returns: updatedReturns,
-        isLoading: false,
-        successMessage: 'Return saved successfully',
-      ));
+      emit(
+        state.copyWith(
+          returns: updatedReturns,
+          isLoading: false,
+          successMessage: 'Return saved successfully',
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 
-  void _onClearMessages(ClearReturnMessages event, Emitter<SalesReturnState> emit) {
+  void _onClearMessages(
+    ClearReturnMessages event,
+    Emitter<SalesReturnState> emit,
+  ) {
     emit(state.copyWith(errorMessage: null, successMessage: null));
   }
 }

@@ -8,10 +8,7 @@ import '../../../core/theme/app_theme.dart';
 class LicenseBlockedScreen extends StatelessWidget {
   final String reason;
 
-  const LicenseBlockedScreen({
-    super.key,
-    required this.reason,
-  });
+  const LicenseBlockedScreen({super.key, required this.reason});
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +57,10 @@ class LicenseBlockedScreen extends StatelessWidget {
           // Main Content Layer
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32.0,
+                vertical: 24.0,
+              ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,

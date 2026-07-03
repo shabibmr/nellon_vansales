@@ -84,7 +84,12 @@ class SyncState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [statusMessage, pendingCount, isSyncing, queueItems];
+  List<Object?> get props => [
+    statusMessage,
+    pendingCount,
+    isSyncing,
+    queueItems,
+  ];
 }
 
 // --- Bloc ---
@@ -98,9 +103,7 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
   StreamSubscription<int>? _countSubscription;
 
   /// Instantiates a new [SyncBloc] mapping sync streams.
-  SyncBloc({
-    required this._syncRepository,
-  })  : super(const SyncState()) {
+  SyncBloc({required this._syncRepository}) : super(const SyncState()) {
     on<SyncStarted>(_onSyncStarted);
     on<TriggerSync>(_onTriggerSync);
     on<RefreshMasterDataRequested>(_onRefreshMasterDataRequested);
@@ -111,13 +114,19 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
   void _onSyncStarted(SyncStarted event, Emitter<SyncState> emit) {
     // Initial load
     final queue = _syncRepository.getSyncQueue();
-    final pendingCount = queue.where((x) => x.status != SyncStatus.completed).length;
+    final pendingCount = queue
+        .where((x) => x.status != SyncStatus.completed)
+        .length;
 
-    emit(state.copyWith(
-      pendingCount: pendingCount,
-      queueItems: queue,
-      statusMessage: pendingCount > 0 ? '$pendingCount items pending sync' : 'All transactions are synced',
-    ));
+    emit(
+      state.copyWith(
+        pendingCount: pendingCount,
+        queueItems: queue,
+        statusMessage: pendingCount > 0
+            ? '$pendingCount items pending sync'
+            : 'All transactions are synced',
+      ),
+    );
 
     // Cancel old subscriptions
     _statusSubscription?.cancel();
@@ -133,37 +142,54 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     });
   }
 
-  Future<void> _onTriggerSync(TriggerSync event, Emitter<SyncState> emit) async {
+  Future<void> _onTriggerSync(
+    TriggerSync event,
+    Emitter<SyncState> emit,
+  ) async {
     emit(state.copyWith(isSyncing: true, statusMessage: 'Connecting...'));
     await _syncRepository.triggerSync();
     final queue = _syncRepository.getSyncQueue();
-    emit(state.copyWith(
-      isSyncing: _syncRepository.isSyncing,
-      queueItems: queue,
-    ));
+    emit(
+      state.copyWith(isSyncing: _syncRepository.isSyncing, queueItems: queue),
+    );
   }
 
-  Future<void> _onRefreshMasterDataRequested(RefreshMasterDataRequested event, Emitter<SyncState> emit) async {
-    emit(state.copyWith(isSyncing: true, statusMessage: 'Fetching latest master lists from Zoho...'));
+  Future<void> _onRefreshMasterDataRequested(
+    RefreshMasterDataRequested event,
+    Emitter<SyncState> emit,
+  ) async {
+    emit(
+      state.copyWith(
+        isSyncing: true,
+        statusMessage: 'Fetching latest master lists from Zoho...',
+      ),
+    );
     await _syncRepository.refreshMasterData();
-    emit(state.copyWith(isSyncing: false, statusMessage: 'Master lists refreshed!'));
+    emit(
+      state.copyWith(
+        isSyncing: false,
+        statusMessage: 'Master lists refreshed!',
+      ),
+    );
   }
 
   void _onSyncStatusUpdated(SyncStatusUpdated event, Emitter<SyncState> emit) {
     final queue = _syncRepository.getSyncQueue();
-    emit(state.copyWith(
-      statusMessage: event.statusMessage,
-      isSyncing: _syncRepository.isSyncing,
-      queueItems: queue,
-    ));
+    emit(
+      state.copyWith(
+        statusMessage: event.statusMessage,
+        isSyncing: _syncRepository.isSyncing,
+        queueItems: queue,
+      ),
+    );
   }
 
-  void _onPendingQueueCountUpdated(PendingQueueCountUpdated event, Emitter<SyncState> emit) {
+  void _onPendingQueueCountUpdated(
+    PendingQueueCountUpdated event,
+    Emitter<SyncState> emit,
+  ) {
     final queue = _syncRepository.getSyncQueue();
-    emit(state.copyWith(
-      pendingCount: event.count,
-      queueItems: queue,
-    ));
+    emit(state.copyWith(pendingCount: event.count, queueItems: queue));
   }
 
   @override

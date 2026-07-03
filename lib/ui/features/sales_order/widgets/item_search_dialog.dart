@@ -13,7 +13,10 @@ class ItemOrderSearchDialog {
     List<String> excludedItemIds = const [],
   }) async {
     final db = sl<HiveDatabaseService>();
-    final items = db.getItems().where((item) => !excludedItemIds.contains(item.id)).toList();
+    final items = db
+        .getItems()
+        .where((item) => !excludedItemIds.contains(item.id))
+        .toList();
 
     (Item, int, double, double)? result;
 

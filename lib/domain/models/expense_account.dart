@@ -44,4 +44,3 @@ class ExpenseAccount extends Equatable {
   @override
   List<Object?> get props => [id, name, accountCode, category];
 }
-

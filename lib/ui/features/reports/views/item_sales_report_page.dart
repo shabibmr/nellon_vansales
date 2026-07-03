@@ -62,7 +62,11 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
     for (final inv in _allInvoices) {
       final day = DateTime(inv.date.year, inv.date.month, inv.date.day);
       if (_startDate != null) {
-        final s = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+        final s = DateTime(
+          _startDate!.year,
+          _startDate!.month,
+          _startDate!.day,
+        );
         if (day.isBefore(s)) continue;
       }
       if (_endDate != null) {
@@ -180,9 +184,19 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.filter_alt_outlined, size: 16, color: AppTheme.primaryIndigo),
+                        const Icon(
+                          Icons.filter_alt_outlined,
+                          size: 16,
+                          color: AppTheme.primaryIndigo,
+                        ),
                         const SizedBox(width: 6),
-                        const Text('Filter by Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const Text(
+                          'Filter by Date',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
                         const Spacer(),
                         if (hasFilter)
                           TextButton(
@@ -195,29 +209,43 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                               _startDate = null;
                               _endDate = null;
                             }),
-                            child: const Text('Clear', style: TextStyle(color: AppTheme.errorRose, fontSize: 12)),
+                            child: const Text(
+                              'Clear',
+                              style: TextStyle(
+                                color: AppTheme.errorRose,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
                       ],
                     ),
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        Expanded(child: _DateChip(
-                          label: _startDate != null ? _dateFmt.format(_startDate!) : 'Start Date',
-                          hasValue: _startDate != null,
-                          isDark: isDark,
-                          onTap: () => _pickDate(true),
-                        )),
+                        Expanded(
+                          child: _DateChip(
+                            label: _startDate != null
+                                ? _dateFmt.format(_startDate!)
+                                : 'Start Date',
+                            hasValue: _startDate != null,
+                            isDark: isDark,
+                            onTap: () => _pickDate(true),
+                          ),
+                        ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8),
                           child: Text('to', style: TextStyle(fontSize: 12)),
                         ),
-                        Expanded(child: _DateChip(
-                          label: _endDate != null ? _dateFmt.format(_endDate!) : 'End Date',
-                          hasValue: _endDate != null,
-                          isDark: isDark,
-                          onTap: () => _pickDate(false),
-                        )),
+                        Expanded(
+                          child: _DateChip(
+                            label: _endDate != null
+                                ? _dateFmt.format(_endDate!)
+                                : 'End Date',
+                            hasValue: _endDate != null,
+                            isDark: isDark,
+                            onTap: () => _pickDate(false),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -232,26 +260,32 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Row(
                 children: [
-                  Expanded(child: _SummaryChip(
-                    label: 'Items',
-                    value: '${rows.length}',
-                    color: AppTheme.infoSky,
-                    isDark: isDark,
-                  )),
+                  Expanded(
+                    child: _SummaryChip(
+                      label: 'Items',
+                      value: '${rows.length}',
+                      color: AppTheme.infoSky,
+                      isDark: isDark,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _SummaryChip(
-                    label: 'Units Sold',
-                    value: '$totalQty',
-                    color: AppTheme.primaryIndigo,
-                    isDark: isDark,
-                  )),
+                  Expanded(
+                    child: _SummaryChip(
+                      label: 'Units Sold',
+                      value: '$totalQty',
+                      color: AppTheme.primaryIndigo,
+                      isDark: isDark,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _SummaryChip(
-                    label: 'Total',
-                    value: '$cs${totalAmount.toStringAsFixed(2)}',
-                    color: AppTheme.successEmerald,
-                    isDark: isDark,
-                  )),
+                  Expanded(
+                    child: _SummaryChip(
+                      label: 'Total',
+                      value: '$cs${totalAmount.toStringAsFixed(2)}',
+                      color: AppTheme.successEmerald,
+                      isDark: isDark,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -263,9 +297,14 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  color: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -276,7 +315,13 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                         onTap: () => _toggleSort(_SortField.name),
                         child: Row(
                           children: [
-                            const Text('ITEM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            const Text(
+                              'ITEM',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             const SizedBox(width: 2),
                             _sortIcon(_SortField.name),
                           ],
@@ -292,7 +337,13 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                           children: [
                             _sortIcon(_SortField.qty),
                             const SizedBox(width: 2),
-                            const Text('QTY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            const Text(
+                              'QTY',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -306,7 +357,13 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                           children: [
                             _sortIcon(_SortField.amount),
                             const SizedBox(width: 2),
-                            const Text('AMOUNT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            const Text(
+                              'AMOUNT',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -320,7 +377,13 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                           children: [
                             _sortIcon(_SortField.customers),
                             const SizedBox(width: 2),
-                            const Text('CUST', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            const Text(
+                              'CUST',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -342,7 +405,9 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                         Icon(
                           Icons.bar_chart_rounded,
                           size: 64,
-                          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                          color: isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFCBD5E1),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -350,7 +415,9 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -361,7 +428,9 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                            color: isDark
+                                ? const Color(0xFF475569)
+                                : const Color(0xFF94A3B8),
                           ),
                         ),
                       ],
@@ -373,7 +442,9 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                     separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final row = rows[index];
-                      final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
+                      final pct = totalAmount > 0
+                          ? (row.totalAmount / totalAmount)
+                          : 0.0;
 
                       return Card(
                         margin: EdgeInsets.zero,
@@ -388,7 +459,8 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                                   Expanded(
                                     flex: 5,
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           row.itemName,
@@ -457,8 +529,9 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                                 borderRadius: BorderRadius.circular(4),
                                 child: LinearProgressIndicator(
                                   value: pct,
-                                  backgroundColor:
-                                      isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                                  backgroundColor: isDark
+                                      ? const Color(0xFF1E293B)
+                                      : const Color(0xFFE2E8F0),
                                   color: AppTheme.primaryIndigo,
                                   minHeight: 4,
                                 ),
@@ -468,7 +541,9 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                                 '${(pct * 100).toStringAsFixed(1)}% of total sales',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                  color: isDark
+                                      ? AppTheme.darkTextSecondary
+                                      : AppTheme.lightTextSecondary,
                                 ),
                               ),
                             ],
@@ -505,13 +580,19 @@ class _DateChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         decoration: BoxDecoration(
-          border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          border: Border.all(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          ),
           borderRadius: BorderRadius.circular(8),
           color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
         ),
         child: Row(
           children: [
-            const Icon(Icons.date_range, size: 14, color: AppTheme.primaryIndigo),
+            const Icon(
+              Icons.date_range,
+              size: 14,
+              color: AppTheme.primaryIndigo,
+            ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -520,7 +601,9 @@ class _DateChip extends StatelessWidget {
                   fontSize: 11,
                   color: hasValue
                       ? (isDark ? AppTheme.darkText : AppTheme.lightText)
-                      : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                      : (isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.lightTextSecondary),
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

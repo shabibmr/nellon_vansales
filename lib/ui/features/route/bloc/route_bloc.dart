@@ -91,13 +91,13 @@ class RouteState extends Equatable {
 
   @override
   List<Object?> get props => [
-        routes,
-        activeRouteId,
-        allCustomers,
-        filteredCustomers,
-        isLoading,
-        errorMessage,
-      ];
+    routes,
+    activeRouteId,
+    allCustomers,
+    filteredCustomers,
+    isLoading,
+    errorMessage,
+  ];
 }
 
 // --- Bloc ---
@@ -109,9 +109,7 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
   final SalesRepository _salesRepository;
 
   /// Instantiates a new [RouteBloc] utilizing the provided sales repository.
-  RouteBloc({
-    required this._salesRepository,
-  })  : super(const RouteState()) {
+  RouteBloc({required this._salesRepository}) : super(const RouteState()) {
     on<LoadRoutes>(_onLoadRoutes);
     on<SelectActiveRoute>(_onSelectActiveRoute);
     on<SearchCustomers>(_onSearchCustomers);
@@ -122,23 +120,28 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
     try {
       final routes = _salesRepository.getRoutes();
       final activeRouteId = _salesRepository.activeRouteId;
-      
+
       final allCustomers = _salesRepository.getCustomers();
       allCustomers.sort((a, b) => a.name.compareTo(b.name));
 
-      emit(state.copyWith(
-        isLoading: false,
-        routes: routes,
-        activeRouteId: activeRouteId,
-        allCustomers: allCustomers,
-        filteredCustomers: allCustomers,
-      ));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          routes: routes,
+          activeRouteId: activeRouteId,
+          allCustomers: allCustomers,
+          filteredCustomers: allCustomers,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 
-  Future<void> _onSelectActiveRoute(SelectActiveRoute event, Emitter<RouteState> emit) async {
+  Future<void> _onSelectActiveRoute(
+    SelectActiveRoute event,
+    Emitter<RouteState> emit,
+  ) async {
     emit(state.copyWith(isLoading: true));
     try {
       await _salesRepository.setActiveRouteId(event.routeId);
@@ -146,12 +149,14 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
       final allCustomers = _salesRepository.getCustomers();
       allCustomers.sort((a, b) => a.name.compareTo(b.name));
 
-      emit(state.copyWith(
-        isLoading: false,
-        activeRouteId: event.routeId,
-        allCustomers: allCustomers,
-        filteredCustomers: allCustomers,
-      ));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          activeRouteId: event.routeId,
+          allCustomers: allCustomers,
+          filteredCustomers: allCustomers,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }

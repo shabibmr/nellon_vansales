@@ -75,7 +75,10 @@ class _DashboardPageState extends State<DashboardPage> {
       _todayPayments = receipts.fold(0.0, (sum, item) => sum + item.amount);
       _todayExpenses = expenses.fold(0.0, (sum, item) => sum + item.amount);
       _todayReturns = returns.fold(0.0, (sum, item) => sum + item.total);
-      _completedDeliveries = invoices.map((inv) => inv.customerId).toSet().length;
+      _completedDeliveries = invoices
+          .map((inv) => inv.customerId)
+          .toSet()
+          .length;
     });
   }
 
@@ -83,7 +86,9 @@ class _DashboardPageState extends State<DashboardPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      backgroundColor: isDark
+          ? AppTheme.darkBackground
+          : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -92,7 +97,10 @@ class _DashboardPageState extends State<DashboardPage> {
           isDark: isDark,
           onCustomerSelected: (customer) {
             Navigator.pop(context); // Close search
-            _showClientOperationsSheet(customer, isDark); // Open customer actions sheet!
+            _showClientOperationsSheet(
+              customer,
+              isDark,
+            ); // Open customer actions sheet!
           },
           onItemSelected: (item) {
             Navigator.pop(context); // Close search
@@ -114,7 +122,9 @@ class _DashboardPageState extends State<DashboardPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      backgroundColor: isDark
+          ? AppTheme.darkBackground
+          : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -150,9 +160,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const SalesOrderEditorPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const SalesOrderEditorPage()),
     ).then((_) {
       _loadDailyStats();
     });
@@ -162,7 +170,9 @@ class _DashboardPageState extends State<DashboardPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      backgroundColor: isDark
+          ? AppTheme.darkBackground
+          : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -243,10 +253,12 @@ class _DashboardPageState extends State<DashboardPage> {
   void _showCustomerLedgerPage() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => BlocProvider.value(
-        value: context.read<CustomerLedgerBloc>(),
-        child: const CustomerLedgerPage(),
-      )),
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: context.read<CustomerLedgerBloc>(),
+          child: const CustomerLedgerPage(),
+        ),
+      ),
     );
   }
 
@@ -278,15 +290,28 @@ class _DashboardPageState extends State<DashboardPage> {
     final isGlass = themeMode == AppThemeMode.glass;
 
     final (themeIcon, themeColor, themeTooltip) = switch (themeMode) {
-      AppThemeMode.light => (Icons.dark_mode_outlined, AppTheme.primaryIndigo, 'Switch to Dark'),
-      AppThemeMode.dark => (Icons.blur_on_rounded, Colors.amber, 'Switch to Glass'),
-      AppThemeMode.glass => (Icons.light_mode_outlined, Colors.cyanAccent, 'Switch to Light'),
+      AppThemeMode.light => (
+        Icons.dark_mode_outlined,
+        AppTheme.primaryIndigo,
+        'Switch to Dark',
+      ),
+      AppThemeMode.dark => (
+        Icons.blur_on_rounded,
+        Colors.amber,
+        'Switch to Glass',
+      ),
+      AppThemeMode.glass => (
+        Icons.light_mode_outlined,
+        Colors.cyanAccent,
+        'Switch to Light',
+      ),
     };
 
     final tabs = [
       RouteSequenceTab(
         isDark: isDark || isGlass,
-        onCustomerTap: (customer) => _showClientOperationsSheet(customer, isDark),
+        onCustomerTap: (customer) =>
+            _showClientOperationsSheet(customer, isDark),
       ),
       AnalyticsReportsTab(
         isDark: isDark,
@@ -319,9 +344,7 @@ class _DashboardPageState extends State<DashboardPage> {
         onManageOrders: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const SalesOrderListPage(),
-            ),
+            MaterialPageRoute(builder: (context) => const SalesOrderListPage()),
           ).then((_) {
             _loadDailyStats();
           });
@@ -342,12 +365,19 @@ class _DashboardPageState extends State<DashboardPage> {
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
                 child: Row(
                   children: [
-                    const Icon(Icons.local_shipping_rounded, color: AppTheme.primaryIndigo, size: 28),
+                    const Icon(
+                      Icons.local_shipping_rounded,
+                      color: AppTheme.primaryIndigo,
+                      size: 28,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         context.org.companyName,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -378,12 +408,19 @@ class _DashboardPageState extends State<DashboardPage> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Icon(Icons.local_shipping_rounded, color: AppTheme.primaryIndigo, size: 20),
+            const Icon(
+              Icons.local_shipping_rounded,
+              color: AppTheme.primaryIndigo,
+              size: 20,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 context.org.companyName,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -396,26 +433,34 @@ class _DashboardPageState extends State<DashboardPage> {
               final hasPending = syncState.pendingCount > 0;
               final syncColor = isSyncing
                   ? AppTheme.primaryIndigo
-                  : (hasPending ? AppTheme.warningAmber : AppTheme.successEmerald);
+                  : (hasPending
+                        ? AppTheme.warningAmber
+                        : AppTheme.successEmerald);
 
               return Tooltip(
                 message: isSyncing
                     ? 'Syncing… · Tap to open Sync Masters'
                     : (hasPending
-                        ? '${syncState.pendingCount} items pending · Tap to open Sync Masters'
-                        : 'All synced · Tap to open Sync Masters'),
+                          ? '${syncState.pendingCount} items pending · Tap to open Sync Masters'
+                          : 'All synced · Tap to open Sync Masters'),
                 child: InkWell(
                   onTap: _showMastersSyncPage,
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
                           width: 8,
                           height: 8,
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: syncColor),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: syncColor,
+                          ),
                         ),
                         const SizedBox(width: 5),
                         ConstrainedBox(
@@ -423,14 +468,22 @@ class _DashboardPageState extends State<DashboardPage> {
                           child: Text(
                             isSyncing
                                 ? 'Syncing'
-                                : (hasPending ? '${syncState.pendingCount} Pending' : 'Synced'),
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: syncColor),
+                                : (hasPending
+                                      ? '${syncState.pendingCount} Pending'
+                                      : 'Synced'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: syncColor,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 3),
                         Icon(
-                          isSyncing ? Icons.sync_outlined : Icons.cloud_done_outlined,
+                          isSyncing
+                              ? Icons.sync_outlined
+                              : Icons.cloud_done_outlined,
                           size: 15,
                           color: syncColor,
                         ),
@@ -456,7 +509,9 @@ class _DashboardPageState extends State<DashboardPage> {
             top: BorderSide(
               color: isGlass
                   ? AppTheme.glassBorder
-                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                  : (isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFE2E8F0)),
               width: 1,
             ),
           ),
@@ -466,10 +521,14 @@ class _DashboardPageState extends State<DashboardPage> {
           child: BottomNavigationBar(
             currentIndex: _currentIndex,
             backgroundColor: Colors.transparent,
-            selectedItemColor: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
+            selectedItemColor: isGlass
+                ? Colors.cyanAccent
+                : AppTheme.primaryIndigo,
             unselectedItemColor: isGlass
                 ? AppTheme.glassTextSecondary
-                : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                : (isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary),
             elevation: 0,
             onTap: (index) {
               setState(() {

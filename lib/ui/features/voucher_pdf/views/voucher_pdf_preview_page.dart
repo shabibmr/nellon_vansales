@@ -42,7 +42,7 @@ class VoucherPdfPreviewPage extends StatelessWidget {
               color: isDark ? Colors.black45 : Colors.black12,
               blurRadius: 8,
               offset: const Offset(0, 4),
-            )
+            ),
           ],
         ),
       ),

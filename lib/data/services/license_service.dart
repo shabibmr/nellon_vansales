@@ -52,8 +52,12 @@ class LicenseService {
         return ServerConfig.fromMap(doc.data()!);
       }
     } catch (e) {
-      throw Exception('Failed to read Zoho server configuration from Firestore: $e');
+      throw Exception(
+        'Failed to read Zoho server configuration from Firestore: $e',
+      );
     }
-    throw Exception('Server configuration document "zoho" not found under "server_config" collection.');
+    throw Exception(
+      'Server configuration document "zoho" not found under "server_config" collection.',
+    );
   }
 }

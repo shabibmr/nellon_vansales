@@ -30,7 +30,6 @@ class SharedPdfTemplate {
     required DateTime date,
   }) {
     final companyName = org?.name ?? 'Van Sales Pro';
-    final currencySymbol = org?.currencySymbol ?? '₹';
     final timezone = org?.timeZone ?? 'GMT+5:30';
 
     return pw.Container(
@@ -65,10 +64,7 @@ class SharedPdfTemplate {
                   ),
                   pw.Text(
                     'Zone: $timezone',
-                    style: pw.TextStyle(
-                      fontSize: 9,
-                      color: slateTextSecondary,
-                    ),
+                    style: pw.TextStyle(fontSize: 9, color: slateTextSecondary),
                   ),
                 ],
               ),
@@ -76,10 +72,15 @@ class SharedPdfTemplate {
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: pw.BoxDecoration(
                       color: primaryLightIndigo,
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                      borderRadius: const pw.BorderRadius.all(
+                        pw.Radius.circular(6),
+                      ),
                     ),
                     child: pw.Text(
                       voucherTitle.toUpperCase(),
@@ -134,10 +135,7 @@ class SharedPdfTemplate {
             children: [
               pw.Text(
                 'Issued: ${dateFormat.format(date)}',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: slateText,
-                ),
+                style: pw.TextStyle(fontSize: 10, color: slateText),
               ),
               pw.Text(
                 'Status: CONFIRMED',
@@ -170,10 +168,7 @@ class SharedPdfTemplate {
             ),
           ),
           pw.SizedBox(height: 2),
-          pw.Container(
-            height: 1,
-            color: borderSlate,
-          ),
+          pw.Container(height: 1, color: borderSlate),
         ],
       ),
     );
@@ -219,10 +214,7 @@ class SharedPdfTemplate {
                 pw.SizedBox(height: 2),
                 pw.Text(
                   companyDetails,
-                  style: pw.TextStyle(
-                    fontSize: 9,
-                    color: slateTextSecondary,
-                  ),
+                  style: pw.TextStyle(fontSize: 9, color: slateTextSecondary),
                 ),
               ],
             ],
@@ -255,30 +247,21 @@ class SharedPdfTemplate {
                 pw.SizedBox(height: 2),
                 pw.Text(
                   'Phone: $clientPhone',
-                  style: pw.TextStyle(
-                    fontSize: 9,
-                    color: slateText,
-                  ),
+                  style: pw.TextStyle(fontSize: 9, color: slateText),
                 ),
               ],
               if (clientEmail != null && clientEmail.isNotEmpty) ...[
                 pw.SizedBox(height: 2),
                 pw.Text(
                   'Email: $clientEmail',
-                  style: pw.TextStyle(
-                    fontSize: 9,
-                    color: slateText,
-                  ),
+                  style: pw.TextStyle(fontSize: 9, color: slateText),
                 ),
               ],
               if (clientAddress != null && clientAddress.isNotEmpty) ...[
                 pw.SizedBox(height: 2),
                 pw.Text(
                   'Address: $clientAddress',
-                  style: pw.TextStyle(
-                    fontSize: 9,
-                    color: slateTextSecondary,
-                  ),
+                  style: pw.TextStyle(fontSize: 9, color: slateTextSecondary),
                 ),
               ],
             ],
@@ -305,7 +288,11 @@ class SharedPdfTemplate {
               ),
               pw.Text(
                 'Page ${context.pageNumber} of ${context.pagesCount}',
-                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: slateText),
+                style: pw.TextStyle(
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                  color: slateText,
+                ),
               ),
             ],
           ),

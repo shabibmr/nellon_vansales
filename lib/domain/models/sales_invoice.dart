@@ -111,7 +111,8 @@ class SalesInvoice extends Equatable {
   double get taxTotal => items.fold(0.0, (sum, item) => sum + item.taxAmount);
 
   /// Computes total line-item discount on this invoice.
-  double get discountTotal => items.fold(0.0, (sum, item) => sum + item.discount);
+  double get discountTotal =>
+      items.fold(0.0, (sum, item) => sum + item.discount);
 
   /// Computes the unrounded grand total.
   double get rawTotal => items.fold(0.0, (sum, item) => sum + item.total);
@@ -149,15 +150,14 @@ class SalesInvoice extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        invoiceNumber,
-        customerId,
-        customerName,
-        date,
-        dueDate,
-        items,
-        notes,
-        isPendingSync,
-      ];
+    id,
+    invoiceNumber,
+    customerId,
+    customerName,
+    date,
+    dueDate,
+    items,
+    notes,
+    isPendingSync,
+  ];
 }
-

@@ -31,10 +31,12 @@ class SharedItemLineEditorDialog extends StatefulWidget {
   });
 
   @override
-  State<SharedItemLineEditorDialog> createState() => _SharedItemLineEditorDialogState();
+  State<SharedItemLineEditorDialog> createState() =>
+      _SharedItemLineEditorDialogState();
 }
 
-class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog> {
+class _SharedItemLineEditorDialogState
+    extends State<SharedItemLineEditorDialog> {
   late TextEditingController _quantityController;
   late TextEditingController _rateController;
   late TextEditingController _discountController;
@@ -46,7 +48,9 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
     super.initState();
     _maxAllowedStock = widget.item.stock + widget.originalQuantity;
     _quantityController = TextEditingController(
-      text: widget.initialQuantity > 0 ? widget.initialQuantity.toString() : '1',
+      text: widget.initialQuantity > 0
+          ? widget.initialQuantity.toString()
+          : '1',
     );
     _rateController = TextEditingController(
       text: (widget.initialRate ?? widget.item.rate).toStringAsFixed(2),
@@ -84,7 +88,9 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
     final subtotal = rate * qty;
     final tax = (subtotal - discount) * (widget.item.taxPercentage / 100);
     final total = subtotal + tax - discount;
-    final displayStock = widget.allowUnlimitedQuantity ? widget.item.stock : _maxAllowedStock;
+    final displayStock = widget.allowUnlimitedQuantity
+        ? widget.item.stock
+        : _maxAllowedStock;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -102,19 +108,27 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
                 DialogHeader(title: widget.title),
                 Text(
                   widget.item.name,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'SKU: ${widget.item.sku} | Standard Rate: ${formatCurrency(widget.item.rate, cs)}',
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                    color: isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.lightTextSecondary,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: displayStock > 0
                         ? AppTheme.successEmerald.withValues(alpha: 0.1)
@@ -129,7 +143,9 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: displayStock > 0 ? AppTheme.successEmerald : AppTheme.errorRose,
+                      color: displayStock > 0
+                          ? AppTheme.successEmerald
+                          : AppTheme.errorRose,
                     ),
                   ),
                 ),
@@ -143,13 +159,19 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
                   decoration: const InputDecoration(
                     labelText: 'Quantity',
                     hintText: 'Enter quantity',
-                    prefixIcon: Icon(Icons.shopping_basket_outlined, color: AppTheme.primaryIndigo),
+                    prefixIcon: Icon(
+                      Icons.shopping_basket_outlined,
+                      color: AppTheme.primaryIndigo,
+                    ),
                   ),
                   validator: (val) {
-                    if (val == null || val.isEmpty) return 'Please enter quantity';
+                    if (val == null || val.isEmpty)
+                      return 'Please enter quantity';
                     final qty = int.tryParse(val);
-                    if (qty == null || qty <= 0) return 'Quantity must be greater than 0';
-                    if (!widget.allowUnlimitedQuantity && qty > _maxAllowedStock) {
+                    if (qty == null || qty <= 0)
+                      return 'Quantity must be greater than 0';
+                    if (!widget.allowUnlimitedQuantity &&
+                        qty > _maxAllowedStock) {
                       return 'Exceeds available van stock ($_maxAllowedStock)';
                     }
                     return null;
@@ -158,38 +180,60 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _rateController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d*\.?\d{0,2}'),
+                    ),
+                  ],
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     labelText: 'Unit Rate ($cs)',
                     hintText: 'Enter rate',
-                    prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppTheme.primaryIndigo),
+                    prefixIcon: const Icon(
+                      Icons.monetization_on_outlined,
+                      color: AppTheme.primaryIndigo,
+                    ),
                   ),
                   validator: (val) {
                     if (val == null || val.isEmpty) return 'Please enter rate';
                     final parsedRate = double.tryParse(val);
-                    if (parsedRate == null || parsedRate <= 0) return 'Rate must be greater than 0';
+                    if (parsedRate == null || parsedRate <= 0)
+                      return 'Rate must be greater than 0';
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _discountController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d*\.?\d{0,2}'),
+                    ),
+                  ],
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     labelText: 'Discount ($cs)',
                     hintText: 'Enter discount',
-                    prefixIcon: const Icon(Icons.local_offer_outlined, color: AppTheme.primaryIndigo),
+                    prefixIcon: const Icon(
+                      Icons.local_offer_outlined,
+                      color: AppTheme.primaryIndigo,
+                    ),
                   ),
                   validator: (val) {
-                    if (val == null || val.isEmpty) return 'Please enter discount';
+                    if (val == null || val.isEmpty)
+                      return 'Please enter discount';
                     final parsedDiscount = double.tryParse(val);
-                    if (parsedDiscount == null || parsedDiscount < 0) return 'Discount must be 0 or greater';
+                    if (parsedDiscount == null || parsedDiscount < 0)
+                      return 'Discount must be 0 or greater';
                     final qty = int.tryParse(_quantityController.text) ?? 0;
-                    final currentRate = double.tryParse(_rateController.text) ?? 0.0;
+                    final currentRate =
+                        double.tryParse(_rateController.text) ?? 0.0;
                     if (parsedDiscount > (currentRate * qty)) {
                       return 'Discount cannot exceed subtotal';
                     }
@@ -200,10 +244,14 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
                     ),
                   ),
                   child: Column(
@@ -211,31 +259,58 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Subtotal:', style: TextStyle(fontSize: 12)),
-                          Text(formatCurrency(subtotal, cs), style: const TextStyle(fontSize: 12)),
+                          const Text(
+                            'Subtotal:',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          Text(
+                            formatCurrency(subtotal, cs),
+                            style: const TextStyle(fontSize: 12),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Discount:', style: TextStyle(fontSize: 12)),
-                          Text(formatCurrency(discount, cs), style: const TextStyle(fontSize: 12, color: AppTheme.errorRose)),
+                          const Text(
+                            'Discount:',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          Text(
+                            formatCurrency(discount, cs),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.errorRose,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('VAT (${widget.item.taxPercentage}%):', style: const TextStyle(fontSize: 12)),
-                          Text(formatCurrency(tax, cs), style: const TextStyle(fontSize: 12)),
+                          Text(
+                            'VAT (${widget.item.taxPercentage}%):',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          Text(
+                            formatCurrency(tax, cs),
+                            style: const TextStyle(fontSize: 12),
+                          ),
                         ],
                       ),
                       const Divider(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Total:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          const Text(
+                            'Total:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                           Text(
                             formatCurrency(total, cs),
                             style: const TextStyle(
@@ -251,7 +326,9 @@ class _SharedItemLineEditorDialogState extends State<SharedItemLineEditorDialog>
                 ),
                 const SizedBox(height: 24),
                 DialogActionButtons(
-                  submitLabel: widget.initialQuantity > 0 ? 'Update' : 'Add Item',
+                  submitLabel: widget.initialQuantity > 0
+                      ? 'Update'
+                      : 'Add Item',
                   onSubmit: _submit,
                 ),
               ],

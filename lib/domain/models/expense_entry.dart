@@ -71,12 +71,5 @@ class ExpenseEntry extends Equatable {
   }
 
   @override
-  List<Object?> get props => [
-        id,
-        date,
-        lines,
-        receiptImagePath,
-        isPendingSync,
-      ];
+  List<Object?> get props => [id, date, lines, receiptImagePath, isPendingSync];
 }
-

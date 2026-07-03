@@ -7,11 +7,13 @@ class DocumentListCard extends StatelessWidget {
   final String docNumber;
   final String customerName;
   final String date;
+
   /// Optional extra subtitle line beneath the customer name (e.g. payment mode).
   final String? subtitle;
   final String total;
   final int? itemCount;
   final bool isPendingSync;
+
   /// Optional extra status pill shown beside the sync pill (e.g. "Converted").
   final String? extraBadgeLabel;
   final Color extraBadgeColor;
@@ -62,25 +64,35 @@ class DocumentListCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         StatusPill(
                           label: isPendingSync ? 'Pending Sync' : 'Synced',
-                          color: isPendingSync ? AppTheme.warningAmber : AppTheme.successEmerald,
+                          color: isPendingSync
+                              ? AppTheme.warningAmber
+                              : AppTheme.successEmerald,
                         ),
                         if (extraBadgeLabel != null) ...[
                           const SizedBox(width: 6),
-                          StatusPill(label: extraBadgeLabel!, color: extraBadgeColor),
+                          StatusPill(
+                            label: extraBadgeLabel!,
+                            color: extraBadgeColor,
+                          ),
                         ],
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       customerName,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle ?? 'Date: $date',
                       style: TextStyle(
                         fontSize: 11,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        color: isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.lightTextSecondary,
                       ),
                     ),
                   ],
@@ -103,7 +115,9 @@ class DocumentListCard extends StatelessWidget {
                       '$itemCount items',
                       style: TextStyle(
                         fontSize: 11,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        color: isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.lightTextSecondary,
                       ),
                     ),
                   ],
@@ -112,7 +126,9 @@ class DocumentListCard extends StatelessWidget {
               const SizedBox(width: 8),
               Icon(
                 Icons.keyboard_arrow_right,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.darkTextSecondary
+                    : AppTheme.lightTextSecondary,
               ),
             ],
           ),

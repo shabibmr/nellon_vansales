@@ -48,4 +48,3 @@ class Tax extends Equatable {
   @override
   List<Object?> get props => [id, name, percentage, type, isDefault];
 }
-

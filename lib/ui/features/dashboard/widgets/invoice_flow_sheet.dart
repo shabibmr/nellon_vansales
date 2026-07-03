@@ -60,9 +60,11 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return _items;
     return _items
-        .where((item) =>
-            item.name.toLowerCase().contains(query) ||
-            item.sku.toLowerCase().contains(query))
+        .where(
+          (item) =>
+              item.name.toLowerCase().contains(query) ||
+              item.sku.toLowerCase().contains(query),
+        )
         .toList();
   }
 
@@ -94,7 +96,10 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
             children: [
               Text(
                 'New Invoice: ${widget.customer.name}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -104,7 +109,10 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                 onChanged: (value) => setState(() => _query = value),
                 decoration: InputDecoration(
                   hintText: 'Search items by name or SKU...',
-                  prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryIndigo),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: AppTheme.primaryIndigo,
+                  ),
                   suffixIcon: _query.isNotEmpty
                       ? IconButton(
                           icon: Icon(
@@ -139,99 +147,119 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                         ),
                       )
                     : ListView.separated(
-                  controller: scrollController,
-                  itemCount: _visibleItems.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final item = _visibleItems[index];
-                    final cartQty = _localCart[item] ?? 0;
+                        controller: scrollController,
+                        itemCount: _visibleItems.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = _visibleItems[index];
+                          final cartQty = _localCart[item] ?? 0;
 
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                          return Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    item.name,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                  ),
-                                  Text(
-                                    'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'In Van Stock: ${item.stock} items',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: item.stock > 0
-                                          ? AppTheme.successEmerald
-                                          : AppTheme.errorRose,
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                        Text(
+                                          'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}',
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'In Van Stock: ${item.stock} items',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: item.stock > 0
+                                                ? AppTheme.successEmerald
+                                                : AppTheme.errorRose,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  )
+                                  ),
+
+                                  // Add/Remove Counter UI
+                                  if (cartQty == 0)
+                                    ElevatedButton(
+                                      onPressed: item.stock == 0
+                                          ? null
+                                          : () {
+                                              setState(() {
+                                                _localCart[item] = 1;
+                                              });
+                                            },
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 8,
+                                        ),
+                                      ),
+                                      child: const Text('ADD'),
+                                    )
+                                  else
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                            color: AppTheme.errorRose,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              if (cartQty == 1) {
+                                                _localCart.remove(item);
+                                              } else {
+                                                _localCart[item] = cartQty - 1;
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        Text(
+                                          cartQty.toString(),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.add_circle_outline,
+                                            color: AppTheme.successEmerald,
+                                          ),
+                                          onPressed: () {
+                                            if (cartQty < item.stock) {
+                                              setState(() {
+                                                _localCart[item] = cartQty + 1;
+                                              });
+                                            } else {
+                                              showErrorSnackBar(
+                                                context,
+                                                'Cannot exceed available van stock',
+                                              );
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
                                 ],
                               ),
                             ),
-
-                            // Add/Remove Counter UI
-                            if (cartQty == 0)
-                              ElevatedButton(
-                                onPressed: item.stock == 0
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          _localCart[item] = 1;
-                                        });
-                                      },
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                ),
-                                child: const Text('ADD'),
-                              )
-                            else
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, color: AppTheme.errorRose),
-                                    onPressed: () {
-                                      setState(() {
-                                        if (cartQty == 1) {
-                                          _localCart.remove(item);
-                                        } else {
-                                          _localCart[item] = cartQty - 1;
-                                        }
-                                      });
-                                    },
-                                  ),
-                                  Text(
-                                    cartQty.toString(),
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, color: AppTheme.successEmerald),
-                                    onPressed: () {
-                                      if (cartQty < item.stock) {
-                                        setState(() {
-                                          _localCart[item] = cartQty + 1;
-                                        });
-                                      } else {
-                                        showErrorSnackBar(context, 'Cannot exceed available van stock');
-                                      }
-                                    },
-                                  ),
-                                ],
-                              )
-                          ],
-                        ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
 
               // Cart summary totals & Checkout trigger
@@ -240,7 +268,11 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
-                        color: widget.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), width: 1),
+                      color: widget.isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
                   ),
                 ),
                 child: Column(
@@ -249,7 +281,10 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Sub Total:', style: TextStyle(fontSize: 13)),
+                        const Text(
+                          'Sub Total:',
+                          style: TextStyle(fontSize: 13),
+                        ),
                         Text('$cs${cartSubTotal.toStringAsFixed(2)}'),
                       ],
                     ),
@@ -266,7 +301,10 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                       children: [
                         const Text(
                           'Invoice Total:',
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
                         ),
                         Text(
                           '$cs${cartTotal.toStringAsFixed(2)}',
@@ -289,17 +327,25 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
                               _localCart.forEach((item, qty) {
                                 bloc.add(AddToCart(item, qty));
                               });
-                              bloc.add(CheckoutRequested(customer: widget.customer, notes: 'Van Sales Checkout'));
+                              bloc.add(
+                                CheckoutRequested(
+                                  customer: widget.customer,
+                                  notes: 'Van Sales Checkout',
+                                ),
+                              );
 
                               Navigator.pop(context);
-                              showSuccessSnackBar(context, 'Invoice generated & queued offline! Subtotal: ${formatCurrency(cartTotal, cs)}');
+                              showSuccessSnackBar(
+                                context,
+                                'Invoice generated & queued offline! Subtotal: ${formatCurrency(cartTotal, cs)}',
+                              );
                               widget.onInvoiceSubmitted();
                             },
                       child: const Text('SUBMIT SALES INVOICE'),
-                    )
+                    ),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         );

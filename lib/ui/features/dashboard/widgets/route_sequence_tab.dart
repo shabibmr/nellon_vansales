@@ -51,7 +51,10 @@ class RouteSequenceTab extends StatelessWidget {
                     },
                     decoration: const InputDecoration(
                       hintText: 'Search sequential clients...',
-                      prefixIcon: Icon(Icons.search_rounded, color: AppTheme.primaryIndigo),
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        color: AppTheme.primaryIndigo,
+                      ),
                     ),
                   ),
                 ),
@@ -62,7 +65,9 @@ class RouteSequenceTab extends StatelessWidget {
                       child: Text(
                         'No customers found on this route.',
                         style: TextStyle(
-                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
                         ),
                       ),
                     ),
@@ -70,9 +75,14 @@ class RouteSequenceTab extends StatelessWidget {
                 else
                   Expanded(
                     child: ListView.separated(
-                      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 24),
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        bottom: 24,
+                      ),
                       itemCount: customers.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final customer = customers[index];
 
@@ -89,7 +99,9 @@ class RouteSequenceTab extends StatelessWidget {
                                     width: 32,
                                     height: 32,
                                     decoration: BoxDecoration(
-                                      color: AppTheme.primaryIndigo.withValues(alpha: 0.12),
+                                      color: AppTheme.primaryIndigo.withValues(
+                                        alpha: 0.12,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
                                     child: Center(
@@ -108,7 +120,8 @@ class RouteSequenceTab extends StatelessWidget {
                                   // Profile Details
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           customer.name,
@@ -122,7 +135,9 @@ class RouteSequenceTab extends StatelessWidget {
                                           customer.companyName,
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
                                           ),
                                         ),
                                       ],
@@ -137,7 +152,9 @@ class RouteSequenceTab extends StatelessWidget {
                                         'Outstanding',
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                          color: isDark
+                                              ? AppTheme.darkTextSecondary
+                                              : AppTheme.lightTextSecondary,
                                         ),
                                       ),
                                       Text(
@@ -155,8 +172,10 @@ class RouteSequenceTab extends StatelessWidget {
                                   const SizedBox(width: 8),
                                   Icon(
                                     Icons.keyboard_arrow_right,
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                  )
+                                    color: isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary,
+                                  ),
                                 ],
                               ),
                             ),

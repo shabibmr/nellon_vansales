@@ -16,8 +16,14 @@ class ReturnItemSearchDialog {
   }) async {
     final db = sl<HiveDatabaseService>();
 
-    final invoices = db.getLocalInvoices().where((inv) => inv.customerId == customerId).toList();
-    final purchasedItemIds = invoices.expand((inv) => inv.items).map((line) => line.item.id).toSet();
+    final invoices = db
+        .getLocalInvoices()
+        .where((inv) => inv.customerId == customerId)
+        .toList();
+    final purchasedItemIds = invoices
+        .expand((inv) => inv.items)
+        .map((line) => line.item.id)
+        .toSet();
 
     final items = db
         .getItems()
@@ -34,7 +40,9 @@ class ReturnItemSearchDialog {
       emptyMessage: 'No items found for this customer',
       accentColor: AppTheme.warningAmber,
       onSelected: (item, sheetContext) async {
-        final customer = db.getCustomers().firstWhere((c) => c.id == customerId);
+        final customer = db.getCustomers().firstWhere(
+          (c) => c.id == customerId,
+        );
         final lines = await showDialog<List<SalesReturnLineItem>>(
           context: sheetContext,
           builder: (context) => ReturnInvoiceSelectorDialog(

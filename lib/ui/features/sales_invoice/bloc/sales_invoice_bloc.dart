@@ -196,15 +196,19 @@ class SalesInvoiceState extends Equatable {
 
   /// Computes the legacy cart representation on the fly from editingItems.
   Map<Item, int> get cart => {
-        for (final line in editingItems) line.item: line.quantity
-      };
+    for (final line in editingItems) line.item: line.quantity,
+  };
 
   /// Evaluates and returns the loaded invoices filtered by the active date range.
   List<SalesInvoice> get filteredInvoices {
     return invoices.where((inv) {
       final invDay = DateTime(inv.date.year, inv.date.month, inv.date.day);
       if (startDate != null) {
-        final startDay = DateTime(startDate!.year, startDate!.month, startDate!.day);
+        final startDay = DateTime(
+          startDate!.year,
+          startDate!.month,
+          startDate!.day,
+        );
         if (invDay.isBefore(startDay)) return false;
       }
       if (endDate != null) {
@@ -252,21 +256,21 @@ class SalesInvoiceState extends Equatable {
 
   @override
   List<Object?> get props => [
-        invoices,
-        startDate,
-        endDate,
-        isLoading,
-        errorMessage,
-        successMessage,
-        editingInvoiceId,
-        editingDate,
-        editingCustomer,
-        editingItems,
-        editingNotes,
-        isEditingNew,
-        sourceOrderId,
-        sourceOrder,
-      ];
+    invoices,
+    startDate,
+    endDate,
+    isLoading,
+    errorMessage,
+    successMessage,
+    editingInvoiceId,
+    editingDate,
+    editingCustomer,
+    editingItems,
+    editingNotes,
+    isEditingNew,
+    sourceOrderId,
+    sourceOrder,
+  ];
 }
 
 // --- Bloc ---
@@ -279,9 +283,9 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
   SalesInvoiceBloc({
     required SalesRepository salesRepository,
     required SyncRepository syncRepository,
-  })  : _salesRepository = salesRepository,
-        _syncRepository = syncRepository,
-        super(const SalesInvoiceState()) {
+  }) : _salesRepository = salesRepository,
+       _syncRepository = syncRepository,
+       super(const SalesInvoiceState()) {
     // List & Editor handlers
     on<LoadInvoices>(_onLoadInvoices);
     on<SetDateFilter>(_onSetDateFilter);
@@ -303,44 +307,46 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     on<CheckoutRequested>(_onCheckoutRequested);
   }
 
-  Future<void> _onLoadInvoices(LoadInvoices event, Emitter<SalesInvoiceState> emit) async {
+  Future<void> _onLoadInvoices(
+    LoadInvoices event,
+    Emitter<SalesInvoiceState> emit,
+  ) async {
     emit(state.copyWith(isLoading: true));
     try {
       final loaded = _salesRepository.getLocalInvoices();
-      emit(state.copyWith(
-        invoices: loaded,
-        isLoading: false,
-      ));
+      emit(state.copyWith(invoices: loaded, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      ));
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 
   void _onSetDateFilter(SetDateFilter event, Emitter<SalesInvoiceState> emit) {
-    emit(state.copyWith(
-      startDate: event.startDate,
-      endDate: event.endDate,
-    ));
+    emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
   }
 
-  void _onStartNewInvoice(StartNewInvoice event, Emitter<SalesInvoiceState> emit) {
-    emit(state.copyWith(
-      editingInvoiceId: 'temp_inv_${DateTime.now().millisecondsSinceEpoch}',
-      editingDate: DateTime.now(),
-      editingCustomer: null,
-      editingItems: const [],
-      editingNotes: '',
-      isEditingNew: true,
-      errorMessage: null,
-      successMessage: null,
-      clearSource: true,
-    ));
+  void _onStartNewInvoice(
+    StartNewInvoice event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        editingInvoiceId: 'temp_inv_${DateTime.now().millisecondsSinceEpoch}',
+        editingDate: DateTime.now(),
+        editingCustomer: null,
+        editingItems: const [],
+        editingNotes: '',
+        isEditingNew: true,
+        errorMessage: null,
+        successMessage: null,
+        clearSource: true,
+      ),
+    );
   }
 
-  void _onStartEditInvoice(StartEditInvoice event, Emitter<SalesInvoiceState> emit) {
+  void _onStartEditInvoice(
+    StartEditInvoice event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     final customers = _salesRepository.getCustomers();
     final customer = customers.firstWhere(
       (c) => c.id == event.invoice.customerId,
@@ -358,17 +364,19 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       ),
     );
 
-    emit(state.copyWith(
-      editingInvoiceId: event.invoice.id,
-      editingDate: event.invoice.date,
-      editingCustomer: customer,
-      editingItems: List.from(event.invoice.items),
-      editingNotes: event.invoice.notes,
-      isEditingNew: false,
-      errorMessage: null,
-      successMessage: null,
-      clearSource: true,
-    ));
+    emit(
+      state.copyWith(
+        editingInvoiceId: event.invoice.id,
+        editingDate: event.invoice.date,
+        editingCustomer: customer,
+        editingItems: List.from(event.invoice.items),
+        editingNotes: event.invoice.notes,
+        isEditingNew: false,
+        errorMessage: null,
+        successMessage: null,
+        clearSource: true,
+      ),
+    );
   }
 
   /// Pre-fills the editor from a sales order being converted to an invoice.
@@ -376,7 +384,10 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
   /// Line items map 1:1 (identical fields) and are copied directly — this
   /// deliberately bypasses the per-line van-stock cap, since converted invoices
   /// provision stock to the van from the warehouse.
-  void _onStartInvoiceFromOrder(StartInvoiceFromOrder event, Emitter<SalesInvoiceState> emit) {
+  void _onStartInvoiceFromOrder(
+    StartInvoiceFromOrder event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     final order = event.order;
     final customers = _salesRepository.getCustomers();
     final customer = customers.firstWhere(
@@ -396,38 +407,51 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     );
 
     final items = order.items
-        .map((line) => InvoiceLineItem(
-              item: line.item,
-              quantity: line.quantity,
-              rate: line.rate,
-              taxPercentage: line.taxPercentage,
-              discount: line.discount,
-            ))
+        .map(
+          (line) => InvoiceLineItem(
+            item: line.item,
+            quantity: line.quantity,
+            rate: line.rate,
+            taxPercentage: line.taxPercentage,
+            discount: line.discount,
+          ),
+        )
         .toList();
 
-    emit(state.copyWith(
-      editingInvoiceId: 'temp_inv_${DateTime.now().millisecondsSinceEpoch}',
-      editingDate: DateTime.now(),
-      editingCustomer: customer,
-      editingItems: items,
-      editingNotes: order.notes,
-      isEditingNew: true,
-      sourceOrderId: order.id,
-      sourceOrder: order,
-      errorMessage: null,
-      successMessage: null,
-    ));
+    emit(
+      state.copyWith(
+        editingInvoiceId: 'temp_inv_${DateTime.now().millisecondsSinceEpoch}',
+        editingDate: DateTime.now(),
+        editingCustomer: customer,
+        editingItems: items,
+        editingNotes: order.notes,
+        isEditingNew: true,
+        sourceOrderId: order.id,
+        sourceOrder: order,
+        errorMessage: null,
+        successMessage: null,
+      ),
+    );
   }
 
-  void _onUpdateInvoiceDate(UpdateInvoiceDate event, Emitter<SalesInvoiceState> emit) {
+  void _onUpdateInvoiceDate(
+    UpdateInvoiceDate event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     emit(state.copyWith(editingDate: event.date));
   }
 
-  void _onUpdateInvoiceCustomer(UpdateInvoiceCustomer event, Emitter<SalesInvoiceState> emit) {
+  void _onUpdateInvoiceCustomer(
+    UpdateInvoiceCustomer event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     emit(state.copyWith(editingCustomer: event.customer));
   }
 
-  void _onAddOrUpdateLineItem(AddOrUpdateLineItem event, Emitter<SalesInvoiceState> emit) {
+  void _onAddOrUpdateLineItem(
+    AddOrUpdateLineItem event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     final items = List<InvoiceLineItem>.from(state.editingItems);
     final idx = items.indexWhere((line) => line.item.id == event.item.id);
 
@@ -446,7 +470,9 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
           notes: '',
         ),
       );
-      final origLineIndex = originalInvoice.items.indexWhere((line) => line.item.id == event.item.id);
+      final origLineIndex = originalInvoice.items.indexWhere(
+        (line) => line.item.id == event.item.id,
+      );
       if (origLineIndex >= 0) {
         originalQty = originalInvoice.items[origLineIndex].quantity;
       }
@@ -454,9 +480,12 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
 
     final allowedStock = event.item.stock + originalQty;
     if (event.quantity > allowedStock) {
-      emit(state.copyWith(
-        errorMessage: 'Cannot set quantity: Exceeds available van inventory stock ($allowedStock available)',
-      ));
+      emit(
+        state.copyWith(
+          errorMessage:
+              'Cannot set quantity: Exceeds available van inventory stock ($allowedStock available)',
+        ),
+      );
       return;
     }
 
@@ -472,25 +501,33 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       }
     } else {
       if (event.quantity > 0) {
-        items.add(InvoiceLineItem(
-          item: event.item,
-          quantity: event.quantity,
-          rate: event.rate ?? event.item.rate,
-          taxPercentage: event.item.taxPercentage,
-          discount: event.discount ?? 0.0,
-        ));
+        items.add(
+          InvoiceLineItem(
+            item: event.item,
+            quantity: event.quantity,
+            rate: event.rate ?? event.item.rate,
+            taxPercentage: event.item.taxPercentage,
+            discount: event.discount ?? 0.0,
+          ),
+        );
       }
     }
     emit(state.copyWith(editingItems: items, errorMessage: null));
   }
 
-  void _onRemoveLineItem(RemoveLineItem event, Emitter<SalesInvoiceState> emit) {
+  void _onRemoveLineItem(
+    RemoveLineItem event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     final items = List<InvoiceLineItem>.from(state.editingItems);
     items.removeWhere((line) => line.item.id == event.item.id);
     emit(state.copyWith(editingItems: items));
   }
 
-  Future<void> _onSaveInvoice(SaveInvoice event, Emitter<SalesInvoiceState> emit) async {
+  Future<void> _onSaveInvoice(
+    SaveInvoice event,
+    Emitter<SalesInvoiceState> emit,
+  ) async {
     if (state.editingCustomer == null) {
       emit(state.copyWith(errorMessage: 'Please select a customer'));
       return;
@@ -503,13 +540,18 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     emit(state.copyWith(isLoading: true));
     try {
       final isNew = state.isEditingNew;
-      final tempId = state.editingInvoiceId ?? 'temp_inv_${DateTime.now().millisecondsSinceEpoch}';
+      final tempId =
+          state.editingInvoiceId ??
+          'temp_inv_${DateTime.now().millisecondsSinceEpoch}';
 
       String invoiceNum;
       if (isNew) {
-        invoiceNum = 'INV-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+        invoiceNum =
+            'INV-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
       } else {
-        final originalInvoice = state.invoices.firstWhere((inv) => inv.id == tempId);
+        final originalInvoice = state.invoices.firstWhere(
+          (inv) => inv.id == tempId,
+        );
         invoiceNum = originalInvoice.invoiceNumber;
       }
 
@@ -519,7 +561,9 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
         customerId: state.editingCustomer!.id,
         customerName: state.editingCustomer!.name,
         date: state.editingDate ?? DateTime.now(),
-        dueDate: (state.editingDate ?? DateTime.now()).add(const Duration(days: 7)),
+        dueDate: (state.editingDate ?? DateTime.now()).add(
+          const Duration(days: 7),
+        ),
         items: state.editingItems,
         notes: event.notes,
         isPendingSync: true,
@@ -537,10 +581,12 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
           (o) => o.id == sourceOrderId,
           orElse: () => state.sourceOrder!,
         );
-        await _salesRepository.saveLocalOrder(order.copyWith(
-          status: SalesOrderStatus.invoiced,
-          convertedInvoiceNumber: invoiceNum,
-        ));
+        await _salesRepository.saveLocalOrder(
+          order.copyWith(
+            status: SalesOrderStatus.invoiced,
+            convertedInvoiceNumber: invoiceNum,
+          ),
+        );
 
         final convertItem = SyncQueueItem(
           id: tempId,
@@ -569,17 +615,16 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
 
       final updatedInvoices = _salesRepository.getLocalInvoices();
 
-      emit(state.copyWith(
-        invoices: updatedInvoices,
-        isLoading: false,
-        successMessage: 'Invoice saved successfully',
-        clearSource: true,
-      ));
+      emit(
+        state.copyWith(
+          invoices: updatedInvoices,
+          isLoading: false,
+          successMessage: 'Invoice saved successfully',
+          clearSource: true,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      ));
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 
@@ -595,32 +640,43 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     final existingQty = idx >= 0 ? items[idx].quantity : 0;
 
     if (existingQty + event.quantity > event.item.stock) {
-      emit(state.copyWith(
-        errorMessage: 'Cannot add item: Exceeds available van inventory stock',
-      ));
+      emit(
+        state.copyWith(
+          errorMessage:
+              'Cannot add item: Exceeds available van inventory stock',
+        ),
+      );
       return;
     }
 
     if (idx >= 0) {
       items[idx] = items[idx].copyWith(quantity: existingQty + event.quantity);
     } else {
-      items.add(InvoiceLineItem(
-        item: event.item,
-        quantity: event.quantity,
-        rate: event.item.rate,
-        taxPercentage: event.item.taxPercentage,
-      ));
+      items.add(
+        InvoiceLineItem(
+          item: event.item,
+          quantity: event.quantity,
+          rate: event.item.rate,
+          taxPercentage: event.item.taxPercentage,
+        ),
+      );
     }
     emit(state.copyWith(editingItems: items));
   }
 
-  void _onRemoveFromCart(RemoveFromCart event, Emitter<SalesInvoiceState> emit) {
+  void _onRemoveFromCart(
+    RemoveFromCart event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     final items = List<InvoiceLineItem>.from(state.editingItems);
     items.removeWhere((line) => line.item.id == event.item.id);
     emit(state.copyWith(editingItems: items));
   }
 
-  void _onUpdateCartQuantity(UpdateCartQuantity event, Emitter<SalesInvoiceState> emit) {
+  void _onUpdateCartQuantity(
+    UpdateCartQuantity event,
+    Emitter<SalesInvoiceState> emit,
+  ) {
     final items = List<InvoiceLineItem>.from(state.editingItems);
     final idx = items.indexWhere((line) => line.item.id == event.item.id);
 
@@ -628,20 +684,24 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       if (idx >= 0) items.removeAt(idx);
     } else {
       if (event.quantity > event.item.stock) {
-        emit(state.copyWith(
-          errorMessage: 'Cannot adjust quantity: Exceeds available van stock',
-        ));
+        emit(
+          state.copyWith(
+            errorMessage: 'Cannot adjust quantity: Exceeds available van stock',
+          ),
+        );
         return;
       }
       if (idx >= 0) {
         items[idx] = items[idx].copyWith(quantity: event.quantity);
       } else {
-        items.add(InvoiceLineItem(
-          item: event.item,
-          quantity: event.quantity,
-          rate: event.item.rate,
-          taxPercentage: event.item.taxPercentage,
-        ));
+        items.add(
+          InvoiceLineItem(
+            item: event.item,
+            quantity: event.quantity,
+            rate: event.item.rate,
+            taxPercentage: event.item.taxPercentage,
+          ),
+        );
       }
     }
     emit(state.copyWith(editingItems: items));
@@ -651,7 +711,10 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     emit(state.copyWith(editingItems: const []));
   }
 
-  Future<void> _onCheckoutRequested(CheckoutRequested event, Emitter<SalesInvoiceState> emit) async {
+  Future<void> _onCheckoutRequested(
+    CheckoutRequested event,
+    Emitter<SalesInvoiceState> emit,
+  ) async {
     if (state.editingItems.isEmpty) {
       emit(state.copyWith(errorMessage: 'Cart is empty'));
       return;
@@ -662,7 +725,8 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       final tempId = 'temp_inv_${DateTime.now().millisecondsSinceEpoch}';
       final invoice = SalesInvoice(
         id: tempId,
-        invoiceNumber: 'INV-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+        invoiceNumber:
+            'INV-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
         customerId: event.customer.id,
         customerName: event.customer.name,
         date: DateTime.now(),
@@ -687,17 +751,16 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
 
       final updatedInvoices = _salesRepository.getLocalInvoices();
 
-      emit(state.copyWith(
-        invoices: updatedInvoices,
-        isLoading: false,
-        editingItems: const [],
-        successMessage: 'Invoice generated & queued offline!',
-      ));
+      emit(
+        state.copyWith(
+          invoices: updatedInvoices,
+          isLoading: false,
+          editingItems: const [],
+          successMessage: 'Invoice generated & queued offline!',
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      ));
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 }

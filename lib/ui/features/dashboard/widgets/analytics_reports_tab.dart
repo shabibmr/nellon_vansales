@@ -94,11 +94,7 @@ class AnalyticsReportsTab extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               // Sales Returns — full-width card
-              _ReturnsCard(
-                cs: cs,
-                todayReturns: todayReturns,
-                isDark: isDark,
-              ),
+              _ReturnsCard(cs: cs, todayReturns: todayReturns, isDark: isDark),
 
               const SizedBox(height: 28),
 
@@ -109,7 +105,9 @@ class AnalyticsReportsTab extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.2,
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -133,7 +131,8 @@ class AnalyticsReportsTab extends StatelessWidget {
               const SizedBox(height: 10),
               _ReportTile(
                 title: 'Agewise Receivables',
-                subtitle: 'Outstanding by age: 0-15, 15-30, 30-60 and >60 days.',
+                subtitle:
+                    'Outstanding by age: 0-15, 15-30, 30-60 and >60 days.',
                 icon: Icons.hourglass_bottom_rounded,
                 color: AppTheme.warningAmber,
                 isDark: isDark,
@@ -178,7 +177,11 @@ class _ReturnsCard extends StatelessWidget {
               color: AppTheme.warningAmber.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.assignment_return_outlined, color: AppTheme.warningAmber, size: 20),
+            child: const Icon(
+              Icons.assignment_return_outlined,
+              color: AppTheme.warningAmber,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -187,7 +190,9 @@ class _ReturnsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.darkTextSecondary
+                    : AppTheme.lightTextSecondary,
               ),
             ),
           ),
@@ -256,22 +261,35 @@ class _ReportTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14, color: color)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: color,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.3,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                      )),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.3,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.lightTextSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios_rounded,
-                size: 13,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 13,
+              color: isDark
+                  ? AppTheme.darkTextSecondary
+                  : AppTheme.lightTextSecondary,
+            ),
           ],
         ),
       ),

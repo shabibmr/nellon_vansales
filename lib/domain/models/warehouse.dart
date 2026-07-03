@@ -42,4 +42,3 @@ class Warehouse extends Equatable {
   @override
   List<Object?> get props => [id, name, address, isPrimary];
 }
-

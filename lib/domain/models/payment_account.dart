@@ -49,4 +49,3 @@ class PaymentAccount extends Equatable {
   @override
   List<Object?> get props => [id, name, accountType, currencyCode, paymentMode];
 }
-

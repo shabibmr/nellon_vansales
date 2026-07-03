@@ -23,19 +23,19 @@ abstract class SalesRepository {
 
   /// Selects and locks an active route for the delivery day.
   Future<void> setActiveRouteId(String? routeId);
-  
+
   /// Retrieves the list of master customer entities synced to the van.
   List<Customer> getCustomers();
 
   /// Saves or refreshes customer entities in local cache.
   Future<void> saveCustomers(List<Customer> customers);
-  
+
   /// Retrieves list of inventory items currently stocked in the van.
   List<Item> getItems();
 
   /// Saves or refreshes item stocks locally.
   Future<void> saveItems(List<Item> items);
-  
+
   /// Gets all sales invoices recorded locally.
   List<SalesInvoice> getLocalInvoices();
 
@@ -54,25 +54,25 @@ abstract class SalesRepository {
 
   /// Reads a single sales order from Zoho Books by its permanent `zohoOrderId`.
   Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId);
-  
+
   /// Gets all receipt vouchers collected locally.
   List<ReceiptVoucher> getLocalReceipts();
 
   /// Logs a new collection receipt locally and caches it.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher);
-  
+
   /// Gets all sales returns logged locally.
   List<SalesReturn> getLocalReturns();
 
   /// Logs a credit note/sales return locally and caches it.
   Future<void> saveLocalReturn(SalesReturn salesReturn);
-  
+
   /// Gets all route expenses filed locally.
   List<ExpenseEntry> getLocalExpenses();
 
   /// Saves a new multi-line expense entry locally.
   Future<void> saveLocalExpense(ExpenseEntry expense);
-  
+
   /// Gets the daily cash closing reconciliation record, if filed.
   CashClosing? getLocalCashClosing();
 
@@ -88,4 +88,3 @@ abstract class SalesRepository {
   /// Retrieves open (unpaid) customer invoices.
   List<OpenInvoice> getOpenInvoices({String? customerId});
 }
-

@@ -71,10 +71,12 @@ class AgingReceivablesReportPage extends StatefulWidget {
   const AgingReceivablesReportPage({super.key});
 
   @override
-  State<AgingReceivablesReportPage> createState() => _AgingReceivablesReportPageState();
+  State<AgingReceivablesReportPage> createState() =>
+      _AgingReceivablesReportPageState();
 }
 
-class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage> {
+class _AgingReceivablesReportPageState
+    extends State<AgingReceivablesReportPage> {
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
   final SyncRepository _syncRepository = sl<SyncRepository>();
   final DateFormat _dateFmt = DateFormat('dd MMM yyyy');
@@ -159,7 +161,9 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
       int cmp;
       switch (_sortField) {
         case _SortField.name:
-          cmp = a.customerName.toLowerCase().compareTo(b.customerName.toLowerCase());
+          cmp = a.customerName.toLowerCase().compareTo(
+            b.customerName.toLowerCase(),
+          );
           break;
         case _SortField.total:
           cmp = a.total.compareTo(b.total);
@@ -176,7 +180,8 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
         _sortAscending = !_sortAscending;
       } else {
         _sortField = field;
-        _sortAscending = field == _SortField.name; // names default A→Z, amounts high→low
+        _sortAscending =
+            field == _SortField.name; // names default A→Z, amounts high→low
       }
     });
   }
@@ -215,7 +220,10 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                 child: SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             )
@@ -237,12 +245,17 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
               decoration: BoxDecoration(
                 color: AppTheme.primaryIndigo.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.primaryIndigo.withValues(alpha: 0.2)),
+                border: Border.all(
+                  color: AppTheme.primaryIndigo.withValues(alpha: 0.2),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.account_balance_wallet_rounded,
-                      color: AppTheme.primaryIndigo, size: 22),
+                  const Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: AppTheme.primaryIndigo,
+                    size: 22,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -253,14 +266,18 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
                           ),
                         ),
                         Text(
                           'As of ${_dateFmt.format(DateTime.now())}',
                           style: TextStyle(
                             fontSize: 10,
-                            color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                            color: isDark
+                                ? const Color(0xFF475569)
+                                : const Color(0xFF94A3B8),
                           ),
                         ),
                       ],
@@ -310,9 +327,14 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  color: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -321,8 +343,13 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                       onTap: () => _toggleSort(_SortField.name),
                       child: Row(
                         children: [
-                          const Text('CUSTOMER',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          const Text(
+                            'CUSTOMER',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           const SizedBox(width: 2),
                           _sortIcon(_SortField.name),
                         ],
@@ -335,8 +362,13 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                         children: [
                           _sortIcon(_SortField.total),
                           const SizedBox(width: 2),
-                          const Text('TOTAL DUE',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          const Text(
+                            'TOTAL DUE',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -357,7 +389,9 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                         Icon(
                           Icons.account_balance_wallet_outlined,
                           size: 64,
-                          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                          color: isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFCBD5E1),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -365,7 +399,9 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -374,7 +410,9 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                            color: isDark
+                                ? const Color(0xFF475569)
+                                : const Color(0xFF94A3B8),
                           ),
                         ),
                       ],
@@ -432,7 +470,8 @@ class _AgingReceivablesReportPageState extends State<AgingReceivablesReportPage>
                                         isDark: isDark,
                                       ),
                                     ),
-                                    if (b != _Bucket.values.last) const SizedBox(width: 6),
+                                    if (b != _Bucket.values.last)
+                                      const SizedBox(width: 6),
                                   ],
                                 ],
                               ),
@@ -477,7 +516,11 @@ class _BucketChip extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -538,7 +581,11 @@ class _BucketCell extends StatelessWidget {
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.bold,
-              color: active ? color : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+              color: active
+                  ? color
+                  : (isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.lightTextSecondary),
             ),
           ),
           const SizedBox(height: 2),
@@ -551,7 +598,9 @@ class _BucketCell extends StatelessWidget {
                 fontWeight: FontWeight.bold,
                 color: active
                     ? (isDark ? AppTheme.darkText : AppTheme.lightText)
-                    : (isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                    : (isDark
+                          ? const Color(0xFF475569)
+                          : const Color(0xFF94A3B8)),
               ),
             ),
           ),

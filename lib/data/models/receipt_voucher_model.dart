@@ -16,7 +16,8 @@ class PaymentAllocationModel extends PaymentAllocation {
     return PaymentAllocationModel(
       invoiceId: json['invoice_id'] ?? json['invoiceId'] ?? '',
       invoiceNumber: json['invoice_number'] ?? json['invoiceNumber'] ?? '',
-      amountApplied: (json['amount_applied'] ?? json['amountApplied'] ?? 0.0).toDouble(),
+      amountApplied: (json['amount_applied'] ?? json['amountApplied'] ?? 0.0)
+          .toDouble(),
     );
   }
 
@@ -65,14 +66,18 @@ class ReceiptVoucherModel extends ReceiptVoucher {
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       customerName: json['customer_name'] ?? json['customerName'] ?? '',
       // Parses list of dynamic invoice objects into [PaymentAllocationModel] list.
-      allocations: (json['invoices'] as List?)
+      allocations:
+          (json['invoices'] as List?)
               ?.map((item) => PaymentAllocationModel.fromJson(item))
               .toList() ??
           [],
       amount: (json['amount'] ?? 0.0).toDouble(),
       paymentMode: json['payment_mode'] ?? json['paymentMode'] ?? 'Cash',
-      referenceNumber: json['reference_number'] ?? json['referenceNumber'] ?? '',
-      date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
+      referenceNumber:
+          json['reference_number'] ?? json['referenceNumber'] ?? '',
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
       isPendingSync: json['isPendingSync'] ?? false,
     );
   }

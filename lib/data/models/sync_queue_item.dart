@@ -1,15 +1,18 @@
 import 'package:equatable/equatable.dart';
 
 /// Enumerates all sync progression states of local transaction logs.
-enum SyncStatus { 
+enum SyncStatus {
   /// Scheduled to upload.
-  pending, 
+  pending,
+
   /// Currently uploading via Sync Worker.
-  syncing, 
+  syncing,
+
   /// Failed due to API limits, network dropout, or validation error.
-  failed, 
+  failed,
+
   /// Completed successfully.
-  completed 
+  completed,
 }
 
 /// Represents an offline-first record pushed to a sync queue box.
@@ -95,6 +98,12 @@ class SyncQueueItem extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, type, payload, status, errorMessage, timestamp];
+  List<Object?> get props => [
+    id,
+    type,
+    payload,
+    status,
+    errorMessage,
+    timestamp,
+  ];
 }
-

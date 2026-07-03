@@ -11,10 +11,7 @@ class SyncRepositoryImpl implements SyncRepository {
   final HiveDatabaseService _dbService;
 
   /// Creates a new [SyncRepositoryImpl] with required worker and local database service.
-  SyncRepositoryImpl({
-    required this._syncWorker,
-    required this._dbService,
-  });
+  SyncRepositoryImpl({required this._syncWorker, required this._dbService});
 
   @override
   Stream<String> get syncStatusStream => _syncWorker.syncStatusStream;
@@ -50,4 +47,3 @@ class SyncRepositoryImpl implements SyncRepository {
     return _dbService.getItems().isNotEmpty;
   }
 }
-

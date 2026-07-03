@@ -73,8 +73,11 @@ class ExpenseEntryModel extends ExpenseEntry {
   factory ExpenseEntryModel.fromJson(Map<String, dynamic> json) {
     return ExpenseEntryModel(
       id: json['expense_id'] ?? json['id'] ?? '',
-      date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
-      lines: (json['lines'] as List?)
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
+      lines:
+          (json['lines'] as List?)
               ?.map((item) => ExpenseLineItemModel.fromJson(item))
               .toList() ??
           [],
@@ -109,4 +112,3 @@ class ExpenseEntryModel extends ExpenseEntry {
     );
   }
 }
-

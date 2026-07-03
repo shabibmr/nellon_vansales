@@ -19,7 +19,8 @@ import '../widgets/item_search_dialog.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../data/services/voucher_pdf_service.dart';
 import '../../dashboard/widgets/create_customer_dialog.dart';
-import '../../sales_invoice/bloc/sales_invoice_bloc.dart' show SalesInvoiceBloc, StartInvoiceFromOrder;
+import '../../sales_invoice/bloc/sales_invoice_bloc.dart'
+    show SalesInvoiceBloc, StartInvoiceFromOrder;
 import '../../sales_invoice/views/sales_invoice_editor_page.dart';
 
 class SalesOrderEditorPage extends StatefulWidget {
@@ -80,7 +81,9 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
           context.read<SalesInvoiceBloc>().add(StartInvoiceFromOrder(order));
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const SalesInvoiceEditorPage()),
+            MaterialPageRoute(
+              builder: (context) => const SalesInvoiceEditorPage(),
+            ),
           );
         },
       ),
@@ -88,14 +91,18 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
   }
 
   Future<void> _selectOrderDate(DateTime currentDate) async {
-    final picked = await showThemedDatePicker(context, initialDate: currentDate);
+    final picked = await showThemedDatePicker(
+      context,
+      initialDate: currentDate,
+    );
     if (picked != null && mounted) {
       context.read<SalesOrderBloc>().add(UpdateOrderDate(picked));
     }
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final allCustomers = _db.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
+    final allCustomers = _db.getCustomers()
+      ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,
       customers: allCustomers,
@@ -115,15 +122,20 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
 
   Future<void> _openItemSearch(List<OrderLineItem> editingItems) async {
     final excludedIds = editingItems.map((line) => line.item.id).toList();
-    final result = await ItemOrderSearchDialog.show(context, excludedItemIds: excludedIds);
+    final result = await ItemOrderSearchDialog.show(
+      context,
+      excludedItemIds: excludedIds,
+    );
     if (result != null && mounted) {
       final (item, qty, rate, discount) = result;
-      context.read<SalesOrderBloc>().add(AddOrUpdateLineItem(
-        item: item,
-        quantity: qty,
-        rate: rate,
-        discount: discount,
-      ));
+      context.read<SalesOrderBloc>().add(
+        AddOrUpdateLineItem(
+          item: item,
+          quantity: qty,
+          rate: rate,
+          discount: discount,
+        ),
+      );
     }
   }
 
@@ -135,10 +147,14 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
   ) async {
     int originalQty = 0;
     if (!isEditingNew && editingOrderId != null) {
-      final originalOrderIndex = orders.indexWhere((ord) => ord.id == editingOrderId);
+      final originalOrderIndex = orders.indexWhere(
+        (ord) => ord.id == editingOrderId,
+      );
       if (originalOrderIndex >= 0) {
         final originalOrder = orders[originalOrderIndex];
-        final originalLineIndex = originalOrder.items.indexWhere((line) => line.item.id == lineItem.item.id);
+        final originalLineIndex = originalOrder.items.indexWhere(
+          (line) => line.item.id == lineItem.item.id,
+        );
         if (originalLineIndex >= 0) {
           originalQty = originalOrder.items[originalLineIndex].quantity;
         }
@@ -158,12 +174,14 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
 
     if (result != null && mounted) {
       final (newQty, newRate, newDiscount) = result;
-      context.read<SalesOrderBloc>().add(AddOrUpdateLineItem(
-        item: lineItem.item,
-        quantity: newQty,
-        rate: newRate,
-        discount: newDiscount,
-      ));
+      context.read<SalesOrderBloc>().add(
+        AddOrUpdateLineItem(
+          item: lineItem.item,
+          quantity: newQty,
+          rate: newRate,
+          discount: newDiscount,
+        ),
+      );
     }
   }
 
@@ -174,13 +192,16 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
     return Scaffold(
       appBar: AppBar(
         title: BlocBuilder<SalesOrderBloc, SalesOrderState>(
-          buildWhen: (previous, current) => previous.isEditingNew != current.isEditingNew,
-          builder: (context, state) => Text(state.isEditingNew ? 'New Sales Order' : 'Edit Sales Order'),
+          buildWhen: (previous, current) =>
+              previous.isEditingNew != current.isEditingNew,
+          builder: (context, state) =>
+              Text(state.isEditingNew ? 'New Sales Order' : 'Edit Sales Order'),
         ),
       ),
       body: BlocConsumer<SalesOrderBloc, SalesOrderState>(
         listenWhen: (previous, current) =>
-            previous.successMessage != current.successMessage || previous.errorMessage != current.errorMessage,
+            previous.successMessage != current.successMessage ||
+            previous.errorMessage != current.errorMessage,
         listener: (context, state) {
           if (state.successMessage == 'Sales Order saved successfully') {
             showSuccessSnackBar(context, state.successMessage!);
@@ -213,7 +234,8 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
 
           return Column(
             children: [
-              if (state.isLoading) const LinearProgressIndicator(color: AppTheme.primaryIndigo),
+              if (state.isLoading)
+                const LinearProgressIndicator(color: AppTheme.primaryIndigo),
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -224,33 +246,45 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                         // Customer Selector Card
                         Card(
                           child: InkWell(
-                            onTap: state.isEditingNew ? () => _showCustomerSelector(context) : null,
+                            onTap: state.isEditingNew
+                                ? () => _showCustomerSelector(context)
+                                : null,
                             borderRadius: BorderRadius.circular(16),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor: AppTheme.primaryIndigo.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.person, color: AppTheme.primaryIndigo),
+                                    backgroundColor: AppTheme.primaryIndigo
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(
+                                      Icons.person,
+                                      color: AppTheme.primaryIndigo,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'CUSTOMER',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
                                           customer?.name ?? 'Select Customer',
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         if (customer != null) ...[
                                           const SizedBox(height: 2),
@@ -258,7 +292,9 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                             customer.companyName,
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                              color: isDark
+                                                  ? AppTheme.darkTextSecondary
+                                                  : AppTheme.lightTextSecondary,
                                             ),
                                           ),
                                         ],
@@ -268,7 +304,9 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                   if (state.isEditingNew)
                                     Icon(
                                       Icons.keyboard_arrow_right,
-                                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      color: isDark
+                                          ? AppTheme.darkTextSecondary
+                                          : AppTheme.lightTextSecondary,
                                     ),
                                 ],
                               ),
@@ -287,33 +325,45 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor: AppTheme.infoSky.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.calendar_today, color: AppTheme.infoSky),
+                                    backgroundColor: AppTheme.infoSky
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(
+                                      Icons.calendar_today,
+                                      color: AppTheme.infoSky,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'ORDER DATE',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
                                           _dateFormat.format(date),
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
                                   Icon(
                                     Icons.keyboard_arrow_right,
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                    color: isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary,
                                   ),
                                 ],
                               ),
@@ -326,12 +376,22 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Line Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const Text(
+                              'Line Items',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
                             TextButton.icon(
-                              onPressed: customer == null ? null : () => _openItemSearch(state.editingItems),
+                              onPressed: customer == null
+                                  ? null
+                                  : () => _openItemSearch(state.editingItems),
                               icon: const Icon(Icons.add, size: 16),
                               label: const Text('Add Item'),
-                              style: TextButton.styleFrom(foregroundColor: AppTheme.primaryIndigo),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppTheme.primaryIndigo,
+                              ),
                             ),
                           ],
                         ),
@@ -339,20 +399,25 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                         if (state.editingItems.isEmpty)
                           EmptyStateCard(
                             icon: Icons.shopping_cart_outlined,
-                            message: customer == null ? 'Select customer to add items' : 'No items added yet',
+                            message: customer == null
+                                ? 'Select customer to add items'
+                                : 'No items added yet',
                           )
                         else
                           LineItemList(
                             items: state.editingItems
-                                .map((line) => LineItemRow(
-                                      name: line.item.name,
-                                      sku: line.item.sku,
-                                      rate: line.rate,
-                                      taxPercentage: line.taxPercentage.toDouble(),
-                                      quantity: line.quantity,
-                                      total: line.total,
-                                      discount: line.discount,
-                                    ))
+                                .map(
+                                  (line) => LineItemRow(
+                                    name: line.item.name,
+                                    sku: line.item.sku,
+                                    rate: line.rate,
+                                    taxPercentage: line.taxPercentage
+                                        .toDouble(),
+                                    quantity: line.quantity,
+                                    total: line.total,
+                                    discount: line.discount,
+                                  ),
+                                )
                                 .toList(),
                             currencySymbol: cs,
                             onEdit: (index) => _editLineItem(
@@ -362,7 +427,9 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                               state.orders,
                             ),
                             onRemove: (index) {
-                              context.read<SalesOrderBloc>().add(RemoveLineItem(state.editingItems[index].item));
+                              context.read<SalesOrderBloc>().add(
+                                RemoveLineItem(state.editingItems[index].item),
+                              );
                             },
                           ),
                         const SizedBox(height: 20),
@@ -374,7 +441,10 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                           decoration: const InputDecoration(
                             labelText: 'Order Notes',
                             hintText: 'Add remarks or special terms...',
-                            prefixIcon: Icon(Icons.notes, color: AppTheme.primaryIndigo),
+                            prefixIcon: Icon(
+                              Icons.notes,
+                              color: AppTheme.primaryIndigo,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 30),
@@ -386,20 +456,45 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
 
               EditorFooter(
                 rows: [
-                  (label: 'Subtotal:', value: formatCurrency(subtotal, cs), emphasize: false),
+                  (
+                    label: 'Subtotal:',
+                    value: formatCurrency(subtotal, cs),
+                    emphasize: false,
+                  ),
                   if (discountTotal > 0)
-                    (label: 'Discount Total:', value: formatCurrency(discountTotal, cs), emphasize: false),
-                  (label: 'VAT (Tax):', value: formatCurrency(vat, cs), emphasize: false),
+                    (
+                      label: 'Discount Total:',
+                      value: formatCurrency(discountTotal, cs),
+                      emphasize: false,
+                    ),
+                  (
+                    label: 'VAT (Tax):',
+                    value: formatCurrency(vat, cs),
+                    emphasize: false,
+                  ),
                   if (roundOff != 0)
-                    (label: 'Round Off:', value: formatCurrency(roundOff, cs), emphasize: false),
-                  (label: 'Total Amount:', value: formatCurrency(total, cs), emphasize: true),
+                    (
+                      label: 'Round Off:',
+                      value: formatCurrency(roundOff, cs),
+                      emphasize: false,
+                    ),
+                  (
+                    label: 'Total Amount:',
+                    value: formatCurrency(total, cs),
+                    emphasize: true,
+                  ),
                 ],
                 buttonLabel: 'SAVE SALES ORDER',
                 buttonColor: AppTheme.primaryIndigo,
-                onSave: (customer == null || state.editingItems.isEmpty || state.isLoading)
+                onSave:
+                    (customer == null ||
+                        state.editingItems.isEmpty ||
+                        state.isLoading)
                     ? null
                     : () {
-                        context.read<SalesOrderBloc>().add(SaveOrder(notes: _notesController.text));
+                        context.read<SalesOrderBloc>().add(
+                          SaveOrder(notes: _notesController.text),
+                        );
                       },
                 trailing: !state.isEditingNew
                     ? Builder(
@@ -412,7 +507,11 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                               customerId: customer?.id ?? '',
                               customerName: customer?.name ?? '',
                               date: date,
-                              shipmentDate: state.editingDate?.add(const Duration(days: 7)) ?? DateTime.now(),
+                              shipmentDate:
+                                  state.editingDate?.add(
+                                    const Duration(days: 7),
+                                  ) ??
+                                  DateTime.now(),
                               items: state.editingItems,
                               notes: _notesController.text,
                             ),
@@ -432,7 +531,10 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                   customerName: customer?.name ?? '',
                                   date: date,
                                   shipmentDate:
-                                      state.editingDate?.add(const Duration(days: 7)) ?? DateTime.now(),
+                                      state.editingDate?.add(
+                                        const Duration(days: 7),
+                                      ) ??
+                                      DateTime.now(),
                                   items: state.editingItems,
                                   notes: _notesController.text,
                                 ),

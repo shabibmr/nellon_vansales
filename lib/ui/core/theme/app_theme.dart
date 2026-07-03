@@ -6,39 +6,39 @@ import 'package:flutter/material.dart';
 /// to ensure unified layouts across the entire Van Sales application.
 class AppTheme {
   // Vibrant HSL-Tailored Color Tokens
-  
+
   /// Primary active accent color (Indigo).
   static const Color primaryIndigo = Color(0xFF6366F1);
-  
+
   /// Darker shade of Indigo for elevated/active triggers.
   static const Color primaryDarkIndigo = Color(0xFF4F46E5);
-  
+
   /// Semantic color for success (Emerald).
   static const Color successEmerald = Color(0xFF10B981);
-  
+
   /// Semantic color for warnings or pending operations (Amber).
   static const Color warningAmber = Color(0xFFF59E0B);
-  
+
   /// Semantic color for error validation/danger states (Rose).
   static const Color errorRose = Color(0xFFF43F5E);
-  
+
   /// Accent info color (Sky blue).
   static const Color infoSky = Color(0xFF0EA5E9);
 
   // Sleek Dark Theme Color Palette
-  
+
   /// Background color for scaffolding in dark mode (Slate 900).
   static const Color darkBackground = Color(0xFF0F172A);
-  
+
   /// Surface/card background color in dark mode (Slate 800).
   static const Color darkSurface = Color(0xFF1E293B);
-  
+
   /// Secondary surface background color in dark mode (Slate 700).
   static const Color darkCard = Color(0xFF334155);
-  
+
   /// Main high-contrast text color in dark mode (Slate 50).
   static const Color darkText = Color(0xFFF8FAFC);
-  
+
   /// Secondary subtitle text color in dark mode (Slate 400).
   static const Color darkTextSecondary = Color(0xFF94A3B8);
 
@@ -66,13 +66,13 @@ class AppTheme {
 
   /// Background color for scaffolding in light mode (Slate 50).
   static const Color lightBackground = Color(0xFFF8FAFC);
-  
+
   /// Surface/card background color in light mode.
   static const Color lightSurface = Color(0xFFFFFFFF);
-  
+
   /// Main high-contrast text color in light mode (Slate 900).
   static const Color lightText = Color(0xFF0F172A);
-  
+
   /// Secondary subtitle text color in light mode (Slate 500).
   static const Color lightTextSecondary = Color(0xFF64748B);
 
@@ -119,10 +119,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -130,7 +127,10 @@ class AppTheme {
         fillColor: glassSurface,
         hintStyle: const TextStyle(color: glassTextSecondary, fontSize: 14),
         labelStyle: const TextStyle(color: primaryIndigo, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: glassBorder, width: 1),
@@ -190,10 +190,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -201,7 +198,10 @@ class AppTheme {
         fillColor: const Color(0xFF1E293B),
         hintStyle: const TextStyle(color: darkTextSecondary, fontSize: 14),
         labelStyle: const TextStyle(color: primaryIndigo, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFF334155), width: 1),
@@ -262,10 +262,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -273,7 +270,10 @@ class AppTheme {
         fillColor: Colors.white,
         hintStyle: const TextStyle(color: lightTextSecondary, fontSize: 14),
         labelStyle: const TextStyle(color: primaryIndigo, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1),

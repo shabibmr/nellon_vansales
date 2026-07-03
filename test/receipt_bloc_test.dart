@@ -49,29 +49,47 @@ class FakeSalesRepository implements SalesRepository {
   List<SyncQueueItem> getSyncQueue() => syncQueue;
 
   // Stub other methods
-  @override List<RouteModel> getRoutes() => [];
-  @override String? get activeRouteId => null;
-  @override Future<void> setActiveRouteId(String? routeId) async {}
-  @override Future<void> saveCustomers(List<Customer> customers) async {}
-  @override List<Item> getItems() => [];
-  @override Future<void> saveItems(List<Item> items) async {}
-  @override List<SalesInvoice> getLocalInvoices() => [];
-  @override Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
-  @override List<SalesOrder> getLocalOrders() => [];
-  @override Future<void> saveLocalOrder(SalesOrder order) async {}
-  @override Future<List<SalesOrder>> fetchRemoteOrders() async => [];
-  @override Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
-  @override List<SalesReturn> getLocalReturns() => [];
-  @override Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
-  @override List<ExpenseEntry> getLocalExpenses() => [];
-  @override Future<void> saveLocalExpense(ExpenseEntry expense) async {}
-  @override CashClosing? getLocalCashClosing() => null;
-  @override Future<void> saveLocalCashClosing(CashClosing closing) async {}
+  @override
+  List<RouteModel> getRoutes() => [];
+  @override
+  String? get activeRouteId => null;
+  @override
+  Future<void> setActiveRouteId(String? routeId) async {}
+  @override
+  Future<void> saveCustomers(List<Customer> customers) async {}
+  @override
+  List<Item> getItems() => [];
+  @override
+  Future<void> saveItems(List<Item> items) async {}
+  @override
+  List<SalesInvoice> getLocalInvoices() => [];
+  @override
+  Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
+  @override
+  List<SalesOrder> getLocalOrders() => [];
+  @override
+  Future<void> saveLocalOrder(SalesOrder order) async {}
+  @override
+  Future<List<SalesOrder>> fetchRemoteOrders() async => [];
+  @override
+  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
+  @override
+  List<SalesReturn> getLocalReturns() => [];
+  @override
+  Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
+  @override
+  List<ExpenseEntry> getLocalExpenses() => [];
+  @override
+  Future<void> saveLocalExpense(ExpenseEntry expense) async {}
+  @override
+  CashClosing? getLocalCashClosing() => null;
+  @override
+  Future<void> saveLocalCashClosing(CashClosing closing) async {}
 }
 
 class FakeSyncRepository implements SyncRepository {
   int triggerCount = 0;
-  
+
   @override
   Future<void> triggerSync() async {
     triggerCount++;
@@ -177,9 +195,13 @@ void main() {
     // $500 to invoice1 (INV-101, oldest)
     // $100 to invoice2 (INV-102, newer)
     expect(bloc.state.editingAllocations.length, 2);
-    
-    final alloc1 = bloc.state.editingAllocations.firstWhere((a) => a.invoiceId == 'inv_01');
-    final alloc2 = bloc.state.editingAllocations.firstWhere((a) => a.invoiceId == 'inv_02');
+
+    final alloc1 = bloc.state.editingAllocations.firstWhere(
+      (a) => a.invoiceId == 'inv_01',
+    );
+    final alloc2 = bloc.state.editingAllocations.firstWhere(
+      (a) => a.invoiceId == 'inv_02',
+    );
 
     expect(alloc1.amountApplied, 500.0);
     expect(alloc2.amountApplied, 100.0);
@@ -201,8 +223,10 @@ void main() {
     // After setting amount, it should allocate $400:
     // $400 to invoice1 (INV-101, oldest)
     expect(bloc.state.editingAllocations.length, 1);
-    
-    final alloc1 = bloc.state.editingAllocations.firstWhere((a) => a.invoiceId == 'inv_01');
+
+    final alloc1 = bloc.state.editingAllocations.firstWhere(
+      (a) => a.invoiceId == 'inv_01',
+    );
     expect(alloc1.amountApplied, 400.0);
   });
 
@@ -221,8 +245,16 @@ void main() {
 
     // Manual override allocation: $200 to inv_01, $200 to inv_02
     const overrides = [
-      PaymentAllocation(invoiceId: 'inv_01', invoiceNumber: 'INV-101', amountApplied: 200.0),
-      PaymentAllocation(invoiceId: 'inv_02', invoiceNumber: 'INV-102', amountApplied: 200.0),
+      PaymentAllocation(
+        invoiceId: 'inv_01',
+        invoiceNumber: 'INV-101',
+        amountApplied: 200.0,
+      ),
+      PaymentAllocation(
+        invoiceId: 'inv_02',
+        invoiceNumber: 'INV-102',
+        amountApplied: 200.0,
+      ),
     ];
     future = bloc.stream.first;
     bloc.add(const UpdateReceiptAllocations(overrides));

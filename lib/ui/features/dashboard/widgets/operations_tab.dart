@@ -50,7 +50,8 @@ class OperationsTab extends StatelessWidget {
             const SizedBox(height: 16),
             VanActionTile(
               title: 'Sales Returns',
-              subtitle: 'View, filter, edit, or create credit notes for returned goods.',
+              subtitle:
+                  'View, filter, edit, or create credit notes for returned goods.',
               icon: Icons.assignment_return_outlined,
               color: AppTheme.warningAmber,
               isDark: isDark,
@@ -77,7 +78,8 @@ class OperationsTab extends StatelessWidget {
             const SizedBox(height: 16),
             VanActionTile(
               title: 'Daily Cash Closing',
-              subtitle: 'End of session cash count, inventory check & Zoho reconciliation.',
+              subtitle:
+                  'End of session cash count, inventory check & Zoho reconciliation.',
               icon: Icons.verified_outlined,
               color: AppTheme.infoSky,
               isDark: isDark,

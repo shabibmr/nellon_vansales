@@ -20,7 +20,8 @@ class TaxModel extends Tax {
     return TaxModel(
       id: json['tax_id'] ?? json['id'] ?? '',
       name: json['tax_name'] ?? json['name'] ?? '',
-      percentage: (json['tax_percentage'] ?? json['percentage'] ?? 0.0).toDouble(),
+      percentage: (json['tax_percentage'] ?? json['percentage'] ?? 0.0)
+          .toDouble(),
       type: json['tax_type'] ?? json['type'] ?? 'tax',
       isDefault: json['is_default_tax'] ?? json['isDefault'] ?? false,
     );
@@ -51,4 +52,3 @@ class TaxModel extends Tax {
     );
   }
 }
-

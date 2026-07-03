@@ -52,13 +52,18 @@ class ClientOperationsSheet extends StatelessWidget {
 
               Text(
                 customer.name,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Text(
                 customer.companyName,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -70,7 +75,9 @@ class ClientOperationsSheet extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
-                        color: customer.outstandingBalance > 0 ? AppTheme.errorRose : AppTheme.successEmerald,
+                        color: customer.outstandingBalance > 0
+                            ? AppTheme.errorRose
+                            : AppTheme.successEmerald,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -79,7 +86,10 @@ class ClientOperationsSheet extends StatelessWidget {
                   Flexible(
                     child: Text(
                       'Limit: $cs${customer.creditLimit.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.end,
                     ),
@@ -90,7 +100,8 @@ class ClientOperationsSheet extends StatelessWidget {
 
               VanActionTile(
                 title: 'New Sales Invoice',
-                subtitle: 'Create cart, calculate taxes, deduct stock, and sync invoice.',
+                subtitle:
+                    'Create cart, calculate taxes, deduct stock, and sync invoice.',
                 icon: Icons.description_rounded,
                 color: AppTheme.primaryIndigo,
                 isDark: isDark,
@@ -99,7 +110,8 @@ class ClientOperationsSheet extends StatelessWidget {
               const SizedBox(height: 14),
               VanActionTile(
                 title: 'New Sales Order',
-                subtitle: 'Create offline sales order and enqueue for Zoho sync.',
+                subtitle:
+                    'Create offline sales order and enqueue for Zoho sync.',
                 icon: Icons.assignment_rounded,
                 color: AppTheme.primaryIndigo,
                 isDark: isDark,
@@ -108,7 +120,8 @@ class ClientOperationsSheet extends StatelessWidget {
               const SizedBox(height: 14),
               VanActionTile(
                 title: 'Receipt Voucher (Payment)',
-                subtitle: 'Collect payment against outstanding contact balances.',
+                subtitle:
+                    'Collect payment against outstanding contact balances.',
                 icon: Icons.receipt_long_rounded,
                 color: AppTheme.successEmerald,
                 isDark: isDark,
@@ -117,7 +130,8 @@ class ClientOperationsSheet extends StatelessWidget {
               const SizedBox(height: 14),
               VanActionTile(
                 title: 'Sales Return (Credit Note)',
-                subtitle: 'Record returned stock and restore it back into the van.',
+                subtitle:
+                    'Record returned stock and restore it back into the van.',
                 icon: Icons.assignment_return_rounded,
                 color: AppTheme.errorRose,
                 isDark: isDark,

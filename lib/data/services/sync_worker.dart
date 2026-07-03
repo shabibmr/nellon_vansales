@@ -12,26 +12,33 @@ import '../models/expense_account_model.dart';
 import '../models/organization_model.dart';
 import '../models/open_invoice_model.dart';
 import '../../domain/models/route.dart';
-import '../../domain/models/sales_order.dart';
 
 /// Enumerates all types of Master data configurations synced from the backend.
 enum MasterType {
   /// General organization settings (Currency symbols, names, formatting context).
   organization,
+
   /// Synced Zoho Books warehouses/van compartments.
   warehouses,
+
   /// Deposit ledger accounts maps for receipts.
   paymentAccounts,
+
   /// Organization Tax configurations.
   taxes,
+
   /// Ledger expense ledger accounts.
   expenseAccounts,
+
   /// Configured delivery routes list.
   routes,
+
   /// Inventory items with rates and van stock quantities.
   items,
+
   /// Customer entities.
   customers,
+
   /// Unpaid invoices snapshot.
   openInvoices,
 }
@@ -41,50 +48,61 @@ extension MasterTypeLabel on MasterType {
   /// Gets a readable description category label.
   String get label {
     switch (this) {
-      case MasterType.organization:    return 'Organization';
-      case MasterType.warehouses:      return 'Warehouses';
-      case MasterType.paymentAccounts: return 'Payment Accounts';
-      case MasterType.taxes:           return 'Taxes';
-      case MasterType.expenseAccounts: return 'Expense Accounts';
-      case MasterType.routes:          return 'Routes';
-      case MasterType.items:           return 'Items';
-      case MasterType.customers:       return 'Customers';
-      case MasterType.openInvoices:    return 'Open Invoices';
+      case MasterType.organization:
+        return 'Organization';
+      case MasterType.warehouses:
+        return 'Warehouses';
+      case MasterType.paymentAccounts:
+        return 'Payment Accounts';
+      case MasterType.taxes:
+        return 'Taxes';
+      case MasterType.expenseAccounts:
+        return 'Expense Accounts';
+      case MasterType.routes:
+        return 'Routes';
+      case MasterType.items:
+        return 'Items';
+      case MasterType.customers:
+        return 'Customers';
+      case MasterType.openInvoices:
+        return 'Open Invoices';
     }
   }
 }
 
 /// The core offline synchronisation engine of the application.
 ///
-/// Runs background listeners to automatically push transactions to the Zoho Books server 
+/// Runs background listeners to automatically push transactions to the Zoho Books server
 /// whenever the device regains a network connection.
 /// Tracks sync statistics and manages dependency resolution during uploads.
 class SyncWorker {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
   final Connectivity _connectivity = Connectivity();
-  
+
   final _syncStatusController = StreamController<String>.broadcast();
+
   /// Broadcast stream communicating structural progress status text (e.g. "Syncing Invoice...").
   Stream<String> get syncStatusStream => _syncStatusController.stream;
 
   final _syncCountController = StreamController<int>.broadcast();
+
   /// Broadcast stream indicating the remaining count of unsynced queue tasks.
   Stream<int> get syncCountStream => _syncCountController.stream;
 
   bool _isSyncing = false;
+
   /// Returns true if a background sync sequence is actively running.
   bool get isSyncing => _isSyncing;
 
   /// Instantiates a new [SyncWorker] background controller.
   ///
   /// Installs network change connectivity listeners to automatically fire syncs when regaining access.
-  SyncWorker({
-    required this._dbService,
-    required this._apiClient,
-  }) {
+  SyncWorker({required this._dbService, required this._apiClient}) {
     // Listen to network changes
-    _connectivity.onConnectivityChanged.listen((List<ConnectivityResult> results) {
+    _connectivity.onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
       if (results.any((r) => r != ConnectivityResult.none)) {
         syncPendingItems();
       }
@@ -108,7 +126,9 @@ class SyncWorker {
     }
 
     final queue = _dbService.getSyncQueue();
-    final pendingItems = queue.where((item) => item.status != SyncStatus.completed).toList();
+    final pendingItems = queue
+        .where((item) => item.status != SyncStatus.completed)
+        .toList();
 
     if (pendingItems.isEmpty) {
       _syncStatusController.add('All transactions are synced');
@@ -131,10 +151,14 @@ class SyncWorker {
       int successCount = 0;
       for (int i = 0; i < pendingItems.length; i++) {
         final item = pendingItems[i];
-        _syncStatusController.add('Syncing ${i + 1}/${pendingItems.length}: ${item.type.toUpperCase()}...');
-        
+        _syncStatusController.add(
+          'Syncing ${i + 1}/${pendingItems.length}: ${item.type.toUpperCase()}...',
+        );
+
         // Mark as syncing in Hive
-        await _dbService.updateSyncItem(item.copyWith(status: SyncStatus.syncing));
+        await _dbService.updateSyncItem(
+          item.copyWith(status: SyncStatus.syncing),
+        );
 
         try {
           String remoteId = '';
@@ -156,11 +180,15 @@ class SyncWorker {
               break;
             case 'update_sales_order':
               remoteId = await _apiClient.updateSalesOrder(
-                item.payload['salesorder_id'], item.payload);
+                item.payload['salesorder_id'],
+                item.payload,
+              );
               await _persistOrderZohoId(item.id, remoteId);
               break;
             case 'convert_so':
-              remoteId = await _apiClient.convertSalesOrderToInvoice(item.payload['salesorder_id']);
+              remoteId = await _apiClient.convertSalesOrderToInvoice(
+                item.payload['salesorder_id'],
+              );
               break;
             case 'receipt':
               remoteId = await _apiClient.syncReceiptVoucher(item.payload);
@@ -172,7 +200,9 @@ class SyncWorker {
               remoteId = await _apiClient.syncExpense(item.payload);
               break;
             default:
-              throw Exception('Unsupported transaction sync type: ${item.type}');
+              throw Exception(
+                'Unsupported transaction sync type: ${item.type}',
+              );
           }
 
           // Mark completed and remove from queue
@@ -182,27 +212,40 @@ class SyncWorker {
           // ignore: avoid_print
           print('Sync error on item ${item.id}: $e');
           // Mark failed and cache error logs
-          await _dbService.updateSyncItem(item.copyWith(
-            status: SyncStatus.failed,
-            errorMessage: e.toString(),
-          ));
+          await _dbService.updateSyncItem(
+            item.copyWith(
+              status: SyncStatus.failed,
+              errorMessage: e.toString(),
+            ),
+          );
         }
       }
 
-      _syncStatusController.add(successCount == pendingItems.length
-          ? 'Sync Successful: All transactions synced!'
-          : 'Sync Partial: $successCount/${pendingItems.length} synced successfully.');
+      _syncStatusController.add(
+        successCount == pendingItems.length
+            ? 'Sync Successful: All transactions synced!'
+            : 'Sync Partial: $successCount/${pendingItems.length} synced successfully.',
+      );
     } finally {
       _isSyncing = false;
-      _syncCountController.add(_dbService.getSyncQueue().where((x) => x.status != SyncStatus.completed).length);
+      _syncCountController.add(
+        _dbService
+            .getSyncQueue()
+            .where((x) => x.status != SyncStatus.completed)
+            .length,
+      );
     }
   }
 
   /// Scans the unsynced queue payload maps and swaps out temporary customer keys with permanent server IDs.
-  Future<void> _resolveTempCustomerIdsInQueue(String tempCustomerId, String permanentZohoId) async {
+  Future<void> _resolveTempCustomerIdsInQueue(
+    String tempCustomerId,
+    String permanentZohoId,
+  ) async {
     final currentQueue = _dbService.getSyncQueue();
     for (final item in currentQueue) {
-      if (item.status == SyncStatus.pending || item.status == SyncStatus.failed) {
+      if (item.status == SyncStatus.pending ||
+          item.status == SyncStatus.failed) {
         bool modified = false;
         final updatedPayload = Map<String, dynamic>.from(item.payload);
 
@@ -217,7 +260,9 @@ class SyncWorker {
         }
 
         if (modified) {
-          await _dbService.updateSyncItem(item.copyWith(payload: updatedPayload));
+          await _dbService.updateSyncItem(
+            item.copyWith(payload: updatedPayload),
+          );
         }
       }
     }
@@ -225,28 +270,36 @@ class SyncWorker {
 
   /// Stores the permanent Zoho `salesorder_id` on the local order record once synced,
   /// so a later conversion can target the real id.
-  Future<void> _persistOrderZohoId(String localOrderId, String zohoOrderId) async {
+  Future<void> _persistOrderZohoId(
+    String localOrderId,
+    String zohoOrderId,
+  ) async {
     final orders = _dbService.getLocalOrders();
     final index = orders.indexWhere((o) => o.id == localOrderId);
     if (index >= 0) {
-      await _dbService.saveLocalOrder(orders[index].copyWith(
-        zohoOrderId: zohoOrderId,
-        isPendingSync: false,
-      ));
+      await _dbService.saveLocalOrder(
+        orders[index].copyWith(zohoOrderId: zohoOrderId, isPendingSync: false),
+      );
     }
   }
 
   /// Patches any pending/failed `convert_so` queue items whose `salesorder_id`
   /// still points at the temporary local order id, swapping in the permanent Zoho id.
-  Future<void> _resolveTempOrderIdsInQueue(String tempOrderId, String permanentZohoId) async {
+  Future<void> _resolveTempOrderIdsInQueue(
+    String tempOrderId,
+    String permanentZohoId,
+  ) async {
     final currentQueue = _dbService.getSyncQueue();
     for (final item in currentQueue) {
       if (item.type != 'convert_so') continue;
-      if (item.status == SyncStatus.pending || item.status == SyncStatus.failed) {
+      if (item.status == SyncStatus.pending ||
+          item.status == SyncStatus.failed) {
         if (item.payload['salesorder_id'] == tempOrderId) {
           final updatedPayload = Map<String, dynamic>.from(item.payload);
           updatedPayload['salesorder_id'] = permanentZohoId;
-          await _dbService.updateSyncItem(item.copyWith(payload: updatedPayload));
+          await _dbService.updateSyncItem(
+            item.copyWith(payload: updatedPayload),
+          );
         }
       }
     }
@@ -289,13 +342,17 @@ class SyncWorker {
           break;
         case MasterType.routes:
           final list = await _apiClient.fetchRoutes();
-          await _dbService.saveRoutes(list
-              .map((r) => RouteModel(
+          await _dbService.saveRoutes(
+            list
+                .map(
+                  (r) => RouteModel(
                     id: r['id'],
                     name: r['name'],
                     description: r['description'],
-                  ))
-              .toList());
+                  ),
+                )
+                .toList(),
+          );
           break;
         case MasterType.items:
           final activeWarehouse = _dbService.assignedWarehouseId ?? 'van_wh_01';

@@ -66,14 +66,13 @@ class Item extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        name,
-        sku,
-        rate,
-        stock,
-        description,
-        taxName,
-        taxPercentage,
-      ];
+    id,
+    name,
+    sku,
+    rate,
+    stock,
+    description,
+    taxName,
+    taxPercentage,
+  ];
 }
-

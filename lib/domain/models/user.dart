@@ -48,18 +48,18 @@ class User extends Equatable {
       email: email ?? this.email,
       role: role ?? this.role,
       activeRouteId: activeRouteId ?? this.activeRouteId,
-      assignedVanWarehouseId: assignedVanWarehouseId ?? this.assignedVanWarehouseId,
+      assignedVanWarehouseId:
+          assignedVanWarehouseId ?? this.assignedVanWarehouseId,
     );
   }
 
   @override
   List<Object?> get props => [
-        id,
-        name,
-        email,
-        role,
-        activeRouteId,
-        assignedVanWarehouseId,
-      ];
+    id,
+    name,
+    email,
+    role,
+    activeRouteId,
+    assignedVanWarehouseId,
+  ];
 }
-

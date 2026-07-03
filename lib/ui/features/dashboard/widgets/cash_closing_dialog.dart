@@ -53,7 +53,8 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
     const openingBalance = 1000.00; // Mock opening morning float in the van
-    final expectedClosing = openingBalance + widget.todayPayments - widget.todayExpenses;
+    final expectedClosing =
+        openingBalance + widget.todayPayments - widget.todayExpenses;
 
     return AlertDialog(
       title: const Text('Daily Cash Closing'),
@@ -68,13 +69,22 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
             ),
             const Divider(height: 24, color: Color(0xFF334155)),
             Text('Morning Cash Float: $cs${openingBalance.toStringAsFixed(2)}'),
-            Text('Total Invoiced Sales: $cs${widget.todaySales.toStringAsFixed(2)}'),
-            Text('Total Cash Collected: $cs${widget.todayPayments.toStringAsFixed(2)}'),
-            Text('Total Claimed Expenses: $cs${widget.todayExpenses.toStringAsFixed(2)}'),
+            Text(
+              'Total Invoiced Sales: $cs${widget.todaySales.toStringAsFixed(2)}',
+            ),
+            Text(
+              'Total Cash Collected: $cs${widget.todayPayments.toStringAsFixed(2)}',
+            ),
+            Text(
+              'Total Claimed Expenses: $cs${widget.todayExpenses.toStringAsFixed(2)}',
+            ),
             const SizedBox(height: 6),
             Text(
               'Expected Cash In Hand: $cs${expectedClosing.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryIndigo),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryIndigo,
+              ),
             ),
             const Divider(height: 24, color: Color(0xFF334155)),
             TextFormField(
@@ -88,16 +98,22 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _notesController,
-              decoration: const InputDecoration(labelText: 'Remarks / Discrepancy Notes'),
+              decoration: const InputDecoration(
+                labelText: 'Remarks / Discrepancy Notes',
+              ),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CANCEL'),
+        ),
         ElevatedButton(
           onPressed: () async {
-            final counted = double.tryParse(_physicalCashController.text.trim()) ?? 0.0;
+            final counted =
+                double.tryParse(_physicalCashController.text.trim()) ?? 0.0;
             final notes = _notesController.text.trim();
 
             final closing = CashClosing(
@@ -117,11 +133,13 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
             // Generate sync packet
             final syncItem = SyncQueueItem(
               id: closing.id,
-              type: 'expense', // Map closing as custom expense sheet or sync separately
+              type:
+                  'expense', // Map closing as custom expense sheet or sync separately
               payload: {
                 'amount': closing.reportedDifference.abs(),
                 'category': 'Miscellaneous',
-                'description': 'Daily Cash Closing: counted: $counted, expected: $expectedClosing. Difference: ${closing.reportedDifference.toStringAsFixed(2)}. Notes: $notes',
+                'description':
+                    'Daily Cash Closing: counted: $counted, expected: $expectedClosing. Difference: ${closing.reportedDifference.toStringAsFixed(2)}. Notes: $notes',
                 'date': closing.date.toIso8601String().split('T')[0],
                 'isPendingSync': true,
               },
@@ -135,7 +153,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
             sl<SyncWorker>().syncPendingItems();
 
             Navigator.pop(context);
-            
+
             final difference = closing.reportedDifference;
             showDialog(
               context: context,
@@ -150,7 +168,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
                   ElevatedButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('OK'),
-                  )
+                  ),
                 ],
               ),
             );

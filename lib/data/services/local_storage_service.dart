@@ -6,7 +6,7 @@ class LocalStorageService {
   static const String _uuidKey = 'license_uuid';
 
   LocalStorageService({FlutterSecureStorage? secureStorage})
-      : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// Reads the unique secure license UUID. Returns null if not yet generated.
   Future<String?> getLicenseUuid() async {

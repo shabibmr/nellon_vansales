@@ -46,4 +46,3 @@ class WarehouseModel extends Warehouse {
     );
   }
 }
-

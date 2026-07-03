@@ -23,11 +23,7 @@ class IconBadge extends StatelessWidget {
         color: filled ? color : color.withValues(alpha: 0.12),
         shape: BoxShape.circle,
       ),
-      child: Icon(
-        icon,
-        color: filled ? Colors.white : color,
-        size: size,
-      ),
+      child: Icon(icon, color: filled ? Colors.white : color, size: size),
     );
   }
 }

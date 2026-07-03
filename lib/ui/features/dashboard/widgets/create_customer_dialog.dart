@@ -19,10 +19,7 @@ class CreateCustomerDialog extends StatefulWidget {
   final VoidCallback? onCustomerCreated;
 
   /// Creates a new [CreateCustomerDialog].
-  const CreateCustomerDialog({
-    super.key,
-    this.onCustomerCreated,
-  });
+  const CreateCustomerDialog({super.key, this.onCustomerCreated});
 
   /// Presents the dialog and resolves to the newly created [Customer], or
   /// `null` if the user cancelled.
@@ -32,7 +29,8 @@ class CreateCustomerDialog extends StatefulWidget {
   }) {
     return showDialog<Customer>(
       context: context,
-      builder: (_) => CreateCustomerDialog(onCustomerCreated: onCustomerCreated),
+      builder: (_) =>
+          CreateCustomerDialog(onCustomerCreated: onCustomerCreated),
     );
   }
 
@@ -73,7 +71,10 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    final activeRouteId = routeBloc.state.activeRouteId ?? salesRepo.activeRouteId ?? 'route_default';
+    final activeRouteId =
+        routeBloc.state.activeRouteId ??
+        salesRepo.activeRouteId ??
+        'route_default';
     final localCustomers = salesRepo.getCustomers();
     final tempId = 'temp_cust_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -82,7 +83,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
     final address = _addressController.text.trim();
-    final creditLimit = double.tryParse(_creditLimitController.text.trim()) ?? 2000.0;
+    final creditLimit =
+        double.tryParse(_creditLimitController.text.trim()) ?? 2000.0;
 
     final newCustomer = Customer(
       id: tempId,
@@ -154,10 +156,17 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
               color: AppTheme.primaryIndigo.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.person_add_rounded, color: AppTheme.primaryIndigo, size: 20),
+            child: const Icon(
+              Icons.person_add_rounded,
+              color: AppTheme.primaryIndigo,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 12),
-          const Text('New Customer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'New Customer',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
       content: SizedBox(
@@ -173,8 +182,10 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   label: 'Full Contact Name',
                   icon: Icons.person_outline_rounded,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Name is required';
-                    if (v.trim().length < 2) return 'Enter at least 2 characters';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Name is required';
+                    if (v.trim().length < 2)
+                      return 'Enter at least 2 characters';
                     return null;
                   },
                 ),
@@ -184,7 +195,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   label: 'Company / Shop Name',
                   icon: Icons.storefront_outlined,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Company name is required';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Company name is required';
                     return null;
                   },
                 ),
@@ -195,7 +207,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Phone is required';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Phone is required';
                     final digits = v.trim().replaceAll(RegExp(r'\D'), '');
                     if (digits.length < 7) return 'Enter a valid phone number';
                     return null;
@@ -210,7 +223,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
                     final emailRegex = RegExp(r'^[\w.-]+@[\w.-]+\.\w{2,}$');
-                    if (!emailRegex.hasMatch(v.trim())) return 'Enter a valid email';
+                    if (!emailRegex.hasMatch(v.trim()))
+                      return 'Enter a valid email';
                     return null;
                   },
                 ),
@@ -226,10 +240,14 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                   controller: _creditLimitController,
                   label: 'Credit Limit ($cs)',
                   icon: Icons.credit_score_outlined,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Credit limit is required';
-                    if (double.tryParse(v.trim()) == null) return 'Enter a valid number';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Credit limit is required';
+                    if (double.tryParse(v.trim()) == null)
+                      return 'Enter a valid number';
                     return null;
                   },
                 ),
@@ -249,7 +267,10 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Icon(Icons.check_rounded, size: 18),
           label: const Text('CREATE'),

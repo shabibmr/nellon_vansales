@@ -122,18 +122,18 @@ class LicenseDocument extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        userId,
-        userEmail,
-        userName,
-        deviceId,
-        deviceModel,
-        deviceOs,
-        deviceOsVersion,
-        appVersion,
-        firstLoginAt,
-        lastLoginAt,
-        enabled,
-        expiryAt,
-      ];
+    id,
+    userId,
+    userEmail,
+    userName,
+    deviceId,
+    deviceModel,
+    deviceOs,
+    deviceOsVersion,
+    appVersion,
+    firstLoginAt,
+    lastLoginAt,
+    enabled,
+    expiryAt,
+  ];
 }

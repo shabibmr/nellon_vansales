@@ -85,8 +85,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
 
   /// Instantiates a new [AuthBloc] with the specified repository.
-  AuthBloc({required this._authRepository})
-      : super(AuthInitial()) {
+  AuthBloc({required this._authRepository}) : super(AuthInitial()) {
     on<AppStarted>(_onAppStarted);
     on<LoginRequested>(_onLoginRequested);
     on<LogoutRequested>(_onLogoutRequested);
@@ -103,7 +102,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   /// Handles sign in credential validation and maps failures.
-  Future<void> _onLoginRequested(LoginRequested event, Emitter<AuthState> emit) async {
+  Future<void> _onLoginRequested(
+    LoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
     try {
       final user = await _authRepository.signIn(event.email, event.password);
@@ -118,10 +120,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   /// Handles session termination.
-  Future<void> _onLogoutRequested(LogoutRequested event, Emitter<AuthState> emit) async {
+  Future<void> _onLogoutRequested(
+    LogoutRequested event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
     await _authRepository.signOut();
     emit(Unauthenticated());
   }
 }
-

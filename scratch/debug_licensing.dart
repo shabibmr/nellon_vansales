@@ -7,7 +7,7 @@ void main() async {
   final localService = FakeLocalStorageService();
   final deviceService = FakeDeviceInfoService();
   final licenseService = FakeLicenseService();
-  
+
   final cubit = LicenseCubit(
     licenseService: licenseService,
     localStorageService: localService,
@@ -28,7 +28,7 @@ void main() async {
   print('Calling checkLicense...');
   await cubit.checkLicense(testUser);
   print('checkLicense finished.');
-  
+
   await Future.delayed(const Duration(milliseconds: 100));
   print('Cubit state: ${cubit.state}');
   print('--- END DEBUGGING ---');

@@ -11,8 +11,8 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
   final ZohoApiClient _apiClient;
 
   ServerConfigCubit({required ZohoApiClient apiClient})
-      : _apiClient = apiClient,
-        super(ServerConfigInitial());
+    : _apiClient = apiClient,
+      super(ServerConfigInitial());
 
   /// Configures the active server credentials mapping, updating [ZohoApiClient].
   void setConfig(ServerConfig? config) {
@@ -29,13 +29,19 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
         refreshToken: config.code,
       );
 
-      emit(ServerConfigLoaded(
-        clientId: config.clientId,
-        clientSecret: config.clientSecret,
-        code: config.code,
-      ));
+      emit(
+        ServerConfigLoaded(
+          clientId: config.clientId,
+          clientSecret: config.clientSecret,
+          code: config.code,
+        ),
+      );
     } catch (e) {
-      emit(ServerConfigError('Failed to inject server configuration credentials: $e'));
+      emit(
+        ServerConfigError(
+          'Failed to inject server configuration credentials: $e',
+        ),
+      );
     }
   }
 

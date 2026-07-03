@@ -44,7 +44,12 @@ class SalesReturnLineItem extends Equatable {
   }
 
   @override
-  List<Object?> get props => [invoiceLineItem, returnedQuantity, invoiceId, invoiceNumber];
+  List<Object?> get props => [
+    invoiceLineItem,
+    returnedQuantity,
+    invoiceId,
+    invoiceNumber,
+  ];
 }
 
 /// Represents a Sales Return (Credit Note) voucher created locally.
@@ -115,14 +120,13 @@ class SalesReturn extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        creditNoteNumber,
-        customerId,
-        customerName,
-        date,
-        items,
-        reason,
-        isPendingSync,
-      ];
+    id,
+    creditNoteNumber,
+    customerId,
+    customerName,
+    date,
+    items,
+    reason,
+    isPendingSync,
+  ];
 }
-

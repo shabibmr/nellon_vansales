@@ -45,7 +45,10 @@ class ExpensePdfTemplate {
               decoration: pw.BoxDecoration(
                 color: SharedPdfTemplate.lightGreyBackground,
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(color: SharedPdfTemplate.borderSlate, width: 1),
+                border: pw.Border.all(
+                  color: SharedPdfTemplate.borderSlate,
+                  width: 1,
+                ),
               ),
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -129,7 +132,10 @@ class ExpensePdfTemplate {
                   children: [
                     _buildTableHeader('#', alignLeft: true),
                     _buildTableHeader('Category', alignLeft: true),
-                    _buildTableHeader('Description / Justification', alignLeft: true),
+                    _buildTableHeader(
+                      'Description / Justification',
+                      alignLeft: true,
+                    ),
                     _buildTableHeader('Amount'),
                   ],
                 ),
@@ -143,9 +149,19 @@ class ExpensePdfTemplate {
                     ),
                     children: [
                       _buildTableCell('${i + 1}'),
-                      _buildTableCell(expense.lines[i].category, alignLeft: true),
-                      _buildTableCell(expense.lines[i].description, alignLeft: true, isSubText: true),
-                      _buildTableCell('$currencySymbol${expense.lines[i].amount.toStringAsFixed(2)}', isBold: true),
+                      _buildTableCell(
+                        expense.lines[i].category,
+                        alignLeft: true,
+                      ),
+                      _buildTableCell(
+                        expense.lines[i].description,
+                        alignLeft: true,
+                        isSubText: true,
+                      ),
+                      _buildTableCell(
+                        '$currencySymbol${expense.lines[i].amount.toStringAsFixed(2)}',
+                        isBold: true,
+                      ),
                     ],
                   ),
                 ],
@@ -189,8 +205,13 @@ class ExpensePdfTemplate {
                   padding: const pw.EdgeInsets.all(12),
                   decoration: pw.BoxDecoration(
                     color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-                    border: pw.Border.all(color: SharedPdfTemplate.borderSlate, width: 1),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(12),
+                    ),
+                    border: pw.Border.all(
+                      color: SharedPdfTemplate.borderSlate,
+                      width: 1,
+                    ),
                   ),
                   child: pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,

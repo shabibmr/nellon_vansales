@@ -28,7 +28,8 @@ class ItemModel extends Item {
       stock: ((json['stock_on_hand'] ?? json['stock'] ?? 0) as num).toInt(),
       description: json['description'] ?? '',
       taxName: json['tax_name'] ?? json['taxName'] ?? 'VAT 5%',
-      taxPercentage: (json['tax_percentage'] ?? json['taxPercentage'] ?? 5.0).toDouble(),
+      taxPercentage: (json['tax_percentage'] ?? json['taxPercentage'] ?? 5.0)
+          .toDouble(),
     );
   }
 
@@ -62,4 +63,3 @@ class ItemModel extends Item {
     );
   }
 }
-

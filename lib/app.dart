@@ -61,26 +61,24 @@ class VanSalesApp extends StatelessWidget {
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider<ThemeCubit>(
-            create: (context) => ThemeCubit(),
-          ),
+          BlocProvider<ThemeCubit>(create: (context) => ThemeCubit()),
           BlocProvider<OrganizationCubit>(
             create: (context) => OrganizationCubit(sl<HiveDatabaseService>()),
           ),
           BlocProvider<AuthBloc>(
-            create: (context) => AuthBloc(
-              authRepository: context.read<AuthRepository>(),
-            )..add(AppStarted()),
+            create: (context) =>
+                AuthBloc(authRepository: context.read<AuthRepository>())
+                  ..add(AppStarted()),
           ),
           BlocProvider<SyncBloc>(
-            create: (context) => SyncBloc(
-              syncRepository: context.read<SyncRepository>(),
-            )..add(SyncStarted()),
+            create: (context) =>
+                SyncBloc(syncRepository: context.read<SyncRepository>())
+                  ..add(SyncStarted()),
           ),
           BlocProvider<RouteBloc>(
-            create: (context) => RouteBloc(
-              salesRepository: context.read<SalesRepository>(),
-            )..add(LoadRoutes()),
+            create: (context) =>
+                RouteBloc(salesRepository: context.read<SalesRepository>())
+                  ..add(LoadRoutes()),
           ),
           BlocProvider<SalesInvoiceBloc>(
             create: (context) => SalesInvoiceBloc(
@@ -126,9 +124,8 @@ class VanSalesApp extends StatelessWidget {
             ),
           ),
           BlocProvider<ServerConfigCubit>(
-            create: (context) => ServerConfigCubit(
-              apiClient: sl<ZohoApiClient>(),
-            ),
+            create: (context) =>
+                ServerConfigCubit(apiClient: sl<ZohoApiClient>()),
           ),
           BlocProvider<VoucherPdfBloc>(
             create: (context) => VoucherPdfBloc(
@@ -184,11 +181,15 @@ class SessionGateway extends StatelessWidget {
                 if (routeState.isLoading) {
                   return const Scaffold(
                     body: Center(
-                      child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
+                      child: CircularProgressIndicator(
+                        color: AppTheme.primaryIndigo,
+                      ),
                     ),
                   );
                 }
-                final hasMasters = context.read<SyncRepository>().hasCoreMasters();
+                final hasMasters = context
+                    .read<SyncRepository>()
+                    .hasCoreMasters();
                 if (!hasMasters) {
                   return const MastersSyncPage();
                 }
@@ -208,4 +209,3 @@ class SessionGateway extends StatelessWidget {
     );
   }
 }
-

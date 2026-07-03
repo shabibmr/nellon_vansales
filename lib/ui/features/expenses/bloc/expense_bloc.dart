@@ -151,34 +151,40 @@ class ExpenseState extends Equatable {
       endDate: endDate ?? this.endDate,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
+      successMessage: clearSuccess
+          ? null
+          : (successMessage ?? this.successMessage),
       editingId: editingId ?? this.editingId,
       editingDate: editingDate ?? this.editingDate,
       editingAmount: editingAmount ?? this.editingAmount,
       editingCategory: editingCategory ?? this.editingCategory,
       editingDescription: editingDescription ?? this.editingDescription,
-      editingReceiptImagePath: clearReceiptImage ? null : (editingReceiptImagePath ?? this.editingReceiptImagePath),
-      editingReceiptImageBytes: clearReceiptImage ? null : (editingReceiptImageBytes ?? this.editingReceiptImageBytes),
+      editingReceiptImagePath: clearReceiptImage
+          ? null
+          : (editingReceiptImagePath ?? this.editingReceiptImagePath),
+      editingReceiptImageBytes: clearReceiptImage
+          ? null
+          : (editingReceiptImageBytes ?? this.editingReceiptImageBytes),
       isEditingNew: isEditingNew ?? this.isEditingNew,
     );
   }
 
   @override
   List<Object?> get props => [
-        expenses,
-        startDate,
-        endDate,
-        isLoading,
-        errorMessage,
-        successMessage,
-        editingId,
-        editingDate,
-        editingAmount,
-        editingCategory,
-        editingDescription,
-        editingReceiptImagePath,
-        isEditingNew,
-      ];
+    expenses,
+    startDate,
+    endDate,
+    isLoading,
+    errorMessage,
+    successMessage,
+    editingId,
+    editingDate,
+    editingAmount,
+    editingCategory,
+    editingDescription,
+    editingReceiptImagePath,
+    isEditingNew,
+  ];
 }
 
 // --- Bloc ---
@@ -190,9 +196,9 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
   ExpenseBloc({
     required SalesRepository salesRepository,
     required SyncRepository syncRepository,
-  })  : _salesRepository = salesRepository,
-        _syncRepository = syncRepository,
-        super(const ExpenseState()) {
+  }) : _salesRepository = salesRepository,
+       _syncRepository = syncRepository,
+       super(const ExpenseState()) {
     on<LoadExpenses>(_onLoadExpenses);
     on<SetExpenseDateFilter>(_onSetDateFilter);
     on<StartNewExpense>(_onStartNewExpense);
@@ -206,7 +212,10 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     on<ClearExpenseMessages>(_onClearMessages);
   }
 
-  Future<void> _onLoadExpenses(LoadExpenses event, Emitter<ExpenseState> emit) async {
+  Future<void> _onLoadExpenses(
+    LoadExpenses event,
+    Emitter<ExpenseState> emit,
+  ) async {
     emit(state.copyWith(isLoading: true));
     try {
       final loaded = _salesRepository.getLocalExpenses();
@@ -216,54 +225,73 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     }
   }
 
-  void _onSetDateFilter(SetExpenseDateFilter event, Emitter<ExpenseState> emit) {
+  void _onSetDateFilter(
+    SetExpenseDateFilter event,
+    Emitter<ExpenseState> emit,
+  ) {
     emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
   }
 
   void _onStartNewExpense(StartNewExpense event, Emitter<ExpenseState> emit) {
-    emit(ExpenseState(
-      expenses: state.expenses,
-      startDate: state.startDate,
-      endDate: state.endDate,
-      editingId: 'temp_exp_${DateTime.now().millisecondsSinceEpoch}',
-      editingDate: DateTime.now(),
-      editingAmount: 0.0,
-      editingCategory: 'Fuel',
-      editingDescription: '',
-      isEditingNew: true,
-    ));
+    emit(
+      ExpenseState(
+        expenses: state.expenses,
+        startDate: state.startDate,
+        endDate: state.endDate,
+        editingId: 'temp_exp_${DateTime.now().millisecondsSinceEpoch}',
+        editingDate: DateTime.now(),
+        editingAmount: 0.0,
+        editingCategory: 'Fuel',
+        editingDescription: '',
+        isEditingNew: true,
+      ),
+    );
   }
 
   void _onStartEditExpense(StartEditExpense event, Emitter<ExpenseState> emit) {
     final exp = event.expense;
     final firstLine = exp.lines.isNotEmpty ? exp.lines.first : null;
-    emit(ExpenseState(
-      expenses: state.expenses,
-      startDate: state.startDate,
-      endDate: state.endDate,
-      editingId: exp.id,
-      editingDate: exp.date,
-      editingAmount: firstLine?.amount ?? exp.amount,
-      editingCategory: firstLine?.category ?? 'Fuel',
-      editingDescription: firstLine?.description ?? '',
-      editingReceiptImagePath: exp.receiptImagePath,
-      isEditingNew: false,
-    ));
+    emit(
+      ExpenseState(
+        expenses: state.expenses,
+        startDate: state.startDate,
+        endDate: state.endDate,
+        editingId: exp.id,
+        editingDate: exp.date,
+        editingAmount: firstLine?.amount ?? exp.amount,
+        editingCategory: firstLine?.category ?? 'Fuel',
+        editingDescription: firstLine?.description ?? '',
+        editingReceiptImagePath: exp.receiptImagePath,
+        isEditingNew: false,
+      ),
+    );
   }
 
-  void _onSetEditingDate(SetEditingExpenseDate event, Emitter<ExpenseState> emit) {
+  void _onSetEditingDate(
+    SetEditingExpenseDate event,
+    Emitter<ExpenseState> emit,
+  ) {
     emit(state.copyWith(editingDate: event.date));
   }
 
-  void _onSetEditingAmount(SetEditingExpenseAmount event, Emitter<ExpenseState> emit) {
+  void _onSetEditingAmount(
+    SetEditingExpenseAmount event,
+    Emitter<ExpenseState> emit,
+  ) {
     emit(state.copyWith(editingAmount: event.amount));
   }
 
-  void _onSetEditingCategory(SetEditingExpenseCategory event, Emitter<ExpenseState> emit) {
+  void _onSetEditingCategory(
+    SetEditingExpenseCategory event,
+    Emitter<ExpenseState> emit,
+  ) {
     emit(state.copyWith(editingCategory: event.category));
   }
 
-  void _onSetEditingDescription(SetEditingExpenseDescription event, Emitter<ExpenseState> emit) {
+  void _onSetEditingDescription(
+    SetEditingExpenseDescription event,
+    Emitter<ExpenseState> emit,
+  ) {
     emit(state.copyWith(editingDescription: event.description));
   }
 
@@ -271,14 +299,19 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     if (event.path == null) {
       emit(state.copyWith(clearReceiptImage: true));
     } else {
-      emit(state.copyWith(
-        editingReceiptImagePath: event.path,
-        editingReceiptImageBytes: event.bytes,
-      ));
+      emit(
+        state.copyWith(
+          editingReceiptImagePath: event.path,
+          editingReceiptImageBytes: event.bytes,
+        ),
+      );
     }
   }
 
-  Future<void> _onSaveExpense(SaveExpense event, Emitter<ExpenseState> emit) async {
+  Future<void> _onSaveExpense(
+    SaveExpense event,
+    Emitter<ExpenseState> emit,
+  ) async {
     if (state.editingAmount <= 0) {
       emit(state.copyWith(errorMessage: 'Please enter a valid amount'));
       return;
@@ -286,7 +319,9 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
 
     emit(state.copyWith(isLoading: true));
     try {
-      final tempId = state.editingId ?? 'temp_exp_${DateTime.now().millisecondsSinceEpoch}';
+      final tempId =
+          state.editingId ??
+          'temp_exp_${DateTime.now().millisecondsSinceEpoch}';
       final line = ExpenseLineItem(
         category: state.editingCategory,
         amount: state.editingAmount,
@@ -314,17 +349,22 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
       _syncRepository.triggerSync();
 
       final updated = _salesRepository.getLocalExpenses();
-      emit(state.copyWith(
-        expenses: updated,
-        isLoading: false,
-        successMessage: 'Expense saved successfully',
-      ));
+      emit(
+        state.copyWith(
+          expenses: updated,
+          isLoading: false,
+          successMessage: 'Expense saved successfully',
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 
-  void _onClearMessages(ClearExpenseMessages event, Emitter<ExpenseState> emit) {
+  void _onClearMessages(
+    ClearExpenseMessages event,
+    Emitter<ExpenseState> emit,
+  ) {
     emit(state.copyWith(clearError: true, clearSuccess: true));
   }
 }

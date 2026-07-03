@@ -24,7 +24,9 @@ class OrganizationModel extends Organization {
       currencyCode: json['currency_code'] ?? json['currencyCode'] ?? '',
       currencySymbol: json['currency_symbol'] ?? json['currencySymbol'] ?? '',
       fiscalYearStartMonth:
-          json['fiscal_year_start_month'] ?? json['fiscalYearStartMonth'] ?? 'january',
+          json['fiscal_year_start_month'] ??
+          json['fiscalYearStartMonth'] ??
+          'january',
       timeZone: json['time_zone'] ?? json['timeZone'] ?? '',
     );
   }
@@ -54,4 +56,3 @@ class OrganizationModel extends Organization {
     );
   }
 }
-

@@ -32,9 +32,16 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
     if (picked != null && mounted) {
       final bloc = context.read<ExpenseBloc>();
       if (isStart) {
-        bloc.add(SetExpenseDateFilter(startDate: picked, endDate: bloc.state.endDate));
+        bloc.add(
+          SetExpenseDateFilter(startDate: picked, endDate: bloc.state.endDate),
+        );
       } else {
-        bloc.add(SetExpenseDateFilter(startDate: bloc.state.startDate, endDate: picked));
+        bloc.add(
+          SetExpenseDateFilter(
+            startDate: bloc.state.startDate,
+            endDate: picked,
+          ),
+        );
       }
     }
   }
@@ -78,13 +85,19 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                 onStartTap: () => _selectDate(true, state.startDate),
                 onEndTap: () => _selectDate(false, state.endDate),
                 onClear: hasFilter
-                    ? () => context.read<ExpenseBloc>().add(const SetExpenseDateFilter())
+                    ? () => context.read<ExpenseBloc>().add(
+                        const SetExpenseDateFilter(),
+                      )
                     : null,
               ),
 
               if (state.isLoading)
                 const Expanded(
-                  child: Center(child: CircularProgressIndicator(color: AppTheme.primaryIndigo)),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryIndigo,
+                    ),
+                  ),
                 )
               else if (list.isEmpty)
                 Expanded(
@@ -102,12 +115,19 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 600),
                       child: ListView.separated(
-                        padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 80),
+                        padding: const EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 8,
+                          bottom: 80,
+                        ),
                         itemCount: list.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final expense = list[index];
-                          final firstLine = expense.lines.isNotEmpty ? expense.lines.first : null;
+                          final firstLine = expense.lines.isNotEmpty
+                              ? expense.lines.first
+                              : null;
                           final category = firstLine?.category ?? '';
                           final description = firstLine?.description ?? '';
 
@@ -115,10 +135,14 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
                               onTap: () {
-                                context.read<ExpenseBloc>().add(StartEditExpense(expense));
+                                context.read<ExpenseBloc>().add(
+                                  StartEditExpense(expense),
+                                );
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(builder: (_) => const ExpenseEditorPage()),
+                                  MaterialPageRoute(
+                                    builder: (_) => const ExpenseEditorPage(),
+                                  ),
                                 );
                               },
                               child: Padding(
@@ -126,40 +150,61 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                 child: Row(
                                   children: [
                                     CircleAvatar(
-                                      backgroundColor: AppTheme.errorRose.withValues(alpha: 0.1),
-                                      child: const Icon(Icons.local_gas_station_outlined,
-                                          color: AppTheme.errorRose),
+                                      backgroundColor: AppTheme.errorRose
+                                          .withValues(alpha: 0.1),
+                                      child: const Icon(
+                                        Icons.local_gas_station_outlined,
+                                        color: AppTheme.errorRose,
+                                      ),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Row(
                                             children: [
                                               Text(
-                                                _dateFormat.format(expense.date),
+                                                _dateFormat.format(
+                                                  expense.date,
+                                                ),
                                                 style: const TextStyle(
-                                                    fontWeight: FontWeight.bold, fontSize: 14),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                ),
                                               ),
                                               const SizedBox(width: 8),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                    horizontal: 6, vertical: 2),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: expense.isPendingSync
-                                                      ? AppTheme.warningAmber.withValues(alpha: 0.12)
-                                                      : AppTheme.successEmerald.withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(4),
+                                                      ? AppTheme.warningAmber
+                                                            .withValues(
+                                                              alpha: 0.12,
+                                                            )
+                                                      : AppTheme.successEmerald
+                                                            .withValues(
+                                                              alpha: 0.12,
+                                                            ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
                                                 child: Text(
-                                                  expense.isPendingSync ? 'Pending Sync' : 'Synced',
+                                                  expense.isPendingSync
+                                                      ? 'Pending Sync'
+                                                      : 'Synced',
                                                   style: TextStyle(
                                                     fontSize: 10,
                                                     fontWeight: FontWeight.bold,
                                                     color: expense.isPendingSync
                                                         ? AppTheme.warningAmber
-                                                        : AppTheme.successEmerald,
+                                                        : AppTheme
+                                                              .successEmerald,
                                                   ),
                                                 ),
                                               ),
@@ -167,27 +212,34 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                           ),
                                           const SizedBox(height: 4),
                                           if (category.isNotEmpty)
-                                            Text(category,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isDark
-                                                      ? AppTheme.darkTextSecondary
-                                                      : AppTheme.lightTextSecondary,
-                                                )),
+                                            Text(
+                                              category,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: isDark
+                                                    ? AppTheme.darkTextSecondary
+                                                    : AppTheme
+                                                          .lightTextSecondary,
+                                              ),
+                                            ),
                                           if (description.isNotEmpty)
-                                            Text(description,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: isDark
-                                                      ? AppTheme.darkTextSecondary
-                                                      : AppTheme.lightTextSecondary,
-                                                )),
+                                            Text(
+                                              description,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark
+                                                    ? AppTheme.darkTextSecondary
+                                                    : AppTheme
+                                                          .lightTextSecondary,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
                                         Text(
                                           formatCurrency(expense.amount, cs),
@@ -198,15 +250,20 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                           ),
                                         ),
                                         if (expense.receiptImagePath != null)
-                                          const Icon(Icons.attach_file_rounded,
-                                              size: 14, color: AppTheme.primaryIndigo),
+                                          const Icon(
+                                            Icons.attach_file_rounded,
+                                            size: 14,
+                                            color: AppTheme.primaryIndigo,
+                                          ),
                                       ],
                                     ),
                                     const SizedBox(width: 4),
-                                    Icon(Icons.keyboard_arrow_right,
-                                        color: isDark
-                                            ? AppTheme.darkTextSecondary
-                                            : AppTheme.lightTextSecondary),
+                                    Icon(
+                                      Icons.keyboard_arrow_right,
+                                      color: isDark
+                                          ? AppTheme.darkTextSecondary
+                                          : AppTheme.lightTextSecondary,
+                                    ),
                                   ],
                                 ),
                               ),

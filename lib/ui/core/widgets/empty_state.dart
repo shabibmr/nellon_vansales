@@ -34,7 +34,9 @@ class EmptyState extends StatelessWidget {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              color: isDark
+                  ? AppTheme.darkTextSecondary
+                  : AppTheme.lightTextSecondary,
             ),
           ),
           if (message != null) ...[
@@ -44,14 +46,13 @@ class EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                color: isDark
+                    ? const Color(0xFF475569)
+                    : const Color(0xFF94A3B8),
               ),
             ),
           ],
-          if (action != null) ...[
-            const SizedBox(height: 16),
-            action!,
-          ],
+          if (action != null) ...[const SizedBox(height: 16), action!],
         ],
       ),
     );
@@ -90,7 +91,9 @@ class EmptyStateCard extends StatelessWidget {
               message,
               style: TextStyle(
                 fontSize: 13,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.darkTextSecondary
+                    : AppTheme.lightTextSecondary,
               ),
             ),
           ],

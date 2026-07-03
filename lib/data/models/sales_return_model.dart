@@ -16,7 +16,9 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
   /// Factory constructor to parse local/remote JSON maps into a [SalesReturnLineItemModel].
   factory SalesReturnLineItemModel.fromJson(Map<String, dynamic> json) {
     return SalesReturnLineItemModel(
-      invoiceLineItem: InvoiceLineItemModel.fromJson(json['invoiceLineItem'] ?? json),
+      invoiceLineItem: InvoiceLineItemModel.fromJson(
+        json['invoiceLineItem'] ?? json,
+      ),
       returnedQuantity: json['returned_quantity'] ?? json['quantity'] ?? 1,
       invoiceId: json['invoice_id'],
       invoiceNumber: json['invoice_number'],
@@ -31,7 +33,9 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
       'rate': invoiceLineItem.rate,
       'invoice_id': invoiceId,
       'invoice_number': invoiceNumber,
-      'invoiceLineItem': InvoiceLineItemModel.fromDomain(invoiceLineItem).toJson(),
+      'invoiceLineItem': InvoiceLineItemModel.fromDomain(
+        invoiceLineItem,
+      ).toJson(),
     };
   }
 
@@ -66,11 +70,15 @@ class SalesReturnModel extends SalesReturn {
   factory SalesReturnModel.fromJson(Map<String, dynamic> json) {
     return SalesReturnModel(
       id: json['creditnote_id'] ?? json['id'] ?? '',
-      creditNoteNumber: json['creditnote_number'] ?? json['creditNoteNumber'] ?? '',
+      creditNoteNumber:
+          json['creditnote_number'] ?? json['creditNoteNumber'] ?? '',
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       customerName: json['customer_name'] ?? json['customerName'] ?? '',
-      date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
-      items: (json['line_items'] as List?)
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
+      items:
+          (json['line_items'] as List?)
               ?.map((item) => SalesReturnLineItemModel.fromJson(item))
               .toList() ??
           [],
@@ -110,4 +118,3 @@ class SalesReturnModel extends SalesReturn {
     );
   }
 }
-

@@ -7,7 +7,11 @@ import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Sales Invoice documents.
 class InvoicePdfTemplate {
-  static pw.Document generate(SalesInvoice invoice, Organization? org, Customer? customer) {
+  static pw.Document generate(
+    SalesInvoice invoice,
+    Organization? org,
+    Customer? customer,
+  ) {
     final pdf = pw.Document();
     final companyName = org?.name ?? 'Van Sales Pro';
     final currencySymbol = org?.currencySymbol ?? '₹';
@@ -46,7 +50,10 @@ class InvoicePdfTemplate {
               decoration: pw.BoxDecoration(
                 color: SharedPdfTemplate.lightGreyBackground,
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(color: SharedPdfTemplate.borderSlate, width: 1),
+                border: pw.Border.all(
+                  color: SharedPdfTemplate.borderSlate,
+                  width: 1,
+                ),
               ),
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -64,7 +71,9 @@ class InvoicePdfTemplate {
                       ),
                       pw.SizedBox(height: 2),
                       pw.Text(
-                        SharedPdfTemplate.dateOnlyFormat.format(invoice.dueDate),
+                        SharedPdfTemplate.dateOnlyFormat.format(
+                          invoice.dueDate,
+                        ),
                         style: pw.TextStyle(
                           fontSize: 10,
                           fontWeight: pw.FontWeight.bold,
@@ -150,14 +159,21 @@ class InvoicePdfTemplate {
                       _buildTableCell('${i + 1}'),
                       _buildTableCell(
                         '${invoice.items[i].item.name}\nSKU: ${invoice.items[i].item.sku}'
-                            '${invoice.items[i].discount > 0 ? ' | Disc: $currencySymbol${invoice.items[i].discount.toStringAsFixed(2)}' : ''}',
+                        '${invoice.items[i].discount > 0 ? ' | Disc: $currencySymbol${invoice.items[i].discount.toStringAsFixed(2)}' : ''}',
                         alignLeft: true,
                         isSubText: true,
                       ),
                       _buildTableCell('${invoice.items[i].quantity}'),
-                      _buildTableCell('$currencySymbol${invoice.items[i].rate.toStringAsFixed(2)}'),
-                      _buildTableCell('$currencySymbol${invoice.items[i].taxAmount.toStringAsFixed(2)} (${invoice.items[i].taxPercentage.toStringAsFixed(0)}%)'),
-                      _buildTableCell('$currencySymbol${invoice.items[i].total.toStringAsFixed(2)}', isBold: true),
+                      _buildTableCell(
+                        '$currencySymbol${invoice.items[i].rate.toStringAsFixed(2)}',
+                      ),
+                      _buildTableCell(
+                        '$currencySymbol${invoice.items[i].taxAmount.toStringAsFixed(2)} (${invoice.items[i].taxPercentage.toStringAsFixed(0)}%)',
+                      ),
+                      _buildTableCell(
+                        '$currencySymbol${invoice.items[i].total.toStringAsFixed(2)}',
+                        isBold: true,
+                      ),
                     ],
                   ),
                 ],
@@ -185,7 +201,9 @@ class InvoicePdfTemplate {
                       ),
                       pw.SizedBox(height: 4),
                       pw.Text(
-                        invoice.notes.isNotEmpty ? invoice.notes : 'No specific delivery instructions.',
+                        invoice.notes.isNotEmpty
+                            ? invoice.notes
+                            : 'No specific delivery instructions.',
                         style: pw.TextStyle(
                           fontSize: 9,
                           color: SharedPdfTemplate.slateText,
@@ -201,24 +219,44 @@ class InvoicePdfTemplate {
                   padding: const pw.EdgeInsets.all(12),
                   decoration: pw.BoxDecoration(
                     color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-                    border: pw.Border.all(color: SharedPdfTemplate.borderSlate, width: 1),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(12),
+                    ),
+                    border: pw.Border.all(
+                      color: SharedPdfTemplate.borderSlate,
+                      width: 1,
+                    ),
                   ),
                   child: pw.Column(
                     children: [
-                      _buildSummaryRow('Sub Total', '$currencySymbol${invoice.subTotal.toStringAsFixed(2)}'),
+                      _buildSummaryRow(
+                        'Sub Total',
+                        '$currencySymbol${invoice.subTotal.toStringAsFixed(2)}',
+                      ),
                       if (invoice.discountTotal > 0) ...[
                         pw.SizedBox(height: 4),
-                        _buildSummaryRow('Discount Total', '$currencySymbol${invoice.discountTotal.toStringAsFixed(2)}'),
+                        _buildSummaryRow(
+                          'Discount Total',
+                          '$currencySymbol${invoice.discountTotal.toStringAsFixed(2)}',
+                        ),
                       ],
                       pw.SizedBox(height: 4),
-                      _buildSummaryRow('VAT / Tax Total', '$currencySymbol${invoice.taxTotal.toStringAsFixed(2)}'),
+                      _buildSummaryRow(
+                        'VAT / Tax Total',
+                        '$currencySymbol${invoice.taxTotal.toStringAsFixed(2)}',
+                      ),
                       if (invoice.roundOff != 0) ...[
                         pw.SizedBox(height: 4),
-                        _buildSummaryRow('Round Off', '$currencySymbol${invoice.roundOff.toStringAsFixed(2)}'),
+                        _buildSummaryRow(
+                          'Round Off',
+                          '$currencySymbol${invoice.roundOff.toStringAsFixed(2)}',
+                        ),
                       ],
                       pw.SizedBox(height: 6),
-                      pw.Divider(color: SharedPdfTemplate.borderSlate, thickness: 1),
+                      pw.Divider(
+                        color: SharedPdfTemplate.borderSlate,
+                        thickness: 1,
+                      ),
                       pw.SizedBox(height: 6),
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,

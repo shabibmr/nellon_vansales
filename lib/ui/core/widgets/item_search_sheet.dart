@@ -29,14 +29,17 @@ class ItemSearchSheet extends StatefulWidget {
     required List<Item> items,
     required String title,
     required String emptyMessage,
-    required Future<void> Function(Item item, BuildContext sheetContext) onSelected,
+    required Future<void> Function(Item item, BuildContext sheetContext)
+    onSelected,
     Color accentColor = AppTheme.primaryIndigo,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      backgroundColor: isDark
+          ? AppTheme.darkBackground
+          : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -72,7 +75,8 @@ class _ItemSearchSheetState extends State<ItemSearchSheet> {
       } else {
         final q = query.toLowerCase();
         _filtered = widget.items.where((item) {
-          return item.name.toLowerCase().contains(q) || item.sku.toLowerCase().contains(q);
+          return item.name.toLowerCase().contains(q) ||
+              item.sku.toLowerCase().contains(q);
         }).toList();
       }
     });
@@ -116,7 +120,9 @@ class _ItemSearchSheetState extends State<ItemSearchSheet> {
                   hintText: 'Search items by name or SKU...',
                   prefixIcon: Icon(Icons.search, color: widget.accentColor),
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -130,15 +136,21 @@ class _ItemSearchSheetState extends State<ItemSearchSheet> {
                           Icon(
                             Icons.inventory_2_outlined,
                             size: 48,
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                            color: isDark
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFCBD5E1),
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            _query.isEmpty ? widget.emptyMessage : 'No items match your search',
+                            _query.isEmpty
+                                ? widget.emptyMessage
+                                : 'No items match your search',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
                             ),
                           ),
                         ],
@@ -151,15 +163,22 @@ class _ItemSearchSheetState extends State<ItemSearchSheet> {
                       itemBuilder: (context, index) {
                         final item = _filtered[index];
                         return ListTile(
-                          title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('SKU: ${item.sku} | Rate: ${formatCurrency(item.rate, cs)}'),
+                          title: Text(
+                            item.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            'SKU: ${item.sku} | Rate: ${formatCurrency(item.rate, cs)}',
+                          ),
                           trailing: item.stock >= 0
                               ? Text(
                                   'Stock: ${item.stock}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: item.stock > 0 ? AppTheme.successEmerald : AppTheme.errorRose,
+                                    color: item.stock > 0
+                                        ? AppTheme.successEmerald
+                                        : AppTheme.errorRose,
                                   ),
                                 )
                               : null,

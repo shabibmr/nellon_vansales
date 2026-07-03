@@ -31,18 +31,28 @@ Future<void> setupDependencyInjection() async {
   sl.registerLazySingleton<FirebaseAuthService>(() => FirebaseAuthService());
 
   // 3. Zoho REST API Client
-  sl.registerLazySingleton<ZohoApiClient>(() => ZohoApiClient(dbService: sl<HiveDatabaseService>()));
+  sl.registerLazySingleton<ZohoApiClient>(
+    () => ZohoApiClient(dbService: sl<HiveDatabaseService>()),
+  );
 
   // 4. Offline Sync Worker
-  sl.registerLazySingleton<SyncWorker>(() => SyncWorker(
-        dbService: sl<HiveDatabaseService>(),
-        apiClient: sl<ZohoApiClient>(),
-      ));
+  sl.registerLazySingleton<SyncWorker>(
+    () => SyncWorker(
+      dbService: sl<HiveDatabaseService>(),
+      apiClient: sl<ZohoApiClient>(),
+    ),
+  );
 
   // 5. Repository Implementations
-  sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(authService: sl()));
-  sl.registerLazySingleton<SyncRepository>(() => SyncRepositoryImpl(syncWorker: sl(), dbService: sl()));
-  sl.registerLazySingleton<SalesRepository>(() => SalesRepositoryImpl(dbService: sl(), apiClient: sl()));
+  sl.registerLazySingleton<AuthRepository>(
+    () => AuthRepositoryImpl(authService: sl()),
+  );
+  sl.registerLazySingleton<SyncRepository>(
+    () => SyncRepositoryImpl(syncWorker: sl(), dbService: sl()),
+  );
+  sl.registerLazySingleton<SalesRepository>(
+    () => SalesRepositoryImpl(dbService: sl(), apiClient: sl()),
+  );
 
   // 6. Licensing & Device Services
   sl.registerLazySingleton<LocalStorageService>(() => LocalStorageService());
@@ -52,4 +62,3 @@ Future<void> setupDependencyInjection() async {
   // 7. PDF Document Generation Service
   sl.registerLazySingleton<VoucherPdfService>(() => VoucherPdfService());
 }
-

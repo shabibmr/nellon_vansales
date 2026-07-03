@@ -9,10 +9,7 @@ class ItemDetailsDialog extends StatelessWidget {
   final Item item;
 
   /// Creates a new [ItemDetailsDialog].
-  const ItemDetailsDialog({
-    super.key,
-    required this.item,
-  });
+  const ItemDetailsDialog({super.key, required this.item});
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +20,10 @@ class ItemDetailsDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('SKU: ${item.sku}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            'SKU: ${item.sku}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           Text('Rate: $cs${item.rate.toStringAsFixed(2)}'),
           const SizedBox(height: 8),
@@ -33,7 +33,9 @@ class ItemDetailsDialog extends StatelessWidget {
             'Available in Van: ${item.stock} units',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: item.stock > 0 ? AppTheme.successEmerald : AppTheme.errorRose,
+              color: item.stock > 0
+                  ? AppTheme.successEmerald
+                  : AppTheme.errorRose,
             ),
           ),
           const SizedBox(height: 12),
@@ -47,7 +49,7 @@ class ItemDetailsDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('CLOSE'),
-        )
+        ),
       ],
     );
   }

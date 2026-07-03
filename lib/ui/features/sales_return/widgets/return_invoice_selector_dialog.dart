@@ -25,14 +25,16 @@ class ReturnInvoiceSelectorDialog extends StatefulWidget {
   });
 
   @override
-  State<ReturnInvoiceSelectorDialog> createState() => _ReturnInvoiceSelectorDialogState();
+  State<ReturnInvoiceSelectorDialog> createState() =>
+      _ReturnInvoiceSelectorDialogState();
 }
 
-class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialog> {
+class _ReturnInvoiceSelectorDialogState
+    extends State<ReturnInvoiceSelectorDialog> {
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
   final _formKey = GlobalKey<FormState>();
-  
+
   late List<SalesInvoice> _matchingInvoices;
   final Map<String, TextEditingController> _qtyControllers = {};
 
@@ -40,10 +42,11 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
   void initState() {
     super.initState();
     // Get all local invoices for the customer containing the selected item
-    final customerInvoices = _db.getLocalInvoices()
+    final customerInvoices = _db
+        .getLocalInvoices()
         .where((inv) => inv.customerId == widget.customer.id)
         .toList();
-    
+
     _matchingInvoices = customerInvoices.where((inv) {
       return inv.items.any((line) => line.item.id == widget.item.id);
     }).toList();
@@ -55,7 +58,8 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
     for (final inv in _matchingInvoices) {
       SalesReturnLineItem? existingLine;
       for (final line in widget.currentLines) {
-        if (line.invoiceId == inv.id && line.invoiceLineItem.item.id == widget.item.id) {
+        if (line.invoiceId == inv.id &&
+            line.invoiceLineItem.item.id == widget.item.id) {
           existingLine = line;
           break;
         }
@@ -86,14 +90,18 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
 
         if (qty > 0) {
           // Find original invoice line item
-          final originalLine = inv.items.firstWhere((line) => line.item.id == widget.item.id);
+          final originalLine = inv.items.firstWhere(
+            (line) => line.item.id == widget.item.id,
+          );
 
-          returnedLines.add(SalesReturnLineItem(
-            invoiceLineItem: originalLine,
-            returnedQuantity: qty,
-            invoiceId: inv.id,
-            invoiceNumber: inv.invoiceNumber,
-          ));
+          returnedLines.add(
+            SalesReturnLineItem(
+              invoiceLineItem: originalLine,
+              returnedQuantity: qty,
+              invoiceId: inv.id,
+              invoiceNumber: inv.invoiceNumber,
+            ),
+          );
         }
       }
 
@@ -136,14 +144,19 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
               const Divider(height: 24),
               Text(
                 widget.item.name,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 'SKU: ${widget.item.sku} | Rate: $cs${widget.item.rate.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -177,23 +190,33 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: _matchingInvoices.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final inv = _matchingInvoices[index];
-                      final originalLine = inv.items.firstWhere((line) => line.item.id == widget.item.id);
+                      final originalLine = inv.items.firstWhere(
+                        (line) => line.item.id == widget.item.id,
+                      );
                       final maxQty = originalLine.quantity;
 
                       return Card(
                         margin: EdgeInsets.zero,
-                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                        color: isDark
+                            ? const Color(0xFF0F172A)
+                            : const Color(0xFFF8FAFC),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                            color: isDark
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFE2E8F0),
                           ),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 12.0,
+                          ),
                           child: Row(
                             children: [
                               Expanded(
@@ -213,7 +236,9 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
                                       'Date: ${_dateFormat.format(inv.date)}',
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                        color: isDark
+                                            ? AppTheme.darkTextSecondary
+                                            : AppTheme.lightTextSecondary,
                                       ),
                                     ),
                                     const SizedBox(height: 2),
@@ -222,7 +247,9 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                        color: isDark
+                                            ? AppTheme.darkText
+                                            : AppTheme.lightText,
                                       ),
                                     ),
                                   ],
@@ -234,9 +261,14 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
                                 child: TextFormField(
                                   controller: _qtyControllers[inv.id],
                                   keyboardType: TextInputType.number,
-                                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
                                   decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
                                     hintText: '0',
                                     isDense: true,
                                     border: OutlineInputBorder(
@@ -269,15 +301,21 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
                       onPressed: () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         side: BorderSide(
-                          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                          color: isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFCBD5E1),
                         ),
                       ),
                       child: Text(
                         'Cancel',
                         style: TextStyle(
-                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
                         ),
                       ),
                     ),
@@ -289,7 +327,9 @@ class _ReturnInvoiceSelectorDialogState extends State<ReturnInvoiceSelectorDialo
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.warningAmber,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: const Text('Confirm'),
                     ),

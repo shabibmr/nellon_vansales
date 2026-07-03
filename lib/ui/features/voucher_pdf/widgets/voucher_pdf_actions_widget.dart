@@ -44,7 +44,9 @@ class VoucherPdfActionsWidget extends StatelessWidget {
             SnackBar(
               backgroundColor: AppTheme.successEmerald,
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               content: Text(state.message),
             ),
           );
@@ -54,7 +56,9 @@ class VoucherPdfActionsWidget extends StatelessWidget {
             SnackBar(
               backgroundColor: AppTheme.errorRose,
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               content: Text(state.error),
             ),
           );
@@ -91,7 +95,7 @@ class VoucherPdfActionsWidget extends StatelessWidget {
                           strokeWidth: 2,
                           color: AppTheme.primaryIndigo,
                         ),
-                      )
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -112,11 +116,11 @@ class VoucherPdfActionsWidget extends StatelessWidget {
                       isDisabled: isLoading,
                       onPressed: () {
                         context.read<VoucherPdfBloc>().add(
-                              GenerateVoucherPdfPreviewRequested(
-                                type: type,
-                                voucher: voucher,
-                              ),
-                            );
+                          GenerateVoucherPdfPreviewRequested(
+                            type: type,
+                            voucher: voucher,
+                          ),
+                        );
                       },
                     ),
                     _buildActionButton(
@@ -127,11 +131,11 @@ class VoucherPdfActionsWidget extends StatelessWidget {
                       isDisabled: isLoading,
                       onPressed: () {
                         context.read<VoucherPdfBloc>().add(
-                              PrintVoucherPdfRequested(
-                                type: type,
-                                voucher: voucher,
-                              ),
-                            );
+                          PrintVoucherPdfRequested(
+                            type: type,
+                            voucher: voucher,
+                          ),
+                        );
                       },
                     ),
                     _buildActionButton(
@@ -142,11 +146,11 @@ class VoucherPdfActionsWidget extends StatelessWidget {
                       isDisabled: isLoading,
                       onPressed: () {
                         context.read<VoucherPdfBloc>().add(
-                              ShareVoucherPdfRequested(
-                                type: type,
-                                voucher: voucher,
-                              ),
-                            );
+                          ShareVoucherPdfRequested(
+                            type: type,
+                            voucher: voucher,
+                          ),
+                        );
                       },
                     ),
                     _buildActionButton(
@@ -157,11 +161,11 @@ class VoucherPdfActionsWidget extends StatelessWidget {
                       isDisabled: isLoading,
                       onPressed: () {
                         context.read<VoucherPdfBloc>().add(
-                              EmailVoucherPdfRequested(
-                                type: type,
-                                voucher: voucher,
-                              ),
-                            );
+                          EmailVoucherPdfRequested(
+                            type: type,
+                            voucher: voucher,
+                          ),
+                        );
                       },
                     ),
                     _buildActionButton(
@@ -172,11 +176,11 @@ class VoucherPdfActionsWidget extends StatelessWidget {
                       isDisabled: isLoading,
                       onPressed: () {
                         context.read<VoucherPdfBloc>().add(
-                              WhatsAppVoucherPdfRequested(
-                                type: type,
-                                voucher: voucher,
-                              ),
-                            );
+                          WhatsAppVoucherPdfRequested(
+                            type: type,
+                            voucher: voucher,
+                          ),
+                        );
                       },
                     ),
                   ],
@@ -204,8 +208,13 @@ class VoucherPdfActionsWidget extends StatelessWidget {
             backgroundColor: color.withValues(alpha: 0.1),
             foregroundColor: color,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),

@@ -36,7 +36,9 @@ class CustomerSelectorSheet extends StatelessWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      backgroundColor: isDark
+          ? AppTheme.darkBackground
+          : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -109,7 +111,9 @@ class CustomerSelectorSheet extends StatelessWidget {
                       hintText: 'Search by name, company or phone...',
                       prefixIcon: Icon(Icons.search, color: accentColor),
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
@@ -122,11 +126,18 @@ class CustomerSelectorSheet extends StatelessWidget {
                         color: accentColor.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.person_add_rounded, color: accentColor, size: 20),
+                      child: Icon(
+                        Icons.person_add_rounded,
+                        color: accentColor,
+                        size: 20,
+                      ),
                     ),
                     title: Text(
                       'Create New Customer',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: accentColor),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: accentColor,
+                      ),
                     ),
                     subtitle: Text(createOptionSubtitle),
                     onTap: () async {
@@ -142,7 +153,9 @@ class CustomerSelectorSheet extends StatelessWidget {
                           child: Text(
                             'No customers found',
                             style: TextStyle(
-                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
                             ),
                           ),
                         )
@@ -153,13 +166,21 @@ class CustomerSelectorSheet extends StatelessWidget {
                           itemBuilder: (context, index) {
                             final customer = filtered[index];
                             return ListTile(
-                              title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              title: Text(
+                                customer.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               subtitle: Text(customer.companyName),
                               trailing: customer.outstandingBalance > 0
                                   ? Text(
                                       'Outstanding: ${formatCurrency(customer.outstandingBalance, cs)}',
                                       style: const TextStyle(
-                                          color: AppTheme.errorRose, fontSize: 11, fontWeight: FontWeight.bold),
+                                        color: AppTheme.errorRose,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     )
                                   : null,
                               onTap: () {

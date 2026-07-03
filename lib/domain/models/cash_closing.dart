@@ -73,7 +73,8 @@ class CashClosing extends Equatable {
       date: date ?? this.date,
       openingBalance: openingBalance ?? this.openingBalance,
       totalSalesInvoices: totalSalesInvoices ?? this.totalSalesInvoices,
-      totalReceiptsCollected: totalReceiptsCollected ?? this.totalReceiptsCollected,
+      totalReceiptsCollected:
+          totalReceiptsCollected ?? this.totalReceiptsCollected,
       totalExpenses: totalExpenses ?? this.totalExpenses,
       closingBalance: closingBalance ?? this.closingBalance,
       notes: notes ?? this.notes,
@@ -83,15 +84,14 @@ class CashClosing extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        date,
-        openingBalance,
-        totalSalesInvoices,
-        totalReceiptsCollected,
-        totalExpenses,
-        closingBalance,
-        notes,
-        isPendingSync,
-      ];
+    id,
+    date,
+    openingBalance,
+    totalSalesInvoices,
+    totalReceiptsCollected,
+    totalExpenses,
+    closingBalance,
+    notes,
+    isPendingSync,
+  ];
 }
-

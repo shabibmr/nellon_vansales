@@ -55,7 +55,10 @@ class DateRangeFilterCard extends StatelessWidget {
                       onPressed: onClear,
                       child: const Text(
                         'Clear',
-                        style: TextStyle(color: AppTheme.errorRose, fontSize: 12),
+                        style: TextStyle(
+                          color: AppTheme.errorRose,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                 ],
@@ -65,7 +68,9 @@ class DateRangeFilterCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _DatePickerBox(
-                      label: startDate != null ? fmt.format(startDate!) : 'Start Date',
+                      label: startDate != null
+                          ? fmt.format(startDate!)
+                          : 'Start Date',
                       hasValue: startDate != null,
                       accentColor: accentColor,
                       isDark: isDark,
@@ -78,7 +83,9 @@ class DateRangeFilterCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: _DatePickerBox(
-                      label: endDate != null ? fmt.format(endDate!) : 'End Date',
+                      label: endDate != null
+                          ? fmt.format(endDate!)
+                          : 'End Date',
                       hasValue: endDate != null,
                       accentColor: accentColor,
                       isDark: isDark,
@@ -135,7 +142,9 @@ class _DatePickerBox extends StatelessWidget {
                   fontSize: 12,
                   color: hasValue
                       ? (isDark ? AppTheme.darkText : AppTheme.lightText)
-                      : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                      : (isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.lightTextSecondary),
                 ),
               ),
             ),

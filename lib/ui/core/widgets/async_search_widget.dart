@@ -31,18 +31,19 @@ class AsyncSearchWidget extends StatefulWidget {
 }
 
 /// Enumerates the search category modes.
-enum SearchType { 
+enum SearchType {
   /// Query customers list.
-  customers, 
+  customers,
+
   /// Query van inventory list.
-  items 
+  items,
 }
 
 class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
   final _searchController = TextEditingController();
   SearchType _activeSearchType = SearchType.customers;
   Timer? _debounceTimer;
-  
+
   bool _isLoading = false;
   List<Customer> _customerResults = [];
   List<Item> _itemResults = [];
@@ -61,7 +62,7 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
   /// continuous database/cache search operations.
   void _onSearchChanged(String query) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    
+
     if (query.trim().isEmpty) {
       setState(() {
         _customerResults = [];
@@ -156,10 +157,14 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
               });
             },
             style: SegmentedButton.styleFrom(
-              selectedBackgroundColor: AppTheme.primaryIndigo.withValues(alpha: 0.15),
+              selectedBackgroundColor: AppTheme.primaryIndigo.withValues(
+                alpha: 0.15,
+              ),
               selectedForegroundColor: AppTheme.primaryIndigo,
               side: BorderSide(
-                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                color: isDark
+                    ? const Color(0xFF334155)
+                    : const Color(0xFFE2E8F0),
               ),
             ),
           ),
@@ -174,12 +179,17 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
             hintText: _activeSearchType == SearchType.customers
                 ? 'Search active client names, shops...'
                 : 'Search catalog SKU, product names...',
-            prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryIndigo),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              color: AppTheme.primaryIndigo,
+            ),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
                     icon: Icon(
                       Icons.cancel,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.lightTextSecondary,
                       size: 20,
                     ),
                     onPressed: _clearSearch,
@@ -190,9 +200,7 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
         const SizedBox(height: 16),
 
         // 3. Asynchronous List View Results
-        Expanded(
-          child: _buildResultsSection(isDark),
-        ),
+        Expanded(child: _buildResultsSection(isDark)),
       ],
     );
   }
@@ -210,9 +218,11 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
               'Searching database records...',
               style: TextStyle(
                 fontSize: 13,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.darkTextSecondary
+                    : AppTheme.lightTextSecondary,
               ),
-            )
+            ),
           ],
         ),
       );
@@ -236,9 +246,11 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.darkTextSecondary
+                    : AppTheme.lightTextSecondary,
               ),
-            )
+            ),
           ],
         ),
       );
@@ -255,16 +267,28 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
           final customer = _customerResults[index];
           return Card(
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 4,
+              ),
               leading: CircleAvatar(
                 backgroundColor: AppTheme.primaryIndigo.withValues(alpha: 0.12),
                 child: Text(
                   customer.sequence.toString(),
-                  style: const TextStyle(color: AppTheme.primaryIndigo, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: AppTheme.primaryIndigo,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-              title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(customer.companyName, style: const TextStyle(fontSize: 12)),
+              title: Text(
+                customer.name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                customer.companyName,
+                style: const TextStyle(fontSize: 12),
+              ),
               trailing: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -275,9 +299,11 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color: customer.outstandingBalance > 0 ? AppTheme.errorRose : AppTheme.successEmerald,
+                      color: customer.outstandingBalance > 0
+                          ? AppTheme.errorRose
+                          : AppTheme.successEmerald,
                     ),
-                  )
+                  ),
                 ],
               ),
               onTap: widget.onCustomerSelected != null
@@ -298,13 +324,25 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
           final item = _itemResults[index];
           return Card(
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 4,
+              ),
               leading: CircleAvatar(
                 backgroundColor: AppTheme.infoSky.withValues(alpha: 0.12),
-                child: const Icon(Icons.shopping_bag_outlined, color: AppTheme.infoSky),
+                child: const Icon(
+                  Icons.shopping_bag_outlined,
+                  color: AppTheme.infoSky,
+                ),
               ),
-              title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('SKU: ${item.sku}', style: const TextStyle(fontSize: 12)),
+              title: Text(
+                item.name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                'SKU: ${item.sku}',
+                style: const TextStyle(fontSize: 12),
+              ),
               trailing: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -314,13 +352,19 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: item.stock > 0 ? AppTheme.successEmerald : AppTheme.errorRose,
+                      color: item.stock > 0
+                          ? AppTheme.successEmerald
+                          : AppTheme.errorRose,
                     ),
                   ),
                   Text(
                     '$cs${item.rate.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryIndigo),
-                  )
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryIndigo,
+                    ),
+                  ),
                 ],
               ),
               onTap: widget.onItemSelected != null

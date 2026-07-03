@@ -29,19 +29,26 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
   }
 
   Future<void> _selectDate(bool isStart, DateTime? current) async {
-    final picked = await showThemedDatePicker(context, initialDate: current ?? DateTime.now());
+    final picked = await showThemedDatePicker(
+      context,
+      initialDate: current ?? DateTime.now(),
+    );
     if (picked != null && picked != current && mounted) {
       final bloc = context.read<SalesOrderBloc>();
       if (isStart) {
         bloc.add(SetDateFilter(startDate: picked, endDate: bloc.state.endDate));
       } else {
-        bloc.add(SetDateFilter(startDate: bloc.state.startDate, endDate: picked));
+        bloc.add(
+          SetDateFilter(startDate: bloc.state.startDate, endDate: picked),
+        );
       }
     }
   }
 
   void _clearFilters() {
-    context.read<SalesOrderBloc>().add(const SetDateFilter(startDate: null, endDate: null));
+    context.read<SalesOrderBloc>().add(
+      const SetDateFilter(startDate: null, endDate: null),
+    );
   }
 
   @override
@@ -55,7 +62,8 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
           IconButton(
             tooltip: 'Sync Orders from Zoho',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => context.read<SalesOrderBloc>().add(RefreshOrdersFromZoho()),
+            onPressed: () =>
+                context.read<SalesOrderBloc>().add(RefreshOrdersFromZoho()),
           ),
         ],
       ),
@@ -85,12 +93,19 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
               ),
 
               if (state.isLoading)
-                const Expanded(child: Center(child: CircularProgressIndicator(color: AppTheme.primaryIndigo)))
+                const Expanded(
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryIndigo,
+                    ),
+                  ),
+                )
               else if (list.isEmpty)
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: () async =>
-                        context.read<SalesOrderBloc>().add(RefreshOrdersFromZoho()),
+                    onRefresh: () async => context.read<SalesOrderBloc>().add(
+                      RefreshOrdersFromZoho(),
+                    ),
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
@@ -114,13 +129,20 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 600),
                       child: RefreshIndicator(
-                        onRefresh: () async =>
-                            context.read<SalesOrderBloc>().add(RefreshOrdersFromZoho()),
+                        onRefresh: () async => context
+                            .read<SalesOrderBloc>()
+                            .add(RefreshOrdersFromZoho()),
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 80.0, top: 8.0),
+                          padding: const EdgeInsets.only(
+                            left: 16.0,
+                            right: 16.0,
+                            bottom: 80.0,
+                            top: 8.0,
+                          ),
                           itemCount: list.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
                           itemBuilder: (context, index) {
                             final order = list[index];
                             return DocumentListCard(
@@ -130,12 +152,19 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
                               total: formatCurrency(order.total, cs),
                               itemCount: order.items.length,
                               isPendingSync: order.isPendingSync,
-                              extraBadgeLabel: order.isConverted ? 'Converted' : null,
+                              extraBadgeLabel: order.isConverted
+                                  ? 'Converted'
+                                  : null,
                               onTap: () {
-                                context.read<SalesOrderBloc>().add(StartEditOrder(order));
+                                context.read<SalesOrderBloc>().add(
+                                  StartEditOrder(order),
+                                );
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(builder: (context) => const SalesOrderEditorPage()),
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const SalesOrderEditorPage(),
+                                  ),
                                 );
                               },
                             );
@@ -157,7 +186,9 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
           context.read<SalesOrderBloc>().add(StartNewOrder());
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const SalesOrderEditorPage()),
+            MaterialPageRoute(
+              builder: (context) => const SalesOrderEditorPage(),
+            ),
           );
         },
         child: const Icon(Icons.add),

@@ -55,8 +55,8 @@ class CustomerLedgerState extends Equatable {
     this.ledger,
     this.isLoading = false,
     this.errorMessage,
-  })  : startDate = startDate ?? _currentFinancialYearStart(),
-        endDate = endDate ?? DateTime.now();
+  }) : startDate = startDate ?? _currentFinancialYearStart(),
+       endDate = endDate ?? DateTime.now();
 
   /// Returns April 1 of the current financial year (India FY starts in April).
   static DateTime _currentFinancialYearStart() {
@@ -89,13 +89,13 @@ class CustomerLedgerState extends Equatable {
 
   @override
   List<Object?> get props => [
-        selectedCustomer,
-        startDate,
-        endDate,
-        ledger,
-        isLoading,
-        errorMessage,
-      ];
+    selectedCustomer,
+    startDate,
+    endDate,
+    ledger,
+    isLoading,
+    errorMessage,
+  ];
 }
 
 // --- Bloc ---
@@ -108,9 +108,9 @@ class CustomerLedgerBloc
   CustomerLedgerBloc({
     required SalesRepository salesRepository,
     required ZohoApiClient apiClient,
-  })  : _salesRepository = salesRepository,
-        _apiClient = apiClient,
-        super(CustomerLedgerState()) {
+  }) : _salesRepository = salesRepository,
+       _apiClient = apiClient,
+       super(CustomerLedgerState()) {
     on<SetLedgerCustomer>(_onSetCustomer);
     on<SetLedgerStartDate>(_onSetStartDate);
     on<SetLedgerEndDate>(_onSetEndDate);
@@ -119,26 +119,40 @@ class CustomerLedgerBloc
   }
 
   // expose local customer list for the selector UI
-  List<Customer> get customers => _salesRepository.getCustomers()
-    ..sort((a, b) => a.name.compareTo(b.name));
+  List<Customer> get customers =>
+      _salesRepository.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
 
-  void _onSetCustomer(SetLedgerCustomer event, Emitter<CustomerLedgerState> emit) {
-    emit(state.copyWith(
-      selectedCustomer: event.customer,
-      clearLedger: true,
-      clearError: true,
-    ));
+  void _onSetCustomer(
+    SetLedgerCustomer event,
+    Emitter<CustomerLedgerState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        selectedCustomer: event.customer,
+        clearLedger: true,
+        clearError: true,
+      ),
+    );
   }
 
-  void _onSetStartDate(SetLedgerStartDate event, Emitter<CustomerLedgerState> emit) {
+  void _onSetStartDate(
+    SetLedgerStartDate event,
+    Emitter<CustomerLedgerState> emit,
+  ) {
     emit(state.copyWith(startDate: event.date, clearLedger: true));
   }
 
-  void _onSetEndDate(SetLedgerEndDate event, Emitter<CustomerLedgerState> emit) {
+  void _onSetEndDate(
+    SetLedgerEndDate event,
+    Emitter<CustomerLedgerState> emit,
+  ) {
     emit(state.copyWith(endDate: event.date, clearLedger: true));
   }
 
-  Future<void> _onFetchLedger(FetchLedger event, Emitter<CustomerLedgerState> emit) async {
+  Future<void> _onFetchLedger(
+    FetchLedger event,
+    Emitter<CustomerLedgerState> emit,
+  ) async {
     if (state.selectedCustomer == null) return;
 
     emit(state.copyWith(isLoading: true, clearError: true, clearLedger: true));
@@ -156,13 +170,18 @@ class CustomerLedgerBloc
         rawWithName['contact_name'] = state.selectedCustomer!.name;
       }
 
-      final ledger = CustomerLedger.fromJson(rawWithName, state.selectedCustomer!.id);
+      final ledger = CustomerLedger.fromJson(
+        rawWithName,
+        state.selectedCustomer!.id,
+      );
       emit(state.copyWith(ledger: ledger, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString().replaceFirst('Exception: ', ''),
-      ));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          errorMessage: e.toString().replaceFirst('Exception: ', ''),
+        ),
+      );
     }
   }
 

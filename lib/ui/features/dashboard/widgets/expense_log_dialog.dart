@@ -53,7 +53,9 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
   Future<void> _pickImageSource(StateSetter setDialogState) async {
     showModalBottomSheet(
       context: context,
-      backgroundColor: widget.isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      backgroundColor: widget.isDark
+          ? AppTheme.darkBackground
+          : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -78,7 +80,10 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.camera_alt_rounded, color: AppTheme.primaryIndigo),
+                leading: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: AppTheme.primaryIndigo,
+                ),
                 title: const Text('Take Photo with Camera'),
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -102,7 +107,10 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_rounded, color: AppTheme.primaryIndigo),
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: AppTheme.primaryIndigo,
+                ),
                 title: const Text('Choose from Gallery'),
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -147,15 +155,21 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                 TextFormField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Expense Amount ($cs)'),
+                  decoration: InputDecoration(
+                    labelText: 'Expense Amount ($cs)',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _category,
                   decoration: const InputDecoration(labelText: 'Category'),
-                  items: ['Fuel', 'Tolls', 'Meals', 'Maintenance', 'Miscellaneous']
-                      .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                      .toList(),
+                  items:
+                      ['Fuel', 'Tolls', 'Meals', 'Maintenance', 'Miscellaneous']
+                          .map(
+                            (cat) =>
+                                DropdownMenuItem(value: cat, child: Text(cat)),
+                          )
+                          .toList(),
                   onChanged: (val) {
                     setDialogState(() {
                       _category = val ?? 'Fuel';
@@ -165,17 +179,23 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _descController,
-                  decoration: const InputDecoration(labelText: 'Description / Remarks'),
+                  decoration: const InputDecoration(
+                    labelText: 'Description / Remarks',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 // Visual image attachment card
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: widget.isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9),
+                    color: widget.isDark
+                        ? AppTheme.darkBackground
+                        : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: widget.isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                      color: widget.isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFCBD5E1),
                       width: 1,
                     ),
                   ),
@@ -184,7 +204,10 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                           onTap: () => _pickImageSource(setDialogState),
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 20,
+                              horizontal: 16,
+                            ),
                             child: Column(
                               children: [
                                 const Icon(
@@ -198,7 +221,9 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
+                                    color: widget.isDark
+                                        ? AppTheme.darkText
+                                        : AppTheme.lightText,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -206,7 +231,9 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                                   'Capture via camera or select from gallery',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                    color: widget.isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary,
                                   ),
                                 ),
                               ],
@@ -233,7 +260,11 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
                                   onPressed: () {
                                     setDialogState(() {
                                       _localImagePath = null;
@@ -252,10 +283,14 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
         },
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CANCEL'),
+        ),
         ElevatedButton(
           onPressed: () async {
-            final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
+            final amount =
+                double.tryParse(_amountController.text.trim()) ?? 0.0;
             final desc = _descController.text.trim();
             if (amount <= 0) return;
 
@@ -292,7 +327,10 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
             sl<SyncWorker>().syncPendingItems();
 
             Navigator.pop(context);
-            showSuccessSnackBar(context, 'Van expense for ${formatCurrency(amount, cs)} queued offline!');
+            showSuccessSnackBar(
+              context,
+              'Van expense for ${formatCurrency(amount, cs)} queued offline!',
+            );
             widget.onExpenseLogged();
           },
           child: const Text('SUBMIT CLAIM'),

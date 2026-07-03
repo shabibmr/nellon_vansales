@@ -37,9 +37,16 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
     if (picked != null && mounted) {
       final bloc = context.read<ReceiptBloc>();
       if (isStart) {
-        bloc.add(SetReceiptDateFilter(startDate: picked, endDate: bloc.state.endDate));
+        bloc.add(
+          SetReceiptDateFilter(startDate: picked, endDate: bloc.state.endDate),
+        );
       } else {
-        bloc.add(SetReceiptDateFilter(startDate: bloc.state.startDate, endDate: picked));
+        bloc.add(
+          SetReceiptDateFilter(
+            startDate: bloc.state.startDate,
+            endDate: picked,
+          ),
+        );
       }
     }
   }
@@ -82,7 +89,9 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
                 onStartTap: () => _selectDate(true, state.startDate),
                 onEndTap: () => _selectDate(false, state.endDate),
                 onClear: hasFilter
-                    ? () => context.read<ReceiptBloc>().add(const SetReceiptDateFilter())
+                    ? () => context.read<ReceiptBloc>().add(
+                        const SetReceiptDateFilter(),
+                      )
                     : null,
                 accentColor: AppTheme.successEmerald,
               ),
@@ -90,7 +99,9 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
               if (state.isLoading)
                 const Expanded(
                   child: Center(
-                    child: CircularProgressIndicator(color: AppTheme.successEmerald),
+                    child: CircularProgressIndicator(
+                      color: AppTheme.successEmerald,
+                    ),
                   ),
                 )
               else if (list.isEmpty)
@@ -109,7 +120,12 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 600),
                       child: ListView.separated(
-                        padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 80),
+                        padding: const EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 8,
+                          bottom: 80,
+                        ),
                         itemCount: list.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
@@ -118,15 +134,20 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
                             docNumber: receipt.paymentNumber,
                             customerName: receipt.customerName,
                             date: _dateFormat.format(receipt.date),
-                            subtitle: '${receipt.paymentMode}  •  ${_dateFormat.format(receipt.date)}',
+                            subtitle:
+                                '${receipt.paymentMode}  •  ${_dateFormat.format(receipt.date)}',
                             total: formatCurrency(receipt.amount, cs),
                             isPendingSync: receipt.isPendingSync,
                             accentColor: AppTheme.successEmerald,
                             onTap: () {
-                              context.read<ReceiptBloc>().add(StartEditReceipt(receipt));
+                              context.read<ReceiptBloc>().add(
+                                StartEditReceipt(receipt),
+                              );
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => const ReceiptEditorPage()),
+                                MaterialPageRoute(
+                                  builder: (_) => const ReceiptEditorPage(),
+                                ),
                               );
                             },
                           );

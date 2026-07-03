@@ -50,7 +50,8 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
   void initState() {
     super.initState();
     // Get all local invoices for this customer
-    final invoices = _db.getLocalInvoices()
+    final invoices = _db
+        .getLocalInvoices()
         .where((inv) => inv.customerId == widget.customer.id)
         .toList();
     // Get all unique item IDs from these invoices
@@ -59,7 +60,8 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
         .map((line) => line.item.id)
         .toSet();
 
-    _items = _db.getItems()
+    _items = _db
+        .getItems()
         .where((item) => purchasedItemIds.contains(item.id))
         .toList();
   }
@@ -76,7 +78,7 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
     if (val == null) return;
     setState(() {
       _selectedItem = val;
-      
+
       // Clear existing controllers
       for (final controller in _qtyControllers.values) {
         controller.dispose();
@@ -84,10 +86,11 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
       _qtyControllers.clear();
 
       // Find matching invoices
-      final customerInvoices = _db.getLocalInvoices()
+      final customerInvoices = _db
+          .getLocalInvoices()
           .where((inv) => inv.customerId == widget.customer.id)
           .toList();
-      
+
       _matchingInvoices = customerInvoices.where((inv) {
         return inv.items.any((line) => line.item.id == val.id);
       }).toList();
@@ -114,26 +117,34 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
 
       if (qty > 0) {
         totalQty += qty;
-        final originalLine = inv.items.firstWhere((line) => line.item.id == _selectedItem!.id);
-        
-        returnedLines.add(SalesReturnLineItem(
-          invoiceLineItem: originalLine,
-          returnedQuantity: qty,
-          invoiceId: inv.id,
-          invoiceNumber: inv.invoiceNumber,
-        ));
+        final originalLine = inv.items.firstWhere(
+          (line) => line.item.id == _selectedItem!.id,
+        );
+
+        returnedLines.add(
+          SalesReturnLineItem(
+            invoiceLineItem: originalLine,
+            returnedQuantity: qty,
+            invoiceId: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+          ),
+        );
       }
     }
 
     if (totalQty <= 0) {
-      showErrorSnackBar(context, 'Please enter return quantity for at least one invoice.');
+      showErrorSnackBar(
+        context,
+        'Please enter return quantity for at least one invoice.',
+      );
       return;
     }
 
     final tempId = 'temp_ret_${DateTime.now().millisecondsSinceEpoch}';
     final returnItem = SalesReturn(
       id: tempId,
-      creditNoteNumber: 'RET-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+      creditNoteNumber:
+          'RET-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
       customerId: widget.customer.id,
       customerName: widget.customer.name,
       date: DateTime.now(),
@@ -160,7 +171,10 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
     sl<SyncWorker>().syncPendingItems();
 
     Navigator.pop(context);
-    showSuccessSnackBar(context, 'Sales Return credit queued. ${_selectedItem!.name} stock restored!');
+    showSuccessSnackBar(
+      context,
+      'Sales Return credit queued. ${_selectedItem!.name} stock restored!',
+    );
     widget.onReturnConfirmed();
   }
 
@@ -187,7 +201,9 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.lightTextSecondary,
                     ),
                   ),
                 ],
@@ -199,13 +215,22 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text('Select returned item and allocate quantity from invoices.'),
+                      const Text(
+                        'Select returned item and allocate quantity from invoices.',
+                      ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<Item>(
                         initialValue: _selectedItem,
-                        decoration: const InputDecoration(labelText: 'Returned Item'),
+                        decoration: const InputDecoration(
+                          labelText: 'Returned Item',
+                        ),
                         items: _items
-                            .map((item) => DropdownMenuItem(value: item, child: Text(item.name)))
+                            .map(
+                              (item) => DropdownMenuItem(
+                                value: item,
+                                child: Text(item.name),
+                              ),
+                            )
                             .toList(),
                         onChanged: _onItemChanged,
                       ),
@@ -213,29 +238,42 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                         const SizedBox(height: 16),
                         const Text(
                           'Select Invoices & Quantities',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         ..._matchingInvoices.map((inv) {
-                          final originalLine = inv.items.firstWhere((line) => line.item.id == _selectedItem!.id);
+                          final originalLine = inv.items.firstWhere(
+                            (line) => line.item.id == _selectedItem!.id,
+                          );
                           final maxQty = originalLine.quantity;
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
-                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            color: isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF8FAFC),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(
-                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                color: isDark
+                                    ? const Color(0xFF334155)
+                                    : const Color(0xFFE2E8F0),
                               ),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12.0,
+                                vertical: 10.0,
+                              ),
                               child: Row(
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           inv.invoiceNumber,
@@ -249,12 +287,17 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                                           'Date: ${_dateFormat.format(inv.date)}',
                                           style: TextStyle(
                                             fontSize: 10,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
                                           ),
                                         ),
                                         Text(
                                           'Sold: $maxQty units',
-                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -265,18 +308,27 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
                                     child: TextFormField(
                                       controller: _qtyControllers[inv.id],
                                       keyboardType: TextInputType.number,
-                                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
                                       decoration: InputDecoration(
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 6,
+                                            ),
                                         hintText: '0',
                                         isDense: true,
                                         border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                       ),
                                       textAlign: TextAlign.center,
                                       validator: (val) {
-                                        if (val == null || val.isEmpty) return null;
+                                        if (val == null || val.isEmpty)
+                                          return null;
                                         final qty = int.tryParse(val);
                                         if (qty == null) return 'Invalid';
                                         if (qty < 0) return 'Min 0';
@@ -297,7 +349,10 @@ class _SalesReturnDialogState extends State<SalesReturnDialog> {
               ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CANCEL'),
+        ),
         ElevatedButton(
           onPressed: _items.isEmpty || _selectedItem == null ? null : _submit,
           child: const Text('CONFIRM RETURN'),

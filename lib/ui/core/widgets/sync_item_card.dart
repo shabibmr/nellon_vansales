@@ -7,6 +7,7 @@ class SyncItemCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+
   /// When set, replaces [subtitle] with a custom widget (e.g. pill+timestamp row).
   final Widget? subtitleWidget;
   final Color accentColor;
@@ -30,7 +31,9 @@ class SyncItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final borderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFE2E8F0);
 
     return Material(
       color: cardColor,
@@ -78,7 +81,9 @@ class SyncItemCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
                           ),
                         ),
                   ],

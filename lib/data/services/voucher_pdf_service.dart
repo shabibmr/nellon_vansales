@@ -37,11 +37,30 @@ class VoucherPdfService {
     required Customer? customer,
   }) async {
     final doc = switch (type) {
-      VoucherType.salesInvoice => InvoicePdfTemplate.generate(voucher as SalesInvoice, org, customer),
-      VoucherType.salesOrder => SalesOrderPdfTemplate.generate(voucher as SalesOrder, org, customer),
-      VoucherType.salesReturn => SalesReturnPdfTemplate.generate(voucher as SalesReturn, org, customer),
-      VoucherType.paymentReceipt => ReceiptPdfTemplate.generate(voucher as ReceiptVoucher, org, customer),
-      VoucherType.expenseVoucher => ExpensePdfTemplate.generate(voucher as ExpenseEntry, org),
+      VoucherType.salesInvoice => InvoicePdfTemplate.generate(
+        voucher as SalesInvoice,
+        org,
+        customer,
+      ),
+      VoucherType.salesOrder => SalesOrderPdfTemplate.generate(
+        voucher as SalesOrder,
+        org,
+        customer,
+      ),
+      VoucherType.salesReturn => SalesReturnPdfTemplate.generate(
+        voucher as SalesReturn,
+        org,
+        customer,
+      ),
+      VoucherType.paymentReceipt => ReceiptPdfTemplate.generate(
+        voucher as ReceiptVoucher,
+        org,
+        customer,
+      ),
+      VoucherType.expenseVoucher => ExpensePdfTemplate.generate(
+        voucher as ExpenseEntry,
+        org,
+      ),
     };
 
     return doc.save();
@@ -53,11 +72,16 @@ class VoucherPdfService {
     required dynamic voucher,
   }) {
     final rawName = switch (type) {
-      VoucherType.salesInvoice => 'sales_invoice_${(voucher as SalesInvoice).invoiceNumber}',
-      VoucherType.salesOrder => 'sales_order_${(voucher as SalesOrder).orderNumber}',
-      VoucherType.salesReturn => 'sales_return_${(voucher as SalesReturn).creditNoteNumber}',
-      VoucherType.paymentReceipt => 'payment_receipt_${(voucher as ReceiptVoucher).paymentNumber}',
-      VoucherType.expenseVoucher => 'expense_voucher_${(voucher as ExpenseEntry).id}',
+      VoucherType.salesInvoice =>
+        'sales_invoice_${(voucher as SalesInvoice).invoiceNumber}',
+      VoucherType.salesOrder =>
+        'sales_order_${(voucher as SalesOrder).orderNumber}',
+      VoucherType.salesReturn =>
+        'sales_return_${(voucher as SalesReturn).creditNoteNumber}',
+      VoucherType.paymentReceipt =>
+        'payment_receipt_${(voucher as ReceiptVoucher).paymentNumber}',
+      VoucherType.expenseVoucher =>
+        'expense_voucher_${(voucher as ExpenseEntry).id}',
     };
 
     // Keep safe characters only
@@ -75,10 +99,7 @@ class VoucherPdfService {
 
   /// Launches the native OS printing dialog overlay.
   Future<bool> printPdf(Uint8List bytes, String jobName) async {
-    return Printing.layoutPdf(
-      onLayout: (format) async => bytes,
-      name: jobName,
-    );
+    return Printing.layoutPdf(onLayout: (format) async => bytes, name: jobName);
   }
 
   /// Triggers generic system-wide share sheet with the PDF attachment.

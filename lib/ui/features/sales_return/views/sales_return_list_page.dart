@@ -38,9 +38,13 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
     if (picked != null && mounted) {
       final bloc = context.read<SalesReturnBloc>();
       if (isStart) {
-        bloc.add(SetReturnDateFilter(startDate: picked, endDate: bloc.state.endDate));
+        bloc.add(
+          SetReturnDateFilter(startDate: picked, endDate: bloc.state.endDate),
+        );
       } else {
-        bloc.add(SetReturnDateFilter(startDate: bloc.state.startDate, endDate: picked));
+        bloc.add(
+          SetReturnDateFilter(startDate: bloc.state.startDate, endDate: picked),
+        );
       }
     }
   }
@@ -83,14 +87,23 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
                 onStartTap: () => _selectDate(true, state.startDate),
                 onEndTap: () => _selectDate(false, state.endDate),
                 onClear: hasFilter
-                    ? () => context.read<SalesReturnBloc>().add(const SetReturnDateFilter(startDate: null, endDate: null))
+                    ? () => context.read<SalesReturnBloc>().add(
+                        const SetReturnDateFilter(
+                          startDate: null,
+                          endDate: null,
+                        ),
+                      )
                     : null,
                 accentColor: AppTheme.warningAmber,
               ),
 
               if (state.isLoading)
                 const Expanded(
-                  child: Center(child: CircularProgressIndicator(color: AppTheme.warningAmber)),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppTheme.warningAmber,
+                    ),
+                  ),
                 )
               else if (list.isEmpty)
                 Expanded(
@@ -108,7 +121,12 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 600),
                       child: ListView.separated(
-                        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80, top: 8),
+                        padding: const EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          bottom: 80,
+                          top: 8,
+                        ),
                         itemCount: list.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
@@ -127,10 +145,14 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
                             isPendingSync: ret.isPendingSync,
                             accentColor: AppTheme.warningAmber,
                             onTap: () {
-                              context.read<SalesReturnBloc>().add(StartEditReturn(ret));
+                              context.read<SalesReturnBloc>().add(
+                                StartEditReturn(ret),
+                              );
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => const SalesReturnEditorPage()),
+                                MaterialPageRoute(
+                                  builder: (_) => const SalesReturnEditorPage(),
+                                ),
                               );
                             },
                           );

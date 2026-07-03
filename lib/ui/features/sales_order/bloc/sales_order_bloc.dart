@@ -141,7 +141,11 @@ class SalesOrderState extends Equatable {
     return orders.where((ord) {
       final ordDay = DateTime(ord.date.year, ord.date.month, ord.date.day);
       if (startDate != null) {
-        final startDay = DateTime(startDate!.year, startDate!.month, startDate!.day);
+        final startDay = DateTime(
+          startDate!.year,
+          startDate!.month,
+          startDate!.day,
+        );
         if (ordDay.isBefore(startDay)) return false;
       }
       if (endDate != null) {
@@ -184,19 +188,19 @@ class SalesOrderState extends Equatable {
 
   @override
   List<Object?> get props => [
-        orders,
-        startDate,
-        endDate,
-        isLoading,
-        errorMessage,
-        successMessage,
-        editingOrderId,
-        editingDate,
-        editingCustomer,
-        editingItems,
-        editingNotes,
-        isEditingNew,
-      ];
+    orders,
+    startDate,
+    endDate,
+    isLoading,
+    errorMessage,
+    successMessage,
+    editingOrderId,
+    editingDate,
+    editingCustomer,
+    editingItems,
+    editingNotes,
+    isEditingNew,
+  ];
 }
 
 // --- Bloc ---
@@ -209,9 +213,9 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
   SalesOrderBloc({
     required SalesRepository salesRepository,
     required SyncRepository syncRepository,
-  })  : _salesRepository = salesRepository,
-        _syncRepository = syncRepository,
-        super(const SalesOrderState()) {
+  }) : _salesRepository = salesRepository,
+       _syncRepository = syncRepository,
+       super(const SalesOrderState()) {
     on<LoadOrders>(_onLoadOrders);
     on<RefreshOrdersFromZoho>(_onRefreshOrdersFromZoho);
     on<SetDateFilter>(_onSetDateFilter);
@@ -225,56 +229,56 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     on<ClearMessages>(_onClearMessages);
   }
 
-  Future<void> _onLoadOrders(LoadOrders event, Emitter<SalesOrderState> emit) async {
+  Future<void> _onLoadOrders(
+    LoadOrders event,
+    Emitter<SalesOrderState> emit,
+  ) async {
     emit(state.copyWith(isLoading: true));
     try {
       final loaded = _salesRepository.getLocalOrders();
-      emit(state.copyWith(
-        orders: loaded,
-        isLoading: false,
-      ));
+      emit(state.copyWith(orders: loaded, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      ));
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 
   Future<void> _onRefreshOrdersFromZoho(
-      RefreshOrdersFromZoho event, Emitter<SalesOrderState> emit) async {
+    RefreshOrdersFromZoho event,
+    Emitter<SalesOrderState> emit,
+  ) async {
     emit(state.copyWith(isLoading: true));
     try {
       final loaded = await _salesRepository.fetchRemoteOrders();
       emit(state.copyWith(orders: loaded, isLoading: false));
     } catch (e) {
       // Offline-first: surface the error but keep the cached list intact.
-      emit(state.copyWith(
-        orders: _salesRepository.getLocalOrders(),
-        isLoading: false,
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWith(
+          orders: _salesRepository.getLocalOrders(),
+          isLoading: false,
+          errorMessage: e.toString(),
+        ),
+      );
     }
   }
 
   void _onSetDateFilter(SetDateFilter event, Emitter<SalesOrderState> emit) {
-    emit(state.copyWith(
-      startDate: event.startDate,
-      endDate: event.endDate,
-    ));
+    emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
   }
 
   void _onStartNewOrder(StartNewOrder event, Emitter<SalesOrderState> emit) {
-    emit(state.copyWith(
-      editingOrderId: 'temp_so_${DateTime.now().millisecondsSinceEpoch}',
-      editingDate: DateTime.now(),
-      editingCustomer: null,
-      editingItems: const [],
-      editingNotes: '',
-      isEditingNew: true,
-      errorMessage: null,
-      successMessage: null,
-    ));
+    emit(
+      state.copyWith(
+        editingOrderId: 'temp_so_${DateTime.now().millisecondsSinceEpoch}',
+        editingDate: DateTime.now(),
+        editingCustomer: null,
+        editingItems: const [],
+        editingNotes: '',
+        isEditingNew: true,
+        errorMessage: null,
+        successMessage: null,
+      ),
+    );
   }
 
   void _onStartEditOrder(StartEditOrder event, Emitter<SalesOrderState> emit) {
@@ -295,27 +299,38 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
       ),
     );
 
-    emit(state.copyWith(
-      editingOrderId: event.order.id,
-      editingDate: event.order.date,
-      editingCustomer: customer,
-      editingItems: List.from(event.order.items),
-      editingNotes: event.order.notes,
-      isEditingNew: false,
-      errorMessage: null,
-      successMessage: null,
-    ));
+    emit(
+      state.copyWith(
+        editingOrderId: event.order.id,
+        editingDate: event.order.date,
+        editingCustomer: customer,
+        editingItems: List.from(event.order.items),
+        editingNotes: event.order.notes,
+        isEditingNew: false,
+        errorMessage: null,
+        successMessage: null,
+      ),
+    );
   }
 
-  void _onUpdateOrderDate(UpdateOrderDate event, Emitter<SalesOrderState> emit) {
+  void _onUpdateOrderDate(
+    UpdateOrderDate event,
+    Emitter<SalesOrderState> emit,
+  ) {
     emit(state.copyWith(editingDate: event.date));
   }
 
-  void _onUpdateOrderCustomer(UpdateOrderCustomer event, Emitter<SalesOrderState> emit) {
+  void _onUpdateOrderCustomer(
+    UpdateOrderCustomer event,
+    Emitter<SalesOrderState> emit,
+  ) {
     emit(state.copyWith(editingCustomer: event.customer));
   }
 
-  void _onAddOrUpdateLineItem(AddOrUpdateLineItem event, Emitter<SalesOrderState> emit) {
+  void _onAddOrUpdateLineItem(
+    AddOrUpdateLineItem event,
+    Emitter<SalesOrderState> emit,
+  ) {
     final items = List<OrderLineItem>.from(state.editingItems);
     final idx = items.indexWhere((line) => line.item.id == event.item.id);
 
@@ -333,13 +348,15 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
       }
     } else {
       if (event.quantity > 0) {
-        items.add(OrderLineItem(
-          item: event.item,
-          quantity: event.quantity,
-          rate: event.rate ?? event.item.rate,
-          taxPercentage: event.item.taxPercentage,
-          discount: event.discount ?? 0.0,
-        ));
+        items.add(
+          OrderLineItem(
+            item: event.item,
+            quantity: event.quantity,
+            rate: event.rate ?? event.item.rate,
+            taxPercentage: event.item.taxPercentage,
+            discount: event.discount ?? 0.0,
+          ),
+        );
       }
     }
     emit(state.copyWith(editingItems: items, errorMessage: null));
@@ -351,7 +368,10 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     emit(state.copyWith(editingItems: items));
   }
 
-  Future<void> _onSaveOrder(SaveOrder event, Emitter<SalesOrderState> emit) async {
+  Future<void> _onSaveOrder(
+    SaveOrder event,
+    Emitter<SalesOrderState> emit,
+  ) async {
     if (state.editingCustomer == null) {
       emit(state.copyWith(errorMessage: 'Please select a customer'));
       return;
@@ -364,14 +384,19 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     emit(state.copyWith(isLoading: true));
     try {
       final isNew = state.isEditingNew;
-      final tempId = state.editingOrderId ?? 'temp_so_${DateTime.now().millisecondsSinceEpoch}';
+      final tempId =
+          state.editingOrderId ??
+          'temp_so_${DateTime.now().millisecondsSinceEpoch}';
 
       String orderNum;
       String? existingZohoOrderId;
       if (isNew) {
-        orderNum = 'SO-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+        orderNum =
+            'SO-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
       } else {
-        final originalOrder = state.orders.firstWhere((ord) => ord.id == tempId);
+        final originalOrder = state.orders.firstWhere(
+          (ord) => ord.id == tempId,
+        );
         orderNum = originalOrder.orderNumber;
         existingZohoOrderId = originalOrder.zohoOrderId;
       }
@@ -382,7 +407,9 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
         customerId: state.editingCustomer!.id,
         customerName: state.editingCustomer!.name,
         date: state.editingDate ?? DateTime.now(),
-        shipmentDate: (state.editingDate ?? DateTime.now()).add(const Duration(days: 7)),
+        shipmentDate: (state.editingDate ?? DateTime.now()).add(
+          const Duration(days: 7),
+        ),
         items: state.editingItems,
         notes: event.notes,
         isPendingSync: true,
@@ -393,7 +420,8 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
 
       // An order that has already synced (has a permanent zohoOrderId) is updated
       // in place; otherwise it is a create still pending its first sync.
-      final isUpdate = existingZohoOrderId != null && existingZohoOrderId.isNotEmpty;
+      final isUpdate =
+          existingZohoOrderId != null && existingZohoOrderId.isNotEmpty;
       final payload = SalesOrderModel.fromDomain(order).toJson();
       if (isUpdate) {
         // Update routes to /salesorders/{realId}, so target the permanent Zoho id.
@@ -413,16 +441,15 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
 
       final updatedOrders = _salesRepository.getLocalOrders();
 
-      emit(state.copyWith(
-        orders: updatedOrders,
-        isLoading: false,
-        successMessage: 'Sales Order saved successfully',
-      ));
+      emit(
+        state.copyWith(
+          orders: updatedOrders,
+          isLoading: false,
+          successMessage: 'Sales Order saved successfully',
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      ));
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 

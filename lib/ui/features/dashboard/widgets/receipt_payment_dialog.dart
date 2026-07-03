@@ -76,11 +76,13 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
       if (balance <= 0) continue;
 
       final allocated = remainingAmount >= balance ? balance : remainingAmount;
-      list.add(PaymentAllocation(
-        invoiceId: invoice.invoiceId,
-        invoiceNumber: invoice.invoiceNumber,
-        amountApplied: double.parse(allocated.toStringAsFixed(2)),
-      ));
+      list.add(
+        PaymentAllocation(
+          invoiceId: invoice.invoiceId,
+          invoiceNumber: invoice.invoiceNumber,
+          amountApplied: double.parse(allocated.toStringAsFixed(2)),
+        ),
+      );
       remainingAmount -= allocated;
       remainingAmount = double.parse(remainingAmount.toStringAsFixed(2));
     }
@@ -98,20 +100,29 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
           ),
         );
         final ctrl = _allocationControllers[inv.invoiceId];
-        final hasFocus = _allocationFocusNodes[inv.invoiceId]?.hasFocus ?? false;
-        final expectedText = alloc.amountApplied > 0 ? alloc.amountApplied.toStringAsFixed(2) : '';
+        final hasFocus =
+            _allocationFocusNodes[inv.invoiceId]?.hasFocus ?? false;
+        final expectedText = alloc.amountApplied > 0
+            ? alloc.amountApplied.toStringAsFixed(2)
+            : '';
         if (ctrl != null) {
           if (ctrl.text != expectedText && !hasFocus) {
             ctrl.text = expectedText;
           }
         } else {
-          _allocationControllers[inv.invoiceId] = TextEditingController(text: expectedText);
+          _allocationControllers[inv.invoiceId] = TextEditingController(
+            text: expectedText,
+          );
         }
       }
     });
   }
 
-  void _onAllocationChanged(String invoiceId, String invoiceNumber, String value) {
+  void _onAllocationChanged(
+    String invoiceId,
+    String invoiceNumber,
+    String value,
+  ) {
     final parsed = double.tryParse(value) ?? 0.0;
     setState(() {
       final index = _allocations.indexWhere((a) => a.invoiceId == invoiceId);
@@ -126,11 +137,13 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
           );
         }
       } else if (parsed > 0) {
-        _allocations.add(PaymentAllocation(
-          invoiceId: invoiceId,
-          invoiceNumber: invoiceNumber,
-          amountApplied: parsed,
-        ));
+        _allocations.add(
+          PaymentAllocation(
+            invoiceId: invoiceId,
+            invoiceNumber: invoiceNumber,
+            amountApplied: parsed,
+          ),
+        );
       }
     });
   }
@@ -155,10 +168,12 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
           status: '',
         ),
       );
-      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance) return false;
+      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance)
+        return false;
       totalAllocated += alloc.amountApplied;
     }
-    if (double.parse(totalAllocated.toStringAsFixed(2)) > double.parse(amount.toStringAsFixed(2))) {
+    if (double.parse(totalAllocated.toStringAsFixed(2)) >
+        double.parse(amount.toStringAsFixed(2))) {
       return false;
     }
     return true;
@@ -180,10 +195,15 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
                 labelText: 'Payment Amount ($cs)',
-                prefixIcon: const Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
+                prefixIcon: const Icon(
+                  Icons.currency_rupee,
+                  color: AppTheme.primaryIndigo,
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -193,7 +213,9 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
               initialValue: _paymentMode,
               decoration: const InputDecoration(labelText: 'Payment Mode'),
               items: ['Cash', 'Cheque', 'Bank Transfer', 'Card']
-                  .map((mode) => DropdownMenuItem(value: mode, child: Text(mode)))
+                  .map(
+                    (mode) => DropdownMenuItem(value: mode, child: Text(mode)),
+                  )
                   .toList(),
               onChanged: (val) {
                 setState(() {
@@ -215,14 +237,20 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
                   ),
                   Builder(
                     builder: (context) {
-                      final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
-                      final totalAllocated = _allocations.fold(0.0, (sum, a) => sum + a.amountApplied);
+                      final amount =
+                          double.tryParse(_amountController.text.trim()) ?? 0.0;
+                      final totalAllocated = _allocations.fold(
+                        0.0,
+                        (sum, a) => sum + a.amountApplied,
+                      );
                       return Text(
                         'Allocated: $cs${totalAllocated.toStringAsFixed(2)} / $cs${amount.toStringAsFixed(2)}',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: totalAllocated > amount + 0.005 ? AppTheme.errorRose : AppTheme.successEmerald,
+                          color: totalAllocated > amount + 0.005
+                              ? AppTheme.errorRose
+                              : AppTheme.successEmerald,
                         ),
                       );
                     },
@@ -247,9 +275,10 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
                   final alloc = _allocations.firstWhere(
                     (a) => a.invoiceId == inv.invoiceId,
                     orElse: () => PaymentAllocation(
-                        invoiceId: inv.invoiceId,
-                        invoiceNumber: inv.invoiceNumber,
-                        amountApplied: 0.0),
+                      invoiceId: inv.invoiceId,
+                      invoiceNumber: inv.invoiceNumber,
+                      amountApplied: 0.0,
+                    ),
                   );
 
                   return Card(
@@ -264,7 +293,10 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
                               children: [
                                 Text(
                                   inv.invoiceNumber,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
                                 ),
                                 Text(
                                   'Outstanding: $cs${inv.balance.toStringAsFixed(2)}',
@@ -279,17 +311,29 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
                             child: TextFormField(
                               controller: ctrl,
                               focusNode: focusNode,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
                               textAlign: TextAlign.end,
                               style: const TextStyle(fontSize: 12),
                               decoration: InputDecoration(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 4,
+                                ),
                                 prefixText: cs,
                                 hintText: '0.00',
-                                errorText: alloc.amountApplied > inv.balance ? 'Too high' : null,
+                                errorText: alloc.amountApplied > inv.balance
+                                    ? 'Too high'
+                                    : null,
                               ),
                               onChanged: (v) {
-                                _onAllocationChanged(inv.invoiceId, inv.invoiceNumber, v);
+                                _onAllocationChanged(
+                                  inv.invoiceId,
+                                  inv.invoiceNumber,
+                                  v,
+                                );
                               },
                             ),
                           ),
@@ -309,48 +353,57 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
           child: const Text('CANCEL'),
         ),
         ElevatedButton(
-          onPressed: !_isFormValid() ? null : () async {
-            final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
-            if (amount <= 0) return;
+          onPressed: !_isFormValid()
+              ? null
+              : () async {
+                  final amount =
+                      double.tryParse(_amountController.text.trim()) ?? 0.0;
+                  if (amount <= 0) return;
 
-            final tempId = 'temp_pay_${DateTime.now().millisecondsSinceEpoch}';
-            final voucher = ReceiptVoucher(
-              id: tempId,
-              paymentNumber: 'PAY-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              customerId: widget.customer.id,
-              customerName: widget.customer.name,
-              allocations: _allocations,
-              amount: amount,
-              paymentMode: _paymentMode,
-              referenceNumber: 'REF-VAN-${DateTime.now().millisecondsSinceEpoch.toString().substring(10)}',
-              date: DateTime.now(),
-              isPendingSync: true,
-            );
+                  final tempId =
+                      'temp_pay_${DateTime.now().millisecondsSinceEpoch}';
+                  final voucher = ReceiptVoucher(
+                    id: tempId,
+                    paymentNumber:
+                        'PAY-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+                    customerId: widget.customer.id,
+                    customerName: widget.customer.name,
+                    allocations: _allocations,
+                    amount: amount,
+                    paymentMode: _paymentMode,
+                    referenceNumber:
+                        'REF-VAN-${DateTime.now().millisecondsSinceEpoch.toString().substring(10)}',
+                    date: DateTime.now(),
+                    isPendingSync: true,
+                  );
 
-            // Local Cache update (deducts Customer outstanding balance instantly!)
-            await _db.saveLocalReceipt(voucher);
+                  // Local Cache update (deducts Customer outstanding balance instantly!)
+                  await _db.saveLocalReceipt(voucher);
 
-            // Sync queue addition
-            final syncItem = SyncQueueItem(
-              id: tempId,
-              type: 'receipt',
-              payload: ReceiptVoucherModel.fromDomain(voucher).toJson(),
-              status: SyncStatus.pending,
-              timestamp: DateTime.now(),
-            );
-            await _db.enqueueSyncItem(syncItem);
+                  // Sync queue addition
+                  final syncItem = SyncQueueItem(
+                    id: tempId,
+                    type: 'receipt',
+                    payload: ReceiptVoucherModel.fromDomain(voucher).toJson(),
+                    status: SyncStatus.pending,
+                    timestamp: DateTime.now(),
+                  );
+                  await _db.enqueueSyncItem(syncItem);
 
-            if (!context.mounted) return;
+                  if (!context.mounted) return;
 
-            // Sync action trigger in background
-            sl<SyncWorker>().syncPendingItems();
+                  // Sync action trigger in background
+                  sl<SyncWorker>().syncPendingItems();
 
-            Navigator.pop(context);
-            showSuccessSnackBar(context, 'Payment Voucher for ${formatCurrency(amount, cs)} queued offline!');
-            widget.onPaymentLogged();
-          },
+                  Navigator.pop(context);
+                  showSuccessSnackBar(
+                    context,
+                    'Payment Voucher for ${formatCurrency(amount, cs)} queued offline!',
+                  );
+                  widget.onPaymentLogged();
+                },
           child: const Text('LOG RECEIPT'),
-        )
+        ),
       ],
     );
   }

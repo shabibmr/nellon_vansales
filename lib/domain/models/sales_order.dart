@@ -131,7 +131,8 @@ class SalesOrder extends Equatable {
   double get taxTotal => items.fold(0.0, (sum, item) => sum + item.taxAmount);
 
   /// Computes total line-item discount on this order.
-  double get discountTotal => items.fold(0.0, (sum, item) => sum + item.discount);
+  double get discountTotal =>
+      items.fold(0.0, (sum, item) => sum + item.discount);
 
   /// Computes the unrounded grand total.
   double get rawTotal => items.fold(0.0, (sum, item) => sum + item.total);
@@ -168,24 +169,25 @@ class SalesOrder extends Equatable {
       notes: notes ?? this.notes,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       status: status ?? this.status,
-      convertedInvoiceNumber: convertedInvoiceNumber ?? this.convertedInvoiceNumber,
+      convertedInvoiceNumber:
+          convertedInvoiceNumber ?? this.convertedInvoiceNumber,
       zohoOrderId: zohoOrderId ?? this.zohoOrderId,
     );
   }
 
   @override
   List<Object?> get props => [
-        id,
-        orderNumber,
-        customerId,
-        customerName,
-        date,
-        shipmentDate,
-        items,
-        notes,
-        isPendingSync,
-        status,
-        convertedInvoiceNumber,
-        zohoOrderId,
-      ];
+    id,
+    orderNumber,
+    customerId,
+    customerName,
+    date,
+    shipmentDate,
+    items,
+    notes,
+    isPendingSync,
+    status,
+    convertedInvoiceNumber,
+    zohoOrderId,
+  ];
 }

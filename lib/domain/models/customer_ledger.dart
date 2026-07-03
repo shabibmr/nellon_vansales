@@ -5,7 +5,8 @@ class LedgerTransaction extends Equatable {
   final String transactionId;
   final String transactionNumber;
   final DateTime date;
-  final String type; // 'invoice', 'payment', 'credit_note', 'debit_note', 'opening_balance'
+  final String
+  type; // 'invoice', 'payment', 'credit_note', 'debit_note', 'opening_balance'
   final double debit;
   final double credit;
   final double balance;
@@ -25,8 +26,11 @@ class LedgerTransaction extends Equatable {
   factory LedgerTransaction.fromJson(Map<String, dynamic> json) {
     return LedgerTransaction(
       transactionId: json['transaction_id'] ?? json['id'] ?? '',
-      transactionNumber: json['transaction_number'] ?? json['reference_number'] ?? '',
-      date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
+      transactionNumber:
+          json['transaction_number'] ?? json['reference_number'] ?? '',
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
       type: json['transaction_type'] ?? json['type'] ?? 'unknown',
       debit: (json['debit'] ?? json['debit_amount'] ?? 0.0).toDouble(),
       credit: (json['credit'] ?? json['credit_amount'] ?? 0.0).toDouble(),
@@ -36,8 +40,16 @@ class LedgerTransaction extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [transactionId, transactionNumber, date, type, debit, credit, balance, description];
+  List<Object?> get props => [
+    transactionId,
+    transactionNumber,
+    date,
+    type,
+    debit,
+    credit,
+    balance,
+    description,
+  ];
 }
 
 /// Full ledger statement for a customer covering a date range.
@@ -56,13 +68,14 @@ class CustomerLedger extends Equatable {
     required this.transactions,
   });
 
-  double get totalDebits =>
-      transactions.fold(0.0, (sum, t) => sum + t.debit);
+  double get totalDebits => transactions.fold(0.0, (sum, t) => sum + t.debit);
 
-  double get totalCredits =>
-      transactions.fold(0.0, (sum, t) => sum + t.credit);
+  double get totalCredits => transactions.fold(0.0, (sum, t) => sum + t.credit);
 
-  factory CustomerLedger.fromJson(Map<String, dynamic> json, String customerId) {
+  factory CustomerLedger.fromJson(
+    Map<String, dynamic> json,
+    String customerId,
+  ) {
     final txList = (json['transactions'] as List? ?? [])
         .map((t) => LedgerTransaction.fromJson(Map<String, dynamic>.from(t)))
         .toList();
@@ -77,6 +90,11 @@ class CustomerLedger extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [customerId, customerName, openingBalance, closingBalance, transactions];
+  List<Object?> get props => [
+    customerId,
+    customerName,
+    openingBalance,
+    closingBalance,
+    transactions,
+  ];
 }

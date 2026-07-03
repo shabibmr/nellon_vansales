@@ -15,10 +15,8 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
   final VoucherPdfService pdfService;
   final HiveDatabaseService dbService;
 
-  VoucherPdfBloc({
-    required this.pdfService,
-    required this.dbService,
-  }) : super(VoucherPdfInitial()) {
+  VoucherPdfBloc({required this.pdfService, required this.dbService})
+    : super(VoucherPdfInitial()) {
     on<GenerateVoucherPdfPreviewRequested>(_onPreviewRequested);
     on<PrintVoucherPdfRequested>(_onPrintRequested);
     on<ShareVoucherPdfRequested>(_onShareRequested);
@@ -75,10 +73,15 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     emit(VoucherPdfLoading());
     try {
       final bytes = await _buildBytes(event.type, event.voucher);
-      final filename = pdfService.getSafeFilename(type: event.type, voucher: event.voucher);
+      final filename = pdfService.getSafeFilename(
+        type: event.type,
+        voucher: event.voucher,
+      );
       emit(VoucherPdfReady(pdfBytes: bytes, filename: filename));
     } catch (e) {
-      emit(VoucherPdfFailure('Failed to generate PDF preview: ${e.toString()}'));
+      emit(
+        VoucherPdfFailure('Failed to generate PDF preview: ${e.toString()}'),
+      );
     }
   }
 
@@ -89,7 +92,10 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     emit(VoucherPdfLoading());
     try {
       final bytes = await _buildBytes(event.type, event.voucher);
-      final filename = pdfService.getSafeFilename(type: event.type, voucher: event.voucher);
+      final filename = pdfService.getSafeFilename(
+        type: event.type,
+        voucher: event.voucher,
+      );
       final printed = await pdfService.printPdf(bytes, filename);
       if (printed) {
         emit(const VoucherPdfActionSuccess('Document sent to print spooler'));
@@ -97,7 +103,11 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
         emit(VoucherPdfInitial()); // Cancelled by user or failed silently
       }
     } catch (e) {
-      emit(VoucherPdfFailure('Failed to compile or print document: ${e.toString()}'));
+      emit(
+        VoucherPdfFailure(
+          'Failed to compile or print document: ${e.toString()}',
+        ),
+      );
     }
   }
 
@@ -108,7 +118,10 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     emit(VoucherPdfLoading());
     try {
       final bytes = await _buildBytes(event.type, event.voucher);
-      final filename = pdfService.getSafeFilename(type: event.type, voucher: event.voucher);
+      final filename = pdfService.getSafeFilename(
+        type: event.type,
+        voucher: event.voucher,
+      );
       final file = await pdfService.savePdfToTempFile(bytes, filename);
       await pdfService.sharePdfFile(file, 'Share Document: $filename');
       emit(const VoucherPdfActionSuccess('Document shared successfully'));
@@ -124,7 +137,10 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     emit(VoucherPdfLoading());
     try {
       final bytes = await _buildBytes(event.type, event.voucher);
-      final filename = pdfService.getSafeFilename(type: event.type, voucher: event.voucher);
+      final filename = pdfService.getSafeFilename(
+        type: event.type,
+        voucher: event.voucher,
+      );
       final file = await pdfService.savePdfToTempFile(bytes, filename);
       await pdfService.shareViaEmail(
         file,
@@ -144,7 +160,10 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     emit(VoucherPdfLoading());
     try {
       final bytes = await _buildBytes(event.type, event.voucher);
-      final filename = pdfService.getSafeFilename(type: event.type, voucher: event.voucher);
+      final filename = pdfService.getSafeFilename(
+        type: event.type,
+        voucher: event.voucher,
+      );
       final file = await pdfService.savePdfToTempFile(bytes, filename);
       await pdfService.shareViaWhatsApp(
         file,
@@ -156,7 +175,10 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     }
   }
 
-  void _onResetState(ResetVoucherPdfState event, Emitter<VoucherPdfState> emit) {
+  void _onResetState(
+    ResetVoucherPdfState event,
+    Emitter<VoucherPdfState> emit,
+  ) {
     emit(VoucherPdfInitial());
   }
 }

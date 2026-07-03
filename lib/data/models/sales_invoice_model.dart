@@ -73,9 +73,14 @@ class SalesInvoiceModel extends SalesInvoice {
       invoiceNumber: json['invoice_number'] ?? json['invoiceNumber'] ?? '',
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       customerName: json['customer_name'] ?? json['customerName'] ?? '',
-      date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
-      dueDate: json['due_date'] != null ? DateTime.parse(json['due_date']) : DateTime.now(),
-      items: (json['line_items'] as List?)
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
+      dueDate: json['due_date'] != null
+          ? DateTime.parse(json['due_date'])
+          : DateTime.now(),
+      items:
+          (json['line_items'] as List?)
               ?.map((item) => InvoiceLineItemModel.fromJson(item))
               .toList() ??
           [],
@@ -118,4 +123,3 @@ class SalesInvoiceModel extends SalesInvoice {
     );
   }
 }
-

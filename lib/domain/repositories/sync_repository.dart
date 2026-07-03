@@ -30,4 +30,3 @@ abstract class SyncRepository {
   /// Returns true if essential master data lists (Customers, Items, Routes) are populated in local cache.
   bool hasCoreMasters();
 }
-

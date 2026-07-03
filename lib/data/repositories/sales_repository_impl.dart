@@ -22,10 +22,7 @@ class SalesRepositoryImpl implements SalesRepository {
   final ZohoApiClient _apiClient;
 
   /// Creates a new [SalesRepositoryImpl] wrapping the Hive local database provider.
-  SalesRepositoryImpl({
-    required this._dbService,
-    required this._apiClient,
-  });
+  SalesRepositoryImpl({required this._dbService, required this._apiClient});
 
   @override
   List<RouteModel> getRoutes() => _dbService.getRoutes();
@@ -34,13 +31,15 @@ class SalesRepositoryImpl implements SalesRepository {
   String? get activeRouteId => _dbService.activeRouteId;
 
   @override
-  Future<void> setActiveRouteId(String? routeId) => _dbService.setActiveRouteId(routeId);
+  Future<void> setActiveRouteId(String? routeId) =>
+      _dbService.setActiveRouteId(routeId);
 
   @override
   List<Customer> getCustomers() => _dbService.getCustomers();
 
   @override
-  Future<void> saveCustomers(List<Customer> customers) => _dbService.saveCustomers(customers);
+  Future<void> saveCustomers(List<Customer> customers) =>
+      _dbService.saveCustomers(customers);
 
   @override
   List<Item> getItems() => _dbService.getItems();
@@ -52,13 +51,15 @@ class SalesRepositoryImpl implements SalesRepository {
   List<SalesInvoice> getLocalInvoices() => _dbService.getLocalInvoices();
 
   @override
-  Future<void> saveLocalInvoice(SalesInvoice invoice) => _dbService.saveLocalInvoice(invoice);
+  Future<void> saveLocalInvoice(SalesInvoice invoice) =>
+      _dbService.saveLocalInvoice(invoice);
 
   @override
   List<SalesOrder> getLocalOrders() => _dbService.getLocalOrders();
 
   @override
-  Future<void> saveLocalOrder(SalesOrder order) => _dbService.saveLocalOrder(order);
+  Future<void> saveLocalOrder(SalesOrder order) =>
+      _dbService.saveLocalOrder(order);
 
   @override
   Future<List<SalesOrder>> fetchRemoteOrders() async {
@@ -79,28 +80,33 @@ class SalesRepositoryImpl implements SalesRepository {
   List<ReceiptVoucher> getLocalReceipts() => _dbService.getLocalReceipts();
 
   @override
-  Future<void> saveLocalReceipt(ReceiptVoucher voucher) => _dbService.saveLocalReceipt(voucher);
+  Future<void> saveLocalReceipt(ReceiptVoucher voucher) =>
+      _dbService.saveLocalReceipt(voucher);
 
   @override
   List<SalesReturn> getLocalReturns() => _dbService.getLocalReturns();
 
   @override
-  Future<void> saveLocalReturn(SalesReturn salesReturn) => _dbService.saveLocalReturn(salesReturn);
+  Future<void> saveLocalReturn(SalesReturn salesReturn) =>
+      _dbService.saveLocalReturn(salesReturn);
 
   @override
   List<ExpenseEntry> getLocalExpenses() => _dbService.getLocalExpenses();
 
   @override
-  Future<void> saveLocalExpense(ExpenseEntry expense) => _dbService.saveLocalExpense(expense);
+  Future<void> saveLocalExpense(ExpenseEntry expense) =>
+      _dbService.saveLocalExpense(expense);
 
   @override
   CashClosing? getLocalCashClosing() => _dbService.getLocalCashClosing();
 
   @override
-  Future<void> saveLocalCashClosing(CashClosing closing) => _dbService.saveLocalCashClosing(closing);
+  Future<void> saveLocalCashClosing(CashClosing closing) =>
+      _dbService.saveLocalCashClosing(closing);
 
   @override
-  Future<void> enqueueSyncItem(SyncQueueItem item) => _dbService.enqueueSyncItem(item);
+  Future<void> enqueueSyncItem(SyncQueueItem item) =>
+      _dbService.enqueueSyncItem(item);
 
   @override
   List<SyncQueueItem> getSyncQueue() => _dbService.getSyncQueue();
@@ -109,4 +115,3 @@ class SalesRepositoryImpl implements SalesRepository {
   List<OpenInvoice> getOpenInvoices({String? customerId}) =>
       _dbService.getOpenInvoices(customerId: customerId);
 }
-

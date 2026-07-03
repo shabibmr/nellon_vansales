@@ -37,10 +37,13 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
     super.initState();
     final state = context.read<ReceiptBloc>().state;
     _amountController = TextEditingController(
-      text: state.editingAmount > 0 ? state.editingAmount.toStringAsFixed(2) : '',
+      text: state.editingAmount > 0
+          ? state.editingAmount.toStringAsFixed(2)
+          : '',
     );
-    _referenceController =
-        TextEditingController(text: state.editingReferenceNumber);
+    _referenceController = TextEditingController(
+      text: state.editingReferenceNumber,
+    );
     _lastCustomerId = state.editingCustomer?.id;
   }
 
@@ -61,7 +64,9 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
 
   bool _areAllocationsValid(ReceiptState state) {
     if (state.editingCustomer == null) return false;
-    final openInvoices = _db.getOpenInvoices(customerId: state.editingCustomer!.id);
+    final openInvoices = _db.getOpenInvoices(
+      customerId: state.editingCustomer!.id,
+    );
     double totalAllocated = 0.0;
     for (final alloc in state.editingAllocations) {
       if (alloc.amountApplied < 0) return false;
@@ -78,7 +83,8 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
           status: '',
         ),
       );
-      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance) return false;
+      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance)
+        return false;
       totalAllocated += alloc.amountApplied;
     }
     if (double.parse(totalAllocated.toStringAsFixed(2)) >
@@ -109,11 +115,13 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
         );
       }
     } else if (parsed > 0) {
-      list.add(PaymentAllocation(
-        invoiceId: invoiceId,
-        invoiceNumber: invoiceNumber,
-        amountApplied: parsed,
-      ));
+      list.add(
+        PaymentAllocation(
+          invoiceId: invoiceId,
+          invoiceNumber: invoiceNumber,
+          amountApplied: parsed,
+        ),
+      );
     }
 
     context.read<ReceiptBloc>().add(UpdateReceiptAllocations(list));
@@ -127,7 +135,8 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
   }
 
   void _showCustomerSelector(BuildContext context, bool isDark) {
-    final allCustomers = _db.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
+    final allCustomers = _db.getCustomers()
+      ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,
       customers: allCustomers,
@@ -174,19 +183,25 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
           }
 
           // Sync amount controller
-          final amountText = state.editingAmount > 0 ? state.editingAmount.toStringAsFixed(2) : '';
-          if (_amountController.text != amountText && !_amountFocusNode.hasFocus) {
+          final amountText = state.editingAmount > 0
+              ? state.editingAmount.toStringAsFixed(2)
+              : '';
+          if (_amountController.text != amountText &&
+              !_amountFocusNode.hasFocus) {
             _amountController.text = amountText;
           }
 
           // Sync reference controller
-          if (_referenceController.text != state.editingReferenceNumber && !_referenceFocusNode.hasFocus) {
+          if (_referenceController.text != state.editingReferenceNumber &&
+              !_referenceFocusNode.hasFocus) {
             _referenceController.text = state.editingReferenceNumber;
           }
 
           // Sync allocations controllers
           if (state.editingCustomer != null) {
-            final openInvoices = _db.getOpenInvoices(customerId: state.editingCustomer!.id);
+            final openInvoices = _db.getOpenInvoices(
+              customerId: state.editingCustomer!.id,
+            );
             for (final inv in openInvoices) {
               final alloc = state.editingAllocations.firstWhere(
                 (a) => a.invoiceId == inv.invoiceId,
@@ -197,14 +212,19 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                 ),
               );
               final ctrl = _allocationControllers[inv.invoiceId];
-              final hasFocus = _allocationFocusNodes[inv.invoiceId]?.hasFocus ?? false;
-              final expectedText = alloc.amountApplied > 0 ? alloc.amountApplied.toStringAsFixed(2) : '';
+              final hasFocus =
+                  _allocationFocusNodes[inv.invoiceId]?.hasFocus ?? false;
+              final expectedText = alloc.amountApplied > 0
+                  ? alloc.amountApplied.toStringAsFixed(2)
+                  : '';
               if (ctrl != null) {
                 if (ctrl.text != expectedText && !hasFocus) {
                   ctrl.text = expectedText;
                 }
               } else {
-                _allocationControllers[inv.invoiceId] = TextEditingController(text: expectedText);
+                _allocationControllers[inv.invoiceId] = TextEditingController(
+                  text: expectedText,
+                );
               }
             }
           }
@@ -237,15 +257,18 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor:
-                                        AppTheme.primaryIndigo.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.person,
-                                        color: AppTheme.primaryIndigo),
+                                    backgroundColor: AppTheme.primaryIndigo
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(
+                                      Icons.person,
+                                      color: AppTheme.primaryIndigo,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'CUSTOMER',
@@ -261,8 +284,9 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                         Text(
                                           customer?.name ?? 'Select Customer',
                                           style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold),
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         if (customer != null) ...[
                                           const SizedBox(height: 2),
@@ -289,10 +313,12 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                     ),
                                   ),
                                   if (state.isEditingNew)
-                                    Icon(Icons.keyboard_arrow_right,
-                                        color: isDark
-                                            ? AppTheme.darkTextSecondary
-                                            : AppTheme.lightTextSecondary),
+                                    Icon(
+                                      Icons.keyboard_arrow_right,
+                                      color: isDark
+                                          ? AppTheme.darkTextSecondary
+                                          : AppTheme.lightTextSecondary,
+                                    ),
                                 ],
                               ),
                             ),
@@ -310,15 +336,18 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor:
-                                        AppTheme.infoSky.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.calendar_today,
-                                        color: AppTheme.infoSky),
+                                    backgroundColor: AppTheme.infoSky
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(
+                                      Icons.calendar_today,
+                                      color: AppTheme.infoSky,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'RECEIPT DATE',
@@ -331,17 +360,22 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
-                                        Text(_dateFormat.format(date),
-                                            style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold)),
+                                        Text(
+                                          _dateFormat.format(date),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
-                                  Icon(Icons.keyboard_arrow_right,
-                                      color: isDark
-                                          ? AppTheme.darkTextSecondary
-                                          : AppTheme.lightTextSecondary),
+                                  Icon(
+                                    Icons.keyboard_arrow_right,
+                                    color: isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary,
+                                  ),
                                 ],
                               ),
                             ),
@@ -353,14 +387,21 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                         TextFormField(
                           controller: _amountController,
                           focusNode: _amountFocusNode,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           onChanged: (v) {
                             final amount = double.tryParse(v) ?? 0.0;
-                            context.read<ReceiptBloc>().add(SetEditingAmount(amount));
+                            context.read<ReceiptBloc>().add(
+                              SetEditingAmount(amount),
+                            );
                           },
                           decoration: InputDecoration(
                             labelText: 'Payment Amount ($cs)',
-                            prefixIcon: const Icon(Icons.currency_rupee, color: AppTheme.primaryIndigo),
+                            prefixIcon: const Icon(
+                              Icons.currency_rupee,
+                              color: AppTheme.primaryIndigo,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -370,17 +411,22 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                           initialValue: state.editingPaymentMode,
                           decoration: const InputDecoration(
                             labelText: 'Payment Mode',
-                            prefixIcon: Icon(Icons.payment_outlined,
-                                color: AppTheme.primaryIndigo),
+                            prefixIcon: Icon(
+                              Icons.payment_outlined,
+                              color: AppTheme.primaryIndigo,
+                            ),
                           ),
                           items: ['Cash', 'Cheque', 'Bank Transfer', 'Card']
-                              .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                              .map(
+                                (m) =>
+                                    DropdownMenuItem(value: m, child: Text(m)),
+                              )
                               .toList(),
                           onChanged: (v) {
                             if (v != null) {
-                              context
-                                  .read<ReceiptBloc>()
-                                  .add(SetEditingPaymentMode(v));
+                              context.read<ReceiptBloc>().add(
+                                SetEditingPaymentMode(v),
+                              );
                             }
                           },
                         ),
@@ -390,12 +436,16 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                         TextFormField(
                           controller: _referenceController,
                           focusNode: _referenceFocusNode,
-                          onChanged: (v) =>
-                              context.read<ReceiptBloc>().add(SetEditingReference(v)),
+                          onChanged: (v) => context.read<ReceiptBloc>().add(
+                            SetEditingReference(v),
+                          ),
                           decoration: const InputDecoration(
                             labelText: 'Reference Number (optional)',
                             hintText: 'Cheque no., transaction ID...',
-                            prefixIcon: Icon(Icons.tag, color: AppTheme.primaryIndigo),
+                            prefixIcon: Icon(
+                              Icons.tag,
+                              color: AppTheme.primaryIndigo,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -404,24 +454,32 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                         if (customer != null) ...[
                           Builder(
                             builder: (context) {
-                              final openInvoices = _db.getOpenInvoices(customerId: customer.id);
-                              if (openInvoices.isEmpty) return const SizedBox.shrink();
+                              final openInvoices = _db.getOpenInvoices(
+                                customerId: customer.id,
+                              );
+                              if (openInvoices.isEmpty)
+                                return const SizedBox.shrink();
 
-                              final totalAllocated = state.editingAllocations.fold(0.0, (sum, a) => sum + a.amountApplied);
-                              final excessAmount = state.editingAmount - totalAllocated;
+                              final totalAllocated = state.editingAllocations
+                                  .fold(0.0, (sum, a) => sum + a.amountApplied);
+                              final excessAmount =
+                                  state.editingAmount - totalAllocated;
 
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'INVOICE ALLOCATIONS',
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
-                                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                          color: isDark
+                                              ? AppTheme.darkTextSecondary
+                                              : AppTheme.lightTextSecondary,
                                         ),
                                       ),
                                       Text(
@@ -429,7 +487,11 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
-                                          color: totalAllocated > state.editingAmount + 0.005 ? AppTheme.errorRose : AppTheme.successEmerald,
+                                          color:
+                                              totalAllocated >
+                                                  state.editingAmount + 0.005
+                                              ? AppTheme.errorRose
+                                              : AppTheme.successEmerald,
                                         ),
                                       ),
                                     ],
@@ -445,7 +507,8 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                       ),
                                     ),
                                   ],
-                                  if (totalAllocated > state.editingAmount + 0.005) ...[
+                                  if (totalAllocated >
+                                      state.editingAmount + 0.005) ...[
                                     const SizedBox(height: 4),
                                     const Text(
                                       'Warning: Total allocated exceeds payment amount!',
@@ -459,53 +522,80 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                   const SizedBox(height: 8),
                                   ListView.builder(
                                     shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
                                     itemCount: openInvoices.length,
                                     itemBuilder: (context, index) {
                                       final inv = openInvoices[index];
-                                      final ctrl = _allocationControllers.putIfAbsent(
-                                        inv.invoiceId,
-                                        () => TextEditingController(
-                                          text: state.editingAllocations
-                                              .firstWhere((a) => a.invoiceId == inv.invoiceId,
-                                                  orElse: () => const PaymentAllocation(
-                                                      invoiceId: '', invoiceNumber: '', amountApplied: 0.0))
-                                              .amountApplied > 0
-                                              ? state.editingAllocations
-                                                  .firstWhere((a) => a.invoiceId == inv.invoiceId)
-                                                  .amountApplied
-                                                  .toStringAsFixed(2)
-                                              : '',
-                                        ),
-                                      );
-                                      final focusNode = _allocationFocusNodes.putIfAbsent(
-                                        inv.invoiceId,
-                                        () => FocusNode(),
-                                      );
+                                      final ctrl = _allocationControllers
+                                          .putIfAbsent(
+                                            inv.invoiceId,
+                                            () => TextEditingController(
+                                              text:
+                                                  state.editingAllocations
+                                                          .firstWhere(
+                                                            (a) =>
+                                                                a.invoiceId ==
+                                                                inv.invoiceId,
+                                                            orElse: () =>
+                                                                const PaymentAllocation(
+                                                                  invoiceId: '',
+                                                                  invoiceNumber:
+                                                                      '',
+                                                                  amountApplied:
+                                                                      0.0,
+                                                                ),
+                                                          )
+                                                          .amountApplied >
+                                                      0
+                                                  ? state.editingAllocations
+                                                        .firstWhere(
+                                                          (a) =>
+                                                              a.invoiceId ==
+                                                              inv.invoiceId,
+                                                        )
+                                                        .amountApplied
+                                                        .toStringAsFixed(2)
+                                                  : '',
+                                            ),
+                                          );
+                                      final focusNode = _allocationFocusNodes
+                                          .putIfAbsent(
+                                            inv.invoiceId,
+                                            () => FocusNode(),
+                                          );
 
-                                      final allocation = state.editingAllocations.firstWhere(
-                                        (a) => a.invoiceId == inv.invoiceId,
-                                        orElse: () => PaymentAllocation(
-                                            invoiceId: inv.invoiceId,
-                                            invoiceNumber: inv.invoiceNumber,
-                                            amountApplied: 0.0),
-                                      );
+                                      final allocation = state
+                                          .editingAllocations
+                                          .firstWhere(
+                                            (a) => a.invoiceId == inv.invoiceId,
+                                            orElse: () => PaymentAllocation(
+                                              invoiceId: inv.invoiceId,
+                                              invoiceNumber: inv.invoiceNumber,
+                                              amountApplied: 0.0,
+                                            ),
+                                          );
 
                                       return Card(
-                                        margin: const EdgeInsets.only(bottom: 8),
+                                        margin: const EdgeInsets.only(
+                                          bottom: 8,
+                                        ),
                                         child: Padding(
                                           padding: const EdgeInsets.all(12),
                                           child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
                                             children: [
                                               Expanded(
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
                                                       inv.invoiceNumber,
                                                       style: const TextStyle(
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                         fontSize: 14,
                                                       ),
                                                     ),
@@ -515,15 +605,18 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                                       style: TextStyle(
                                                         fontSize: 11,
                                                         color: isDark
-                                                            ? AppTheme.darkTextSecondary
-                                                            : AppTheme.lightTextSecondary,
+                                                            ? AppTheme
+                                                                  .darkTextSecondary
+                                                            : AppTheme
+                                                                  .lightTextSecondary,
                                                       ),
                                                     ),
                                                     Text(
                                                       'Outstanding: $cs${inv.balance.toStringAsFixed(2)}',
                                                       style: const TextStyle(
                                                         fontSize: 12,
-                                                        fontWeight: FontWeight.w600,
+                                                        fontWeight:
+                                                            FontWeight.w600,
                                                       ),
                                                     ),
                                                   ],
@@ -535,13 +628,25 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                                 child: TextFormField(
                                                   controller: ctrl,
                                                   focusNode: focusNode,
-                                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                  keyboardType:
+                                                      const TextInputType.numberWithOptions(
+                                                        decimal: true,
+                                                      ),
                                                   textAlign: TextAlign.end,
                                                   decoration: InputDecoration(
-                                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 8,
+                                                        ),
                                                     prefixText: cs,
                                                     hintText: '0.00',
-                                                    errorText: allocation.amountApplied > inv.balance ? 'Exceeds balance' : null,
+                                                    errorText:
+                                                        allocation
+                                                                .amountApplied >
+                                                            inv.balance
+                                                        ? 'Exceeds balance'
+                                                        : null,
                                                   ),
                                                   onChanged: (v) {
                                                     _onAllocationChanged(
@@ -576,19 +681,24 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.3 : 0.05,
+                      ),
                       blurRadius: 10,
                       offset: const Offset(0, -2),
                     ),
                   ],
                   border: Border(
                     top: BorderSide(
-                        color: isDark
-                            ? const Color(0xFF334155)
-                            : const Color(0xFFE2E8F0)),
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                    ),
                   ),
                 ),
                 child: Center(
@@ -600,9 +710,13 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Amount:',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w900, fontSize: 16)),
+                            const Text(
+                              'Amount:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                              ),
+                            ),
                             Text(
                               '$cs${state.editingAmount.toStringAsFixed(2)}',
                               style: const TextStyle(
@@ -617,19 +731,23 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: (customer == null ||
+                            onPressed:
+                                (customer == null ||
                                     state.editingAmount <= 0 ||
                                     state.isLoading ||
                                     !_areAllocationsValid(state))
                                 ? null
-                                : () =>
-                                    context.read<ReceiptBloc>().add(SaveReceipt()),
+                                : () => context.read<ReceiptBloc>().add(
+                                    SaveReceipt(),
+                                  ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.successEmerald,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
-                            child: const Text('SAVE RECEIPT',
-                                style: TextStyle(color: Colors.white)),
+                            child: const Text(
+                              'SAVE RECEIPT',
+                              style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ),
                         if (!state.isEditingNew) ...[

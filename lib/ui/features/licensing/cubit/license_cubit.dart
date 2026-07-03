@@ -21,11 +21,11 @@ class LicenseCubit extends Cubit<LicenseState> {
     required LocalStorageService localStorageService,
     required DeviceInfoService deviceInfoService,
     Uuid? uuidGenerator,
-  })  : _licenseService = licenseService,
-        _localStorageService = localStorageService,
-        _deviceInfoService = deviceInfoService,
-        _uuidGenerator = uuidGenerator ?? const Uuid(),
-        super(LicenseInitial());
+  }) : _licenseService = licenseService,
+       _localStorageService = localStorageService,
+       _deviceInfoService = deviceInfoService,
+       _uuidGenerator = uuidGenerator ?? const Uuid(),
+       super(LicenseInitial());
 
   /// Triggers standard license check workflow.
   ///
@@ -53,12 +53,22 @@ class LicenseCubit extends Cubit<LicenseState> {
       // Check validation flags (enabled + expiration checks)
       final now = DateTime.now();
       if (!licenseDoc.enabled) {
-        emit(const LicenseBlocked(reason: 'Your application license has been disabled by the administrator.'));
+        emit(
+          const LicenseBlocked(
+            reason:
+                'Your application license has been disabled by the administrator.',
+          ),
+        );
         return;
       }
 
       if (licenseDoc.expiryAt.isBefore(now)) {
-        emit(const LicenseBlocked(reason: 'Your application license has expired. Please contact support.'));
+        emit(
+          const LicenseBlocked(
+            reason:
+                'Your application license has expired. Please contact support.',
+          ),
+        );
         return;
       }
 
@@ -92,7 +102,9 @@ class LicenseCubit extends Cubit<LicenseState> {
       final deviceDetails = await _deviceInfoService.getDeviceDetails();
 
       final now = DateTime.now();
-      final expiry = now.add(const Duration(days: 15)); // Default 15 days trial license
+      final expiry = now.add(
+        const Duration(days: 15),
+      ); // Default 15 days trial license
 
       final licenseDoc = LicenseDocument(
         id: newUuid,
@@ -127,7 +139,11 @@ class LicenseCubit extends Cubit<LicenseState> {
 
       emit(LicenseValid(serverConfig: serverConfig));
     } catch (e) {
-      emit(LicenseError('Failed to register application license: ${e.toString().replaceAll('Exception: ', '')}'));
+      emit(
+        LicenseError(
+          'Failed to register application license: ${e.toString().replaceAll('Exception: ', '')}',
+        ),
+      );
     }
   }
 

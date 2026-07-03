@@ -53,7 +53,12 @@ class Organization extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [id, name, currencyCode, currencySymbol, fiscalYearStartMonth, timeZone];
+  List<Object?> get props => [
+    id,
+    name,
+    currencyCode,
+    currencySymbol,
+    fiscalYearStartMonth,
+    timeZone,
+  ];
 }
-

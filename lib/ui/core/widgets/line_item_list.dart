@@ -65,7 +65,10 @@ class LineItemList extends StatelessWidget {
                       children: [
                         Text(
                           line.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -73,7 +76,9 @@ class LineItemList extends StatelessWidget {
                           '${line.discount > 0 ? ' | Disc: ${formatCurrency(line.discount, currencySymbol)}' : ''}',
                           style: TextStyle(
                             fontSize: 11,
-                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
                           ),
                         ),
                       ],
@@ -84,7 +89,10 @@ class LineItemList extends StatelessWidget {
                     children: [
                       Text(
                         'Qty: ${line.quantity}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -99,7 +107,11 @@ class LineItemList extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: AppTheme.errorRose, size: 20),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppTheme.errorRose,
+                      size: 20,
+                    ),
                     onPressed: () => onRemove(index),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),

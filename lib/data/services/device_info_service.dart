@@ -24,7 +24,7 @@ class DeviceInfoService {
   final DeviceInfoPlugin _deviceInfoPlugin;
 
   DeviceInfoService({DeviceInfoPlugin? deviceInfoPlugin})
-      : _deviceInfoPlugin = deviceInfoPlugin ?? DeviceInfoPlugin();
+    : _deviceInfoPlugin = deviceInfoPlugin ?? DeviceInfoPlugin();
 
   /// Collects, maps, and returns standard device characteristics and active application version numbers.
   Future<DeviceDetails> getDeviceDetails() async {

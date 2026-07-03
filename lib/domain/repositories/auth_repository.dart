@@ -16,4 +16,3 @@ abstract class AuthRepository {
   /// Destroys the active session and clears the local authenticated cache state.
   Future<void> signOut();
 }
-

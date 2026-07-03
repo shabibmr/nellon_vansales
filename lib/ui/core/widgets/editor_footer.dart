@@ -54,7 +54,12 @@ class EditorFooter extends StatelessWidget {
                   const Divider(height: 16),
                 if (i > 0 && !(rows[i].emphasize && !rows[i - 1].emphasize))
                   const SizedBox(height: 4),
-                _TotalsRow(label: rows[i].label, value: rows[i].value, emphasize: rows[i].emphasize, accentColor: accentColor),
+                _TotalsRow(
+                  label: rows[i].label,
+                  value: rows[i].value,
+                  emphasize: rows[i].emphasize,
+                  accentColor: accentColor,
+                ),
               ],
               const SizedBox(height: 16),
               SizedBox(
@@ -68,10 +73,7 @@ class EditorFooter extends StatelessWidget {
                   child: Text(buttonLabel),
                 ),
               ),
-              if (trailing != null) ...[
-                const SizedBox(height: 16),
-                trailing!,
-              ],
+              if (trailing != null) ...[const SizedBox(height: 16), trailing!],
             ],
           ),
         ),
@@ -124,7 +126,9 @@ class _TotalsRow extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 13,
-            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+            color: isDark
+                ? AppTheme.darkTextSecondary
+                : AppTheme.lightTextSecondary,
           ),
         ),
         Text(value),

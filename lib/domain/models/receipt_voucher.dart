@@ -72,7 +72,8 @@ class ReceiptVoucher extends Equatable {
   });
 
   /// Calculates the sum of all allocations applied to specific invoices.
-  double get totalAllocated => allocations.fold(0.0, (sum, item) => sum + item.amountApplied);
+  double get totalAllocated =>
+      allocations.fold(0.0, (sum, item) => sum + item.amountApplied);
 
   /// Calculates the excess/remaining amount of payment that acts as a customer credit.
   double get unallocatedAmount => amount - totalAllocated;
@@ -106,16 +107,15 @@ class ReceiptVoucher extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        paymentNumber,
-        customerId,
-        customerName,
-        allocations,
-        amount,
-        paymentMode,
-        referenceNumber,
-        date,
-        isPendingSync,
-      ];
+    id,
+    paymentNumber,
+    customerId,
+    customerName,
+    allocations,
+    amount,
+    paymentMode,
+    referenceNumber,
+    date,
+    isPendingSync,
+  ];
 }
-

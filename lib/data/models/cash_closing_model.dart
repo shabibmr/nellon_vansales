@@ -21,10 +21,13 @@ class CashClosingModel extends CashClosing {
   factory CashClosingModel.fromJson(Map<String, dynamic> json) {
     return CashClosingModel(
       id: json['id'] ?? '',
-      date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
       openingBalance: (json['openingBalance'] ?? 0.0).toDouble(),
       totalSalesInvoices: (json['totalSalesInvoices'] ?? 0.0).toDouble(),
-      totalReceiptsCollected: (json['totalReceiptsCollected'] ?? 0.0).toDouble(),
+      totalReceiptsCollected: (json['totalReceiptsCollected'] ?? 0.0)
+          .toDouble(),
       totalExpenses: (json['totalExpenses'] ?? 0.0).toDouble(),
       closingBalance: (json['closingBalance'] ?? 0.0).toDouble(),
       notes: json['notes'] ?? '',
@@ -64,4 +67,3 @@ class CashClosingModel extends CashClosing {
     );
   }
 }
-

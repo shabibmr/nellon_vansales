@@ -50,4 +50,3 @@ class PaymentAccountModel extends PaymentAccount {
     );
   }
 }
-

@@ -7,7 +7,11 @@ import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Sales Order documents.
 class SalesOrderPdfTemplate {
-  static pw.Document generate(SalesOrder order, Organization? org, Customer? customer) {
+  static pw.Document generate(
+    SalesOrder order,
+    Organization? org,
+    Customer? customer,
+  ) {
     final pdf = pw.Document();
     final companyName = org?.name ?? 'Van Sales Pro';
     final currencySymbol = org?.currencySymbol ?? '₹';
@@ -46,7 +50,10 @@ class SalesOrderPdfTemplate {
               decoration: pw.BoxDecoration(
                 color: SharedPdfTemplate.lightGreyBackground,
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(color: SharedPdfTemplate.borderSlate, width: 1),
+                border: pw.Border.all(
+                  color: SharedPdfTemplate.borderSlate,
+                  width: 1,
+                ),
               ),
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -64,7 +71,9 @@ class SalesOrderPdfTemplate {
                       ),
                       pw.SizedBox(height: 2),
                       pw.Text(
-                        SharedPdfTemplate.dateOnlyFormat.format(order.shipmentDate),
+                        SharedPdfTemplate.dateOnlyFormat.format(
+                          order.shipmentDate,
+                        ),
                         style: pw.TextStyle(
                           fontSize: 10,
                           fontWeight: pw.FontWeight.bold,
@@ -150,14 +159,21 @@ class SalesOrderPdfTemplate {
                       _buildTableCell('${i + 1}'),
                       _buildTableCell(
                         '${order.items[i].item.name}\nSKU: ${order.items[i].item.sku}'
-                            '${order.items[i].discount > 0 ? ' | Disc: $currencySymbol${order.items[i].discount.toStringAsFixed(2)}' : ''}',
+                        '${order.items[i].discount > 0 ? ' | Disc: $currencySymbol${order.items[i].discount.toStringAsFixed(2)}' : ''}',
                         alignLeft: true,
                         isSubText: true,
                       ),
                       _buildTableCell('${order.items[i].quantity}'),
-                      _buildTableCell('$currencySymbol${order.items[i].rate.toStringAsFixed(2)}'),
-                      _buildTableCell('$currencySymbol${order.items[i].taxAmount.toStringAsFixed(2)} (${order.items[i].taxPercentage.toStringAsFixed(0)}%)'),
-                      _buildTableCell('$currencySymbol${order.items[i].total.toStringAsFixed(2)}', isBold: true),
+                      _buildTableCell(
+                        '$currencySymbol${order.items[i].rate.toStringAsFixed(2)}',
+                      ),
+                      _buildTableCell(
+                        '$currencySymbol${order.items[i].taxAmount.toStringAsFixed(2)} (${order.items[i].taxPercentage.toStringAsFixed(0)}%)',
+                      ),
+                      _buildTableCell(
+                        '$currencySymbol${order.items[i].total.toStringAsFixed(2)}',
+                        isBold: true,
+                      ),
                     ],
                   ),
                 ],
@@ -185,7 +201,9 @@ class SalesOrderPdfTemplate {
                       ),
                       pw.SizedBox(height: 4),
                       pw.Text(
-                        order.notes.isNotEmpty ? order.notes : 'No specific delivery instructions.',
+                        order.notes.isNotEmpty
+                            ? order.notes
+                            : 'No specific delivery instructions.',
                         style: pw.TextStyle(
                           fontSize: 9,
                           color: SharedPdfTemplate.slateText,
@@ -201,24 +219,44 @@ class SalesOrderPdfTemplate {
                   padding: const pw.EdgeInsets.all(12),
                   decoration: pw.BoxDecoration(
                     color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-                    border: pw.Border.all(color: SharedPdfTemplate.borderSlate, width: 1),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(12),
+                    ),
+                    border: pw.Border.all(
+                      color: SharedPdfTemplate.borderSlate,
+                      width: 1,
+                    ),
                   ),
                   child: pw.Column(
                     children: [
-                      _buildSummaryRow('Sub Total', '$currencySymbol${order.subTotal.toStringAsFixed(2)}'),
+                      _buildSummaryRow(
+                        'Sub Total',
+                        '$currencySymbol${order.subTotal.toStringAsFixed(2)}',
+                      ),
                       if (order.discountTotal > 0) ...[
                         pw.SizedBox(height: 4),
-                        _buildSummaryRow('Discount Total', '$currencySymbol${order.discountTotal.toStringAsFixed(2)}'),
+                        _buildSummaryRow(
+                          'Discount Total',
+                          '$currencySymbol${order.discountTotal.toStringAsFixed(2)}',
+                        ),
                       ],
                       pw.SizedBox(height: 4),
-                      _buildSummaryRow('VAT / Tax Total', '$currencySymbol${order.taxTotal.toStringAsFixed(2)}'),
+                      _buildSummaryRow(
+                        'VAT / Tax Total',
+                        '$currencySymbol${order.taxTotal.toStringAsFixed(2)}',
+                      ),
                       if (order.roundOff != 0) ...[
                         pw.SizedBox(height: 4),
-                        _buildSummaryRow('Round Off', '$currencySymbol${order.roundOff.toStringAsFixed(2)}'),
+                        _buildSummaryRow(
+                          'Round Off',
+                          '$currencySymbol${order.roundOff.toStringAsFixed(2)}',
+                        ),
                       ],
                       pw.SizedBox(height: 6),
-                      pw.Divider(color: SharedPdfTemplate.borderSlate, thickness: 1),
+                      pw.Divider(
+                        color: SharedPdfTemplate.borderSlate,
+                        thickness: 1,
+                      ),
                       pw.SizedBox(height: 6),
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -284,7 +322,9 @@ class SalesOrderPdfTemplate {
         style: pw.TextStyle(
           fontSize: isSubText ? 7.5 : 8.5,
           fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: isSubText ? SharedPdfTemplate.slateTextSecondary : SharedPdfTemplate.slateText,
+          color: isSubText
+              ? SharedPdfTemplate.slateTextSecondary
+              : SharedPdfTemplate.slateText,
         ),
       ),
     );

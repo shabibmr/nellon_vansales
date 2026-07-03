@@ -81,7 +81,11 @@ class HiveDatabaseService {
   List<Customer> getCustomers() {
     final rawList = _masterBox.get('customers', defaultValue: []);
     return (rawList as List)
-        .map((item) => CustomerModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .map(
+          (item) => CustomerModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(item)),
+          ),
+        )
         .toList();
   }
 
@@ -97,7 +101,10 @@ class HiveDatabaseService {
   List<Item> getItems() {
     final rawList = _masterBox.get('items', defaultValue: []);
     return (rawList as List)
-        .map((item) => ItemModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .map(
+          (item) =>
+              ItemModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))),
+        )
         .toList();
   }
 
@@ -112,22 +119,26 @@ class HiveDatabaseService {
   /// Retrieves the list of synced master routes.
   List<RouteModel> getRoutes() {
     final rawList = _masterBox.get('routes', defaultValue: []);
-    return (rawList as List)
-        .map((item) {
-          final decoded = Map<String, dynamic>.from(jsonDecode(item));
-          return RouteModel(
-            id: decoded['id'] ?? '',
-            name: decoded['name'] ?? '',
-            description: decoded['description'] ?? '',
-          );
-        })
-        .toList();
+    return (rawList as List).map((item) {
+      final decoded = Map<String, dynamic>.from(jsonDecode(item));
+      return RouteModel(
+        id: decoded['id'] ?? '',
+        name: decoded['name'] ?? '',
+        description: decoded['description'] ?? '',
+      );
+    }).toList();
   }
 
   /// Saves master delivery routes list.
   Future<void> saveRoutes(List<RouteModel> routes) async {
     final serialized = routes
-        .map((r) => jsonEncode({'id': r.id, 'name': r.name, 'description': r.description}))
+        .map(
+          (r) => jsonEncode({
+            'id': r.id,
+            'name': r.name,
+            'description': r.description,
+          }),
+        )
         .toList();
     await _masterBox.put('routes', serialized);
   }
@@ -136,7 +147,10 @@ class HiveDatabaseService {
   List<Warehouse> getWarehouses() {
     final rawList = _masterBox.get('warehouses', defaultValue: []);
     return (rawList as List)
-        .map((w) => WarehouseModel.fromJson(Map<String, dynamic>.from(jsonDecode(w))))
+        .map(
+          (w) =>
+              WarehouseModel.fromJson(Map<String, dynamic>.from(jsonDecode(w))),
+        )
         .toList();
   }
 
@@ -152,7 +166,11 @@ class HiveDatabaseService {
   List<PaymentAccount> getPaymentAccounts() {
     final rawList = _masterBox.get('payment_accounts', defaultValue: []);
     return (rawList as List)
-        .map((a) => PaymentAccountModel.fromJson(Map<String, dynamic>.from(jsonDecode(a))))
+        .map(
+          (a) => PaymentAccountModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(a)),
+          ),
+        )
         .toList();
   }
 
@@ -184,7 +202,11 @@ class HiveDatabaseService {
   List<ExpenseAccount> getExpenseAccounts() {
     final rawList = _masterBox.get('expense_accounts', defaultValue: []);
     return (rawList as List)
-        .map((a) => ExpenseAccountModel.fromJson(Map<String, dynamic>.from(jsonDecode(a))))
+        .map(
+          (a) => ExpenseAccountModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(a)),
+          ),
+        )
         .toList();
   }
 
@@ -200,7 +222,9 @@ class HiveDatabaseService {
   Organization? getOrganization() {
     final raw = _masterBox.get('organization');
     if (raw == null) return null;
-    return OrganizationModel.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
+    return OrganizationModel.fromJson(
+      Map<String, dynamic>.from(jsonDecode(raw)),
+    );
   }
 
   /// Caches active Organization configurations.
@@ -217,7 +241,11 @@ class HiveDatabaseService {
   List<OpenInvoice> getOpenInvoices({String? customerId}) {
     final rawList = _masterBox.get('open_invoices', defaultValue: []);
     final all = (rawList as List)
-        .map((i) => OpenInvoiceModel.fromJson(Map<String, dynamic>.from(jsonDecode(i))))
+        .map(
+          (i) => OpenInvoiceModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(i)),
+          ),
+        )
         .toList();
     if (customerId == null) return all;
     return all.where((inv) => inv.customerId == customerId).toList();
@@ -259,7 +287,11 @@ class HiveDatabaseService {
   List<SalesInvoice> getLocalInvoices() {
     final rawList = _localHistoryBox.get('invoices', defaultValue: []);
     return (rawList as List)
-        .map((item) => SalesInvoiceModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .map(
+          (item) => SalesInvoiceModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(item)),
+          ),
+        )
         .toList();
   }
 
@@ -267,7 +299,7 @@ class HiveDatabaseService {
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {
     final current = getLocalInvoices();
     final model = SalesInvoiceModel.fromDomain(invoice);
-    
+
     // Add or update
     final index = current.indexWhere((inv) => inv.id == invoice.id);
     SalesInvoice? oldInvoice;
@@ -277,10 +309,12 @@ class HiveDatabaseService {
     } else {
       current.insert(0, model);
     }
-    
-    final serialized = current.map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson())).toList();
+
+    final serialized = current
+        .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
+        .toList();
     await _localHistoryBox.put('invoices', serialized);
-    
+
     // Update local cached item inventory stock instantly!
     final localItems = getItems();
     if (oldInvoice != null) {
@@ -288,7 +322,9 @@ class HiveDatabaseService {
         final itemIndex = localItems.indexWhere((it) => it.id == line.item.id);
         if (itemIndex >= 0) {
           final existingItem = localItems[itemIndex];
-          localItems[itemIndex] = existingItem.copyWith(stock: existingItem.stock + line.quantity);
+          localItems[itemIndex] = existingItem.copyWith(
+            stock: existingItem.stock + line.quantity,
+          );
         }
       }
     }
@@ -297,7 +333,9 @@ class HiveDatabaseService {
       if (itemIndex >= 0) {
         final existingItem = localItems[itemIndex];
         final updatedStock = existingItem.stock - line.quantity;
-        localItems[itemIndex] = existingItem.copyWith(stock: updatedStock >= 0 ? updatedStock : 0);
+        localItems[itemIndex] = existingItem.copyWith(
+          stock: updatedStock >= 0 ? updatedStock : 0,
+        );
       }
     }
     await saveItems(localItems);
@@ -307,7 +345,11 @@ class HiveDatabaseService {
   List<SalesOrder> getLocalOrders() {
     final rawList = _localHistoryBox.get('sales_orders', defaultValue: []);
     return (rawList as List)
-        .map((item) => SalesOrderModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .map(
+          (item) => SalesOrderModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(item)),
+          ),
+        )
         .toList();
   }
 
@@ -317,7 +359,7 @@ class HiveDatabaseService {
   Future<void> saveLocalOrder(SalesOrder order) async {
     final current = getLocalOrders();
     final model = SalesOrderModel.fromDomain(order);
-    
+
     // Add or update
     final index = current.indexWhere((ord) => ord.id == order.id);
     if (index >= 0) {
@@ -325,8 +367,10 @@ class HiveDatabaseService {
     } else {
       current.insert(0, model);
     }
-    
-    final serialized = current.map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson())).toList();
+
+    final serialized = current
+        .map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson()))
+        .toList();
     await _localHistoryBox.put('sales_orders', serialized);
   }
 
@@ -336,12 +380,16 @@ class HiveDatabaseService {
   /// preserved untouched; everything else is replaced by the authoritative remote set.
   /// Remote orders are matched against local ones by `zohoOrderId` to avoid duplicates.
   Future<void> saveRemoteOrders(List<SalesOrder> remote) async {
-    final pendingLocal = getLocalOrders().where((o) => o.isPendingSync).toList();
+    final pendingLocal = getLocalOrders()
+        .where((o) => o.isPendingSync)
+        .toList();
 
     // Drop any pending-local order that the remote set already accounts for.
     final remoteIds = remote.map((o) => o.id).toSet();
     final keptLocal = pendingLocal
-        .where((o) => o.zohoOrderId == null || !remoteIds.contains(o.zohoOrderId))
+        .where(
+          (o) => o.zohoOrderId == null || !remoteIds.contains(o.zohoOrderId),
+        )
         .toList();
 
     final merged = [...keptLocal, ...remote];
@@ -355,7 +403,11 @@ class HiveDatabaseService {
   List<ReceiptVoucher> getLocalReceipts() {
     final rawList = _localHistoryBox.get('receipts', defaultValue: []);
     return (rawList as List)
-        .map((item) => ReceiptVoucherModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .map(
+          (item) => ReceiptVoucherModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(item)),
+          ),
+        )
         .toList();
   }
 
@@ -363,20 +415,24 @@ class HiveDatabaseService {
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {
     final current = getLocalReceipts();
     final model = ReceiptVoucherModel.fromDomain(voucher);
-    
+
     final index = current.indexWhere((rec) => rec.id == voucher.id);
     if (index >= 0) {
       current[index] = model;
     } else {
       current.insert(0, model);
     }
-    
-    final serialized = current.map((rec) => jsonEncode(ReceiptVoucherModel.fromDomain(rec).toJson())).toList();
+
+    final serialized = current
+        .map((rec) => jsonEncode(ReceiptVoucherModel.fromDomain(rec).toJson()))
+        .toList();
     await _localHistoryBox.put('receipts', serialized);
-    
+
     // Adjust local Customer outstanding balance instantly!
     final localCustomers = getCustomers();
-    final customerIndex = localCustomers.indexWhere((cust) => cust.id == voucher.customerId);
+    final customerIndex = localCustomers.indexWhere(
+      (cust) => cust.id == voucher.customerId,
+    );
     if (customerIndex >= 0) {
       final existingCust = localCustomers[customerIndex];
       final updatedBalance = existingCust.outstandingBalance - voucher.amount;
@@ -391,7 +447,11 @@ class HiveDatabaseService {
   List<SalesReturn> getLocalReturns() {
     final rawList = _localHistoryBox.get('returns', defaultValue: []);
     return (rawList as List)
-        .map((item) => SalesReturnModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .map(
+          (item) => SalesReturnModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(item)),
+          ),
+        )
         .toList();
   }
 
@@ -399,24 +459,30 @@ class HiveDatabaseService {
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {
     final current = getLocalReturns();
     final model = SalesReturnModel.fromDomain(salesReturn);
-    
+
     final index = current.indexWhere((ret) => ret.id == salesReturn.id);
     if (index >= 0) {
       current[index] = model;
     } else {
       current.insert(0, model);
     }
-    
-    final serialized = current.map((ret) => jsonEncode(SalesReturnModel.fromDomain(ret).toJson())).toList();
+
+    final serialized = current
+        .map((ret) => jsonEncode(SalesReturnModel.fromDomain(ret).toJson()))
+        .toList();
     await _localHistoryBox.put('returns', serialized);
-    
+
     // Restore stock in local cached inventory instantly!
     final localItems = getItems();
     for (final line in salesReturn.items) {
-      final itemIndex = localItems.indexWhere((it) => it.id == line.invoiceLineItem.item.id);
+      final itemIndex = localItems.indexWhere(
+        (it) => it.id == line.invoiceLineItem.item.id,
+      );
       if (itemIndex >= 0) {
         final existingItem = localItems[itemIndex];
-        localItems[itemIndex] = existingItem.copyWith(stock: existingItem.stock + line.returnedQuantity);
+        localItems[itemIndex] = existingItem.copyWith(
+          stock: existingItem.stock + line.returnedQuantity,
+        );
       }
     }
     await saveItems(localItems);
@@ -426,7 +492,11 @@ class HiveDatabaseService {
   List<ExpenseEntry> getLocalExpenses() {
     final rawList = _localHistoryBox.get('expenses', defaultValue: []);
     return (rawList as List)
-        .map((item) => ExpenseEntryModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))))
+        .map(
+          (item) => ExpenseEntryModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(item)),
+          ),
+        )
         .toList();
   }
 
@@ -434,15 +504,17 @@ class HiveDatabaseService {
   Future<void> saveLocalExpense(ExpenseEntry expense) async {
     final current = getLocalExpenses();
     final model = ExpenseEntryModel.fromDomain(expense);
-    
+
     final index = current.indexWhere((exp) => exp.id == expense.id);
     if (index >= 0) {
       current[index] = model;
     } else {
       current.insert(0, model);
     }
-    
-    final serialized = current.map((exp) => jsonEncode(ExpenseEntryModel.fromDomain(exp).toJson())).toList();
+
+    final serialized = current
+        .map((exp) => jsonEncode(ExpenseEntryModel.fromDomain(exp).toJson()))
+        .toList();
     await _localHistoryBox.put('expenses', serialized);
   }
 
@@ -450,7 +522,9 @@ class HiveDatabaseService {
   CashClosing? getLocalCashClosing() {
     final raw = _localHistoryBox.get('cash_closing');
     if (raw == null) return null;
-    return CashClosingModel.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
+    return CashClosingModel.fromJson(
+      Map<String, dynamic>.from(jsonDecode(raw)),
+    );
   }
 
   /// Caches the daily cash closing reconciliation record.

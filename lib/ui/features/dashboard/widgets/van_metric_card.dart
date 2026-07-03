@@ -71,7 +71,9 @@ class VanMetricCard extends StatelessWidget {
         ),
       ),
       child: _cardContent(
-        titleColor: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+        titleColor: isDark
+            ? AppTheme.darkTextSecondary
+            : AppTheme.lightTextSecondary,
         valueColor: isDark ? AppTheme.darkText : AppTheme.lightText,
       ),
     );

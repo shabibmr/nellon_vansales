@@ -43,7 +43,9 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      backgroundColor: isDark
+          ? AppTheme.darkBackground
+          : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -51,104 +53,123 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
         var filtered = allCustomers;
         final searchCtrl = TextEditingController();
 
-        return StatefulBuilder(builder: (sheetCtx, setModal) {
-          void onSearch(String query) {
-            final q = query.toLowerCase();
-            setModal(() {
-              filtered = q.isEmpty
-                  ? allCustomers
-                  : allCustomers.where((c) {
-                      return c.name.toLowerCase().contains(q) ||
-                          c.companyName.toLowerCase().contains(q) ||
-                          c.phone.contains(query);
-                    }).toList();
-            });
-          }
+        return StatefulBuilder(
+          builder: (sheetCtx, setModal) {
+            void onSearch(String query) {
+              final q = query.toLowerCase();
+              setModal(() {
+                filtered = q.isEmpty
+                    ? allCustomers
+                    : allCustomers.where((c) {
+                        return c.name.toLowerCase().contains(q) ||
+                            c.companyName.toLowerCase().contains(q) ||
+                            c.phone.contains(query);
+                      }).toList();
+              });
+            }
 
-          return DraggableScrollableSheet(
-            initialChildSize: 0.7,
-            minChildSize: 0.4,
-            maxChildSize: 0.9,
-            expand: false,
-            builder: (_, scrollCtrl) {
-              return Column(
-                children: [
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(10),
+            return DraggableScrollableSheet(
+              initialChildSize: 0.7,
+              minChildSize: 0.4,
+              maxChildSize: 0.9,
+              expand: false,
+              builder: (_, scrollCtrl) {
+                return Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Select Customer',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: TextField(
-                      controller: searchCtrl,
-                      autofocus: true,
-                      onChanged: onSearch,
-                      decoration: InputDecoration(
-                        hintText: 'Search by name, company or phone...',
-                        prefixIcon:
-                            const Icon(Icons.search, color: AppTheme.primaryIndigo),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Select Customer',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                  const Divider(),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text('No customers found',
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: TextField(
+                        controller: searchCtrl,
+                        autofocus: true,
+                        onChanged: onSearch,
+                        decoration: InputDecoration(
+                          hintText: 'Search by name, company or phone...',
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: AppTheme.primaryIndigo,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No customers found',
                                 style: TextStyle(
                                   color: isDark
                                       ? AppTheme.darkTextSecondary
                                       : AppTheme.lightTextSecondary,
-                                )))
-                        : ListView.separated(
-                            controller: scrollCtrl,
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
-                            itemBuilder: (_, i) {
-                              final customer = filtered[i];
-                              return ListTile(
-                                title: Text(customer.name,
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              controller: scrollCtrl,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (_, i) {
+                                final customer = filtered[i];
+                                return ListTile(
+                                  title: Text(
+                                    customer.name,
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.bold)),
-                                subtitle: Text(customer.companyName),
-                                trailing: customer.outstandingBalance > 0
-                                    ? Text(
-                                        '$cs${customer.outstandingBalance.toStringAsFixed(0)}',
-                                        style: const TextStyle(
-                                          color: AppTheme.errorRose,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      )
-                                    : null,
-                                onTap: () {
-                                  context
-                                      .read<CustomerLedgerBloc>()
-                                      .add(SetLedgerCustomer(customer));
-                                  Navigator.pop(sheetCtx);
-                                },
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              );
-            },
-          );
-        });
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Text(customer.companyName),
+                                  trailing: customer.outstandingBalance > 0
+                                      ? Text(
+                                          '$cs${customer.outstandingBalance.toStringAsFixed(0)}',
+                                          style: const TextStyle(
+                                            color: AppTheme.errorRose,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        )
+                                      : null,
+                                  onTap: () {
+                                    context.read<CustomerLedgerBloc>().add(
+                                      SetLedgerCustomer(customer),
+                                    );
+                                    Navigator.pop(sheetCtx);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
       },
     );
   }
@@ -200,12 +221,15 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                           onTap: () => _showCustomerSelector(context, isDark),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 12),
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                  color: isDark
-                                      ? const Color(0xFF334155)
-                                      : const Color(0xFFE2E8F0)),
+                                color: isDark
+                                    ? const Color(0xFF334155)
+                                    : const Color(0xFFE2E8F0),
+                              ),
                               borderRadius: BorderRadius.circular(10),
                               color: isDark
                                   ? const Color(0xFF0F172A)
@@ -213,12 +237,16 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.person_search_outlined,
-                                    color: AppTheme.primaryIndigo, size: 20),
+                                const Icon(
+                                  Icons.person_search_outlined,
+                                  color: AppTheme.primaryIndigo,
+                                  size: 20,
+                                ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         state.selectedCustomer?.name ??
@@ -228,15 +256,18 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                                           fontSize: 15,
                                           color: state.selectedCustomer != null
                                               ? (isDark
-                                                  ? AppTheme.darkText
-                                                  : AppTheme.lightText)
+                                                    ? AppTheme.darkText
+                                                    : AppTheme.lightText)
                                               : (isDark
-                                                  ? AppTheme.darkTextSecondary
-                                                  : AppTheme.lightTextSecondary),
+                                                    ? AppTheme.darkTextSecondary
+                                                    : AppTheme
+                                                          .lightTextSecondary),
                                         ),
                                       ),
                                       if (state.selectedCustomer != null &&
-                                          state.selectedCustomer!.companyName
+                                          state
+                                              .selectedCustomer!
+                                              .companyName
                                               .isNotEmpty)
                                         Text(
                                           state.selectedCustomer!.companyName,
@@ -250,10 +281,12 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                                     ],
                                   ),
                                 ),
-                                Icon(Icons.arrow_drop_down,
-                                    color: isDark
-                                        ? AppTheme.darkTextSecondary
-                                        : AppTheme.lightTextSecondary),
+                                Icon(
+                                  Icons.arrow_drop_down,
+                                  color: isDark
+                                      ? AppTheme.darkTextSecondary
+                                      : AppTheme.lightTextSecondary,
+                                ),
                               ],
                             ),
                           ),
@@ -292,9 +325,9 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: state.canFetch
-                                ? () => context
-                                    .read<CustomerLedgerBloc>()
-                                    .add(FetchLedger())
+                                ? () => context.read<CustomerLedgerBloc>().add(
+                                    FetchLedger(),
+                                  )
                                 : null,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.primaryIndigo,
@@ -305,10 +338,15 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2),
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
                                   )
-                                : const Icon(Icons.cloud_download_outlined,
-                                    color: Colors.white, size: 18),
+                                : const Icon(
+                                    Icons.cloud_download_outlined,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
                             label: Text(
                               state.isLoading
                                   ? 'Fetching from Zoho...'
@@ -420,7 +458,9 @@ class _LedgerReportView extends StatelessWidget {
                           child: Text(
                             ledger.customerName,
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ],
@@ -433,7 +473,8 @@ class _LedgerReportView extends StatelessWidget {
                       children: [
                         _SummaryChip(
                           label: 'Opening Balance',
-                          value: '$cs${ledger.openingBalance.toStringAsFixed(2)}',
+                          value:
+                              '$cs${ledger.openingBalance.toStringAsFixed(2)}',
                           color: AppTheme.primaryIndigo,
                           isDark: isDark,
                         ),
@@ -451,7 +492,8 @@ class _LedgerReportView extends StatelessWidget {
                         ),
                         _SummaryChip(
                           label: 'Closing Balance',
-                          value: '$cs${ledger.closingBalance.toStringAsFixed(2)}',
+                          value:
+                              '$cs${ledger.closingBalance.toStringAsFixed(2)}',
                           color: ledger.closingBalance > 0
                               ? AppTheme.errorRose
                               : AppTheme.successEmerald,
@@ -468,13 +510,18 @@ class _LedgerReportView extends StatelessWidget {
             // Transactions header
             Row(
               children: [
-                const Icon(Icons.list_alt_outlined,
-                    size: 16, color: AppTheme.primaryIndigo),
+                const Icon(
+                  Icons.list_alt_outlined,
+                  size: 16,
+                  color: AppTheme.primaryIndigo,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'Transactions  (${ledger.transactions.length})',
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
@@ -500,11 +547,13 @@ class _LedgerReportView extends StatelessWidget {
                 children: [
                   _TableHeader(isDark: isDark),
                   const Divider(height: 1),
-                  ...ledger.transactions.map((tx) => _TransactionRow(
-                        tx: tx,
-                        isDark: isDark,
-                        shortDate: shortDate,
-                      )),
+                  ...ledger.transactions.map(
+                    (tx) => _TransactionRow(
+                      tx: tx,
+                      isDark: isDark,
+                      shortDate: shortDate,
+                    ),
+                  ),
                 ],
               ),
           ],
@@ -533,15 +582,17 @@ class _TableHeader extends StatelessWidget {
           SizedBox(width: 60, child: Text('DATE', style: style)),
           Expanded(child: Text('DESCRIPTION', style: style)),
           SizedBox(
-              width: 72,
-              child: Text('DEBIT', style: style, textAlign: TextAlign.right)),
+            width: 72,
+            child: Text('DEBIT', style: style, textAlign: TextAlign.right),
+          ),
           SizedBox(
-              width: 72,
-              child: Text('CREDIT', style: style, textAlign: TextAlign.right)),
+            width: 72,
+            child: Text('CREDIT', style: style, textAlign: TextAlign.right),
+          ),
           SizedBox(
-              width: 80,
-              child:
-                  Text('BALANCE', style: style, textAlign: TextAlign.right)),
+            width: 80,
+            child: Text('BALANCE', style: style, textAlign: TextAlign.right),
+          ),
         ],
       ),
     );
@@ -603,13 +654,15 @@ class _TransactionRow extends StatelessWidget {
             children: [
               SizedBox(
                 width: 60,
-                child: Text(shortDate.format(tx.date),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark
-                          ? AppTheme.darkTextSecondary
-                          : AppTheme.lightTextSecondary,
-                    )),
+                child: Text(
+                  shortDate.format(tx.date),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.lightTextSecondary,
+                  ),
+                ),
               ),
               Expanded(
                 child: Row(
@@ -625,7 +678,8 @@ class _TransactionRow extends StatelessWidget {
                                 ? tx.description
                                 : tx.transactionNumber,
                             style: textStyle.copyWith(
-                                fontWeight: FontWeight.w600),
+                              fontWeight: FontWeight.w600,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                           if (tx.transactionNumber.isNotEmpty &&
@@ -650,8 +704,9 @@ class _TransactionRow extends StatelessWidget {
                 child: Text(
                   tx.debit > 0 ? '$cs${tx.debit.toStringAsFixed(2)}' : '-',
                   style: textStyle.copyWith(
-                    color:
-                        tx.debit > 0 ? AppTheme.warningAmber : Colors.transparent,
+                    color: tx.debit > 0
+                        ? AppTheme.warningAmber
+                        : Colors.transparent,
                     fontWeight: FontWeight.w600,
                   ),
                   textAlign: TextAlign.right,
@@ -683,9 +738,7 @@ class _TransactionRow extends StatelessWidget {
         ),
         Divider(
           height: 1,
-          color: isDark
-              ? const Color(0xFF334155)
-              : const Color(0xFFE2E8F0),
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
         ),
       ],
     );
@@ -762,7 +815,8 @@ class _DateBox extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           border: Border.all(
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          ),
           borderRadius: BorderRadius.circular(8),
           color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
         ),
@@ -771,11 +825,13 @@ class _DateBox extends StatelessWidget {
             Icon(icon, size: 14, color: AppTheme.primaryIndigo),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                  )),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                ),
+              ),
             ),
           ],
         ),

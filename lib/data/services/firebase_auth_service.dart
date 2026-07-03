@@ -22,7 +22,10 @@ class FirebaseAuthService {
   /// Authenticates credentials with Firebase Authentication.
   ///
   /// Throws standard Firebase auth exceptions if validation or network connection fails.
-  Future<User?> signInWithEmailAndPassword(String email, String password) async {
+  Future<User?> signInWithEmailAndPassword(
+    String email,
+    String password,
+  ) async {
     final credential = await _firebaseAuth.signInWithEmailAndPassword(
       email: email,
       password: password,
@@ -37,11 +40,11 @@ class FirebaseAuthService {
 
   /// Maps standard Firebase user entities into the custom domain [User] profile.
   ///
-  /// In a production environment, additional fields like dynamic agent authorization roles 
+  /// In a production environment, additional fields like dynamic agent authorization roles
   /// and van warehouse configurations are retrieved via custom Firebase claims or Firestore records.
   User? _mapFirebaseUser(fb.User? user) {
     if (user == null) return null;
-    
+
     return User(
       id: user.uid,
       name: user.displayName ?? user.email?.split('@')[0] ?? 'Van Sales Agent',
@@ -53,4 +56,3 @@ class FirebaseAuthService {
     );
   }
 }
-
