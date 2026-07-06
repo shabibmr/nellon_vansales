@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'item.dart';
+import '../utils/money_math.dart';
 
 /// Represents a single line item entry in a sales order.
 ///
@@ -30,13 +31,13 @@ class OrderLineItem extends Equatable {
   });
 
   /// Computes the cost excluding tax.
-  double get subTotal => rate * quantity;
+  double get subTotal => roundMoney(rate * quantity);
 
   /// Computes the specific tax portion amount.
-  double get taxAmount => subTotal * (taxPercentage / 100);
+  double get taxAmount => roundMoney(subTotal * (taxPercentage / 100));
 
   /// Computes the gross line total including tax and subtracting discount.
-  double get total => subTotal + taxAmount - discount;
+  double get total => roundMoney(subTotal + taxAmount - discount);
 
   /// Creates a copy of this [OrderLineItem] with replaced values for specific fields.
   OrderLineItem copyWith({
@@ -129,23 +130,26 @@ class SalesOrder extends Equatable {
   bool get isConverted => status == SalesOrderStatus.invoiced;
 
   /// Computes sum of all sub-totals (excluding taxes).
-  double get subTotal => items.fold(0.0, (sum, item) => sum + item.subTotal);
+  double get subTotal =>
+      roundMoney(items.fold(0.0, (sum, item) => sum + item.subTotal));
 
   /// Computes total accumulated tax on this order.
-  double get taxTotal => items.fold(0.0, (sum, item) => sum + item.taxAmount);
+  double get taxTotal =>
+      roundMoney(items.fold(0.0, (sum, item) => sum + item.taxAmount));
 
   /// Computes total line-item discount on this order.
   double get discountTotal =>
-      items.fold(0.0, (sum, item) => sum + item.discount);
+      roundMoney(items.fold(0.0, (sum, item) => sum + item.discount));
 
   /// Computes the unrounded grand total.
-  double get rawTotal => items.fold(0.0, (sum, item) => sum + item.total);
+  double get rawTotal =>
+      roundMoney(items.fold(0.0, (sum, item) => sum + item.total));
 
   /// Computes the final grand total billed, rounded to the nearest integer.
   double get total => rawTotal.roundToDouble();
 
   /// Computes the round off adjustment.
-  double get roundOff => total - rawTotal;
+  double get roundOff => roundMoney(total - rawTotal);
 
   /// Creates a copy of this [SalesOrder] with replaced values for specific fields.
   SalesOrder copyWith({

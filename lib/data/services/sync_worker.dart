@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'app_logger.dart';
+import 'error_classification.dart';
 import 'hive_database_service.dart';
 import 'zoho_api_client.dart';
 import '../models/sync_queue_item.dart';
@@ -84,7 +86,7 @@ extension MasterTypeLabel on MasterType {
 class SyncWorker {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
-  final Connectivity _connectivity = Connectivity();
+  final Future<List<ConnectivityResult>> Function() _checkConnectivity;
 
   final _syncStatusController = StreamController<String>.broadcast();
 
@@ -104,15 +106,48 @@ class SyncWorker {
   /// Instantiates a new [SyncWorker] background controller.
   ///
   /// Installs network change connectivity listeners to automatically fire syncs when regaining access.
-  SyncWorker({required this._dbService, required this._apiClient}) {
-    // Listen to network changes
-    _connectivity.onConnectivityChanged.listen((
-      List<ConnectivityResult> results,
-    ) {
-      if (results.any((r) => r != ConnectivityResult.none)) {
-        syncPendingItems();
-      }
-    });
+  /// [checkConnectivity] can be overridden (e.g. with a fake) in tests; when
+  /// overridden, the live connectivity-change auto-resync listener (which
+  /// talks to the real platform channel) is skipped, since `Connectivity` is
+  /// a non-subclassable singleton and tests have no platform channel to back it.
+  Timer? _autoRetryTimer;
+
+  SyncWorker({
+    required this._dbService,
+    required this._apiClient,
+    Future<List<ConnectivityResult>> Function()? checkConnectivity,
+  }) : _checkConnectivity =
+           checkConnectivity ?? Connectivity().checkConnectivity {
+    if (checkConnectivity == null) {
+      // Listen to network changes
+      Connectivity().onConnectivityChanged.listen((
+        List<ConnectivityResult> results,
+      ) {
+        if (results.any((r) => r != ConnectivityResult.none)) {
+          syncPendingItems();
+        }
+      });
+
+      // Periodically re-check whether any transient-failed item's backoff
+      // window has elapsed, so retries happen automatically while the app
+      // stays online rather than only on reconnect or a manual tap.
+      _autoRetryTimer = Timer.periodic(
+        const Duration(seconds: 60),
+        (_) => syncPendingItems(),
+      );
+    }
+  }
+
+  /// Disposes the periodic auto-retry timer, if one was started.
+  void dispose() {
+    _autoRetryTimer?.cancel();
+  }
+
+  /// Exponential backoff delay for a failed item's [retryCount]-th retry:
+  /// 30s, 1m, 2m, 4m, 8m, capped at 30 minutes.
+  static Duration _backoffDelay(int retryCount) {
+    final seconds = 30 * (1 << retryCount.clamp(0, 6));
+    return Duration(seconds: seconds.clamp(30, 1800));
   }
 
   /// Iterates through the pending local transaction queue and pushes items sequentially.
@@ -122,23 +157,51 @@ class SyncWorker {
   /// - Captures newly assigned Zoho IDs from successful customer creations.
   /// - Automatically scans subsequent queued transactions (invoices, receipts) and replaces
   ///   their temporary local client customer IDs with the permanent Zoho Contacts ID.
-  Future<void> syncPendingItems() async {
+  ///
+  /// By default (e.g. called from the connectivity listener or the periodic
+  /// auto-retry timer), failed items are only retried if they were
+  /// classified as transient (see `error_classification.dart`) AND their
+  /// exponential backoff window has elapsed — a permanent (validation)
+  /// failure won't be retried automatically since it can't succeed without a
+  /// data fix. Pass [forceRetryAll] (from the manual "Retry Failed" UI
+  /// action) to bypass both checks and retry every failed item immediately.
+  Future<void> syncPendingItems({bool forceRetryAll = false}) async {
     if (_isSyncing) return;
 
-    final connectivityResult = await _connectivity.checkConnectivity();
+    final connectivityResult = await _checkConnectivity();
     if (connectivityResult.any((r) => r == ConnectivityResult.none)) {
       _syncStatusController.add('Offline: No Internet Connection');
       return;
     }
 
+    final now = DateTime.now();
     final queue = _dbService.getSyncQueue();
-    final pendingItems = queue
+    final activeItems = queue
         .where((item) => item.status != SyncStatus.completed)
         .toList();
 
-    if (pendingItems.isEmpty) {
+    if (activeItems.isEmpty) {
       _syncStatusController.add('All transactions are synced');
       _syncCountController.add(0);
+      return;
+    }
+
+    final pendingItems = activeItems.where((item) {
+      if (item.status != SyncStatus.failed || forceRetryAll) return true;
+
+      // Auto-retry path: skip permanent failures and anything still within
+      // its backoff window.
+      final isPermanent =
+          item.errorMessage?.startsWith('[Needs Attention]') ?? false;
+      if (isPermanent) return false;
+      final nextRetryAt = item.timestamp.add(_backoffDelay(item.retryCount));
+      return !now.isBefore(nextRetryAt);
+    }).toList();
+
+    if (pendingItems.isEmpty) {
+      // Items remain unsynced, but none are eligible to run right now
+      // (still in backoff, or waiting on a permanent-failure fix) — leave
+      // the count/status as-is rather than falsely reporting "all synced".
       return;
     }
 
@@ -156,7 +219,17 @@ class SyncWorker {
 
       int successCount = 0;
       for (int i = 0; i < pendingItems.length; i++) {
-        final item = pendingItems[i];
+        // Re-read this item's current persisted state rather than trusting
+        // the batch snapshot taken before the loop started: if an earlier
+        // item in this same batch was a customer/sales-order whose sync
+        // just patched a temp id into this item's payload (see
+        // _resolveTempCustomerIdsInQueue / _resolveTempOrderIdsInQueue),
+        // the stale snapshot would still carry the old temp id and this
+        // item would sync against the wrong reference.
+        final item = _dbService.getSyncQueue().firstWhere(
+          (q) => q.id == pendingItems[i].id,
+          orElse: () => pendingItems[i],
+        );
         _syncStatusController.add(
           'Syncing ${i + 1}/${pendingItems.length}: ${item.type.toUpperCase()}...',
         );
@@ -176,7 +249,9 @@ class SyncWorker {
               break;
             case 'customer_gps_update':
               // Lightweight GPS enrichment update (contact must already exist in Zoho)
-              final cid = item.payload['contact_id']?.toString() ?? item.payload['customer_id']?.toString();
+              final cid =
+                  item.payload['contact_id']?.toString() ??
+                  item.payload['customer_id']?.toString();
               final lat = (item.payload['latitude'] as num?)?.toDouble();
               final lng = (item.payload['longitude'] as num?)?.toDouble();
               if (cid != null && lat != null && lng != null) {
@@ -224,13 +299,25 @@ class SyncWorker {
           await _dbService.dequeueSyncItem(item.id);
           successCount++;
         } catch (e) {
-          // ignore: avoid_print
-          print('Sync error on item ${item.id}: $e');
-          // Mark failed and cache error logs
+          final category = classifySyncError(e);
+          AppLogger.error(
+            'Sync',
+            'Sync error on item ${item.id} ($category): $e',
+          );
+          // Mark failed and cache error logs, tagging the message with the
+          // error category so the Sync Queue UI can distinguish "retryable"
+          // failures from ones needing manual attention.
+          final tag = category == ErrorCategory.transient
+              ? '[Retryable]'
+              : '[Needs Attention]';
           await _dbService.updateSyncItem(
             item.copyWith(
               status: SyncStatus.failed,
-              errorMessage: e.toString(),
+              errorMessage: '$tag $e',
+              // Anchor exponential backoff to this attempt, not the item's
+              // original creation time.
+              timestamp: DateTime.now(),
+              retryCount: item.retryCount + 1,
             ),
           );
         }

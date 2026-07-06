@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/sync_queue_item.dart';
+import '../../../../data/services/hive_database_service.dart';
+import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
@@ -558,6 +560,35 @@ class _MastersSyncPageState extends State<MastersSyncPage>
     }
   }
 
+  /// Blocks logout if today's route activity hasn't been reconciled yet via
+  /// the Cash Closing workflow — otherwise a day's cash-in-hand discrepancy
+  /// could be walked away from unnoticed.
+  Future<void> _attemptLogout(BuildContext context) async {
+    final hasPendingClosing = sl<HiveDatabaseService>()
+        .hasPendingCashClosingForToday();
+    if (!hasPendingClosing) {
+      context.read<AuthBloc>().add(LogoutRequested());
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cash Closing Required'),
+        content: const Text(
+          "You have unreconciled sales activity today. Please complete "
+          "today's Cash Closing from the Dashboard before logging out.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomBar(bool hasMasters) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -578,9 +609,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
             Expanded(
               flex: 2,
               child: OutlinedButton.icon(
-                onPressed: () {
-                  context.read<AuthBloc>().add(LogoutRequested());
-                },
+                onPressed: () => _attemptLogout(context),
                 icon: const Icon(Icons.logout),
                 label: const Text('LOG OUT'),
                 style: OutlinedButton.styleFrom(
@@ -626,6 +655,10 @@ class _MastersSyncPageState extends State<MastersSyncPage>
     return BlocBuilder<SyncBloc, SyncState>(
       builder: (context, syncState) {
         final list = syncState.queueItems;
+        final failedCount = list
+            .where((i) => i.status == SyncStatus.failed)
+            .length;
+
         if (list.isEmpty) {
           return Center(
             child: Padding(
@@ -671,18 +704,62 @@ class _MastersSyncPageState extends State<MastersSyncPage>
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: list.length,
-          itemBuilder: (context, index) {
-            final syncItem = list[index];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _buildQueueCard(syncItem, isDark),
-            );
-          },
+        return Column(
+          children: [
+            if (failedCount > 0) _buildQueueActionsBar(failedCount, syncState),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: list.length,
+                itemBuilder: (context, index) {
+                  final syncItem = list[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildQueueCard(syncItem, isDark),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildQueueActionsBar(int failedCount, SyncState syncState) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: AppTheme.errorRose.withAlpha(20),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$failedCount item${failedCount == 1 ? '' : 's'} failed to sync',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.errorRose,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: syncState.isSyncing
+                ? null
+                : () => context.read<SyncBloc>().add(
+                    const TriggerSync(forceRetryAll: true),
+                  ),
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Retry Failed'),
+          ),
+          TextButton.icon(
+            onPressed: () =>
+                context.read<SyncBloc>().add(ClearFailedItemsRequested()),
+            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+            label: const Text('Clear Failed'),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorRose),
+          ),
+        ],
+      ),
     );
   }
 
@@ -720,6 +797,16 @@ class _MastersSyncPageState extends State<MastersSyncPage>
                                 ? Icons.assignment_return_rounded
                                 : Icons.person_add_rounded))));
 
+    // The sync worker tags failed items' errorMessage with "[Retryable]" or
+    // "[Needs Attention]" based on whether the underlying error was
+    // transient (network/server) or permanent (validation/business-rule).
+    final rawError = syncItem.errorMessage;
+    final isRetryable = rawError?.startsWith('[Retryable]') ?? false;
+    final isNeedsAttention = rawError?.startsWith('[Needs Attention]') ?? false;
+    final displayError = rawError
+        ?.replaceFirst('[Retryable] ', '')
+        .replaceFirst('[Needs Attention] ', '');
+
     final subtitleWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -742,11 +829,23 @@ class _MastersSyncPageState extends State<MastersSyncPage>
             ),
           ],
         ),
-        if (syncItem.status == SyncStatus.failed &&
-            syncItem.errorMessage != null) ...[
+        if (syncItem.status == SyncStatus.failed && displayError != null) ...[
           const SizedBox(height: 6),
+          if (isRetryable)
+            const StatusPill(
+              label: 'Retryable',
+              color: AppTheme.infoSky,
+              icon: Icons.wifi_off_rounded,
+            )
+          else if (isNeedsAttention)
+            const StatusPill(
+              label: 'Needs Attention',
+              color: AppTheme.errorRose,
+              icon: Icons.report_problem_outlined,
+            ),
+          const SizedBox(height: 4),
           Text(
-            syncItem.errorMessage!,
+            displayError,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 11, color: AppTheme.errorRose),

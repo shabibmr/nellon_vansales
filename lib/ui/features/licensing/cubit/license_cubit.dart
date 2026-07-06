@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../data/services/app_logger.dart';
 import '../../../../data/services/device_info_service.dart';
 import '../../../../data/services/license_service.dart';
 import '../../../../data/services/local_storage_service.dart';
@@ -78,15 +79,19 @@ class LicenseCubit extends Cubit<LicenseState> {
         serverConfig = await _licenseService.fetchServerConfig();
       } catch (e) {
         // Fail-open strategy allows proceeding even if remote credentials fail to load
-        // ignore: avoid_print
-        print('Licensing fail-open warning: Failed to fetch Server Config: $e');
+        AppLogger.warning(
+          'Licensing',
+          'Fail-open warning: Failed to fetch Server Config: $e',
+        );
       }
 
       emit(LicenseValid(serverConfig: serverConfig));
     } catch (e) {
       // Fail-open strategy on Firestore network/access errors.
-      // ignore: avoid_print
-      print('Licensing fail-open: Firestore fetch failed. Allowing access: $e');
+      AppLogger.warning(
+        'Licensing',
+        'Fail-open: Firestore fetch failed. Allowing access: $e',
+      );
       emit(const LicenseValid(serverConfig: null));
     }
   }
@@ -130,8 +135,10 @@ class LicenseCubit extends Cubit<LicenseState> {
       try {
         serverConfig = await _licenseService.fetchServerConfig();
       } catch (e) {
-        // ignore: avoid_print
-        print('Licensing registration warning: Failed to load Zoho Config: $e');
+        AppLogger.warning(
+          'Licensing',
+          'Registration warning: Failed to load Zoho Config: $e',
+        );
       }
 
       emit(LicenseValid(serverConfig: serverConfig));

@@ -77,7 +77,8 @@ class _StockReportPageState extends State<StockReportPage> {
           ),
         ],
       ),
-      body: _isLoading
+      body: SafeArea(
+        child: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
             )
@@ -168,6 +169,7 @@ class _StockReportPageState extends State<StockReportPage> {
                 ],
               ),
             ),
+      ),
     );
   }
 }

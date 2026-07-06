@@ -33,6 +33,7 @@ import 'data/services/device_info_service.dart';
 import 'data/services/license_service.dart';
 import 'ui/features/licensing/cubit/license_cubit.dart';
 import 'ui/features/licensing/cubit/server_config_cubit.dart';
+import 'ui/features/licensing/cubit/server_config_state.dart';
 import 'ui/features/licensing/views/license_gate.dart';
 import 'data/services/voucher_pdf_service.dart';
 import 'ui/features/voucher_pdf/bloc/voucher_pdf_bloc.dart';
@@ -157,7 +158,15 @@ class VanSalesApp extends StatelessWidget {
                   : ThemeMode.dark,
               builder: (context, child) => AnimatedGlowBackground(
                 themeMode: appThemeMode,
-                child: child ?? const SizedBox.shrink(),
+                child: BlocBuilder<ServerConfigCubit, ServerConfigState>(
+                  builder: (context, _) => Column(
+                    children: [
+                      if (sl<ZohoApiClient>().isAnyMockModeActive)
+                        const _MockModeBanner(),
+                      Expanded(child: child ?? const SizedBox.shrink()),
+                    ],
+                  ),
+                ),
               ),
               home: const SessionGateway(),
             );
@@ -215,14 +224,47 @@ class SessionGateway extends StatelessWidget {
           } else if (authState is AuthLoading) {
             return const Scaffold(
               body: Center(
-                child: CircularProgressIndicator(
-                  color: AppTheme.primaryIndigo,
-                ),
+                child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
               ),
             );
           }
           return const LoginPage();
         },
+      ),
+    );
+  }
+}
+
+/// Persistent top-of-screen banner shown app-wide whenever transactions are
+/// being simulated against a sandbox instead of pushed live to Zoho.
+class _MockModeBanner extends StatelessWidget {
+  const _MockModeBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Material(
+      color: AppTheme.warningAmber,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.science_outlined, size: 14, color: Colors.black87),
+              SizedBox(width: 6),
+              Text(
+                'MOCK MODE — transactions are simulated, not pushed to Zoho',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

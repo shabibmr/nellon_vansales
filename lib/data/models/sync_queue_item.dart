@@ -36,8 +36,14 @@ class SyncQueueItem extends Equatable {
   /// Error details or message if the sync status is [SyncStatus.failed].
   final String? errorMessage;
 
-  /// Date-time when this sync action was generated.
+  /// Date-time when this sync action was generated, or — after a failed
+  /// attempt — when that attempt happened (used as the backoff anchor).
   final DateTime timestamp;
+
+  /// Number of failed sync attempts so far. Drives exponential backoff for
+  /// automatic retries; reset implicitly whenever the item succeeds (it's
+  /// dequeued) or is manually cleared.
+  final int retryCount;
 
   /// Creates a new [SyncQueueItem] to manage offline syncing.
   const SyncQueueItem({
@@ -47,6 +53,7 @@ class SyncQueueItem extends Equatable {
     this.status = SyncStatus.pending,
     this.errorMessage,
     required this.timestamp,
+    this.retryCount = 0,
   });
 
   /// Returns a copied [SyncQueueItem] instance with replaced values for specified fields.
@@ -57,6 +64,7 @@ class SyncQueueItem extends Equatable {
     SyncStatus? status,
     String? errorMessage,
     DateTime? timestamp,
+    int? retryCount,
   }) {
     return SyncQueueItem(
       id: id ?? this.id,
@@ -65,6 +73,7 @@ class SyncQueueItem extends Equatable {
       status: status ?? this.status,
       errorMessage: errorMessage ?? this.errorMessage,
       timestamp: timestamp ?? this.timestamp,
+      retryCount: retryCount ?? this.retryCount,
     );
   }
 
@@ -82,6 +91,7 @@ class SyncQueueItem extends Equatable {
       timestamp: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'])
           : DateTime.now(),
+      retryCount: json['retryCount'] as int? ?? 0,
     );
   }
 
@@ -94,6 +104,7 @@ class SyncQueueItem extends Equatable {
       'status': status.name,
       'errorMessage': errorMessage,
       'timestamp': timestamp.toIso8601String(),
+      'retryCount': retryCount,
     };
   }
 
@@ -105,5 +116,6 @@ class SyncQueueItem extends Equatable {
     status,
     errorMessage,
     timestamp,
+    retryCount,
   ];
 }

@@ -1,0 +1,278 @@
+{
+  "api_calls": [
+    {
+      "method": "POST",
+      "url": "https://accounts.zoho.com/oauth/v2/token",
+      "description": "Refresh OAuth 2.0 access token using client credentials and refresh token.",
+      "request_parameters": {
+        "refresh_token": "1000.ccb7c895a473ba5569c55565c0aed87d.c2f3a5530356193d39a19c511efed856",
+        "client_id": "1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP",
+        "client_secret": "1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103",
+        "grant_type": "refresh_token"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://www.zohoapis.com/books/v3/contacts",
+      "description": "Create a new contact (customer) in Zoho Books.",
+      "sample_payload": {
+        "id": "temp_cust_171658823",
+        "contact_id": "temp_cust_171658823",
+        "name": "Metro Hypermarket",
+        "contact_name": "Metro Hypermarket",
+        "company_name": "Metro Group Ltd",
+        "email": "procurement@metro.com",
+        "phone": "+91 99000 11223",
+        "address": "Plot 42, Sector 5, North Corridor",
+        "outstandingBalance": 2850.0,
+        "creditLimit": 5000.0,
+        "route_id": "route_north",
+        "sequence": 1,
+        "isPendingSync": true,
+        "latitude": 12.9716,
+        "longitude": 77.5946,
+        "cf_latitude": 12.9716,
+        "cf_longitude": 77.5946
+      }
+    },
+    {
+      "method": "PUT",
+      "url": "https://www.zohoapis.com/books/v3/contacts/{contact_id}",
+      "description": "Update GPS (latitude/longitude) custom fields on an existing Zoho contact.",
+      "sample_payload": {
+        "custom_fields": [
+          {
+            "api_name": "cf_latitude",
+            "value": "12.9716"
+          },
+          {
+            "api_name": "cf_longitude",
+            "value": "77.5946"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://www.zohoapis.com/books/v3/invoices",
+      "description": "Create a new sales invoice in Zoho Books.",
+      "sample_payload": {
+        "id": "temp_inv_171658899",
+        "invoice_id": "temp_inv_171658899",
+        "invoice_number": "INV-00001",
+        "customer_id": "cust_101",
+        "customer_name": "Metro Hypermarket",
+        "date": "2026-07-06",
+        "due_date": "2026-07-13",
+        "notes": "Thank you for your business.",
+        "isPendingSync": true,
+        "round_off": 0.0,
+        "location_id": "783019958",
+        "line_items": [
+          {
+            "item_id": "item_501",
+            "quantity": 24,
+            "rate": 60.0,
+            "tax_percentage": 5.0,
+            "discount": 0.0,
+            "item": {
+              "id": "item_501",
+              "item_id": "item_501",
+              "name": "Premium Fresh Milk (1L)",
+              "sku": "MILK-PREM-1L",
+              "rate": 60.0,
+              "stock": 120,
+              "stock_on_hand": 120,
+              "description": "Homogenized Pasteurised Whole Milk",
+              "tax_name": "VAT 5%",
+              "tax_percentage": 5.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://www.zohoapis.com/books/v3/salesorders",
+      "description": "Create a new sales order in Zoho Books.",
+      "sample_payload": {
+        "id": "temp_so_171658999",
+        "salesorder_id": "temp_so_171658999",
+        "salesorder_number": "SO-00001",
+        "customer_id": "cust_101",
+        "customer_name": "Metro Hypermarket",
+        "date": "2026-07-06",
+        "shipment_date": "2026-07-10",
+        "notes": "Standing weekly order",
+        "isPendingSync": true,
+        "round_off": 0.0,
+        "status": "open",
+        "converted_invoice_number": null,
+        "zoho_order_id": null,
+        "location_id": "783019958",
+        "line_items": [
+          {
+            "item_id": "item_501",
+            "quantity": 20,
+            "rate": 60.0,
+            "tax_percentage": 5.0,
+            "discount": 0.0,
+            "item": {
+              "id": "item_501",
+              "item_id": "item_501",
+              "name": "Premium Fresh Milk (1L)",
+              "sku": "MILK-PREM-1L",
+              "rate": 60.0,
+              "stock": 120,
+              "stock_on_hand": 120,
+              "description": "Homogenized Pasteurised Whole Milk",
+              "tax_name": "VAT 5%",
+              "tax_percentage": 5.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "url": "https://www.zohoapis.com/books/v3/salesorders/{salesorder_id}",
+      "description": "Update an existing sales order in Zoho Books.",
+      "sample_payload": {
+        "id": "so_9001",
+        "salesorder_id": "so_9001",
+        "salesorder_number": "SO-00001",
+        "customer_id": "cust_101",
+        "customer_name": "Metro Hypermarket",
+        "date": "2026-07-06",
+        "shipment_date": "2026-07-10",
+        "notes": "Updated notes: delivery by 10 AM",
+        "isPendingSync": true,
+        "round_off": 0.0,
+        "status": "open",
+        "converted_invoice_number": null,
+        "zoho_order_id": "so_9001",
+        "location_id": "783019958",
+        "line_items": [
+          {
+            "item_id": "item_501",
+            "quantity": 25,
+            "rate": 60.0,
+            "tax_percentage": 5.0,
+            "discount": 0.0,
+            "item": {
+              "id": "item_501",
+              "item_id": "item_501",
+              "name": "Premium Fresh Milk (1L)",
+              "sku": "MILK-PREM-1L",
+              "rate": 60.0,
+              "stock": 120,
+              "stock_on_hand": 120,
+              "description": "Homogenized Pasteurised Whole Milk",
+              "tax_name": "VAT 5%",
+              "tax_percentage": 5.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://www.zohoapis.com/books/v3/salesorders/{salesorder_id}/converttoinvoice",
+      "description": "Convert an existing sales order to a sales invoice.",
+      "sample_payload": {
+        "location_id": "783019958"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://www.zohoapis.com/books/v3/customerpayments",
+      "description": "Record a payment received from a customer (Receipt Voucher).",
+      "sample_payload": {
+        "id": "temp_pay_171659000",
+        "payment_id": "temp_pay_171659000",
+        "payment_number": "PAY-00001",
+        "customer_id": "cust_101",
+        "customer_name": "Metro Hypermarket",
+        "amount": 2000.0,
+        "payment_mode": "Bank Transfer",
+        "reference_number": "TXN987654321",
+        "date": "2026-07-06",
+        "isPendingSync": true,
+        "location_id": "783019958",
+        "invoices": [
+          {
+            "invoice_id": "inv_001",
+            "invoice_number": "INV-001",
+            "amount_applied": 2000.0
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://www.zohoapis.com/books/v3/creditnotes",
+      "description": "Record a sales return (Credit Note).",
+      "sample_payload": {
+        "id": "temp_cn_171659100",
+        "creditnote_id": "temp_cn_171659100",
+        "creditnote_number": "CN-00001",
+        "customer_id": "cust_101",
+        "customer_name": "Metro Hypermarket",
+        "date": "2026-07-06",
+        "reason": "Damaged goods returned",
+        "isPendingSync": true,
+        "location_id": "783019958",
+        "line_items": [
+          {
+            "item_id": "item_501",
+            "quantity": 2,
+            "rate": 60.0,
+            "invoice_id": "inv_001",
+            "invoice_number": "INV-001",
+            "invoiceLineItem": {
+              "item_id": "item_501",
+              "quantity": 24,
+              "rate": 60.0,
+              "tax_percentage": 5.0,
+              "discount": 0.0,
+              "item": {
+                "id": "item_501",
+                "item_id": "item_501",
+                "name": "Premium Fresh Milk (1L)",
+                "sku": "MILK-PREM-1L",
+                "rate": 60.0,
+                "stock": 120,
+                "stock_on_hand": 120,
+                "description": "Homogenized Pasteurised Whole Milk",
+                "tax_name": "VAT 5%",
+                "tax_percentage": 5.0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://www.zohoapis.com/books/v3/expenses",
+      "description": "Record business expenses such as fuel, tolls, or meals. Supports multipart/form-data payload with receipt attachment file if receiptImagePath is defined.",
+      "sample_payload": {
+        "id": "temp_exp_171659200",
+        "expense_id": "temp_exp_171659200",
+        "date": "2026-07-06",
+        "receiptImagePath": "C:/Users/91991/.gemini/antigravity-cli/brain/a01964a7-b9d5-4312-9d5b-87e7cfeb340c/receipt.jpg",
+        "isPendingSync": true,
+        "location_id": "783019958",
+        "amount": 250.0,
+        "lines": [
+          {
+            "category": "Fuel",
+            "amount": 250.0,
+            "description": "Fuel fill-up at station",
+            "account_id": "fuel_expense_ac_id"
+          }
+        ]
+      }
+    }
+  ]
+}

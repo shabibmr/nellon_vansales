@@ -9,6 +9,7 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_return_model.dart';
+import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
 
@@ -123,24 +124,12 @@ class SalesReturnState extends Equatable {
     this.isEditingNew = false,
   });
 
-  List<SalesReturn> get filteredReturns {
-    return returns.where((r) {
-      final day = DateTime(r.date.year, r.date.month, r.date.day);
-      if (startDate != null) {
-        final startDay = DateTime(
-          startDate!.year,
-          startDate!.month,
-          startDate!.day,
-        );
-        if (day.isBefore(startDay)) return false;
-      }
-      if (endDate != null) {
-        final endDay = DateTime(endDate!.year, endDate!.month, endDate!.day);
-        if (day.isAfter(endDay)) return false;
-      }
-      return true;
-    }).toList();
-  }
+  List<SalesReturn> get filteredReturns => filterByDateRange(
+    returns,
+    (r) => r.date,
+    startDate: startDate,
+    endDate: endDate,
+  );
 
   SalesReturnState copyWith({
     List<SalesReturn>? returns,

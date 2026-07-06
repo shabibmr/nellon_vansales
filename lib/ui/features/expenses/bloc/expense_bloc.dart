@@ -6,6 +6,7 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/expense_entry_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
+import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
 
@@ -111,20 +112,12 @@ class ExpenseState extends Equatable {
     this.isEditingNew = false,
   });
 
-  List<ExpenseEntry> get filteredExpenses {
-    return expenses.where((exp) {
-      final day = DateTime(exp.date.year, exp.date.month, exp.date.day);
-      if (startDate != null) {
-        final s = DateTime(startDate!.year, startDate!.month, startDate!.day);
-        if (day.isBefore(s)) return false;
-      }
-      if (endDate != null) {
-        final e = DateTime(endDate!.year, endDate!.month, endDate!.day);
-        if (day.isAfter(e)) return false;
-      }
-      return true;
-    }).toList();
-  }
+  List<ExpenseEntry> get filteredExpenses => filterByDateRange(
+    expenses,
+    (exp) => exp.date,
+    startDate: startDate,
+    endDate: endDate,
+  );
 
   ExpenseState copyWith({
     List<ExpenseEntry>? expenses,
@@ -193,10 +186,8 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
   final SalesRepository _salesRepository;
   final SyncRepository _syncRepository;
 
-  ExpenseBloc({
-    required this._salesRepository,
-    required this._syncRepository,
-  }) : super(const ExpenseState()) {
+  ExpenseBloc({required this._salesRepository, required this._syncRepository})
+    : super(const ExpenseState()) {
     on<LoadExpenses>(_onLoadExpenses);
     on<SetExpenseDateFilter>(_onSetDateFilter);
     on<StartNewExpense>(_onStartNewExpense);

@@ -67,7 +67,8 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
           ),
         ],
       ),
-      body: BlocConsumer<SalesInvoiceBloc, SalesInvoiceState>(
+      body: SafeArea(
+        child: BlocConsumer<SalesInvoiceBloc, SalesInvoiceState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
             showErrorSnackBar(context, state.errorMessage!);
@@ -154,6 +155,7 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
             ],
           );
         },
+      ),
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create New Sales Invoice',

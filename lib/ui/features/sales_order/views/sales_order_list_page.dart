@@ -67,7 +67,8 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
           ),
         ],
       ),
-      body: BlocConsumer<SalesOrderBloc, SalesOrderState>(
+      body: SafeArea(
+        child: BlocConsumer<SalesOrderBloc, SalesOrderState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
             showErrorSnackBar(context, state.errorMessage!);
@@ -177,6 +178,7 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
             ],
           );
         },
+      ),
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create New Sales Order',

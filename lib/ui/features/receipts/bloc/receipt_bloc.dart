@@ -7,6 +7,8 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
+import '../../../../data/services/sync_worker.dart';
+import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
 
@@ -118,20 +120,12 @@ class ReceiptState extends Equatable {
     this.isEditingNew = false,
   });
 
-  List<ReceiptVoucher> get filteredReceipts {
-    return receipts.where((rec) {
-      final day = DateTime(rec.date.year, rec.date.month, rec.date.day);
-      if (startDate != null) {
-        final s = DateTime(startDate!.year, startDate!.month, startDate!.day);
-        if (day.isBefore(s)) return false;
-      }
-      if (endDate != null) {
-        final e = DateTime(endDate!.year, endDate!.month, endDate!.day);
-        if (day.isAfter(e)) return false;
-      }
-      return true;
-    }).toList();
-  }
+  List<ReceiptVoucher> get filteredReceipts => filterByDateRange(
+    receipts,
+    (rec) => rec.date,
+    startDate: startDate,
+    endDate: endDate,
+  );
 
   ReceiptState copyWith({
     List<ReceiptVoucher>? receipts,
@@ -197,10 +191,8 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
   final SalesRepository _salesRepository;
   final SyncRepository _syncRepository;
 
-  ReceiptBloc({
-    required this._salesRepository,
-    required this._syncRepository,
-  }) : super(const ReceiptState()) {
+  ReceiptBloc({required this._salesRepository, required this._syncRepository})
+    : super(const ReceiptState()) {
     on<LoadReceipts>(_onLoadReceipts);
     on<SetReceiptDateFilter>(_onSetDateFilter);
     on<StartNewReceipt>(_onStartNewReceipt);
@@ -287,10 +279,19 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
     );
   }
 
-  void _onSetCustomer(
+  Future<void> _onSetCustomer(
     SetEditingReceiptCustomer event,
     Emitter<ReceiptState> emit,
-  ) {
+  ) async {
+    try {
+      // Pull a live open-invoice snapshot before choosing allocation targets,
+      // so a payment doesn't get FIFO-applied against an invoice that was
+      // already settled (or miss one raised) since the last master sync.
+      await _syncRepository.syncMaster(MasterType.openInvoices);
+    } catch (_) {
+      // Offline or the fetch failed — fall back to whatever open-invoice
+      // snapshot is already cached locally.
+    }
     final allocations = _autoAllocate(event.customer.id, state.editingAmount);
     emit(
       state.copyWith(

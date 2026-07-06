@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
+import 'package:van_sales/domain/models/sales_return.dart';
 
 void main() {
   const item1 = Item(
@@ -138,6 +139,102 @@ void main() {
 
       // roundOff = total - rawTotal = 42.00 - 42.45 = -0.45
       expect(order.roundOff, closeTo(-0.45, 0.0001));
+    });
+  });
+
+  group('SalesReturnLineItem total (tax + prorated discount)', () {
+    test('full-quantity return includes tax and the full original discount', () {
+      // Original invoiced line: 10 units @ 12.00, 5% tax, 5.00 total discount.
+      const originalLine = InvoiceLineItem(
+        item: item1,
+        quantity: 10,
+        rate: 12.00,
+        taxPercentage: 5.0,
+        discount: 5.00,
+      );
+
+      const returnLine = SalesReturnLineItem(
+        invoiceLineItem: originalLine,
+        returnedQuantity: 10,
+      );
+
+      // subTotal = 12.00 * 10 = 120.00
+      expect(returnLine.subTotal, equals(120.00));
+      // taxAmount = 120.00 * 5% = 6.00
+      expect(returnLine.taxAmount, equals(6.00));
+      // Full return -> full original discount credited back.
+      expect(returnLine.discountAmount, equals(5.00));
+      // total = 120.00 + 6.00 - 5.00 = 121.00
+      expect(returnLine.total, equals(121.00));
+    });
+
+    test('partial-quantity return prorates tax and discount', () {
+      // Original invoiced line: 10 units @ 12.00, 5% tax, 5.00 total discount.
+      const originalLine = InvoiceLineItem(
+        item: item1,
+        quantity: 10,
+        rate: 12.00,
+        taxPercentage: 5.0,
+        discount: 5.00,
+      );
+
+      // Only 2 of the 10 units are being returned.
+      const returnLine = SalesReturnLineItem(
+        invoiceLineItem: originalLine,
+        returnedQuantity: 2,
+      );
+
+      // subTotal = 12.00 * 2 = 24.00
+      expect(returnLine.subTotal, equals(24.00));
+      // taxAmount = 24.00 * 5% = 1.20
+      expect(returnLine.taxAmount, equals(1.20));
+      // discountAmount = (5.00 / 10) * 2 = 1.00 (prorated, not the full 5.00)
+      expect(returnLine.discountAmount, equals(1.00));
+      // total = 24.00 + 1.20 - 1.00 = 24.20
+      expect(returnLine.total, equals(24.20));
+    });
+  });
+
+  group('Floating-point drift guard (roundMoney)', () {
+    test('summing many binary-imprecise line totals stays exact to the cent', () {
+      // 0.1 is not exactly representable in binary floating point; summing it
+      // 30 times via raw double addition drifts off the cent (e.g. 3.0000000000000004).
+      const rateItem = Item(
+        id: 'item_3',
+        name: 'Cheap Item',
+        sku: 'SKU3',
+        rate: 0.1,
+        stock: 100,
+        description: 'Sub-cent-drift item',
+        taxName: 'No Tax',
+        taxPercentage: 0.0,
+      );
+
+      final lines = List.generate(
+        30,
+        (_) => const InvoiceLineItem(
+          item: rateItem,
+          quantity: 1,
+          rate: 0.1,
+          taxPercentage: 0.0,
+        ),
+      );
+
+      final invoice = SalesInvoice(
+        id: 'inv_drift',
+        invoiceNumber: 'INV-DRIFT',
+        customerId: 'cust_1',
+        customerName: 'Customer One',
+        date: DateTime.now(),
+        dueDate: DateTime.now(),
+        items: lines,
+        notes: '',
+      );
+
+      // Without rounding at each accumulation step, raw double summation of
+      // 0.1 x 30 produces 3.0000000000000004 instead of exactly 3.0.
+      expect(invoice.subTotal, equals(3.0));
+      expect(invoice.rawTotal, equals(3.0));
     });
   });
 }

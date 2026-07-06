@@ -8,6 +8,7 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_order_model.dart';
+import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
 
@@ -137,24 +138,12 @@ class SalesOrderState extends Equatable {
   });
 
   /// Evaluates and returns the loaded orders filtered by the active date range.
-  List<SalesOrder> get filteredOrders {
-    return orders.where((ord) {
-      final ordDay = DateTime(ord.date.year, ord.date.month, ord.date.day);
-      if (startDate != null) {
-        final startDay = DateTime(
-          startDate!.year,
-          startDate!.month,
-          startDate!.day,
-        );
-        if (ordDay.isBefore(startDay)) return false;
-      }
-      if (endDate != null) {
-        final endDay = DateTime(endDate!.year, endDate!.month, endDate!.day);
-        if (ordDay.isAfter(endDay)) return false;
-      }
-      return true;
-    }).toList();
-  }
+  List<SalesOrder> get filteredOrders => filterByDateRange(
+    orders,
+    (ord) => ord.date,
+    startDate: startDate,
+    endDate: endDate,
+  );
 
   SalesOrderState copyWith({
     List<SalesOrder>? orders,

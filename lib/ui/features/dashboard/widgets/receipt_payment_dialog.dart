@@ -42,14 +42,35 @@ class _ReceiptPaymentDialogState extends State<ReceiptPaymentDialog> {
   final Map<String, TextEditingController> _allocationControllers = {};
   final Map<String, FocusNode> _allocationFocusNodes = {};
   List<PaymentAllocation> _allocations = [];
-  late final List<OpenInvoice> _openInvoices;
+  List<OpenInvoice> _openInvoices = [];
 
   @override
   void initState() {
     super.initState();
-    _openInvoices = _db.getOpenInvoices(customerId: widget.customer.id)
-      ..sort((a, b) => a.date.compareTo(b.date));
+    _loadOpenInvoices();
     _amountController.addListener(_onAmountChanged);
+  }
+
+  Future<void> _loadOpenInvoices() async {
+    // Show whatever's cached immediately so the dialog isn't blank offline...
+    setState(() {
+      _openInvoices = _db.getOpenInvoices(customerId: widget.customer.id)
+        ..sort((a, b) => a.date.compareTo(b.date));
+    });
+    try {
+      // ...then refresh live from Zoho so allocation targets aren't stale
+      // (e.g. an invoice already settled or raised since the last master
+      // sync), and re-apply the FIFO allocation against the fresh snapshot.
+      await sl<SyncWorker>().syncMaster(MasterType.openInvoices);
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _openInvoices = _db.getOpenInvoices(customerId: widget.customer.id)
+        ..sort((a, b) => a.date.compareTo(b.date));
+    });
+    _onAmountChanged();
   }
 
   @override

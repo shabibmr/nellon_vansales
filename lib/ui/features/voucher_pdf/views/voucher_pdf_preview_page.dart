@@ -26,7 +26,8 @@ class VoucherPdfPreviewPage extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: PdfPreview(
+      body: SafeArea(
+        child: PdfPreview(
         build: (format) => pdfBytes,
         allowPrinting: true,
         allowSharing: true,
@@ -45,6 +46,7 @@ class VoucherPdfPreviewPage extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

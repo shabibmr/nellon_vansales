@@ -28,8 +28,13 @@ class SyncRepositoryImpl implements SyncRepository {
   }
 
   @override
-  Future<void> triggerSync() {
-    return _syncWorker.syncPendingItems();
+  Future<void> triggerSync({bool forceRetryAll = false}) {
+    return _syncWorker.syncPendingItems(forceRetryAll: forceRetryAll);
+  }
+
+  @override
+  Future<void> clearFailedSyncItems() {
+    return _dbService.clearFailedSyncItems();
   }
 
   @override

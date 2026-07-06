@@ -299,7 +299,7 @@ class SalesOrderPdfTemplate {
       child: pw.Text(
         text,
         textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-        style: pw.TextStyle(
+        style: const pw.TextStyle(
           fontSize: 8,
           fontWeight: pw.FontWeight.bold,
           color: PdfColors.white,

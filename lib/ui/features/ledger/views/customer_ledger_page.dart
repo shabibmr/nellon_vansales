@@ -195,7 +195,8 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
           ),
         ],
       ),
-      body: BlocConsumer<CustomerLedgerBloc, CustomerLedgerState>(
+      body: SafeArea(
+        child: BlocConsumer<CustomerLedgerBloc, CustomerLedgerState>(
         listenWhen: (p, c) => p.errorMessage != c.errorMessage,
         listener: (context, state) {
           if (state.errorMessage != null) {
@@ -413,6 +414,7 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
             ],
           );
         },
+      ),
       ),
     );
   }

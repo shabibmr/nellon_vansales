@@ -5,10 +5,12 @@ import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../../domain/utils/stock_rules.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_invoice_model.dart';
+import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
 
@@ -200,24 +202,12 @@ class SalesInvoiceState extends Equatable {
   };
 
   /// Evaluates and returns the loaded invoices filtered by the active date range.
-  List<SalesInvoice> get filteredInvoices {
-    return invoices.where((inv) {
-      final invDay = DateTime(inv.date.year, inv.date.month, inv.date.day);
-      if (startDate != null) {
-        final startDay = DateTime(
-          startDate!.year,
-          startDate!.month,
-          startDate!.day,
-        );
-        if (invDay.isBefore(startDay)) return false;
-      }
-      if (endDate != null) {
-        final endDay = DateTime(endDate!.year, endDate!.month, endDate!.day);
-        if (invDay.isAfter(endDay)) return false;
-      }
-      return true;
-    }).toList();
-  }
+  List<SalesInvoice> get filteredInvoices => filterByDateRange(
+    invoices,
+    (inv) => inv.date,
+    startDate: startDate,
+    endDate: endDate,
+  );
 
   SalesInvoiceState copyWith({
     List<SalesInvoice>? invoices,
@@ -479,13 +469,15 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     }
 
     final allowedStock = event.item.stock + originalQty;
-    if (event.quantity > allowedStock) {
-      emit(
-        state.copyWith(
-          errorMessage:
-              'Cannot set quantity: Exceeds available van inventory stock ($allowedStock available)',
-        ),
+    try {
+      deductStock(
+        itemId: event.item.id,
+        itemName: event.item.name,
+        available: allowedStock,
+        requested: event.quantity,
       );
+    } on InsufficientStockException catch (e) {
+      emit(state.copyWith(errorMessage: e.toString()));
       return;
     }
 
@@ -639,13 +631,15 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     final idx = items.indexWhere((line) => line.item.id == event.item.id);
     final existingQty = idx >= 0 ? items[idx].quantity : 0;
 
-    if (existingQty + event.quantity > event.item.stock) {
-      emit(
-        state.copyWith(
-          errorMessage:
-              'Cannot add item: Exceeds available van inventory stock',
-        ),
+    try {
+      deductStock(
+        itemId: event.item.id,
+        itemName: event.item.name,
+        available: event.item.stock,
+        requested: existingQty + event.quantity,
       );
+    } on InsufficientStockException catch (e) {
+      emit(state.copyWith(errorMessage: e.toString()));
       return;
     }
 
@@ -683,12 +677,15 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     if (event.quantity <= 0) {
       if (idx >= 0) items.removeAt(idx);
     } else {
-      if (event.quantity > event.item.stock) {
-        emit(
-          state.copyWith(
-            errorMessage: 'Cannot adjust quantity: Exceeds available van stock',
-          ),
+      try {
+        deductStock(
+          itemId: event.item.id,
+          itemName: event.item.name,
+          available: event.item.stock,
+          requested: event.quantity,
         );
+      } on InsufficientStockException catch (e) {
+        emit(state.copyWith(errorMessage: e.toString()));
         return;
       }
       if (idx >= 0) {

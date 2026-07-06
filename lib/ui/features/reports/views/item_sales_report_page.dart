@@ -213,7 +213,8 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
             ),
         ],
       ),
-      body: Column(
+      body: SafeArea(
+        child: Column(
         children: [
           // Date filter card
           Padding(
@@ -597,6 +598,7 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
                   ),
           ),
         ],
+      ),
       ),
     );
   }

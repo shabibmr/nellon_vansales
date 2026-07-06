@@ -161,18 +161,18 @@ class _ReturnInvoiceSelectorDialogState
               ),
               const SizedBox(height: 16),
               if (_matchingInvoices.isEmpty)
-                Expanded(
+                const Expanded(
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.receipt_long_outlined,
                           size: 48,
                           color: AppTheme.errorRose,
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
+                        SizedBox(height: 12),
+                        Text(
                           'No sales invoices found containing this item for this customer.',
                           textAlign: TextAlign.center,
                           style: TextStyle(

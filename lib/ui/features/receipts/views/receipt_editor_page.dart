@@ -159,7 +159,8 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
               Text(state.isEditingNew ? 'New Receipt' : 'Edit Receipt'),
         ),
       ),
-      body: BlocConsumer<ReceiptBloc, ReceiptState>(
+      body: SafeArea(
+        child: BlocConsumer<ReceiptBloc, ReceiptState>(
         listener: (context, state) {
           if (state.successMessage != null) {
             showSuccessSnackBar(context, state.successMessage!);
@@ -807,6 +808,7 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
             ],
           );
         },
+      ),
       ),
     );
   }

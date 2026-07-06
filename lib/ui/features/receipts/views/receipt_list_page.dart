@@ -66,7 +66,8 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
           ),
         ],
       ),
-      body: BlocConsumer<ReceiptBloc, ReceiptState>(
+      body: SafeArea(
+        child: BlocConsumer<ReceiptBloc, ReceiptState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
             showErrorSnackBar(context, state.errorMessage!);
@@ -159,6 +160,7 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
             ],
           );
         },
+      ),
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Log New Receipt',

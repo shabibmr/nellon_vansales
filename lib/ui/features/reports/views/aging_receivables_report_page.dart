@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../../data/models/customer_model.dart';
+import '../../../../data/models/open_invoice_model.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
-import '../../../../data/services/sync_worker.dart';
+import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/open_invoice.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -65,8 +66,9 @@ enum _SortField { name, total }
 ///
 /// Splits each customer's outstanding invoice balances into 0-15, 15-30, 30-60
 /// and >60 day buckets based on the number of days elapsed since the invoice
-/// date, computed as of today. Data is sourced from the cached open invoices
-/// snapshot ([HiveDatabaseService.getOpenInvoices]).
+/// date, computed as of today. Fetches open invoices and customer names live
+/// from Zoho Books; the cached Hive snapshot is painted instantly on open
+/// while the live fetch is in flight, and kept on screen if that fetch fails.
 class AgingReceivablesReportPage extends StatefulWidget {
   const AgingReceivablesReportPage({super.key});
 
@@ -78,7 +80,7 @@ class AgingReceivablesReportPage extends StatefulWidget {
 class _AgingReceivablesReportPageState
     extends State<AgingReceivablesReportPage> {
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
-  final SyncRepository _syncRepository = sl<SyncRepository>();
+  final ZohoApiClient _apiClient = sl<ZohoApiClient>();
   final DateFormat _dateFmt = DateFormat('dd MMM yyyy');
 
   _SortField _sortField = _SortField.total;
@@ -91,33 +93,39 @@ class _AgingReceivablesReportPageState
   @override
   void initState() {
     super.initState();
-    _load();
-    // Paint the cached snapshot instantly, then pull a fresh copy from Zoho.
-    _syncFromZoho();
-  }
-
-  /// Reads the local open-invoices + customers snapshot from Hive.
-  void _load() {
+    // Paint the cached local snapshot instantly, then pull the live report from Zoho.
     _openInvoices = _db.getOpenInvoices();
     _customerNames = {
       for (final Customer c in _db.getCustomers()) c.id: c.name,
     };
+    _fetchFromZoho();
   }
 
-  /// Pulls live open invoices (and customer names) from Zoho into the local
-  /// cache, then rebuilds. Offline-first: on failure the cached snapshot is
-  /// kept and an error is surfaced.
-  Future<void> _syncFromZoho() async {
+  /// Fetches open invoices and customer names live from Zoho Books.
+  ///
+  /// Offline-first: on failure, whatever data is already on screen is kept
+  /// and an error is surfaced rather than blanking the report.
+  Future<void> _fetchFromZoho() async {
     if (_isSyncing) return;
     setState(() => _isSyncing = true);
     try {
-      await _syncRepository.syncMaster(MasterType.customers);
-      await _syncRepository.syncMaster(MasterType.openInvoices);
+      final rawInvoices = await _apiClient.fetchOpenInvoices();
+      final rawCustomers = await _apiClient.fetchCustomers();
+      final invoices = rawInvoices
+          .map((json) => OpenInvoiceModel.fromJson(json))
+          .toList();
+      final customerNames = {
+        for (final customer in rawCustomers.map(CustomerModel.fromJson))
+          customer.id: customer.name,
+      };
       if (!mounted) return;
-      setState(_load);
+      setState(() {
+        _openInvoices = invoices;
+        _customerNames = customerNames;
+      });
     } catch (e) {
       if (!mounted) return;
-      showErrorSnackBar(context, 'Could not refresh from Zoho: $e');
+      showErrorSnackBar(context, 'Could not load report from Zoho: $e');
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
@@ -229,147 +237,73 @@ class _AgingReceivablesReportPageState
             )
           else
             IconButton(
-              tooltip: 'Sync from Zoho',
+              tooltip: 'Refresh from Zoho',
               icon: const Icon(Icons.cloud_sync_rounded),
-              onPressed: _syncFromZoho,
+              onPressed: _fetchFromZoho,
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // As-of + grand total banner
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryIndigo.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppTheme.primaryIndigo.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.account_balance_wallet_rounded,
-                    color: AppTheme.primaryIndigo,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total Receivable',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary,
-                          ),
-                        ),
-                        Text(
-                          'As of ${_dateFmt.format(DateTime.now())}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isDark
-                                ? const Color(0xFF475569)
-                                : const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      '$cs${grandTotal.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.primaryIndigo,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Bucket summary strip
-          if (rows.isNotEmpty)
+      body: SafeArea(
+        child: Column(
+          children: [
+            // As-of + grand total banner
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Row(
-                children: [
-                  for (final b in _Bucket.values) ...[
-                    Expanded(
-                      child: _BucketChip(
-                        label: '${b.label} days',
-                        value: '$cs${bucketTotals[b]!.toStringAsFixed(0)}',
-                        color: b.color,
-                        isDark: isDark,
-                      ),
-                    ),
-                    if (b != _Bucket.values.last) const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 10),
-
-          // Sort header
-          if (rows.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                  horizontal: 14,
+                  vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E293B)
-                      : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppTheme.primaryIndigo.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppTheme.primaryIndigo.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    GestureDetector(
-                      onTap: () => _toggleSort(_SortField.name),
-                      child: Row(
+                    const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      color: AppTheme.primaryIndigo,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'CUSTOMER',
+                          Text(
+                            'Total Receivable',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
                             ),
                           ),
-                          const SizedBox(width: 2),
-                          _sortIcon(_SortField.name),
+                          Text(
+                            'As of ${_dateFmt.format(DateTime.now())}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? const Color(0xFF475569)
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => _toggleSort(_SortField.total),
-                      child: Row(
-                        children: [
-                          _sortIcon(_SortField.total),
-                          const SizedBox(width: 2),
-                          const Text(
-                            'TOTAL DUE',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '$cs${grandTotal.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.primaryIndigo,
+                        ),
                       ),
                     ),
                   ],
@@ -377,112 +311,191 @@ class _AgingReceivablesReportPageState
               ),
             ),
 
-          const SizedBox(height: 4),
+            // Bucket summary strip
+            if (rows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Row(
+                  children: [
+                    for (final b in _Bucket.values) ...[
+                      Expanded(
+                        child: _BucketChip(
+                          label: '${b.label} days',
+                          value: '$cs${bucketTotals[b]!.toStringAsFixed(0)}',
+                          color: b.color,
+                          isDark: isDark,
+                        ),
+                      ),
+                      if (b != _Bucket.values.last) const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
 
-          // List body
-          Expanded(
-            child: rows.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.account_balance_wallet_outlined,
-                          size: 64,
-                          color: isDark
-                              ? const Color(0xFF334155)
-                              : const Color(0xFFCBD5E1),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No outstanding receivables',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sync open invoices from the Masters page to populate this report.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? const Color(0xFF475569)
-                                : const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    itemCount: rows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final row = rows[index];
-                      return Card(
-                        margin: EdgeInsets.zero,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      row.customerName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '$cs${row.total.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 15,
-                                      color: AppTheme.primaryIndigo,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  for (final b in _Bucket.values) ...[
-                                    Expanded(
-                                      child: _BucketCell(
-                                        label: b.label,
-                                        value: row.amount(b) > 0
-                                            ? '$cs${row.amount(b).toStringAsFixed(0)}'
-                                            : '—',
-                                        color: b.color,
-                                        active: row.amount(b) > 0,
-                                        isDark: isDark,
-                                      ),
-                                    ),
-                                    if (b != _Bucket.values.last)
-                                      const SizedBox(width: 6),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+            const SizedBox(height: 10),
+
+            // Sort header
+            if (rows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
-          ),
-        ],
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => _toggleSort(_SortField.name),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'CUSTOMER',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            _sortIcon(_SortField.name),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => _toggleSort(_SortField.total),
+                        child: Row(
+                          children: [
+                            _sortIcon(_SortField.total),
+                            const SizedBox(width: 2),
+                            const Text(
+                              'TOTAL DUE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 4),
+
+            // List body
+            Expanded(
+              child: rows.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.account_balance_wallet_outlined,
+                            size: 64,
+                            color: isDark
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFCBD5E1),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No outstanding receivables',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Sync open invoices from the Masters page to populate this report.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? const Color(0xFF475569)
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      itemCount: rows.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) {
+                        final row = rows[index];
+                        return Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        row.customerName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '$cs${row.total.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 15,
+                                        color: AppTheme.primaryIndigo,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    for (final b in _Bucket.values) ...[
+                                      Expanded(
+                                        child: _BucketCell(
+                                          label: b.label,
+                                          value: row.amount(b) > 0
+                                              ? '$cs${row.amount(b).toStringAsFixed(0)}'
+                                              : '—',
+                                          color: b.color,
+                                          active: row.amount(b) > 0,
+                                          isDark: isDark,
+                                        ),
+                                      ),
+                                      if (b != _Bucket.values.last)
+                                        const SizedBox(width: 6),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

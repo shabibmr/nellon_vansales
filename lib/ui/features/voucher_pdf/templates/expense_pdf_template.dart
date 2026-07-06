@@ -251,7 +251,7 @@ class ExpensePdfTemplate {
       padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: pw.Text(
         text,
-        style: pw.TextStyle(
+        style: const pw.TextStyle(
           color: PdfColors.white,
           fontSize: 9,
           fontWeight: pw.FontWeight.bold,

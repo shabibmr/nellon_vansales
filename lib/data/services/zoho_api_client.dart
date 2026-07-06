@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'app_logger.dart';
 import 'hive_database_service.dart';
 
 /// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
@@ -31,14 +32,26 @@ class ZohoApiClient {
     _refreshToken = refreshToken;
   }
 
-  /// Toggle this to mock transaction uploads (invoices, receipts, returns, expenses) to a sandbox,
-  /// preserving live connection configurations for master downloads.
-  static const bool _mockTransactions = true;
+  /// Runtime toggle for mocking transaction uploads (invoices, receipts, returns,
+  /// expenses) against a sandbox, preserving live connections for master downloads.
+  /// Set via [updateMockFlags], sourced from the remote `ServerConfig` — this used
+  /// to be a compile-time `static const` requiring a rebuild to flip.
+  bool _mockTransactions = true;
 
   /// Sales Order uploads (create / update / convert) use this flag instead of
   /// [_mockTransactions], so they can be pushed live to Zoho independently of all
   /// other transaction types. Still requires real credentials (`!_isMockMode()`).
-  static const bool _mockSalesOrderTransactions = false;
+  bool _mockSalesOrderTransactions = false;
+
+  /// Updates the runtime mock-mode flags for transactions and sales orders
+  /// (called upon loading server config, alongside [updateCredentials]).
+  void updateMockFlags({
+    required bool mockTransactions,
+    required bool mockSalesOrderTransactions,
+  }) {
+    _mockTransactions = mockTransactions;
+    _mockSalesOrderTransactions = mockSalesOrderTransactions;
+  }
 
   /// Instantiates a new [ZohoApiClient].
   ///
@@ -98,6 +111,12 @@ class ZohoApiClient {
     return _clientId.contains('YOUR_CLIENT_ID');
   }
 
+  /// True if any transaction type (invoices, receipts, returns, expenses, or
+  /// sales orders) is currently being simulated against a sandbox rather than
+  /// pushed live to Zoho — whether due to placeholder credentials or a mock flag.
+  bool get isAnyMockModeActive =>
+      _isMockMode() || _mockTransactions || _mockSalesOrderTransactions;
+
   // --- OAuth 2.0 Handlers ---
 
   /// Fetches the cached OAuth access token or triggers a refresh workflow if expired.
@@ -146,8 +165,7 @@ class ZohoApiClient {
         return newAccessToken;
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Zoho OAuth Refresh Error: $e');
+      AppLogger.error('ZohoApi', 'OAuth Refresh Error: $e');
     }
     return null;
   }
@@ -236,8 +254,7 @@ class ZohoApiClient {
       try {
         return await _fetchAllPages('/contacts', {'contact_type': 'customer'});
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchCustomers error: $e');
+        AppLogger.error('ZohoApi', 'fetchCustomers error: $e');
         throw Exception('Failed to fetch customers from Zoho: $e');
       }
     }
@@ -330,8 +347,7 @@ class ZohoApiClient {
 
         return await _fetchAllPages('/items', queryParams);
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchItems error: $e');
+        AppLogger.error('ZohoApi', 'fetchItems error: $e');
         throw Exception('Failed to fetch items from Zoho: $e');
       }
     }
@@ -431,7 +447,11 @@ class ZohoApiClient {
   /// Uses PUT /contacts/{contactId} sending only the custom_fields array to minimize
   /// risk of overwriting other fields. Works for both live and (simulated) mock modes.
   /// Returns the contact_id on success.
-  Future<String> updateCustomerGps(String contactId, double latitude, double longitude) async {
+  Future<String> updateCustomerGps(
+    String contactId,
+    double latitude,
+    double longitude,
+  ) async {
     final payload = {
       'custom_fields': [
         {'api_name': 'cf_latitude', 'value': latitude.toString()},
@@ -443,7 +463,8 @@ class ZohoApiClient {
       try {
         final response = await _dio.put('/contacts/$contactId', data: payload);
         if (response.statusCode == 200 || response.statusCode == 201) {
-          final returnedId = response.data['contact']?['contact_id']?.toString() ?? contactId;
+          final returnedId =
+              response.data['contact']?['contact_id']?.toString() ?? contactId;
           return returnedId;
         }
       } catch (e) {
@@ -531,8 +552,7 @@ class ZohoApiClient {
       try {
         return await _fetchAllPages('/salesorders', {});
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchSalesOrders error: $e');
+        AppLogger.error('ZohoApi', 'fetchSalesOrders error: $e');
         throw Exception('Failed to fetch sales orders from Zoho: $e');
       }
     }
@@ -615,8 +635,7 @@ class ZohoApiClient {
         }
         return Map<String, dynamic>.from(response.data['salesorder'] ?? {});
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchSalesOrder error: $e');
+        AppLogger.error('ZohoApi', 'fetchSalesOrder error: $e');
         throw Exception('Failed to fetch sales order from Zoho: $e');
       }
     }
@@ -767,8 +786,7 @@ class ZohoApiClient {
           'Failed to fetch locations: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchWarehouses (locations) error: $e');
+        AppLogger.error('ZohoApi', 'fetchWarehouses (locations) error: $e');
         throw Exception('Failed to fetch locations from Zoho: $e');
       }
     }
@@ -800,8 +818,7 @@ class ZohoApiClient {
           'Failed to fetch salespersons: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchSalespersons error: $e');
+        AppLogger.error('ZohoApi', 'fetchSalespersons error: $e');
         throw Exception('Failed to fetch salespersons from Zoho: $e');
       }
     }
@@ -827,9 +844,7 @@ class ZohoApiClient {
         final response = await _dio.get('/cm_salesperson_location');
         if (response.statusCode == 200) {
           final list =
-              (response.data['module_records'] ??
-                      response.data['data'] ??
-                      [])
+              (response.data['module_records'] ?? response.data['data'] ?? [])
                   as List;
           return list.map((m) => Map<String, dynamic>.from(m)).toList();
         }
@@ -837,8 +852,10 @@ class ZohoApiClient {
           'Failed to fetch salesperson location mappings: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchSalespersonLocationMappings error: $e');
+        AppLogger.error(
+          'ZohoApi',
+          'fetchSalespersonLocationMappings error: $e',
+        );
         throw Exception(
           'Failed to fetch salesperson location mappings from Zoho: $e',
         );
@@ -863,8 +880,7 @@ class ZohoApiClient {
           'Failed to fetch payment accounts: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchPaymentAccounts error: $e');
+        AppLogger.error('ZohoApi', 'fetchPaymentAccounts error: $e');
         throw Exception('Failed to fetch payment accounts from Zoho: $e');
       }
     }
@@ -901,8 +917,7 @@ class ZohoApiClient {
           'Failed to fetch taxes: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchTaxes error: $e');
+        AppLogger.error('ZohoApi', 'fetchTaxes error: $e');
         throw Exception('Failed to fetch taxes from Zoho: $e');
       }
     }
@@ -947,8 +962,7 @@ class ZohoApiClient {
           'Failed to fetch expense accounts: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchExpenseAccounts error: $e');
+        AppLogger.error('ZohoApi', 'fetchExpenseAccounts error: $e');
         throw Exception('Failed to fetch expense accounts from Zoho: $e');
       }
     }
@@ -1001,8 +1015,7 @@ class ZohoApiClient {
           'Failed to fetch organization: Server returned status code ${response.statusCode}',
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchOrganization error: $e');
+        AppLogger.error('ZohoApi', 'fetchOrganization error: $e');
         throw Exception('Failed to fetch organization from Zoho: $e');
       }
     }
@@ -1148,8 +1161,7 @@ class ZohoApiClient {
           'transactions': rows,
         };
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchCustomerStatement error: $e');
+        AppLogger.error('ZohoApi', 'fetchCustomerStatement error: $e');
         throw Exception('Failed to fetch customer statement from Zoho: $e');
       }
     }
@@ -1239,8 +1251,7 @@ class ZohoApiClient {
       try {
         return await _fetchAllPages('/invoices', {'status': 'unpaid'});
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchOpenInvoices error: $e');
+        AppLogger.error('ZohoApi', 'fetchOpenInvoices error: $e');
         throw Exception('Failed to fetch open invoices from Zoho: $e');
       }
     }
@@ -1286,14 +1297,12 @@ class ZohoApiClient {
             details.add(await fetchInvoiceDetail(id));
           } catch (e) {
             // Skip invoices whose detail fails to load rather than failing the whole report.
-            // ignore: avoid_print
-            print('Zoho fetchInvoiceDetail($id) error: $e');
+            AppLogger.error('ZohoApi', 'fetchInvoiceDetail($id) error: $e');
           }
         }
         return details;
       } catch (e) {
-        // ignore: avoid_print
-        print('Zoho fetchInvoices error: $e');
+        AppLogger.error('ZohoApi', 'fetchInvoices error: $e');
         throw Exception('Failed to fetch invoices from Zoho: $e');
       }
     }

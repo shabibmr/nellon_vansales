@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'app.dart';
+import 'data/services/app_logger.dart';
 import 'data/services/injection.dart';
 import 'firebase_options.dart';
 
@@ -24,8 +25,7 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
-    // ignore: avoid_print
-    print('Firebase Initialization Sandbox Warning: $e');
+    AppLogger.warning('Startup', 'Firebase Initialization Sandbox Warning: $e');
   }
 
   // Boot Dependency Injection & Local Caches (Hive)

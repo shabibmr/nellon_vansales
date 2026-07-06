@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../utils/money_math.dart';
 
 /// Represents a single categorical expense charge inside an overall expense entry ledger.
 class ExpenseLineItem extends Equatable {
@@ -55,7 +56,8 @@ class ExpenseEntry extends Equatable {
   });
 
   /// Computes the total combined cost of all line items contained in this entry.
-  double get amount => lines.fold(0.0, (sum, item) => sum + item.amount);
+  double get amount =>
+      roundMoney(lines.fold(0.0, (sum, item) => sum + item.amount));
 
   /// Creates a copy of this [ExpenseEntry] with replaced values for specific fields.
   ExpenseEntry copyWith({

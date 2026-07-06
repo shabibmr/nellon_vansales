@@ -9,14 +9,14 @@ import '../../../../domain/models/organization.dart';
 /// reusable blocks (Headers, Footers, Info Cards) matching the application's look and feel.
 class SharedPdfTemplate {
   // Premium Theme Color Palette
-  static final PdfColor primaryIndigo = PdfColor.fromInt(0xFF4F46E5);
-  static final PdfColor primaryLightIndigo = PdfColor.fromInt(0xFFEEF2FF);
-  static final PdfColor slateText = PdfColor.fromInt(0xFF0F172A);
-  static final PdfColor slateTextSecondary = PdfColor.fromInt(0xFF64748B);
-  static final PdfColor borderSlate = PdfColor.fromInt(0xFFE2E8F0);
-  static final PdfColor alertAmber = PdfColor.fromInt(0xFFF59E0B);
-  static final PdfColor successEmerald = PdfColor.fromInt(0xFF10B981);
-  static final PdfColor lightGreyBackground = PdfColor.fromInt(0xFFF8FAFC);
+  static final PdfColor primaryIndigo = const PdfColor.fromInt(0xFF4F46E5);
+  static final PdfColor primaryLightIndigo = const PdfColor.fromInt(0xFFEEF2FF);
+  static final PdfColor slateText = const PdfColor.fromInt(0xFF0F172A);
+  static final PdfColor slateTextSecondary = const PdfColor.fromInt(0xFF64748B);
+  static final PdfColor borderSlate = const PdfColor.fromInt(0xFFE2E8F0);
+  static final PdfColor alertAmber = const PdfColor.fromInt(0xFFF59E0B);
+  static final PdfColor successEmerald = const PdfColor.fromInt(0xFF10B981);
+  static final PdfColor lightGreyBackground = const PdfColor.fromInt(0xFFF8FAFC);
 
   // Formatting helpers
   static final DateFormat dateFormat = DateFormat('dd MMM yyyy, hh:mm a');

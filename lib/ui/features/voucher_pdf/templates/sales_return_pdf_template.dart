@@ -59,7 +59,7 @@ class SalesReturnPdfTemplate {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Icon(
-                    pw.IconData(0xe887), // Help/Info icon equivalent
+                    const pw.IconData(0xe887), // Help/Info icon equivalent
                     color: SharedPdfTemplate.primaryIndigo,
                     size: 14,
                   ),
@@ -219,7 +219,7 @@ class SalesReturnPdfTemplate {
       padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: pw.Text(
         text,
-        style: pw.TextStyle(
+        style: const pw.TextStyle(
           color: PdfColors.white,
           fontSize: 9,
           fontWeight: pw.FontWeight.bold,

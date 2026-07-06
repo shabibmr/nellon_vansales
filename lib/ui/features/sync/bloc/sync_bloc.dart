@@ -17,10 +17,23 @@ abstract class SyncEvent extends Equatable {
 class SyncStarted extends SyncEvent {}
 
 /// Fired to trigger an immediate upload sweep of all pending transaction queue tasks.
-class TriggerSync extends SyncEvent {}
+///
+/// By default, failed items only retry if transient and past their backoff
+/// window. Set [forceRetryAll] (the manual "Retry Failed" action) to retry
+/// every failed item immediately.
+class TriggerSync extends SyncEvent {
+  final bool forceRetryAll;
+  const TriggerSync({this.forceRetryAll = false});
+
+  @override
+  List<Object?> get props => [forceRetryAll];
+}
 
 /// Fired to request a full master data cache refresh sequence from Zoho Books.
 class RefreshMasterDataRequested extends SyncEvent {}
+
+/// Fired to permanently remove all failed items from the offline sync queue.
+class ClearFailedItemsRequested extends SyncEvent {}
 
 /// Fired internally by stream listeners to update the active synchronization status text.
 class SyncStatusUpdated extends SyncEvent {
@@ -107,6 +120,7 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     on<SyncStarted>(_onSyncStarted);
     on<TriggerSync>(_onTriggerSync);
     on<RefreshMasterDataRequested>(_onRefreshMasterDataRequested);
+    on<ClearFailedItemsRequested>(_onClearFailedItemsRequested);
     on<SyncStatusUpdated>(_onSyncStatusUpdated);
     on<PendingQueueCountUpdated>(_onPendingQueueCountUpdated);
   }
@@ -147,7 +161,7 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     Emitter<SyncState> emit,
   ) async {
     emit(state.copyWith(isSyncing: true, statusMessage: 'Connecting...'));
-    await _syncRepository.triggerSync();
+    await _syncRepository.triggerSync(forceRetryAll: event.forceRetryAll);
     final queue = _syncRepository.getSyncQueue();
     emit(
       state.copyWith(isSyncing: _syncRepository.isSyncing, queueItems: queue),
@@ -171,6 +185,18 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
         statusMessage: 'Master lists refreshed!',
       ),
     );
+  }
+
+  Future<void> _onClearFailedItemsRequested(
+    ClearFailedItemsRequested event,
+    Emitter<SyncState> emit,
+  ) async {
+    await _syncRepository.clearFailedSyncItems();
+    final queue = _syncRepository.getSyncQueue();
+    final pendingCount = queue
+        .where((x) => x.status != SyncStatus.completed)
+        .length;
+    emit(state.copyWith(pendingCount: pendingCount, queueItems: queue));
   }
 
   void _onSyncStatusUpdated(SyncStatusUpdated event, Emitter<SyncState> emit) {

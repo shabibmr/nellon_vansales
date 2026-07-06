@@ -64,7 +64,8 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
           ),
         ],
       ),
-      body: BlocConsumer<SalesReturnBloc, SalesReturnState>(
+      body: SafeArea(
+        child: BlocConsumer<SalesReturnBloc, SalesReturnState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
             showErrorSnackBar(context, state.errorMessage!);
@@ -164,6 +165,7 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
             ],
           );
         },
+      ),
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create New Sales Return',

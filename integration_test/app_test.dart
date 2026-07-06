@@ -63,7 +63,10 @@ class FakeSyncRepository implements SyncRepository {
   List<SyncQueueItem> getSyncQueue() => [];
 
   @override
-  Future<void> triggerSync() async {}
+  Future<void> triggerSync({bool forceRetryAll = false}) async {}
+
+  @override
+  Future<void> clearFailedSyncItems() async {}
 
   @override
   Future<void> refreshMasterData() async {}
@@ -155,7 +158,11 @@ class FakeSalesRepository implements SalesRepository {
   List<SyncQueueItem> getSyncQueue() => [];
 
   @override
-  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
+  Future<void> updateCustomerGps(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) async {}
 }
 
 void main() {

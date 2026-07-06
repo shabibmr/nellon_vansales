@@ -250,7 +250,7 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                           },
                           decoration: InputDecoration(
                             labelText: 'Amount ($cs)',
-                            prefixIcon: Icon(
+                            prefixIcon: const Icon(
                               Icons.currency_rupee,
                               color: AppTheme.primaryIndigo,
                             ),

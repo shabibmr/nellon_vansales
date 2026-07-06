@@ -16,6 +16,7 @@ import '../../domain/models/expense_account.dart';
 import '../../domain/models/organization.dart';
 import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
+import '../../domain/utils/stock_rules.dart';
 import '../models/customer_model.dart';
 import '../models/item_model.dart';
 import '../models/sales_invoice_model.dart';
@@ -101,7 +102,11 @@ class HiveDatabaseService {
 
   /// Updates latitude/longitude for a specific customer (by id) and persists.
   /// If the customer is not found, this is a no-op.
-  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {
+  Future<void> updateCustomerGps(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) async {
     final current = getCustomers();
     final index = current.indexWhere((c) => c.id == customerId);
     if (index < 0) return;
@@ -338,6 +343,19 @@ class HiveDatabaseService {
     await _syncQueueBox.delete(id);
   }
 
+  /// Permanently removes every queue task currently marked [SyncStatus.failed].
+  ///
+  /// Pending and syncing items are left untouched so unsynced work is never
+  /// silently discarded — only tasks that have already exhausted a sync
+  /// attempt and failed are cleared.
+  Future<void> clearFailedSyncItems() async {
+    for (final item in getSyncQueue()) {
+      if (item.status == SyncStatus.failed) {
+        await _syncQueueBox.delete(item.id);
+      }
+    }
+  }
+
   /// Filters a list of location-taggable records down to the active session location.
   ///
   /// Records with no `locationId` (legacy, pre-dating this field) always pass through.
@@ -370,6 +388,11 @@ class HiveDatabaseService {
       _filterByActiveLocation(_getAllLocalInvoices(), (inv) => inv.locationId);
 
   /// Caches a newly created sales invoice locally and immediately updates corresponding item stock level in the van.
+  ///
+  /// Validates stock *before* persisting anything: if any line would drive an
+  /// item's stock below zero, this throws [InsufficientStockException] and
+  /// neither the invoice nor the stock levels are written — the invoice can
+  /// never be committed while silently leaving stock inconsistent.
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {
     final stamped = invoice.locationId == null && assignedWarehouseId != null
         ? invoice.copyWith(locationId: assignedWarehouseId)
@@ -377,22 +400,13 @@ class HiveDatabaseService {
     final current = _getAllLocalInvoices();
     final model = SalesInvoiceModel.fromDomain(stamped);
 
-    // Add or update
     final index = current.indexWhere((inv) => inv.id == stamped.id);
-    SalesInvoice? oldInvoice;
-    if (index >= 0) {
-      oldInvoice = current[index];
-      current[index] = model;
-    } else {
-      current.insert(0, model);
-    }
+    final oldInvoice = index >= 0 ? current[index] : null;
 
-    final serialized = current
-        .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
-        .toList();
-    await _localHistoryBox.put('invoices', serialized);
-
-    // Update local cached item inventory stock instantly!
+    // Compute (and validate) the resulting item stock levels before writing
+    // anything: restore the old invoice's quantities (if this is an edit),
+    // then deduct the new invoice's quantities, enforcing the single
+    // stock invariant via deductStock().
     final localItems = getItems();
     if (oldInvoice != null) {
       for (final line in oldInvoice.items) {
@@ -409,12 +423,26 @@ class HiveDatabaseService {
       final itemIndex = localItems.indexWhere((it) => it.id == line.item.id);
       if (itemIndex >= 0) {
         final existingItem = localItems[itemIndex];
-        final updatedStock = existingItem.stock - line.quantity;
-        localItems[itemIndex] = existingItem.copyWith(
-          stock: updatedStock >= 0 ? updatedStock : 0,
+        final updatedStock = deductStock(
+          itemId: existingItem.id,
+          itemName: existingItem.name,
+          available: existingItem.stock,
+          requested: line.quantity,
         );
+        localItems[itemIndex] = existingItem.copyWith(stock: updatedStock);
       }
     }
+
+    // Stock validation passed — now persist the invoice and the updated stock.
+    if (index >= 0) {
+      current[index] = model;
+    } else {
+      current.insert(0, model);
+    }
+    final serialized = current
+        .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
+        .toList();
+    await _localHistoryBox.put('invoices', serialized);
     await saveItems(localItems);
   }
 
@@ -496,10 +524,8 @@ class HiveDatabaseService {
   }
 
   /// Retrieves all collection receipts recorded locally, scoped to the active session location.
-  List<ReceiptVoucher> getLocalReceipts() => _filterByActiveLocation(
-    _getAllLocalReceipts(),
-    (rec) => rec.locationId,
-  );
+  List<ReceiptVoucher> getLocalReceipts() =>
+      _filterByActiveLocation(_getAllLocalReceipts(), (rec) => rec.locationId);
 
   /// Caches a newly created receipt locally and instantly decrements the matching customer's outstanding balance in memory.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {
@@ -639,6 +665,27 @@ class HiveDatabaseService {
   Future<void> saveLocalCashClosing(CashClosing closing) async {
     final model = CashClosingModel.fromDomain(closing);
     await _localHistoryBox.put('cash_closing', jsonEncode(model.toJson()));
+  }
+
+  /// True if there's recorded sales activity (invoices, receipts, or
+  /// expenses) dated today, but no cash-closing reconciliation has been
+  /// filed for today — i.e. the day-close workflow is still outstanding.
+  ///
+  /// Used to gate logout so a day's activity can't be walked away from
+  /// without reconciling cash in hand against expected takings.
+  bool hasPendingCashClosingForToday() {
+    final now = DateTime.now();
+    bool isToday(DateTime d) =>
+        d.year == now.year && d.month == now.month && d.day == now.day;
+
+    final hasActivityToday =
+        getLocalInvoices().any((inv) => isToday(inv.date)) ||
+        getLocalReceipts().any((rec) => isToday(rec.date)) ||
+        getLocalExpenses().any((exp) => isToday(exp.date));
+    if (!hasActivityToday) return false;
+
+    final closing = getLocalCashClosing();
+    return closing == null || !isToday(closing.date);
   }
 
   /// Gets the cached OAuth 2.0 Access Token for Zoho Books.

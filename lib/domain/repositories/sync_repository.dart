@@ -19,7 +19,15 @@ abstract class SyncRepository {
   List<SyncQueueItem> getSyncQueue();
 
   /// Initiates an upload of all pending local transactions in the offline-queue to Zoho Books.
-  Future<void> triggerSync();
+  ///
+  /// By default, previously-failed items are only retried if they were
+  /// transient and their exponential backoff window has elapsed. Pass
+  /// [forceRetryAll] (from a manual "Retry Failed" UI action) to retry every
+  /// failed item immediately regardless of backoff or error category.
+  Future<void> triggerSync({bool forceRetryAll = false});
+
+  /// Removes every queue task currently marked as failed, without touching pending/syncing items.
+  Future<void> clearFailedSyncItems();
 
   /// Triggers a full master data download (Customers, Items, Taxes, Warehouses) from Zoho Books.
   Future<void> refreshMasterData();

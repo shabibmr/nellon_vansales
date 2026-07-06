@@ -10,8 +10,7 @@ import 'server_config_state.dart';
 class ServerConfigCubit extends Cubit<ServerConfigState> {
   final ZohoApiClient _apiClient;
 
-  ServerConfigCubit({required this._apiClient})
-    : super(ServerConfigInitial());
+  ServerConfigCubit({required this._apiClient}) : super(ServerConfigInitial());
 
   /// Configures the active server credentials mapping, updating [ZohoApiClient].
   void setConfig(ServerConfig? config) {
@@ -26,6 +25,10 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
         clientId: config.clientId,
         clientSecret: config.clientSecret,
         refreshToken: config.code,
+      );
+      _apiClient.updateMockFlags(
+        mockTransactions: config.mockTransactions,
+        mockSalesOrderTransactions: config.mockSalesOrderTransactions,
       );
 
       emit(

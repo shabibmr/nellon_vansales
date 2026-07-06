@@ -46,7 +46,11 @@ class FakeSalesRepository implements SalesRepository {
   }
 
   @override
-  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {
+  Future<void> updateCustomerGps(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) async {
     // No-op for tests
   }
 
@@ -94,11 +98,16 @@ class FakeSalesRepository implements SalesRepository {
 
 class FakeSyncRepository implements SyncRepository {
   int triggerCount = 0;
+  List<MasterType> syncedMasters = [];
+  bool throwOnSyncMaster = false;
 
   @override
-  Future<void> triggerSync() async {
+  Future<void> triggerSync({bool forceRetryAll = false}) async {
     triggerCount++;
   }
+
+  @override
+  Future<void> clearFailedSyncItems() async {}
 
   @override
   Stream<String> get syncStatusStream => const Stream.empty();
@@ -116,7 +125,10 @@ class FakeSyncRepository implements SyncRepository {
   Future<void> refreshMasterData() async {}
 
   @override
-  Future<void> syncMaster(MasterType type) async {}
+  Future<void> syncMaster(MasterType type) async {
+    syncedMasters.add(type);
+    if (throwOnSyncMaster) throw Exception('offline');
+  }
 
   @override
   bool hasCoreMasters() => true;
@@ -127,7 +139,7 @@ void main() {
   late FakeSyncRepository syncRepo;
   late ReceiptBloc bloc;
 
-  final testCustomer = Customer(
+  final testCustomer = const Customer(
     id: 'cust_01',
     name: 'Customer A',
     companyName: 'Company A',
@@ -210,6 +222,44 @@ void main() {
 
     expect(alloc1.amountApplied, 500.0);
     expect(alloc2.amountApplied, 100.0);
+  });
+
+  test('SetEditingReceiptCustomer refreshes the open-invoice master snapshot '
+      'before allocating', () async {
+    var future = bloc.stream.first;
+    bloc.add(StartNewReceipt());
+    await future;
+
+    future = bloc.stream.first;
+    bloc.add(SetEditingReceiptCustomer(testCustomer));
+    await future;
+
+    expect(syncRepo.syncedMasters, contains(MasterType.openInvoices));
+  });
+
+  test('SetEditingReceiptCustomer still allocates from the local cache when '
+      'the live refresh fails (offline)', () async {
+    syncRepo.throwOnSyncMaster = true;
+
+    var future = bloc.stream.first;
+    bloc.add(StartNewReceipt());
+    await future;
+
+    future = bloc.stream.first;
+    bloc.add(const SetEditingAmount(600.0));
+    await future;
+
+    future = bloc.stream.first;
+    bloc.add(SetEditingReceiptCustomer(testCustomer));
+    await future;
+
+    expect(bloc.state.editingAllocations.length, 2);
+    expect(
+      bloc.state.editingAllocations
+          .firstWhere((a) => a.invoiceId == 'inv_01')
+          .amountApplied,
+      500.0,
+    );
   });
 
   test('SetEditingAmount triggers FIFO auto-allocation', () async {

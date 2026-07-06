@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../utils/money_math.dart';
 
 /// Represents a specific application of cash or payment against an outstanding open invoice.
 class PaymentAllocation extends Equatable {
@@ -76,11 +77,12 @@ class ReceiptVoucher extends Equatable {
   });
 
   /// Calculates the sum of all allocations applied to specific invoices.
-  double get totalAllocated =>
-      allocations.fold(0.0, (sum, item) => sum + item.amountApplied);
+  double get totalAllocated => roundMoney(
+    allocations.fold(0.0, (sum, item) => sum + item.amountApplied),
+  );
 
   /// Calculates the excess/remaining amount of payment that acts as a customer credit.
-  double get unallocatedAmount => amount - totalAllocated;
+  double get unallocatedAmount => roundMoney(amount - totalAllocated);
 
   /// Creates a copy of this [ReceiptVoucher] with replaced values for specific fields.
   ReceiptVoucher copyWith({

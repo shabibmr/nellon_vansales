@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'sales_invoice.dart';
+import '../utils/money_math.dart';
 
 /// Represents a single returned line item in a customer sales return/credit note.
 ///
@@ -25,8 +26,29 @@ class SalesReturnLineItem extends Equatable {
     this.invoiceNumber,
   });
 
-  /// Computes the total return value (rate * quantity returned) for this line.
-  double get total => invoiceLineItem.rate * returnedQuantity;
+  /// Computes the cost excluding tax for the quantity returned.
+  double get subTotal => roundMoney(invoiceLineItem.rate * returnedQuantity);
+
+  /// Computes the tax portion applicable to the returned quantity, using the
+  /// original invoiced line's tax rate.
+  double get taxAmount =>
+      roundMoney(subTotal * (invoiceLineItem.taxPercentage / 100));
+
+  /// Prorates the original line's discount to the quantity being returned, so
+  /// a partial return of a discounted line correctly reduces the credit.
+  ///
+  /// e.g. a 10-unit line discounted by 5.00 total, returning 2 units, credits
+  /// back only 1.00 (2/10) of that discount rather than the full 5.00.
+  double get discountAmount {
+    if (invoiceLineItem.quantity <= 0) return 0.0;
+    final perUnitDiscount = invoiceLineItem.discount / invoiceLineItem.quantity;
+    return roundMoney(perUnitDiscount * returnedQuantity);
+  }
+
+  /// Computes the total return credit value, aligned with [InvoiceLineItem]'s
+  /// subtotal → tax → discount calculation so returns reconcile against the
+  /// originating invoice.
+  double get total => roundMoney(subTotal + taxAmount - discountAmount);
 
   /// Creates a copy of this [SalesReturnLineItem] with replaced values for specific fields.
   SalesReturnLineItem copyWith({
@@ -97,7 +119,8 @@ class SalesReturn extends Equatable {
   });
 
   /// Computes the final grand total return value.
-  double get total => items.fold(0.0, (sum, item) => sum + item.total);
+  double get total =>
+      roundMoney(items.fold(0.0, (sum, item) => sum + item.total));
 
   /// Creates a copy of this [SalesReturn] with replaced values for specific fields.
   SalesReturn copyWith({

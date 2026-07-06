@@ -134,7 +134,8 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
           ),
         ),
       ),
-      body: BlocConsumer<SalesReturnBloc, SalesReturnState>(
+      body: SafeArea(
+        child: BlocConsumer<SalesReturnBloc, SalesReturnState>(
         listenWhen: (previous, current) =>
             previous.successMessage != current.successMessage ||
             previous.errorMessage != current.errorMessage,
@@ -431,6 +432,7 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
             ],
           );
         },
+      ),
       ),
     );
   }

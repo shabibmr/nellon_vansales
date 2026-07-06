@@ -62,7 +62,8 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
           ),
         ],
       ),
-      body: BlocConsumer<ExpenseBloc, ExpenseState>(
+      body: SafeArea(
+        child: BlocConsumer<ExpenseBloc, ExpenseState>(
         listener: (context, state) {
           if (state.errorMessage != null) {
             showErrorSnackBar(context, state.errorMessage!);
@@ -277,6 +278,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
             ],
           );
         },
+      ),
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Log New Expense',
