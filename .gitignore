@@ -58,4 +58,9 @@ app.*.map.json
 # Claude Code directory
 .claude/
 
+# Local tooling / scratch artifacts (not project source)
+mcps/
+terminals/
+scratch/
+
 

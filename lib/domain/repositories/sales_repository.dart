@@ -8,6 +8,7 @@ import '../models/expense_entry.dart';
 import '../models/cash_closing.dart';
 import '../models/open_invoice.dart';
 import '../models/sales_order.dart';
+import '../models/stock_transfer.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract managing local van sales data access and session tracking.
@@ -91,4 +92,10 @@ abstract class SalesRepository {
 
   /// Retrieves open (unpaid) customer invoices.
   List<OpenInvoice> getOpenInvoices({String? customerId});
+
+  /// Gets all stock transfers (Issue to Van / Stock Unloading) recorded locally.
+  List<StockTransfer> getLocalStockTransfers();
+
+  /// Logs a new stock transfer locally, caches it, and adjusts van stock levels.
+  Future<void> saveLocalStockTransfer(StockTransfer transfer);
 }

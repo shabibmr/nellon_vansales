@@ -11,10 +11,6 @@ class AnalyticsReportsTab extends StatelessWidget {
   final double todayExpenses;
   final double todayReturns;
   final int completedDeliveries;
-  final VoidCallback onItemSalesReport;
-  final VoidCallback onCustomerLedger;
-  final VoidCallback onAgingReport;
-  final VoidCallback onStockReport;
 
   const AnalyticsReportsTab({
     super.key,
@@ -25,10 +21,6 @@ class AnalyticsReportsTab extends StatelessWidget {
     required this.todayExpenses,
     required this.todayReturns,
     required this.completedDeliveries,
-    required this.onItemSalesReport,
-    required this.onCustomerLedger,
-    required this.onAgingReport,
-    required this.onStockReport,
   });
 
   @override
@@ -97,58 +89,6 @@ class AnalyticsReportsTab extends StatelessWidget {
               const SizedBox(height: 12),
               // Sales Returns — full-width card
               _ReturnsCard(cs: cs, todayReturns: todayReturns, isDark: isDark),
-
-              const SizedBox(height: 28),
-
-              // ── Reports section ───────────────────────────
-              Text(
-                'REPORTS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  color: isDark
-                      ? AppTheme.darkTextSecondary
-                      : AppTheme.lightTextSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _ReportTile(
-                title: 'Item Sales Report',
-                subtitle: 'Itemwise quantities, amounts and customer reach.',
-                icon: Icons.bar_chart_rounded,
-                color: AppTheme.infoSky,
-                isDark: isDark,
-                onTap: onItemSalesReport,
-              ),
-              const SizedBox(height: 10),
-              _ReportTile(
-                title: 'Customer Ledger',
-                subtitle: 'Statement of transactions and outstanding balance.',
-                icon: Icons.account_balance_outlined,
-                color: AppTheme.primaryIndigo,
-                isDark: isDark,
-                onTap: onCustomerLedger,
-              ),
-              const SizedBox(height: 10),
-              _ReportTile(
-                title: 'Agewise Receivables',
-                subtitle:
-                    'Outstanding by age: 0-15, 15-30, 30-60 and >60 days.',
-                icon: Icons.hourglass_bottom_rounded,
-                color: AppTheme.warningAmber,
-                isDark: isDark,
-                onTap: onAgingReport,
-              ),
-              const SizedBox(height: 10),
-              _ReportTile(
-                title: 'Stock Report',
-                subtitle: 'Item stock and rates for your assigned location.',
-                icon: Icons.inventory_2_outlined,
-                color: AppTheme.successEmerald,
-                isDark: isDark,
-                onTap: onStockReport,
-              ),
               const SizedBox(height: 24),
             ],
           ),
@@ -219,90 +159,6 @@ class _ReturnsCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Compact report navigation tile ────────────────────────────────────────
-
-class _ReportTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _ReportTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 18),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: color,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11,
-                      height: 1.3,
-                      color: isDark
-                          ? AppTheme.darkTextSecondary
-                          : AppTheme.lightTextSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 13,
-              color: isDark
-                  ? AppTheme.darkTextSecondary
-                  : AppTheme.lightTextSecondary,
-            ),
-          ],
-        ),
       ),
     );
   }

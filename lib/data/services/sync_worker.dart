@@ -289,6 +289,9 @@ class SyncWorker {
             case 'expense':
               remoteId = await _apiClient.syncExpense(item.payload);
               break;
+            case 'stock_transfer':
+              remoteId = await _apiClient.syncStockTransfer(item.payload);
+              break;
             default:
               throw Exception(
                 'Unsupported transaction sync type: ${item.type}',

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'app_logger.dart';
 import 'hive_database_service.dart';
+import 'zoho_payload_mapper.dart';
 
 /// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
 ///
@@ -14,6 +15,14 @@ class ZohoApiClient {
   // Zoho OAuth 2.0 credentials (read from secure build configurations or environments in production)
   final String _accountsUrl = 'https://accounts.zoho.com/oauth/v2/token';
   final String _apiUrl = 'https://www.zohoapis.com/books/v3';
+
+  /// Zoho **Inventory** API base. Transfer Orders (stock transfers between
+  /// locations) live here, NOT under Books v3 — posting to an absolute URL off
+  /// this base overrides Dio's `baseUrl` while still running the auth/org-id
+  /// request interceptor. Requires the OAuth refresh token to carry the
+  /// `ZohoInventory.transferorders.CREATE` scope and Inventory to be enabled on
+  /// the organization.
+  final String _inventoryApiUrl = 'https://www.zohoapis.com/inventory/v1';
 
   String _clientId = '1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP';
   String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
@@ -43,15 +52,40 @@ class ZohoApiClient {
   /// other transaction types. Still requires real credentials (`!_isMockMode()`).
   bool _mockSalesOrderTransactions = false;
 
-  /// Updates the runtime mock-mode flags for transactions and sales orders
-  /// (called upon loading server config, alongside [updateCredentials]).
+  /// Stock Transfer uploads (Issue to Van / Stock Unloading) use this flag
+  /// instead of [_mockTransactions], mirroring [_mockSalesOrderTransactions].
+  /// Still requires real credentials (`!_isMockMode()`).
+  bool _mockStockTransfers = true;
+
+  /// Updates the runtime mock-mode flags for transactions, sales orders, and
+  /// stock transfers (called upon loading server config, alongside [updateCredentials]).
   void updateMockFlags({
     required bool mockTransactions,
     required bool mockSalesOrderTransactions,
+    required bool mockStockTransfers,
   }) {
     _mockTransactions = mockTransactions;
     _mockSalesOrderTransactions = mockSalesOrderTransactions;
+    _mockStockTransfers = mockStockTransfers;
   }
+
+  /// True when every transaction type is being simulated rather than pushed live.
+  bool get isMockModeEnabled =>
+      _mockTransactions &&
+      _mockSalesOrderTransactions &&
+      _mockStockTransfers;
+
+  /// Flips all transaction mock flags together (mock on = all true, live = all false).
+  void setAllMockFlags(bool enabled) {
+    updateMockFlags(
+      mockTransactions: enabled,
+      mockSalesOrderTransactions: enabled,
+      mockStockTransfers: enabled,
+    );
+  }
+
+  /// True when OAuth credentials are still placeholder templates.
+  bool get usesPlaceholderCredentials => _isMockMode();
 
   /// Instantiates a new [ZohoApiClient].
   ///
@@ -115,7 +149,10 @@ class ZohoApiClient {
   /// sales orders) is currently being simulated against a sandbox rather than
   /// pushed live to Zoho — whether due to placeholder credentials or a mock flag.
   bool get isAnyMockModeActive =>
-      _isMockMode() || _mockTransactions || _mockSalesOrderTransactions;
+      _isMockMode() ||
+      _mockTransactions ||
+      _mockSalesOrderTransactions ||
+      _mockStockTransfers;
 
   // --- OAuth 2.0 Handlers ---
 
@@ -428,7 +465,10 @@ class ZohoApiClient {
   Future<String> syncCustomer(Map<String, dynamic> customerJson) async {
     if (!_isMockMode() && !_mockTransactions) {
       try {
-        final response = await _dio.post('/contacts', data: customerJson);
+        final response = await _dio.post(
+          '/contacts',
+          data: ZohoPayloadMapper.zohoContactPayload(customerJson),
+        );
         if (response.statusCode == 201 || response.statusCode == 200) {
           return response.data['contact']['contact_id'];
         }
@@ -482,7 +522,10 @@ class ZohoApiClient {
     invoiceJson = _injectLocationIdIfNeeded(invoiceJson);
     if (!_isMockMode() && !_mockTransactions) {
       try {
-        final response = await _dio.post('/invoices', data: invoiceJson);
+        final response = await _dio.post(
+          '/invoices',
+          data: ZohoPayloadMapper.zohoInvoicePayload(invoiceJson),
+        );
         if (response.statusCode == 201 || response.statusCode == 200) {
           return response.data['invoice']['invoice_id'];
         }
@@ -501,7 +544,10 @@ class ZohoApiClient {
     salesOrderJson = _injectLocationIdIfNeeded(salesOrderJson);
     if (!_isMockMode() && !_mockSalesOrderTransactions) {
       try {
-        final response = await _dio.post('/salesorders', data: salesOrderJson);
+        final response = await _dio.post(
+          '/salesorders',
+          data: ZohoPayloadMapper.zohoSalesOrderPayload(salesOrderJson),
+        );
         if (response.statusCode == 201 || response.statusCode == 200) {
           return response.data['salesorder']['salesorder_id'];
         }
@@ -680,7 +726,7 @@ class ZohoApiClient {
       try {
         final response = await _dio.put(
           '/salesorders/$salesOrderId',
-          data: payload,
+          data: ZohoPayloadMapper.zohoSalesOrderPayload(payload),
         );
         if (response.statusCode == 200) {
           return response.data['salesorder']['salesorder_id'];
@@ -695,6 +741,33 @@ class ZohoApiClient {
     return salesOrderId;
   }
 
+  // 5g. Zoho Books Transfer Orders API: Sync Stock Transfer (Issue to Van / Stock Unloading).
+  //
+  // Transfers carry explicit from/to location ids in the payload already, so
+  // (unlike invoices/orders/receipts) this does NOT run _injectLocationIdIfNeeded.
+  Future<String> syncStockTransfer(Map<String, dynamic> transferJson) async {
+    if (!_isMockMode() && !_mockStockTransfers) {
+      try {
+        // Transfer Orders belong to the Zoho Inventory API, not Books v3 — post
+        // to the absolute Inventory URL (overrides Dio's Books baseUrl; the
+        // interceptor still injects the token + organization_id).
+        final response = await _dio.post(
+          '$_inventoryApiUrl/transferorders',
+          data: ZohoPayloadMapper.zohoStockTransferPayload(transferJson),
+        );
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          return response.data['transfer_order']['transfer_order_id'];
+        }
+      } catch (e) {
+        throw Exception('Zoho Inventory Stock Transfer Sync Failed: $e');
+      }
+    }
+
+    // Mock response
+    await Future.delayed(const Duration(seconds: 1));
+    return 'zoho_to_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
   // 6. Zoho Books Customer Payments API: Sync Receipt Voucher
   Future<String> syncReceiptVoucher(Map<String, dynamic> paymentJson) async {
     paymentJson = _injectLocationIdIfNeeded(paymentJson);
@@ -702,7 +775,7 @@ class ZohoApiClient {
       try {
         final response = await _dio.post(
           '/customerpayments',
-          data: paymentJson,
+          data: ZohoPayloadMapper.zohoReceiptPayload(paymentJson),
         );
         if (response.statusCode == 201 || response.statusCode == 200) {
           return response.data['payment']['payment_id'];
@@ -722,7 +795,10 @@ class ZohoApiClient {
     creditNoteJson = _injectLocationIdIfNeeded(creditNoteJson);
     if (!_isMockMode() && !_mockTransactions) {
       try {
-        final response = await _dio.post('/creditnotes', data: creditNoteJson);
+        final response = await _dio.post(
+          '/creditnotes',
+          data: ZohoPayloadMapper.zohoCreditNotePayload(creditNoteJson),
+        );
         if (response.statusCode == 201 || response.statusCode == 200) {
           return response.data['creditnote']['creditnote_id'];
         }
@@ -741,20 +817,24 @@ class ZohoApiClient {
     expenseJson = _injectLocationIdIfNeeded(expenseJson);
     if (!_isMockMode() && !_mockTransactions) {
       try {
+        // Resolve local category lines into an itemized Zoho expense body with
+        // real ledger account IDs and a paid-through (cash) account at the root.
+        final zohoExpense = _buildZohoExpensePayload(expenseJson);
+
         // Multi-part formatting in case a receipt image exists
         final receiptPath = expenseJson['receiptImagePath'];
         dynamic dataPayload;
 
         if (receiptPath != null && receiptPath.isNotEmpty) {
           dataPayload = FormData.fromMap({
-            'JSONString': jsonEncode(expenseJson),
+            'JSONString': jsonEncode(zohoExpense),
             'attachment': await MultipartFile.fromFile(
               receiptPath,
               filename: 'receipt.jpg',
             ),
           });
         } else {
-          dataPayload = expenseJson;
+          dataPayload = zohoExpense;
         }
 
         final response = await _dio.post('/expenses', data: dataPayload);
@@ -769,6 +849,58 @@ class ZohoApiClient {
     // Mock response
     await Future.delayed(const Duration(seconds: 1));
     return 'zoho_exp_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  /// Resolves a stored expense map (`lines[]` of category/amount/description)
+  /// into an itemized Zoho `/expenses` body via [ZohoPayloadMapper].
+  ///
+  /// Each line's `category` is mapped to a real Zoho expense ledger `account_id`
+  /// from the synced expense accounts; `paid_through_account_id` defaults to the
+  /// first cash-type payment account (the app has no per-expense payer picker
+  /// yet). Throws if the master account lists are empty so the sync-queue item
+  /// surfaces as "Needs Attention" rather than sending an invalid payload.
+  Map<String, dynamic> _buildZohoExpensePayload(
+    Map<String, dynamic> expenseJson,
+  ) {
+    final expenseAccounts = _dbService.getExpenseAccounts();
+    final paymentAccounts = _dbService.getPaymentAccounts();
+
+    if (expenseAccounts.isEmpty) {
+      throw Exception(
+        'No expense accounts synced — cannot resolve expense ledger account_id.',
+      );
+    }
+    if (paymentAccounts.isEmpty) {
+      throw Exception(
+        'No payment accounts synced — cannot resolve paid_through_account_id.',
+      );
+    }
+
+    String accountIdForCategory(String category) {
+      final match = expenseAccounts.where((a) => a.category == category);
+      return match.isNotEmpty ? match.first.id : expenseAccounts.first.id;
+    }
+
+    final cashAccount = paymentAccounts.firstWhere(
+      (a) => a.accountType == 'cash',
+      orElse: () => paymentAccounts.first,
+    );
+
+    final rawLines = (expenseJson['lines'] as List?) ?? const [];
+    final resolvedLines = rawLines.whereType<Map>().map((line) {
+      final map = Map<String, dynamic>.from(line);
+      return <String, dynamic>{
+        'account_id': accountIdForCategory(map['category']?.toString() ?? ''),
+        'amount': (map['amount'] as num?)?.toDouble() ?? 0.0,
+        'description': map['description']?.toString() ?? '',
+      };
+    }).toList();
+
+    return ZohoPayloadMapper.zohoExpensePayload(
+      expenseJson,
+      resolvedLines: resolvedLines,
+      paidThroughAccountId: cashAccount.id,
+    );
   }
 
   // --- Master Data Fetchers ---

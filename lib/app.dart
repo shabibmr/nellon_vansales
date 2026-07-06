@@ -18,6 +18,7 @@ import 'ui/features/sales_order/bloc/sales_order_bloc.dart';
 import 'ui/features/expenses/bloc/expense_bloc.dart';
 import 'ui/features/receipts/bloc/receipt_bloc.dart';
 import 'ui/features/sales_return/bloc/sales_return_bloc.dart';
+import 'ui/features/stock_transfer/bloc/stock_transfer_bloc.dart';
 import 'ui/features/ledger/bloc/customer_ledger_bloc.dart';
 import 'ui/core/cubit/organization_cubit.dart';
 import 'ui/core/cubit/salesperson_cubit.dart';
@@ -120,6 +121,14 @@ class VanSalesApp extends StatelessWidget {
               syncRepository: context.read<SyncRepository>(),
             ),
           ),
+          BlocProvider<StockTransferBloc>(
+            create: (context) => StockTransferBloc(
+              salesRepository: context.read<SalesRepository>(),
+              syncRepository: context.read<SyncRepository>(),
+              dbService: sl<HiveDatabaseService>(),
+              apiClient: sl<ZohoApiClient>(),
+            ),
+          ),
           BlocProvider<CustomerLedgerBloc>(
             create: (context) => CustomerLedgerBloc(
               salesRepository: context.read<SalesRepository>(),
@@ -134,8 +143,10 @@ class VanSalesApp extends StatelessWidget {
             ),
           ),
           BlocProvider<ServerConfigCubit>(
-            create: (context) =>
-                ServerConfigCubit(apiClient: sl<ZohoApiClient>()),
+            create: (context) => ServerConfigCubit(
+              apiClient: sl<ZohoApiClient>(),
+              dbService: sl<HiveDatabaseService>(),
+            ),
           ),
           BlocProvider<VoucherPdfBloc>(
             create: (context) => VoucherPdfBloc(
@@ -159,13 +170,17 @@ class VanSalesApp extends StatelessWidget {
               builder: (context, child) => AnimatedGlowBackground(
                 themeMode: appThemeMode,
                 child: BlocBuilder<ServerConfigCubit, ServerConfigState>(
-                  builder: (context, _) => Column(
-                    children: [
-                      if (sl<ZohoApiClient>().isAnyMockModeActive)
-                        const _MockModeBanner(),
-                      Expanded(child: child ?? const SizedBox.shrink()),
-                    ],
-                  ),
+                  builder: (context, configState) {
+                    final showMockBanner =
+                        configState.isMockModeEnabled ||
+                        sl<ZohoApiClient>().usesPlaceholderCredentials;
+                    return Column(
+                      children: [
+                        if (showMockBanner) const _MockModeBanner(),
+                        Expanded(child: child ?? const SizedBox.shrink()),
+                      ],
+                    );
+                  },
                 ),
               ),
               home: const SessionGateway(),

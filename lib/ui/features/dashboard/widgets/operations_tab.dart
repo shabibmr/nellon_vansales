@@ -10,6 +10,8 @@ class OperationsTab extends StatelessWidget {
   final VoidCallback onManageExpenses;
   final VoidCallback onManageReceipts;
   final VoidCallback onManageReturns;
+  final VoidCallback onIssueToVan;
+  final VoidCallback onStockUnloading;
 
   const OperationsTab({
     super.key,
@@ -20,6 +22,8 @@ class OperationsTab extends StatelessWidget {
     required this.onManageExpenses,
     required this.onManageReceipts,
     required this.onManageReturns,
+    required this.onIssueToVan,
+    required this.onStockUnloading,
   });
 
   @override
@@ -74,6 +78,26 @@ class OperationsTab extends StatelessWidget {
               color: AppTheme.successEmerald,
               isDark: isDark,
               onTap: onManageReceipts,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
+              title: 'Issue to Van',
+              subtitle:
+                  'Plan and load stock from the default warehouse onto the van.',
+              icon: Icons.local_shipping_outlined,
+              color: AppTheme.primaryIndigo,
+              isDark: isDark,
+              onTap: onIssueToVan,
+            ),
+            const SizedBox(height: 16),
+            VanActionTile(
+              title: 'Stock Unloading',
+              subtitle:
+                  'Return the van\'s balance stock back to the default warehouse.',
+              icon: Icons.unarchive_outlined,
+              color: AppTheme.infoSky,
+              isDark: isDark,
+              onTap: onStockUnloading,
             ),
             const SizedBox(height: 16),
             VanActionTile(

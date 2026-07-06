@@ -13,6 +13,7 @@ import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
+import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 
 class FakeSalesRepository implements SalesRepository {
@@ -94,6 +95,10 @@ class FakeSalesRepository implements SalesRepository {
   CashClosing? getLocalCashClosing() => null;
   @override
   Future<void> saveLocalCashClosing(CashClosing closing) async {}
+  @override
+  List<StockTransfer> getLocalStockTransfers() => [];
+  @override
+  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
 }
 
 class FakeSyncRepository implements SyncRepository {

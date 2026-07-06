@@ -16,6 +16,7 @@ import '../../domain/models/expense_account.dart';
 import '../../domain/models/organization.dart';
 import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
+import '../../domain/models/stock_transfer.dart';
 import '../../domain/utils/stock_rules.dart';
 import '../models/customer_model.dart';
 import '../models/item_model.dart';
@@ -32,6 +33,7 @@ import '../models/expense_account_model.dart';
 import '../models/organization_model.dart';
 import '../models/open_invoice_model.dart';
 import '../models/sales_order_model.dart';
+import '../models/stock_transfer_model.dart';
 import '../models/sync_queue_item.dart';
 
 /// Database service backing the application's offline-first capabilities using Hive boxes.
@@ -74,6 +76,16 @@ class HiveDatabaseService {
 
   /// Gets the physical warehouse ID mapped to the van.
   String? get assignedWarehouseId => _masterBox.get('assigned_warehouse_id');
+
+  /// Runtime override for unified mock/live transaction sync.
+  /// When null, [ServerConfigCubit] derives mock mode from remote config.
+  bool? get transactionMockModeEnabled =>
+      _masterBox.get('transaction_mock_mode_enabled') as bool?;
+
+  /// Persists the unified mock/live transaction sync preference on device.
+  Future<void> setTransactionMockModeEnabled(bool enabled) async {
+    await _masterBox.put('transaction_mock_mode_enabled', enabled);
+  }
 
   /// Mapps a specific Zoho warehouse ID to this local van sales session.
   Future<void> setAssignedWarehouseId(String? warehouseId) async {
@@ -509,6 +521,74 @@ class HiveDatabaseService {
         .map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson()))
         .toList();
     await _localHistoryBox.put('sales_orders', serialized);
+  }
+
+  /// Retrieves the full, unfiltered list of stock transfers recorded locally (for internal read-modify-write use).
+  List<StockTransfer> _getAllLocalStockTransfers() {
+    final rawList = _localHistoryBox.get('stock_transfers', defaultValue: []);
+    return (rawList as List)
+        .map(
+          (item) => StockTransferModel.fromJson(
+            Map<String, dynamic>.from(jsonDecode(item)),
+          ),
+        )
+        .toList();
+  }
+
+  /// Retrieves list of stock transfers (Issue to Van / Stock Unloading) recorded
+  /// locally, scoped to the active session location.
+  List<StockTransfer> getLocalStockTransfers() => _filterByActiveLocation(
+    _getAllLocalStockTransfers(),
+    (t) => t.locationId,
+  );
+
+  /// Caches a newly created stock transfer locally and adjusts the van's local
+  /// item stock levels: [StockTransferDirection.load] increases stock (Issue
+  /// to Van), [StockTransferDirection.unload] decreases it (Stock Unloading).
+  ///
+  /// Validates stock *before* persisting anything: an unload that would drive
+  /// an item's stock below zero throws [InsufficientStockException] and
+  /// neither the transfer record nor the stock levels are written — mirrors
+  /// the invariant enforced by [saveLocalInvoice].
+  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {
+    final stamped =
+        transfer.locationId == null && assignedWarehouseId != null
+        ? transfer.copyWith(locationId: assignedWarehouseId)
+        : transfer;
+
+    // Compute (and validate) the resulting item stock levels before writing anything.
+    final localItems = getItems();
+    for (final line in stamped.lines) {
+      final itemIndex = localItems.indexWhere((it) => it.id == line.item.id);
+      if (itemIndex < 0) continue;
+      final existingItem = localItems[itemIndex];
+      final updatedStock = stamped.direction == StockTransferDirection.load
+          ? existingItem.stock + line.quantity
+          : deductStock(
+              itemId: existingItem.id,
+              itemName: existingItem.name,
+              available: existingItem.stock,
+              requested: line.quantity,
+            );
+      localItems[itemIndex] = existingItem.copyWith(stock: updatedStock);
+    }
+
+    // Stock validation passed — now persist the transfer record and the updated stock.
+    final current = _getAllLocalStockTransfers();
+    final model = StockTransferModel.fromDomain(stamped);
+
+    final index = current.indexWhere((t) => t.id == stamped.id);
+    if (index >= 0) {
+      current[index] = model;
+    } else {
+      current.insert(0, model);
+    }
+
+    final serialized = current
+        .map((t) => jsonEncode(StockTransferModel.fromDomain(t).toJson()))
+        .toList();
+    await _localHistoryBox.put('stock_transfers', serialized);
+    await saveItems(localItems);
   }
 
   /// Retrieves the full, unfiltered list of receipts recorded locally (for internal read-modify-write use).

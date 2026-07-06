@@ -8,6 +8,7 @@ import '../../domain/models/expense_entry.dart';
 import '../../domain/models/cash_closing.dart';
 import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
+import '../../domain/models/stock_transfer.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../models/sync_queue_item.dart';
 import '../models/sales_order_model.dart';
@@ -118,4 +119,12 @@ class SalesRepositoryImpl implements SalesRepository {
   @override
   Future<void> updateCustomerGps(String customerId, double latitude, double longitude) =>
       _dbService.updateCustomerGps(customerId, latitude, longitude);
+
+  @override
+  List<StockTransfer> getLocalStockTransfers() =>
+      _dbService.getLocalStockTransfers();
+
+  @override
+  Future<void> saveLocalStockTransfer(StockTransfer transfer) =>
+      _dbService.saveLocalStockTransfer(transfer);
 }

@@ -12,6 +12,7 @@ While the generated payloads contain the appropriate business parameters (contac
 1. **Unrecognized Meta-Fields**: The app sends local operational attributes (like internal database IDs, sync status flags, and route indices) that Zoho's API doesn't specify in its OpenAPI docs. Although standard REST endpoints generally ignore unrecognized fields, these are technically non-standard.
 2. **Nested Model Serialization**: The app serializes nested domain data (like complete item objects under invoice/order line items) instead of just the primitive parameters Zoho expects.
 3. **Critical Expense Sync Failure**: The Expense synchronization structure contains a major mismatch. The app sends a nested lines array, whereas Zoho Books expects a single flat entry at the root. More importantly, the required field `paid_through_account_id` is missing, which will cause API failures if mock mode is turned off.
+4. **Critical Stock Transfer Wrong API Surface**: The newly added Stock Transfer feature posts to `/transferorders`, but this endpoint belongs to the **Zoho Inventory** API (`https://www.zohoapis.com/inventory/v1/transferorders`), not Zoho Books v3. The app's `ZohoApiClient` is configured with the Books v3 base URL (`https://www.zohoapis.com/books/v3`), so the request will resolve to a non-existent Books route and fail once `_mockStockTransfers` is turned off. The payload itself also uses the wrong field name for notes (`notes` instead of `description`) and omits the required `transfer_order_number`.
 
 ---
 
@@ -258,7 +259,52 @@ While the generated payloads contain the appropriate business parameters (contac
 The standard Zoho Books `/expenses` endpoint does not support a nested items list (`lines`). It is designed for posting single-item expenses. 
 1. **Missing Required Fields at Root**: The Zoho API requires `account_id` and `paid_through_account_id` directly in the root JSON block. The app's payload lacks `paid_through_account_id` completely, and `account_id` is only defined inside the nested `lines` items.
 2. **Structural Mismatch**: The app groups expense amounts under a `lines` array. The standard Zoho Books API does not expect a `lines` array for basic expenses.
-* **Severity**: **High (Critical)**. This payload will fail against the live Zoho Books API. A conversion helper is required to flatten this structure before sending it to Zoho.
+* **Severity**: ~~**High (Critical)**~~ → **RESOLVED**. A conversion helper now transforms the payload before sending.
+
+> **✅ Resolution (fixed):** `ZohoApiClient.syncExpense` now calls `_buildZohoExpensePayload`, which resolves each local category line to a real Zoho expense ledger `account_id` (via `HiveDatabaseService.getExpenseAccounts()`), sets root `paid_through_account_id` to the first cash-type payment account (`getPaymentAccounts()`), and emits an **itemized** Zoho `line_items[]` array (each `{account_id, amount, description}`) plus root `date`, `amount` (summed total), and `account_id` (first line, schema satisfier). The non-standard `lines` array and local keys are dropped. Structuring lives in [ZohoPayloadMapper.zohoExpensePayload](file:///E:/work/nellon/lib/data/services/zoho_payload_mapper.dart). *Open item: confirm the sandbox accepts root `account_id` alongside `line_items`; if not, drop root `account_id` when itemizing.*
+
+---
+
+### 2.10. Create Stock Transfer (Issue to Van / Stock Unloading) — *CRITICAL MISMATCH*
+* **HTTP Method**: `POST`
+* **Endpoint URL (App)**: `https://www.zohoapis.com/books/v3/transferorders` *(resolved via `ZohoApiClient._apiUrl` = Books v3 base)*
+* **Endpoint URL (Actual Zoho API)**: `https://www.zohoapis.com/inventory/v1/transferorders` — Transfer Orders is a **Zoho Inventory** endpoint, not Zoho Books. It does not exist anywhere in the Books v3 OpenAPI spec set (`zohodocs/` has zero references to `transfer_order`/`transferorders` across all 40+ spec files).
+* **Doc Schema Reference**: **Absent from `zohodocs/`** — retrieved directly from the live Zoho Inventory API reference at `https://www.zoho.com/inventory/api/v1/transferorders/#overview` (`create-a-transfer-order`)
+* **Source Implementation**: [StockTransferModel.toJson](file:///E:/work/nellon/lib/data/models/stock_transfer_model.dart#L92-L111), [ZohoApiClient.syncStockTransfer](file:///E:/work/nellon/lib/data/services/zoho_api_client.dart#L712-L730)
+
+#### Fields Comparison Table
+| Payload Parameter | OpenAPI Type | Presence in Spec | Presence in App Payload | Description / Alignment |
+| :--- | :--- | :--- | :--- | :--- |
+| `transfer_order_number` | String | **Required** | Yes (as `transfer_order_number`) | Matches key name; app auto-generates. |
+| `date` | String (Date) | **Required** | Yes | Matches exactly. |
+| `from_location_id` | String | **Required** | Yes | Matches exactly. |
+| `to_location_id` | String | **Required** | Yes | Matches exactly. |
+| `description` | String | Optional | **Absent (wrong key)** | App sends `notes` instead of `description` — Zoho will not receive the remark text under the expected key. |
+| `line_items` | Array | **Required** | Yes | List present. |
+| `line_items[].item_id` | String | **Required** | Yes | Matches exactly. |
+| `line_items[].name` | String | **Required** | Yes | Matches exactly. |
+| `line_items[].quantity_transfer` | Number | **Required** | Yes | Matches exactly. |
+| `line_items[].unit` | String | Optional | **Absent** | Not sent; harmless since optional. |
+| `from_warehouse_id` / `to_warehouse_id` | String | Optional | **Absent** | Only needed when multi-warehouse mode is enabled on the Inventory org; not used by this app's single-warehouse-per-location model. |
+| `is_intransit_order` | Boolean | Optional | **Absent** | Defaults to `false` server-side; app has no in-transit workflow so omission is fine. |
+| `id` / `transfer_order_id` | String | **Absent** | Yes | *App internal/temporary transfer ID.* |
+| `direction` | String | **Absent** | Yes | *Local `load`/`unload` classification — Zoho infers direction purely from `from_location_id`/`to_location_id`.* |
+| `isPendingSync` | Boolean | **Absent** | Yes | *App local sync tracking flag.* |
+| `zoho_transfer_id` | String | **Absent** | Yes | *Reference key mapping to Zoho.* |
+| `location_id` | String | **Absent** | Yes | *App session/route location tag, distinct from `from_location_id`/`to_location_id`.* |
+| `line_items[].quantity` | Number | **Absent** | Yes | *Duplicate of `quantity_transfer` under a non-standard key.* |
+| `line_items[].item` | Object | **Absent** | Yes | *Full serialised item object inside line items — same nested-model pattern seen in invoices/orders/credit notes.* |
+
+#### Gap Analysis & Impact
+1. **Wrong API surface (root cause)**: `ZohoApiClient` is hard-wired to the Books v3 base URL (`zoho_api_client.dart:16`), and `syncStockTransfer` posts to `/transferorders` off that same `_dio` instance (`zoho_api_client.dart:712-730`), producing `https://www.zohoapis.com/books/v3/transferorders`. The real endpoint lives under the Inventory API host/version (`https://www.zohoapis.com/inventory/v1/transferorders`) and requires an `organization_id` query parameter plus Inventory-scoped OAuth (`ZohoInventory.transferorders.CREATE`), not the Books scopes this client currently requests. As written, this call will fail (404 / invalid endpoint) the moment `_mockStockTransfers` is set to `false` — it is not a "extra fields get ignored" situation like the other sections; the request has nowhere valid to land.
+2. **Field name mismatch**: `notes` (app) vs `description` (spec) — an easy but real bug since the transfer remark would silently vanish even if the endpoint were corrected.
+3. **Missing `transfer_order_number` uniqueness note**: field is present and required, so no gap there beyond confirming the app already handles it correctly.
+4. **Minor payload bloat**: same nested full-`item`-object and duplicate-key issues (`line_items[].item`, `line_items[].quantity`) seen throughout the rest of the audit.
+* **Severity**: ~~**High (Critical)**~~ → **RESOLVED (code)**. Endpoint host + payload fixed; one operational precondition remains (OAuth scope).
+
+> **✅ Resolution (fixed):** `ZohoApiClient.syncStockTransfer` now POSTs to the **absolute** Inventory URL `https://www.zohoapis.com/inventory/v1/transferorders` (new `_inventoryApiUrl` constant), which overrides Dio's Books `baseUrl` while the existing request interceptor still injects the auth token and `organization_id`. The body is built by [ZohoPayloadMapper.zohoStockTransferPayload](file:///E:/work/nellon/lib/data/services/zoho_payload_mapper.dart): it maps the local `notes` field to Zoho's `description`, reduces line items to `{item_id, name, quantity_transfer}`, and drops all local keys (`id`, `transfer_order_id`, `direction`, `isPendingSync`, `zoho_transfer_id`, `location_id`) plus the duplicate `line_items[].quantity` and nested `line_items[].item`.
+>
+> **⚠️ Operational precondition (not code):** the OAuth refresh token must carry the `ZohoInventory.transferorders.CREATE` scope and the organization must have Zoho Inventory enabled. Verify with a live sandbox call before setting `_mockStockTransfers = false`.
 
 ---
 
@@ -287,4 +333,25 @@ Remove local tracking fields (e.g., `isPendingSync`, `customer_name`, `invoice_i
 
 ---
 
+## 4. Fixes Applied
+
+All issues in this audit have been addressed in code (2026-07-06). The fix centres on a new pure map→map transformer, [lib/data/services/zoho_payload_mapper.dart](file:///E:/work/nellon/lib/data/services/zoho_payload_mapper.dart) (`ZohoPayloadMapper`), whitelisting each write payload to its official schema **at send time**. This preserves the dual-purpose `Model.toJson()` (still used verbatim for local Hive queue storage and `fromJson` round-trips) while sending Zoho only the fields it documents.
+
+| # | Endpoint | Fix | Status |
+| :-- | :--- | :--- | :--- |
+| 2.9 | Create Expense | Itemized `line_items[]` with resolved per-line `account_id`; root `paid_through_account_id` (cash); `amount` summed. `lines` array removed. | ✅ Fixed |
+| 2.10 | Stock Transfer | Re-pointed to Zoho **Inventory** `/transferorders`; `notes`→`description`; `quantity_transfer`; local keys stripped. | ✅ Fixed (code) |
+| 2.1 | Create Contact | Whitelist drops `id`, `contact_id`, `name`, `outstandingBalance`, `route_id`, `sequence`, `isPendingSync`, root GPS. | ✅ Fixed |
+| 2.3 | Create Invoice | Whitelist drops local root keys + nested `line_items[].item`. | ✅ Fixed |
+| 2.4 / 2.5 | Sales Order (create/update) | Whitelist drops local keys (`status`, `zoho_order_id`, …) + nested `item`. | ✅ Fixed |
+| 2.7 | Customer Payment | Whitelist drops local root keys + `invoices[].invoice_number`. | ✅ Fixed |
+| 2.8 | Credit Note | Whitelist drops local keys + `line_items[].invoice_number` / `invoiceLineItem`. | ✅ Fixed |
+
+**Wiring:** each `syncX` method in [zoho_api_client.dart](file:///E:/work/nellon/lib/data/services/zoho_api_client.dart) calls the matching `ZohoPayloadMapper.*` builder immediately before `_dio.post/put` (after the existing `_injectLocationIdIfNeeded`). **Tests:** [test/zoho_payload_mapper_test.dart](file:///E:/work/nellon/test/zoho_payload_mapper_test.dart) (8 cases) plus the full suite (74 tests) pass; `flutter analyze` clean.
+
+**Remaining before production flip:** (a) Stock Transfer OAuth `ZohoInventory.transferorders.CREATE` scope / Inventory-enabled org; (b) sandbox smoke test of each transaction with mock flags off; (c) confirm expense root `account_id` + `line_items` coexistence.
+
+---
+
 *Document Created: 2026-07-06T08:46:13+05:30*
+*Fixes Applied: 2026-07-06*

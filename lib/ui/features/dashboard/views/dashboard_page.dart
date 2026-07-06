@@ -13,6 +13,7 @@ import '../../receipts/bloc/receipt_bloc.dart';
 import '../../receipts/views/receipt_list_page.dart';
 import '../widgets/route_sequence_tab.dart';
 import '../widgets/analytics_reports_tab.dart';
+import '../widgets/reports_tab.dart';
 import '../widgets/operations_tab.dart';
 import '../widgets/global_search_sheet.dart';
 import '../widgets/item_details_dialog.dart';
@@ -27,17 +28,21 @@ import '../../sales_order/bloc/sales_order_bloc.dart';
 import '../../sales_order/views/sales_order_editor_page.dart';
 import '../../sales_return/bloc/sales_return_bloc.dart';
 import '../../sales_return/views/sales_return_list_page.dart';
+import '../../stock_transfer/bloc/stock_transfer_bloc.dart';
+import '../../stock_transfer/views/issue_to_van_page.dart';
+import '../../stock_transfer/views/stock_unloading_page.dart';
 import '../../reports/views/item_sales_report_page.dart';
 import '../../reports/views/aging_receivables_report_page.dart';
 import '../../reports/views/stock_report_page.dart';
 import '../../ledger/bloc/customer_ledger_bloc.dart';
 import '../../ledger/views/customer_ledger_page.dart';
 import '../../sync/views/masters_sync_page.dart';
+import '../../licensing/widgets/mock_live_switch_tile.dart';
 import '../../../core/extensions/org_context_extension.dart';
 
 /// The central workspace of the Van Sales application.
 ///
-/// Features a multi-tab view (Route sequence, operations, and analytical reporting)
+/// Features a multi-tab view (route sequence, dashboard, operations, and reports)
 /// displaying real-time daily sales, collections, route stats, and triggers to create new entities.
 class DashboardPage extends StatefulWidget {
   /// Creates a new [DashboardPage].
@@ -277,6 +282,22 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _showIssueToVanPage() {
+    context.read<StockTransferBloc>().add(LoadIssueGrid());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const IssueToVanPage()),
+    ).then((_) => _loadDailyStats());
+  }
+
+  void _showStockUnloadingPage() {
+    context.read<StockTransferBloc>().add(LoadUnloadGrid());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const StockUnloadingPage()),
+    ).then((_) => _loadDailyStats());
+  }
+
   void _showCashClosingForm(bool isDark) {
     showDialog(
       context: context,
@@ -329,10 +350,6 @@ class _DashboardPageState extends State<DashboardPage> {
         todayExpenses: _todayExpenses,
         todayReturns: _todayReturns,
         completedDeliveries: _completedDeliveries,
-        onItemSalesReport: _showItemSalesReport,
-        onCustomerLedger: _showCustomerLedgerPage,
-        onAgingReport: _showAgingReport,
-        onStockReport: _showStockReport,
       ),
       OperationsTab(
         isDark: isDark || isGlass,
@@ -358,6 +375,15 @@ class _DashboardPageState extends State<DashboardPage> {
             _loadDailyStats();
           });
         },
+        onIssueToVan: _showIssueToVanPage,
+        onStockUnloading: _showStockUnloadingPage,
+      ),
+      ReportsTab(
+        isDark: isDark,
+        onItemSalesReport: _showItemSalesReport,
+        onCustomerLedger: _showCustomerLedgerPage,
+        onAgingReport: _showAgingReport,
+        onStockReport: _showStockReport,
       ),
     ];
 
@@ -410,6 +436,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 title: Text(themeTooltip),
                 onTap: () => context.read<ThemeCubit>().toggleTheme(),
               ),
+              const MockLiveSwitchTile(),
             ],
           ),
         ),
@@ -544,6 +571,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 _currentIndex = index;
               });
             },
+            type: BottomNavigationBarType.fixed,
             items: const [
               BottomNavigationBarItem(
                 icon: Icon(Icons.people_outline),
@@ -551,14 +579,19 @@ class _DashboardPageState extends State<DashboardPage> {
                 label: 'Customers',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.analytics_outlined),
-                activeIcon: Icon(Icons.analytics),
-                label: 'Daily Reports',
+                icon: Icon(Icons.dashboard_outlined),
+                activeIcon: Icon(Icons.dashboard),
+                label: 'Dashboard',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.settings_suggest_outlined),
                 activeIcon: Icon(Icons.settings_suggest),
                 label: 'Operations',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.assessment_outlined),
+                activeIcon: Icon(Icons.assessment),
+                label: 'Reports',
               ),
             ],
           ),
