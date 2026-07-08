@@ -28,7 +28,7 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
     ZohoApiClient apiClient,
   ) {
     final persisted = dbService.transactionMockModeEnabled;
-    final enabled = persisted ?? true;
+    final enabled = persisted ?? false;
     apiClient.setAllMockFlags(enabled);
     return enabled;
   }

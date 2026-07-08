@@ -58,7 +58,7 @@ void main() {
       cubit.setConfig(null);
 
       expect(cubit.state, isA<ServerConfigInitial>());
-      expect(cubit.state.isMockModeEnabled, isTrue);
+      expect(cubit.state.isMockModeEnabled, isFalse);
     });
 
     test('setConfig enables mock when any remote flag is true', () {

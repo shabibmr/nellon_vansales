@@ -25,27 +25,23 @@ class ServerConfig extends Equatable {
     required this.clientId,
     required this.clientSecret,
     required this.code,
-    this.mockTransactions = true,
+    this.mockTransactions = false,
     this.mockSalesOrderTransactions = false,
-    this.mockStockTransfers = true,
+    this.mockStockTransfers = false,
   });
 
   /// Factory constructor to create a [ServerConfig] from a Firestore map.
   ///
-  /// Defaults mirror the old compile-time flags (`mockTransactions` true,
-  /// `mockSalesOrderTransactions` false, `mockStockTransfers` true) so an org
-  /// whose Firestore document predates these fields keeps its current
-  /// safe/simulated behavior rather than silently starting to push real
-  /// transactions to Zoho.
+  /// Defaults to false (live mode) if the keys are missing, as part of the live-first strategy.
   factory ServerConfig.fromMap(Map<String, dynamic> map) {
     return ServerConfig(
       clientId: map['client_id'] as String? ?? '',
       clientSecret: map['client_secret'] as String? ?? '',
       code: map['code'] as String? ?? '',
-      mockTransactions: map['mock_transactions'] as bool? ?? true,
+      mockTransactions: map['mock_transactions'] as bool? ?? false,
       mockSalesOrderTransactions:
           map['mock_sales_order_transactions'] as bool? ?? false,
-      mockStockTransfers: map['mock_stock_transfers'] as bool? ?? true,
+      mockStockTransfers: map['mock_stock_transfers'] as bool? ?? false,
     );
   }
 

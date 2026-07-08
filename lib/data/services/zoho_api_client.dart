@@ -45,7 +45,7 @@ class ZohoApiClient {
   /// expenses) against a sandbox, preserving live connections for master downloads.
   /// Set via [updateMockFlags], sourced from the remote `ServerConfig` — this used
   /// to be a compile-time `static const` requiring a rebuild to flip.
-  bool _mockTransactions = true;
+  bool _mockTransactions = false;
 
   /// Sales Order uploads (create / update / convert) use this flag instead of
   /// [_mockTransactions], so they can be pushed live to Zoho independently of all
@@ -55,7 +55,7 @@ class ZohoApiClient {
   /// Stock Transfer uploads (Issue to Van / Stock Unloading) use this flag
   /// instead of [_mockTransactions], mirroring [_mockSalesOrderTransactions].
   /// Still requires real credentials (`!_isMockMode()`).
-  bool _mockStockTransfers = true;
+  bool _mockStockTransfers = false;
 
   /// Updates the runtime mock-mode flags for transactions, sales orders, and
   /// stock transfers (called upon loading server config, alongside [updateCredentials]).
