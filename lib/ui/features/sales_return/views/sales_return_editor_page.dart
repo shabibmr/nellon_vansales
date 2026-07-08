@@ -17,7 +17,7 @@ import '../bloc/sales_return_bloc.dart';
 import '../widgets/return_item_search_dialog.dart';
 import '../widgets/return_invoice_selector_dialog.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
-import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
 
 class SalesReturnEditorPage extends StatefulWidget {
   const SalesReturnEditorPage({super.key});

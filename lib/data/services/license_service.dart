@@ -45,19 +45,48 @@ class LicenseService {
   }
 
   /// Reads and parses remote Zoho API integration configurations from `server_config/zoho`.
+  ///
+  /// If the document does not exist, it is created with default live settings.
+  /// If any specific key is missing from the document, it is automatically
+  /// populated and updated in Firestore.
   Future<ServerConfig> fetchServerConfig() async {
     try {
-      final doc = await firestore.collection('server_config').doc('zoho').get();
-      if (doc.exists && doc.data() != null) {
-        return ServerConfig.fromMap(doc.data()!);
+      final docRef = firestore.collection('server_config').doc('zoho');
+      final doc = await docRef.get();
+
+      final defaultData = {
+        'client_id': '',
+        'client_secret': '',
+        'code': '',
+        'mock_transactions': true,
+        'mock_sales_order_transactions': false,
+        'mock_stock_transfers': true,
+      };
+
+      if (!doc.exists || doc.data() == null) {
+        await docRef.set(defaultData);
+        return ServerConfig.fromMap(defaultData);
       }
+
+      final data = Map<String, dynamic>.from(doc.data()!);
+      final missingUpdates = <String, dynamic>{};
+      
+      for (final entry in defaultData.entries) {
+        if (!data.containsKey(entry.key)) {
+          missingUpdates[entry.key] = entry.value;
+        }
+      }
+
+      if (missingUpdates.isNotEmpty) {
+        await docRef.update(missingUpdates);
+        data.addAll(missingUpdates);
+      }
+
+      return ServerConfig.fromMap(data);
     } catch (e) {
       throw Exception(
-        'Failed to read Zoho server configuration from Firestore: $e',
+        'Failed to read and auto-populate Zoho server configuration from Firestore: $e',
       );
     }
-    throw Exception(
-      'Server configuration document "zoho" not found under "server_config" collection.',
-    );
   }
 }

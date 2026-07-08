@@ -9,7 +9,7 @@ import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../bloc/expense_bloc.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
-import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../../domain/models/expense_entry.dart';
 
 class ExpenseEditorPage extends StatefulWidget {

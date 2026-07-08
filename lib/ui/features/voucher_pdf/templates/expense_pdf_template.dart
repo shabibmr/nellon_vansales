@@ -6,14 +6,17 @@ import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Expense Voucher documents.
 class ExpensePdfTemplate {
-  static pw.Document generate(ExpenseEntry expense, Organization? org) {
+  static pw.Document generate(
+    ExpenseEntry expense,
+    Organization org, {
+    PdfPageFormat pageFormat = PdfPageFormat.a4,
+  }) {
     final pdf = pw.Document();
-    final companyName = org?.name ?? 'Van Sales Pro';
-    final currencySymbol = org?.currencySymbol ?? '₹';
+    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
           return [
@@ -29,7 +32,7 @@ class ExpensePdfTemplate {
             // Billing Parties Grid (From and To)
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Charged By (Company)',
-              companyName: companyName,
+              companyName: org.name,
               companyDetails: 'On-Route Operating Expense\nTax-Deductible Log',
               billToLabel: 'Disbursed To / Vendor',
               clientName: 'Operational Expense / Driver',
@@ -40,66 +43,15 @@ class ExpensePdfTemplate {
             pw.SizedBox(height: 20),
 
             // Expense Metadata
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: SharedPdfTemplate.lightGreyBackground,
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(
-                  color: SharedPdfTemplate.borderSlate,
-                  width: 1,
-                ),
+            SharedPdfTemplate.buildInfoPanel([
+              const PdfInfoEntry('Voucher Type', 'Route Fleet Expense'),
+              PdfInfoEntry(
+                'Total Disbursed',
+                '$currencySymbol${expense.amount.toStringAsFixed(2)}',
+                alignment: pw.CrossAxisAlignment.end,
+                valueColor: SharedPdfTemplate.primaryIndigo,
               ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'VOUCHER TYPE',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        'Route Fleet Expense',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(
-                        'TOTAL DISBURSED',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        '$currencySymbol${expense.amount.toStringAsFixed(2)}',
-                        style: pw.TextStyle(
-                          fontSize: 11,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.primaryIndigo,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            ]),
             pw.SizedBox(height: 20),
 
             // Expense Lines Section Title
@@ -130,13 +82,16 @@ class ExpensePdfTemplate {
                     color: SharedPdfTemplate.primaryIndigo,
                   ),
                   children: [
-                    _buildTableHeader('#', alignLeft: true),
-                    _buildTableHeader('Category', alignLeft: true),
-                    _buildTableHeader(
+                    SharedPdfTemplate.buildTableHeader('#', alignLeft: true),
+                    SharedPdfTemplate.buildTableHeader(
+                      'Category',
+                      alignLeft: true,
+                    ),
+                    SharedPdfTemplate.buildTableHeader(
                       'Description / Justification',
                       alignLeft: true,
                     ),
-                    _buildTableHeader('Amount'),
+                    SharedPdfTemplate.buildTableHeader('Amount'),
                   ],
                 ),
                 // Item Rows
@@ -148,17 +103,17 @@ class ExpensePdfTemplate {
                           : SharedPdfTemplate.lightGreyBackground,
                     ),
                     children: [
-                      _buildTableCell('${i + 1}'),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell('${i + 1}'),
+                      SharedPdfTemplate.buildTableCell(
                         expense.lines[i].category,
                         alignLeft: true,
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         expense.lines[i].description,
                         alignLeft: true,
                         isSubText: true,
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${expense.lines[i].amount.toStringAsFixed(2)}',
                         isBold: true,
                       ),
@@ -200,40 +155,14 @@ class ExpensePdfTemplate {
                   ),
                 ),
                 pw.SizedBox(width: 32),
-                pw.Container(
+                SharedPdfTemplate.buildTotalsCard(
                   width: 200,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(12),
-                    ),
-                    border: pw.Border.all(
-                      color: SharedPdfTemplate.borderSlate,
-                      width: 1,
-                    ),
-                  ),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        'Total Claim',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                      pw.Text(
-                        '$currencySymbol${expense.amount.toStringAsFixed(2)}',
-                        style: pw.TextStyle(
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.primaryIndigo,
-                        ),
-                      ),
-                    ],
-                  ),
+                  rows: const [],
+                  grandTotalLabel: 'Total Claim',
+                  grandTotalValue:
+                      '$currencySymbol${expense.amount.toStringAsFixed(2)}',
+                  grandTotalLabelFontSize: 10,
+                  grandTotalValueFontSize: 12,
                 ),
               ],
             ),
@@ -244,40 +173,5 @@ class ExpensePdfTemplate {
     );
 
     return pdf;
-  }
-
-  static pw.Widget _buildTableHeader(String text, {bool alignLeft = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: const pw.TextStyle(
-          color: PdfColors.white,
-          fontSize: 9,
-          fontWeight: pw.FontWeight.bold,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
-  }
-
-  static pw.Widget _buildTableCell(
-    String text, {
-    bool alignLeft = false,
-    bool isBold = false,
-    bool isSubText = false,
-  }) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          color: SharedPdfTemplate.slateText,
-          fontSize: isSubText ? 8.5 : 9,
-          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
   }
 }

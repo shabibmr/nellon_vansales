@@ -18,7 +18,7 @@ import '../../../../ui/core/widgets/item_search_sheet.dart';
 import '../../../../ui/core/widgets/line_item_list.dart';
 import '../bloc/sales_order_bloc.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
-import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../dashboard/widgets/create_customer_dialog.dart';
 import '../../sales_invoice/bloc/sales_invoice_bloc.dart'
     show SalesInvoiceBloc, StartInvoiceFromOrder;

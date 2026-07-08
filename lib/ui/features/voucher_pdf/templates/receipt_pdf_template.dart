@@ -9,16 +9,16 @@ import 'shared_pdf_template.dart';
 class ReceiptPdfTemplate {
   static pw.Document generate(
     ReceiptVoucher receipt,
-    Organization? org,
-    Customer? customer,
-  ) {
+    Organization org,
+    Customer? customer, {
+    PdfPageFormat pageFormat = PdfPageFormat.a4,
+  }) {
     final pdf = pw.Document();
-    final companyName = org?.name ?? 'Van Sales Pro';
-    final currencySymbol = org?.currencySymbol ?? '₹';
+    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
           return [
@@ -34,7 +34,7 @@ class ReceiptPdfTemplate {
             // Billing Parties Grid (From and To)
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Received By (Merchant)',
-              companyName: companyName,
+              companyName: org.name,
               companyDetails: 'On-Route Delivery Van\nTax Registered Vendor',
               billToLabel: 'Payer (Customer)',
               clientName: receipt.customerName,
@@ -45,90 +45,22 @@ class ReceiptPdfTemplate {
             pw.SizedBox(height: 20),
 
             // Payment Metadata Panel
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: SharedPdfTemplate.lightGreyBackground,
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(
-                  color: SharedPdfTemplate.borderSlate,
-                  width: 1,
-                ),
+            SharedPdfTemplate.buildInfoPanel([
+              PdfInfoEntry('Payment Mode', receipt.paymentMode.toUpperCase()),
+              PdfInfoEntry(
+                'Reference / Tran ID',
+                receipt.referenceNumber.isNotEmpty
+                    ? receipt.referenceNumber
+                    : 'N/A',
+                alignment: pw.CrossAxisAlignment.center,
               ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'PAYMENT MODE',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        receipt.paymentMode.toUpperCase(),
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.center,
-                    children: [
-                      pw.Text(
-                        'REFERENCE / TRAN ID',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        receipt.referenceNumber.isNotEmpty
-                            ? receipt.referenceNumber
-                            : 'N/A',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(
-                        'TOTAL RECEIVED',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        '$currencySymbol${receipt.amount.toStringAsFixed(2)}',
-                        style: pw.TextStyle(
-                          fontSize: 11,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.primaryIndigo,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              PdfInfoEntry(
+                'Total Received',
+                '$currencySymbol${receipt.amount.toStringAsFixed(2)}',
+                alignment: pw.CrossAxisAlignment.end,
+                valueColor: SharedPdfTemplate.primaryIndigo,
               ),
-            ),
+            ]),
             pw.SizedBox(height: 20),
 
             // Allocations Section
@@ -177,12 +109,12 @@ class ReceiptPdfTemplate {
                       color: SharedPdfTemplate.primaryIndigo,
                     ),
                     children: [
-                      _buildTableHeader('#', alignLeft: true),
-                      _buildTableHeader(
+                      SharedPdfTemplate.buildTableHeader('#', alignLeft: true),
+                      SharedPdfTemplate.buildTableHeader(
                         'Target Invoice Reference',
                         alignLeft: true,
                       ),
-                      _buildTableHeader('Amount Applied'),
+                      SharedPdfTemplate.buildTableHeader('Amount Applied'),
                     ],
                   ),
                   // Allocation Rows
@@ -194,12 +126,12 @@ class ReceiptPdfTemplate {
                             : SharedPdfTemplate.lightGreyBackground,
                       ),
                       children: [
-                        _buildTableCell('${i + 1}'),
-                        _buildTableCell(
+                        SharedPdfTemplate.buildTableCell('${i + 1}'),
+                        SharedPdfTemplate.buildTableCell(
                           receipt.allocations[i].invoiceNumber,
                           alignLeft: true,
                         ),
-                        _buildTableCell(
+                        SharedPdfTemplate.buildTableCell(
                           '$currencySymbol${receipt.allocations[i].amountApplied.toStringAsFixed(2)}',
                           isBold: true,
                         ),
@@ -215,59 +147,24 @@ class ReceiptPdfTemplate {
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.end,
               children: [
-                pw.Container(
+                SharedPdfTemplate.buildTotalsCard(
                   width: 250,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(12),
+                  rows: [
+                    SharedPdfTemplate.buildSummaryRow(
+                      'Total Allocated',
+                      '$currencySymbol${receipt.totalAllocated.toStringAsFixed(2)}',
                     ),
-                    border: pw.Border.all(
-                      color: SharedPdfTemplate.borderSlate,
-                      width: 1,
+                    pw.SizedBox(height: 4),
+                    SharedPdfTemplate.buildSummaryRow(
+                      'Unallocated General Credit',
+                      '$currencySymbol${receipt.unallocatedAmount.toStringAsFixed(2)}',
                     ),
-                  ),
-                  child: pw.Column(
-                    children: [
-                      _buildSummaryRow(
-                        'Total Allocated',
-                        '$currencySymbol${receipt.totalAllocated.toStringAsFixed(2)}',
-                      ),
-                      pw.SizedBox(height: 4),
-                      _buildSummaryRow(
-                        'Unallocated General Credit',
-                        '$currencySymbol${receipt.unallocatedAmount.toStringAsFixed(2)}',
-                      ),
-                      pw.SizedBox(height: 6),
-                      pw.Divider(
-                        color: SharedPdfTemplate.borderSlate,
-                        thickness: 1,
-                      ),
-                      pw.SizedBox(height: 6),
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(
-                            'Grand Total Received',
-                            style: pw.TextStyle(
-                              fontSize: 10,
-                              fontWeight: pw.FontWeight.bold,
-                              color: SharedPdfTemplate.slateText,
-                            ),
-                          ),
-                          pw.Text(
-                            '$currencySymbol${receipt.amount.toStringAsFixed(2)}',
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: SharedPdfTemplate.primaryIndigo,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  ],
+                  grandTotalLabel: 'Grand Total Received',
+                  grandTotalValue:
+                      '$currencySymbol${receipt.amount.toStringAsFixed(2)}',
+                  grandTotalLabelFontSize: 10,
+                  grandTotalValueFontSize: 12,
                 ),
               ],
             ),
@@ -278,62 +175,5 @@ class ReceiptPdfTemplate {
     );
 
     return pdf;
-  }
-
-  static pw.Widget _buildTableHeader(String text, {bool alignLeft = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: const pw.TextStyle(
-          color: PdfColors.white,
-          fontSize: 9,
-          fontWeight: pw.FontWeight.bold,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
-  }
-
-  static pw.Widget _buildTableCell(
-    String text, {
-    bool alignLeft = false,
-    bool isBold = false,
-  }) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          color: SharedPdfTemplate.slateText,
-          fontSize: 9,
-          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
-  }
-
-  static pw.Widget _buildSummaryRow(String label, String value) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [
-        pw.Text(
-          label,
-          style: pw.TextStyle(
-            fontSize: 9,
-            color: SharedPdfTemplate.slateTextSecondary,
-          ),
-        ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(
-            fontSize: 9,
-            fontWeight: pw.FontWeight.bold,
-            color: SharedPdfTemplate.slateText,
-          ),
-        ),
-      ],
-    );
   }
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../ui/core/theme/app_theme.dart';
-import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../data/services/hive_database_service.dart';
+import '../../../../data/services/injection.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/snackbars.dart';
 import '../bloc/voucher_pdf_bloc.dart';
 import '../bloc/voucher_pdf_event.dart';
 import '../bloc/voucher_pdf_state.dart';
@@ -9,7 +12,9 @@ import '../views/voucher_pdf_preview_page.dart';
 
 /// Interactive visual row containing trigger buttons for all PDF capabilities.
 ///
-/// Features loading overlays and platform snackbar notifications.
+/// Features loading overlays and platform snackbar notifications. Provides its
+/// own [VoucherPdfBloc] instance scoped to this widget, so PDF state from one
+/// voucher screen can never leak onto another after navigation.
 class VoucherPdfActionsWidget extends StatelessWidget {
   final VoucherType type;
   final dynamic voucher;
@@ -22,7 +27,28 @@ class VoucherPdfActionsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return BlocProvider<VoucherPdfBloc>(
+      create: (_) => VoucherPdfBloc(
+        pdfService: sl<VoucherPdfRepository>(),
+        dbService: sl<HiveDatabaseService>(),
+      ),
+      child: _VoucherPdfActionsBody(type: type, voucher: voucher),
+    );
+  }
+}
+
+class _VoucherPdfActionsBody extends StatelessWidget {
+  final VoucherType type;
+  final dynamic voucher;
+
+  const _VoucherPdfActionsBody({required this.type, required this.voucher});
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final snackShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(10),
+    );
 
     return BlocConsumer<VoucherPdfBloc, VoucherPdfState>(
       listener: (context, state) {
@@ -40,27 +66,19 @@ class VoucherPdfActionsWidget extends StatelessWidget {
           // Instantly clear/reset the bloc state so popping back doesn't trigger loop
           context.read<VoucherPdfBloc>().add(ResetVoucherPdfState());
         } else if (state is VoucherPdfActionSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppTheme.successEmerald,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              content: Text(state.message),
-            ),
+          showSuccessSnackBar(
+            context,
+            state.message,
+            behavior: SnackBarBehavior.floating,
+            shape: snackShape,
           );
           context.read<VoucherPdfBloc>().add(ResetVoucherPdfState());
         } else if (state is VoucherPdfFailure) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppTheme.errorRose,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              content: Text(state.error),
-            ),
+          showErrorSnackBar(
+            context,
+            state.error,
+            behavior: SnackBarBehavior.floating,
+            shape: snackShape,
           );
           context.read<VoucherPdfBloc>().add(ResetVoucherPdfState());
         }
