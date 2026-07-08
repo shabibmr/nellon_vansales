@@ -387,214 +387,450 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     ];
 
-    return Scaffold(
-      drawer: Drawer(
-        backgroundColor: isGlass
-            ? AppTheme.glassBackground2
-            : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.local_shipping_rounded,
-                      color: AppTheme.primaryIndigo,
-                      size: 28,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        context.org.companyName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: Icon(
-                  Icons.search_rounded,
-                  color: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
-                ),
-                title: const Text('Global Database Search'),
-                onTap: () {
-                  Navigator.pop(context); // close the drawer
-                  _showGlobalSearchSheet(isDark);
-                },
-              ),
-              ListTile(
-                leading: Icon(themeIcon, color: themeColor),
-                title: Text(themeTooltip),
-                onTap: () => context.read<ThemeCubit>().toggleTheme(),
-              ),
-              const MockLiveSwitchTile(),
-            ],
-          ),
-        ),
-      ),
-      appBar: AppBar(
-        title: Row(
-          children: [
-            const Icon(
-              Icons.local_shipping_rounded,
-              color: AppTheme.primaryIndigo,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                context.org.companyName,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          BlocBuilder<SyncBloc, SyncState>(
-            builder: (context, syncState) {
-              final isSyncing = syncState.isSyncing;
-              final hasPending = syncState.pendingCount > 0;
-              final syncColor = isSyncing
-                  ? AppTheme.primaryIndigo
-                  : (hasPending
-                        ? AppTheme.warningAmber
-                        : AppTheme.successEmerald);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 800.0;
 
-              return Tooltip(
-                message: isSyncing
-                    ? 'Syncing… · Tap to open Sync Masters'
-                    : (hasPending
-                          ? '${syncState.pendingCount} items pending · Tap to open Sync Masters'
-                          : 'All synced · Tap to open Sync Masters'),
-                child: InkWell(
-                  onTap: _showMastersSyncPage,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+        return Scaffold(
+          drawer: isWideScreen
+              ? null
+              : Drawer(
+                  backgroundColor: isGlass
+                      ? AppTheme.glassBackground2
+                      : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
+                  child: SafeArea(
+                    child: Column(
                       children: [
                         Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: syncColor,
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.local_shipping_rounded,
+                                color: AppTheme.primaryIndigo,
+                                size: 28,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  context.org.companyName,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 5),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 72),
-                          child: Text(
-                            isSyncing
-                                ? 'Syncing'
-                                : (hasPending
-                                      ? '${syncState.pendingCount} Pending'
-                                      : 'Synced'),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: Icon(
+                            Icons.search_rounded,
+                            color: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
+                          ),
+                          title: const Text('Global Database Search'),
+                          onTap: () {
+                            Navigator.pop(context); // close the drawer
+                            _showGlobalSearchSheet(isDark);
+                          },
+                        ),
+                        ListTile(
+                          leading: Icon(themeIcon, color: themeColor),
+                          title: Text(themeTooltip),
+                          onTap: () => context.read<ThemeCubit>().toggleTheme(),
+                        ),
+                        const MockLiveSwitchTile(),
+                      ],
+                    ),
+                  ),
+                ),
+          appBar: AppBar(
+            title: isWideScreen
+                ? Text(
+                    switch (_currentIndex) {
+                      0 => 'Customers & Routes',
+                      1 => 'Analytics & Dashboard',
+                      2 => 'Operations Panel',
+                      3 => 'Reports & Statements',
+                      _ => 'Dashboard',
+                    },
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                : Row(
+                    children: [
+                      const Icon(
+                        Icons.local_shipping_rounded,
+                        color: AppTheme.primaryIndigo,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          context.org.companyName,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+            actions: [
+              BlocBuilder<SyncBloc, SyncState>(
+                builder: (context, syncState) {
+                  final isSyncing = syncState.isSyncing;
+                  final hasPending = syncState.pendingCount > 0;
+                  final syncColor = isSyncing
+                      ? AppTheme.primaryIndigo
+                      : (hasPending
+                            ? AppTheme.warningAmber
+                            : AppTheme.successEmerald);
+
+                  return Tooltip(
+                    message: isSyncing
+                        ? 'Syncing… · Tap to open Sync Masters'
+                        : (hasPending
+                              ? '${syncState.pendingCount} items pending · Tap to open Sync Masters'
+                              : 'All synced · Tap to open Sync Masters'),
+                    child: InkWell(
+                      onTap: _showMastersSyncPage,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: syncColor,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 72),
+                              child: Text(
+                                isSyncing
+                                    ? 'Syncing'
+                                    : (hasPending
+                                          ? '${syncState.pendingCount} Pending'
+                                          : 'Synced'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: syncColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            Icon(
+                              isSyncing
+                                  ? Icons.sync_outlined
+                                  : Icons.cloud_done_outlined,
+                              size: 15,
                               color: syncColor,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          ],
                         ),
-                        const SizedBox(width: 3),
-                        Icon(
-                          isSyncing
-                              ? Icons.sync_outlined
-                              : Icons.cloud_done_outlined,
-                          size: 15,
-                          color: syncColor,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+          body: isWideScreen
+              ? Row(
+                  children: [
+                    _buildSidebar(
+                      context,
+                      isDark,
+                      isGlass,
+                      themeIcon,
+                      themeColor,
+                      themeTooltip,
+                    ),
+                    const VerticalDivider(width: 1, thickness: 1),
+                    Expanded(
+                      child: tabs[_currentIndex],
+                    ),
+                  ],
+                )
+              : tabs[_currentIndex],
+          bottomNavigationBar: isWideScreen
+              ? null
+              : Container(
+                  decoration: BoxDecoration(
+                    color: isGlass
+                        ? AppTheme.glassBackground2
+                        : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
+                    border: Border(
+                      top: BorderSide(
+                        color: isGlass
+                            ? AppTheme.glassBorder
+                            : (isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFE2E8F0)),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: BottomNavigationBar(
+                      currentIndex: _currentIndex,
+                      backgroundColor: Colors.transparent,
+                      selectedItemColor: isGlass
+                          ? Colors.cyanAccent
+                          : AppTheme.primaryIndigo,
+                      unselectedItemColor: isGlass
+                          ? AppTheme.glassTextSecondary
+                          : (isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary),
+                      elevation: 0,
+                      onTap: (index) {
+                        setState(() {
+                          _currentIndex = index;
+                        });
+                      },
+                      type: BottomNavigationBarType.fixed,
+                      items: const [
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.people_outline),
+                          activeIcon: Icon(Icons.people),
+                          label: 'Customers',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.dashboard_outlined),
+                          activeIcon: Icon(Icons.dashboard),
+                          label: 'Dashboard',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.settings_suggest_outlined),
+                          activeIcon: Icon(Icons.settings_suggest),
+                          label: 'Operations',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.assessment_outlined),
+                          activeIcon: Icon(Icons.assessment),
+                          label: 'Reports',
                         ),
                       ],
                     ),
                   ),
                 ),
-              );
-            },
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      // The app-wide AnimatedGlowBackground (mounted in MaterialApp.builder)
-      // now provides the animated backdrop for every theme, including glass.
-      body: tabs[_currentIndex],
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: isGlass
-              ? AppTheme.glassBackground2
-              : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
-          border: Border(
-            top: BorderSide(
-              color: isGlass
-                  ? AppTheme.glassBorder
-                  : (isDark
-                        ? const Color(0xFF334155)
-                        : const Color(0xFFE2E8F0)),
-              width: 1,
+        );
+      },
+    );
+  }
+
+  Widget _buildSidebar(
+    BuildContext context,
+    bool isDark,
+    bool isGlass,
+    IconData themeIcon,
+    Color themeColor,
+    String themeTooltip,
+  ) {
+    final companyName = context.org.companyName;
+
+    return Container(
+      width: 260,
+      color: isGlass
+          ? AppTheme.glassBackground2.withValues(alpha: 0.8)
+          : (isDark ? AppTheme.darkSurface : AppTheme.lightSurface),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.local_shipping_rounded,
+                    color: AppTheme.primaryIndigo,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          companyName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Van Sales System',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isGlass
+                                ? AppTheme.glassTextSecondary
+                                : (isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  _buildSidebarNavItem(
+                    index: 0,
+                    icon: Icons.people_outline,
+                    activeIcon: Icons.people,
+                    label: 'Customers',
+                    isGlass: isGlass,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 4),
+                  _buildSidebarNavItem(
+                    index: 1,
+                    icon: Icons.dashboard_outlined,
+                    activeIcon: Icons.dashboard,
+                    label: 'Dashboard',
+                    isGlass: isGlass,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 4),
+                  _buildSidebarNavItem(
+                    index: 2,
+                    icon: Icons.settings_suggest_outlined,
+                    activeIcon: Icons.settings_suggest,
+                    label: 'Operations',
+                    isGlass: isGlass,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 4),
+                  _buildSidebarNavItem(
+                    index: 3,
+                    icon: Icons.assessment_outlined,
+                    activeIcon: Icons.assessment,
+                    label: 'Reports',
+                    isGlass: isGlass,
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: Icon(
+                      Icons.search_rounded,
+                      color: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
+                    ),
+                    title: const Text('Global Search', style: TextStyle(fontSize: 13)),
+                    onTap: () => _showGlobalSearchSheet(isDark),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: Icon(themeIcon, color: themeColor),
+                    title: Text(themeTooltip, style: const TextStyle(fontSize: 13)),
+                    onTap: () => context.read<ThemeCubit>().toggleTheme(),
+                  ),
+                  const SizedBox(height: 8),
+                  const MockLiveSwitchTile(),
+                ],
+              ),
+            ),
+          ],
         ),
-        child: SafeArea(
-          top: false,
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            backgroundColor: Colors.transparent,
-            selectedItemColor: isGlass
-                ? Colors.cyanAccent
-                : AppTheme.primaryIndigo,
-            unselectedItemColor: isGlass
-                ? AppTheme.glassTextSecondary
-                : (isDark
-                      ? AppTheme.darkTextSecondary
-                      : AppTheme.lightTextSecondary),
-            elevation: 0,
-            onTap: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            type: BottomNavigationBarType.fixed,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.people_outline),
-                activeIcon: Icon(Icons.people),
-                label: 'Customers',
+      ),
+    );
+  }
+
+  Widget _buildSidebarNavItem({
+    required int index,
+    required IconData icon,
+    required IconData activeIcon,
+    required String label,
+    required bool isGlass,
+    required bool isDark,
+  }) {
+    final isSelected = _currentIndex == index;
+    final activeColor = isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo;
+    final inactiveColor = isGlass
+        ? AppTheme.glassTextSecondary
+        : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary);
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _currentIndex = index;
+        });
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? activeColor.withValues(alpha: 0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? activeIcon : icon,
+              color: isSelected ? activeColor : inactiveColor,
+              size: 22,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected
+                      ? (isGlass ? Colors.cyanAccent : (isDark ? AppTheme.darkText : AppTheme.lightText))
+                      : inactiveColor,
+                  fontSize: 14,
+                ),
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.dashboard_outlined),
-                activeIcon: Icon(Icons.dashboard),
-                label: 'Dashboard',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.settings_suggest_outlined),
-                activeIcon: Icon(Icons.settings_suggest),
-                label: 'Operations',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.assessment_outlined),
-                activeIcon: Icon(Icons.assessment),
-                label: 'Reports',
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
