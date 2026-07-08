@@ -51,6 +51,10 @@ class HiveDatabaseService {
   late Box _syncQueueBox;
   late Box _localHistoryBox;
 
+  /// Lazily-built id-indexed cache backing [getCustomerById], invalidated
+  /// whenever [saveCustomers] persists a new master list.
+  Map<String, Customer>? _customerCache;
+
   /// Initializes the local database bindings and opens Hive boxes.
   Future<void> init() async {
     await Hive.initFlutter();
@@ -110,6 +114,14 @@ class HiveDatabaseService {
         .map((c) => jsonEncode(CustomerModel.fromDomain(c).toJson()))
         .toList();
     await _masterBox.put('customers', serialized);
+    _customerCache = null;
+  }
+
+  /// Looks up a single customer by id via an in-memory index built from
+  /// [getCustomers], avoiding a full deserialize-and-scan on every call.
+  Customer? getCustomerById(String id) {
+    _customerCache ??= {for (final c in getCustomers()) c.id: c};
+    return _customerCache![id];
   }
 
   /// Updates latitude/longitude for a specific customer (by id) and persists.

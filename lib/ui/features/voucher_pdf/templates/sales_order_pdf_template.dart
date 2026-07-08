@@ -9,16 +9,16 @@ import 'shared_pdf_template.dart';
 class SalesOrderPdfTemplate {
   static pw.Document generate(
     SalesOrder order,
-    Organization? org,
-    Customer? customer,
-  ) {
+    Organization org,
+    Customer? customer, {
+    PdfPageFormat pageFormat = PdfPageFormat.a4,
+  }) {
     final pdf = pw.Document();
-    final companyName = org?.name ?? 'Van Sales Pro';
-    final currencySymbol = org?.currencySymbol ?? '₹';
+    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
           return [
@@ -34,7 +34,7 @@ class SalesOrderPdfTemplate {
             // Billing Parties Grid (From and To)
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Supplier / Dispatcher',
-              companyName: companyName,
+              companyName: org.name,
               companyDetails: 'On-Route Delivery Van\nTax Registered Vendor',
               billToLabel: 'Ordered By (Customer)',
               clientName: order.customerName,
@@ -44,69 +44,19 @@ class SalesOrderPdfTemplate {
             ),
             pw.SizedBox(height: 20),
 
-            // Shipment Date Block
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: SharedPdfTemplate.lightGreyBackground,
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(
-                  color: SharedPdfTemplate.borderSlate,
-                  width: 1,
-                ),
+            // Shipment Date & Order Status Block
+            SharedPdfTemplate.buildInfoPanel([
+              PdfInfoEntry(
+                'Expected Shipment Date',
+                SharedPdfTemplate.dateOnlyFormat.format(order.shipmentDate),
               ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'EXPECTED SHIPMENT DATE',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        SharedPdfTemplate.dateOnlyFormat.format(
-                          order.shipmentDate,
-                        ),
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(
-                        'ORDER STATUS',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        'Booking Confirmed',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.successEmerald,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              PdfInfoEntry(
+                'Order Status',
+                'Booking Confirmed',
+                alignment: pw.CrossAxisAlignment.end,
+                valueColor: SharedPdfTemplate.successEmerald,
               ),
-            ),
+            ]),
             pw.SizedBox(height: 20),
 
             // Items Section Title
@@ -139,12 +89,15 @@ class SalesOrderPdfTemplate {
                     color: SharedPdfTemplate.primaryIndigo,
                   ),
                   children: [
-                    _buildTableHeader('#', alignLeft: true),
-                    _buildTableHeader('Item & SKU', alignLeft: true),
-                    _buildTableHeader('Qty'),
-                    _buildTableHeader('Rate'),
-                    _buildTableHeader('Tax Amt'),
-                    _buildTableHeader('Total'),
+                    SharedPdfTemplate.buildTableHeader('#', alignLeft: true),
+                    SharedPdfTemplate.buildTableHeader(
+                      'Item & SKU',
+                      alignLeft: true,
+                    ),
+                    SharedPdfTemplate.buildTableHeader('Qty'),
+                    SharedPdfTemplate.buildTableHeader('Rate'),
+                    SharedPdfTemplate.buildTableHeader('Tax Amt'),
+                    SharedPdfTemplate.buildTableHeader('Total'),
                   ],
                 ),
                 // Item Rows
@@ -156,21 +109,23 @@ class SalesOrderPdfTemplate {
                           : SharedPdfTemplate.lightGreyBackground,
                     ),
                     children: [
-                      _buildTableCell('${i + 1}'),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell('${i + 1}'),
+                      SharedPdfTemplate.buildTableCell(
                         '${order.items[i].item.name}\nSKU: ${order.items[i].item.sku}'
                         '${order.items[i].discount > 0 ? ' | Disc: $currencySymbol${order.items[i].discount.toStringAsFixed(2)}' : ''}',
                         alignLeft: true,
                         isSubText: true,
                       ),
-                      _buildTableCell('${order.items[i].quantity}'),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
+                        '${order.items[i].quantity}',
+                      ),
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${order.items[i].rate.toStringAsFixed(2)}',
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${order.items[i].taxAmount.toStringAsFixed(2)} (${order.items[i].taxPercentage.toStringAsFixed(0)}%)',
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${order.items[i].total.toStringAsFixed(2)}',
                         isBold: true,
                       ),
@@ -214,73 +169,35 @@ class SalesOrderPdfTemplate {
                 ),
                 pw.SizedBox(width: 32),
                 // Right Column: Totals Calculation Card
-                pw.Container(
-                  width: 220,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(12),
+                SharedPdfTemplate.buildTotalsCard(
+                  rows: [
+                    SharedPdfTemplate.buildSummaryRow(
+                      'Sub Total',
+                      '$currencySymbol${order.subTotal.toStringAsFixed(2)}',
                     ),
-                    border: pw.Border.all(
-                      color: SharedPdfTemplate.borderSlate,
-                      width: 1,
-                    ),
-                  ),
-                  child: pw.Column(
-                    children: [
-                      _buildSummaryRow(
-                        'Sub Total',
-                        '$currencySymbol${order.subTotal.toStringAsFixed(2)}',
-                      ),
-                      if (order.discountTotal > 0) ...[
-                        pw.SizedBox(height: 4),
-                        _buildSummaryRow(
-                          'Discount Total',
-                          '$currencySymbol${order.discountTotal.toStringAsFixed(2)}',
-                        ),
-                      ],
+                    if (order.discountTotal > 0) ...[
                       pw.SizedBox(height: 4),
-                      _buildSummaryRow(
-                        'VAT / Tax Total',
-                        '$currencySymbol${order.taxTotal.toStringAsFixed(2)}',
-                      ),
-                      if (order.roundOff != 0) ...[
-                        pw.SizedBox(height: 4),
-                        _buildSummaryRow(
-                          'Round Off',
-                          '$currencySymbol${order.roundOff.toStringAsFixed(2)}',
-                        ),
-                      ],
-                      pw.SizedBox(height: 6),
-                      pw.Divider(
-                        color: SharedPdfTemplate.borderSlate,
-                        thickness: 1,
-                      ),
-                      pw.SizedBox(height: 6),
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(
-                            'Grand Total',
-                            style: pw.TextStyle(
-                              fontSize: 11,
-                              fontWeight: pw.FontWeight.bold,
-                              color: SharedPdfTemplate.slateText,
-                            ),
-                          ),
-                          pw.Text(
-                            '$currencySymbol${order.total.toStringAsFixed(2)}',
-                            style: pw.TextStyle(
-                              fontSize: 13,
-                              fontWeight: pw.FontWeight.bold,
-                              color: SharedPdfTemplate.primaryIndigo,
-                            ),
-                          ),
-                        ],
+                      SharedPdfTemplate.buildSummaryRow(
+                        'Discount Total',
+                        '$currencySymbol${order.discountTotal.toStringAsFixed(2)}',
                       ),
                     ],
-                  ),
+                    pw.SizedBox(height: 4),
+                    SharedPdfTemplate.buildSummaryRow(
+                      'VAT / Tax Total',
+                      '$currencySymbol${order.taxTotal.toStringAsFixed(2)}',
+                    ),
+                    if (order.roundOff != 0) ...[
+                      pw.SizedBox(height: 4),
+                      SharedPdfTemplate.buildSummaryRow(
+                        'Round Off',
+                        '$currencySymbol${order.roundOff.toStringAsFixed(2)}',
+                      ),
+                    ],
+                  ],
+                  grandTotalLabel: 'Grand Total',
+                  grandTotalValue:
+                      '$currencySymbol${order.total.toStringAsFixed(2)}',
                 ),
               ],
             ),
@@ -291,65 +208,5 @@ class SalesOrderPdfTemplate {
     );
 
     return pdf;
-  }
-
-  static pw.Widget _buildTableHeader(String text, {bool alignLeft = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(
-        text,
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-        style: const pw.TextStyle(
-          fontSize: 8,
-          fontWeight: pw.FontWeight.bold,
-          color: PdfColors.white,
-        ),
-      ),
-    );
-  }
-
-  static pw.Widget _buildTableCell(
-    String text, {
-    bool alignLeft = false,
-    bool isBold = false,
-    bool isSubText = false,
-  }) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      child: pw.Text(
-        text,
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-        style: pw.TextStyle(
-          fontSize: isSubText ? 7.5 : 8.5,
-          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: isSubText
-              ? SharedPdfTemplate.slateTextSecondary
-              : SharedPdfTemplate.slateText,
-        ),
-      ),
-    );
-  }
-
-  static pw.Widget _buildSummaryRow(String label, String value) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [
-        pw.Text(
-          label,
-          style: pw.TextStyle(
-            fontSize: 9,
-            color: SharedPdfTemplate.slateTextSecondary,
-          ),
-        ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(
-            fontSize: 9,
-            fontWeight: pw.FontWeight.bold,
-            color: SharedPdfTemplate.slateText,
-          ),
-        ),
-      ],
-    );
   }
 }

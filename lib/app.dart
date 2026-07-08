@@ -36,8 +36,6 @@ import 'ui/features/licensing/cubit/license_cubit.dart';
 import 'ui/features/licensing/cubit/server_config_cubit.dart';
 import 'ui/features/licensing/cubit/server_config_state.dart';
 import 'ui/features/licensing/views/license_gate.dart';
-import 'data/services/voucher_pdf_service.dart';
-import 'ui/features/voucher_pdf/bloc/voucher_pdf_bloc.dart';
 
 /// The root widget of the Van Sales Pro application.
 ///
@@ -145,12 +143,6 @@ class VanSalesApp extends StatelessWidget {
           BlocProvider<ServerConfigCubit>(
             create: (context) => ServerConfigCubit(
               apiClient: sl<ZohoApiClient>(),
-              dbService: sl<HiveDatabaseService>(),
-            ),
-          ),
-          BlocProvider<VoucherPdfBloc>(
-            create: (context) => VoucherPdfBloc(
-              pdfService: sl<VoucherPdfService>(),
               dbService: sl<HiveDatabaseService>(),
             ),
           ),

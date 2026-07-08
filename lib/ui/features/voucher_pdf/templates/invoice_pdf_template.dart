@@ -9,16 +9,16 @@ import 'shared_pdf_template.dart';
 class InvoicePdfTemplate {
   static pw.Document generate(
     SalesInvoice invoice,
-    Organization? org,
-    Customer? customer,
-  ) {
+    Organization org,
+    Customer? customer, {
+    PdfPageFormat pageFormat = PdfPageFormat.a4,
+  }) {
     final pdf = pw.Document();
-    final companyName = org?.name ?? 'Van Sales Pro';
-    final currencySymbol = org?.currencySymbol ?? '₹';
+    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
           return [
@@ -34,7 +34,7 @@ class InvoicePdfTemplate {
             // Billing Parties Grid (From and To)
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Supplier / Dispatcher',
-              companyName: companyName,
+              companyName: org.name,
               companyDetails: 'On-Route Delivery Van\nTax Registered Vendor',
               billToLabel: 'Billed To (Customer)',
               clientName: invoice.customerName,
@@ -44,69 +44,18 @@ class InvoicePdfTemplate {
             ),
             pw.SizedBox(height: 20),
 
-            // Due Date & Sync Block
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: SharedPdfTemplate.lightGreyBackground,
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(
-                  color: SharedPdfTemplate.borderSlate,
-                  width: 1,
-                ),
+            // Due Date & Payment Method Block
+            SharedPdfTemplate.buildInfoPanel([
+              PdfInfoEntry(
+                'Payment Due Date',
+                SharedPdfTemplate.dateOnlyFormat.format(invoice.dueDate),
               ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'PAYMENT DUE DATE',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        SharedPdfTemplate.dateOnlyFormat.format(
-                          invoice.dueDate,
-                        ),
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(
-                        'PAYMENT METHOD',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateTextSecondary,
-                        ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        'Credit Terms / Cash',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              const PdfInfoEntry(
+                'Payment Method',
+                'Credit Terms / Cash',
+                alignment: pw.CrossAxisAlignment.end,
               ),
-            ),
+            ]),
             pw.SizedBox(height: 20),
 
             // Items Section Title
@@ -139,12 +88,15 @@ class InvoicePdfTemplate {
                     color: SharedPdfTemplate.primaryIndigo,
                   ),
                   children: [
-                    _buildTableHeader('#', alignLeft: true),
-                    _buildTableHeader('Item & SKU', alignLeft: true),
-                    _buildTableHeader('Qty'),
-                    _buildTableHeader('Rate'),
-                    _buildTableHeader('Tax Amt'),
-                    _buildTableHeader('Total'),
+                    SharedPdfTemplate.buildTableHeader('#', alignLeft: true),
+                    SharedPdfTemplate.buildTableHeader(
+                      'Item & SKU',
+                      alignLeft: true,
+                    ),
+                    SharedPdfTemplate.buildTableHeader('Qty'),
+                    SharedPdfTemplate.buildTableHeader('Rate'),
+                    SharedPdfTemplate.buildTableHeader('Tax Amt'),
+                    SharedPdfTemplate.buildTableHeader('Total'),
                   ],
                 ),
                 // Item Rows
@@ -156,21 +108,23 @@ class InvoicePdfTemplate {
                           : SharedPdfTemplate.lightGreyBackground,
                     ),
                     children: [
-                      _buildTableCell('${i + 1}'),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell('${i + 1}'),
+                      SharedPdfTemplate.buildTableCell(
                         '${invoice.items[i].item.name}\nSKU: ${invoice.items[i].item.sku}'
                         '${invoice.items[i].discount > 0 ? ' | Disc: $currencySymbol${invoice.items[i].discount.toStringAsFixed(2)}' : ''}',
                         alignLeft: true,
                         isSubText: true,
                       ),
-                      _buildTableCell('${invoice.items[i].quantity}'),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
+                        '${invoice.items[i].quantity}',
+                      ),
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${invoice.items[i].rate.toStringAsFixed(2)}',
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${invoice.items[i].taxAmount.toStringAsFixed(2)} (${invoice.items[i].taxPercentage.toStringAsFixed(0)}%)',
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${invoice.items[i].total.toStringAsFixed(2)}',
                         isBold: true,
                       ),
@@ -214,73 +168,35 @@ class InvoicePdfTemplate {
                 ),
                 pw.SizedBox(width: 32),
                 // Right Column: Totals Calculation Card
-                pw.Container(
-                  width: 220,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(12),
+                SharedPdfTemplate.buildTotalsCard(
+                  rows: [
+                    SharedPdfTemplate.buildSummaryRow(
+                      'Sub Total',
+                      '$currencySymbol${invoice.subTotal.toStringAsFixed(2)}',
                     ),
-                    border: pw.Border.all(
-                      color: SharedPdfTemplate.borderSlate,
-                      width: 1,
-                    ),
-                  ),
-                  child: pw.Column(
-                    children: [
-                      _buildSummaryRow(
-                        'Sub Total',
-                        '$currencySymbol${invoice.subTotal.toStringAsFixed(2)}',
-                      ),
-                      if (invoice.discountTotal > 0) ...[
-                        pw.SizedBox(height: 4),
-                        _buildSummaryRow(
-                          'Discount Total',
-                          '$currencySymbol${invoice.discountTotal.toStringAsFixed(2)}',
-                        ),
-                      ],
+                    if (invoice.discountTotal > 0) ...[
                       pw.SizedBox(height: 4),
-                      _buildSummaryRow(
-                        'VAT / Tax Total',
-                        '$currencySymbol${invoice.taxTotal.toStringAsFixed(2)}',
-                      ),
-                      if (invoice.roundOff != 0) ...[
-                        pw.SizedBox(height: 4),
-                        _buildSummaryRow(
-                          'Round Off',
-                          '$currencySymbol${invoice.roundOff.toStringAsFixed(2)}',
-                        ),
-                      ],
-                      pw.SizedBox(height: 6),
-                      pw.Divider(
-                        color: SharedPdfTemplate.borderSlate,
-                        thickness: 1,
-                      ),
-                      pw.SizedBox(height: 6),
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(
-                            'Grand Total',
-                            style: pw.TextStyle(
-                              fontSize: 11,
-                              fontWeight: pw.FontWeight.bold,
-                              color: SharedPdfTemplate.slateText,
-                            ),
-                          ),
-                          pw.Text(
-                            '$currencySymbol${invoice.total.toStringAsFixed(2)}',
-                            style: pw.TextStyle(
-                              fontSize: 13,
-                              fontWeight: pw.FontWeight.bold,
-                              color: SharedPdfTemplate.primaryIndigo,
-                            ),
-                          ),
-                        ],
+                      SharedPdfTemplate.buildSummaryRow(
+                        'Discount Total',
+                        '$currencySymbol${invoice.discountTotal.toStringAsFixed(2)}',
                       ),
                     ],
-                  ),
+                    pw.SizedBox(height: 4),
+                    SharedPdfTemplate.buildSummaryRow(
+                      'VAT / Tax Total',
+                      '$currencySymbol${invoice.taxTotal.toStringAsFixed(2)}',
+                    ),
+                    if (invoice.roundOff != 0) ...[
+                      pw.SizedBox(height: 4),
+                      SharedPdfTemplate.buildSummaryRow(
+                        'Round Off',
+                        '$currencySymbol${invoice.roundOff.toStringAsFixed(2)}',
+                      ),
+                    ],
+                  ],
+                  grandTotalLabel: 'Grand Total',
+                  grandTotalValue:
+                      '$currencySymbol${invoice.total.toStringAsFixed(2)}',
                 ),
               ],
             ),
@@ -291,63 +207,5 @@ class InvoicePdfTemplate {
     );
 
     return pdf;
-  }
-
-  static pw.Widget _buildTableHeader(String text, {bool alignLeft = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: const pw.TextStyle(
-          color: PdfColors.white,
-          fontSize: 9,
-          fontWeight: pw.FontWeight.bold,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
-  }
-
-  static pw.Widget _buildTableCell(
-    String text, {
-    bool alignLeft = false,
-    bool isBold = false,
-    bool isSubText = false,
-  }) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          color: SharedPdfTemplate.slateText,
-          fontSize: isSubText ? 8.5 : 9,
-          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
-  }
-
-  static pw.Widget _buildSummaryRow(String label, String value) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [
-        pw.Text(
-          label,
-          style: pw.TextStyle(
-            fontSize: 9,
-            color: SharedPdfTemplate.slateTextSecondary,
-          ),
-        ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(
-            fontSize: 9,
-            fontWeight: pw.FontWeight.bold,
-            color: SharedPdfTemplate.slateText,
-          ),
-        ),
-      ],
-    );
   }
 }

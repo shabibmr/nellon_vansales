@@ -9,16 +9,16 @@ import 'shared_pdf_template.dart';
 class SalesReturnPdfTemplate {
   static pw.Document generate(
     SalesReturn returnVoucher,
-    Organization? org,
-    Customer? customer,
-  ) {
+    Organization org,
+    Customer? customer, {
+    PdfPageFormat pageFormat = PdfPageFormat.a4,
+  }) {
     final pdf = pw.Document();
-    final companyName = org?.name ?? 'Van Sales Pro';
-    final currencySymbol = org?.currencySymbol ?? '₹';
+    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
           return [
@@ -34,7 +34,7 @@ class SalesReturnPdfTemplate {
             // Billing Parties Grid (From and To)
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Receiver / Merchant',
-              companyName: companyName,
+              companyName: org.name,
               companyDetails: 'On-Route Delivery Van\nTax Registered Vendor',
               billToLabel: 'Returned By (Customer)',
               clientName: returnVoucher.customerName,
@@ -124,11 +124,14 @@ class SalesReturnPdfTemplate {
                     color: SharedPdfTemplate.primaryIndigo,
                   ),
                   children: [
-                    _buildTableHeader('#', alignLeft: true),
-                    _buildTableHeader('Item & SKU', alignLeft: true),
-                    _buildTableHeader('Returned Qty'),
-                    _buildTableHeader('Unit Rate'),
-                    _buildTableHeader('Refund Amount'),
+                    SharedPdfTemplate.buildTableHeader('#', alignLeft: true),
+                    SharedPdfTemplate.buildTableHeader(
+                      'Item & SKU',
+                      alignLeft: true,
+                    ),
+                    SharedPdfTemplate.buildTableHeader('Returned Qty'),
+                    SharedPdfTemplate.buildTableHeader('Unit Rate'),
+                    SharedPdfTemplate.buildTableHeader('Refund Amount'),
                   ],
                 ),
                 // Item Rows
@@ -140,19 +143,19 @@ class SalesReturnPdfTemplate {
                           : SharedPdfTemplate.lightGreyBackground,
                     ),
                     children: [
-                      _buildTableCell('${i + 1}'),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell('${i + 1}'),
+                      SharedPdfTemplate.buildTableCell(
                         '${returnVoucher.items[i].invoiceLineItem.item.name}\nSKU: ${returnVoucher.items[i].invoiceLineItem.item.sku}',
                         alignLeft: true,
                         isSubText: true,
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '${returnVoucher.items[i].returnedQuantity}',
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${returnVoucher.items[i].invoiceLineItem.rate.toStringAsFixed(2)}',
                       ),
-                      _buildTableCell(
+                      SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${returnVoucher.items[i].total.toStringAsFixed(2)}',
                         isBold: true,
                       ),
@@ -167,41 +170,11 @@ class SalesReturnPdfTemplate {
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.end,
               children: [
-                // Right Column: Credit Summary Card
-                pw.Container(
-                  width: 220,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.lightGreyBackground,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(12),
-                    ),
-                    border: pw.Border.all(
-                      color: SharedPdfTemplate.borderSlate,
-                      width: 1,
-                    ),
-                  ),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        'Total Credit Issued',
-                        style: pw.TextStyle(
-                          fontSize: 11,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.slateText,
-                        ),
-                      ),
-                      pw.Text(
-                        '$currencySymbol${returnVoucher.total.toStringAsFixed(2)}',
-                        style: pw.TextStyle(
-                          fontSize: 13,
-                          fontWeight: pw.FontWeight.bold,
-                          color: SharedPdfTemplate.primaryIndigo,
-                        ),
-                      ),
-                    ],
-                  ),
+                SharedPdfTemplate.buildTotalsCard(
+                  rows: const [],
+                  grandTotalLabel: 'Total Credit Issued',
+                  grandTotalValue:
+                      '$currencySymbol${returnVoucher.total.toStringAsFixed(2)}',
                 ),
               ],
             ),
@@ -212,40 +185,5 @@ class SalesReturnPdfTemplate {
     );
 
     return pdf;
-  }
-
-  static pw.Widget _buildTableHeader(String text, {bool alignLeft = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: const pw.TextStyle(
-          color: PdfColors.white,
-          fontSize: 9,
-          fontWeight: pw.FontWeight.bold,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
-  }
-
-  static pw.Widget _buildTableCell(
-    String text, {
-    bool alignLeft = false,
-    bool isBold = false,
-    bool isSubText = false,
-  }) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          color: SharedPdfTemplate.slateText,
-          fontSize: isSubText ? 8.5 : 9,
-          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
-        textAlign: alignLeft ? pw.TextAlign.left : pw.TextAlign.right,
-      ),
-    );
   }
 }

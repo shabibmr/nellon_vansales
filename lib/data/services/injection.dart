@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:get_it/get_it.dart';
 import 'hive_database_service.dart';
 import 'firebase_auth_service.dart';
@@ -8,6 +9,7 @@ import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/sync_repository.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../../domain/repositories/salesperson_repository.dart';
+import '../../domain/repositories/voucher_pdf_repository.dart';
 import '../repositories/auth_repository_impl.dart';
 import '../repositories/sync_repository_impl.dart';
 import '../repositories/sales_repository_impl.dart';
@@ -65,5 +67,10 @@ Future<void> setupDependencyInjection() async {
   sl.registerLazySingleton<LicenseService>(() => LicenseService());
 
   // 7. PDF Document Generation Service
-  sl.registerLazySingleton<VoucherPdfService>(() => VoucherPdfService());
+  final voucherPdfService = VoucherPdfService();
+  sl.registerLazySingleton<VoucherPdfService>(() => voucherPdfService);
+  sl.registerLazySingleton<VoucherPdfRepository>(() => voucherPdfService);
+  // Best-effort cleanup of temp PDFs left behind by a previous session
+  // (e.g. app was killed before per-share deletion ran).
+  unawaited(voucherPdfService.clearStaleTempFiles());
 }

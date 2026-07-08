@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
 
 /// Base class for all Voucher PDF events.
 abstract class VoucherPdfEvent extends Equatable {

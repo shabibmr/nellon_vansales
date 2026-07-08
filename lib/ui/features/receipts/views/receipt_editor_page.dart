@@ -10,7 +10,7 @@ import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/customer_selector_sheet.dart';
 import '../bloc/receipt_bloc.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
-import '../../../../data/services/voucher_pdf_service.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/open_invoice.dart';
 
