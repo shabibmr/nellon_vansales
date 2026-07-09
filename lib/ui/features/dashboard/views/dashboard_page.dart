@@ -34,6 +34,16 @@ import '../../stock_transfer/views/stock_unloading_page.dart';
 import '../../reports/views/item_sales_report_page.dart';
 import '../../reports/views/aging_receivables_report_page.dart';
 import '../../reports/views/stock_report_page.dart';
+import '../../reports/views/transactions_summary_report_page.dart';
+import '../../reports/views/expense_summary_report_page.dart';
+import '../../reports/views/invoice_receipts_summary_report_page.dart';
+import '../../reports/views/sales_summary_by_customer_value_report_page.dart';
+import '../../reports/views/sales_summary_by_customer_item_report_page.dart';
+import '../../reports/views/itemwise_orders_summary_report_page.dart';
+import '../../reports/views/orders_summary_by_customer_report_page.dart';
+import '../../reports/views/order_status_report_page.dart';
+import '../../reports/views/itemwise_returns_summary_report_page.dart';
+import '../../reports/views/customerwise_returns_summary_report_page.dart';
 import '../../ledger/bloc/customer_ledger_bloc.dart';
 import '../../ledger/views/customer_ledger_page.dart';
 import '../../sync/views/masters_sync_page.dart';
@@ -239,6 +249,131 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _showTransactionsSummaryReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const TransactionsSummaryReportPage()),
+    );
+  }
+
+  void _showExpenseSummaryReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ExpenseSummaryReportPage()),
+    );
+  }
+
+  void _showInvoiceReceiptsSummaryReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const InvoiceReceiptsSummaryReportPage(),
+      ),
+    );
+  }
+
+  void _showSalesSummaryByCustomerValueReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SalesSummaryByCustomerValueReportPage(),
+      ),
+    );
+  }
+
+  void _showSalesSummaryByCustomerItemReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SalesSummaryByCustomerItemReportPage(),
+      ),
+    );
+  }
+
+  void _showItemwiseOrdersSummaryReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ItemwiseOrdersSummaryReportPage(),
+      ),
+    );
+  }
+
+  void _showOrdersSummaryByCustomerReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OrdersSummaryByCustomerReportPage(),
+      ),
+    );
+  }
+
+  void _showOrdersReadyReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OrderStatusReportPage(
+          filter: OrderStatusFilter.readyOrPending,
+          title: 'Orders Ready',
+        ),
+      ),
+    );
+  }
+
+  void _showPendingOrdersReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OrderStatusReportPage(
+          filter: OrderStatusFilter.readyOrPending,
+          title: 'Pending Orders',
+        ),
+      ),
+    );
+  }
+
+  void _showOrdersInvoicedReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OrderStatusReportPage(
+          filter: OrderStatusFilter.invoiced,
+          title: 'Orders Invoiced',
+        ),
+      ),
+    );
+  }
+
+  void _showOrdersDelayedReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OrderStatusReportPage(
+          filter: OrderStatusFilter.delayed,
+          title: 'Orders Delayed',
+        ),
+      ),
+    );
+  }
+
+  void _showItemwiseReturnsSummaryReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ItemwiseReturnsSummaryReportPage(),
+      ),
+    );
+  }
+
+  void _showCustomerwiseReturnsSummaryReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CustomerwiseReturnsSummaryReportPage(),
+      ),
+    );
+  }
+
   void _showSalesReturnListPage() {
     context.read<SalesReturnBloc>().add(LoadReturns());
     Navigator.push(
@@ -384,6 +519,22 @@ class _DashboardPageState extends State<DashboardPage> {
         onCustomerLedger: _showCustomerLedgerPage,
         onAgingReport: _showAgingReport,
         onStockReport: _showStockReport,
+        onTransactionsSummaryReport: _showTransactionsSummaryReport,
+        onExpenseSummaryReport: _showExpenseSummaryReport,
+        onInvoiceReceiptsSummaryReport: _showInvoiceReceiptsSummaryReport,
+        onSalesSummaryByCustomerValueReport:
+            _showSalesSummaryByCustomerValueReport,
+        onSalesSummaryByCustomerItemReport:
+            _showSalesSummaryByCustomerItemReport,
+        onItemwiseOrdersSummaryReport: _showItemwiseOrdersSummaryReport,
+        onOrdersSummaryByCustomerReport: _showOrdersSummaryByCustomerReport,
+        onOrdersReadyReport: _showOrdersReadyReport,
+        onPendingOrdersReport: _showPendingOrdersReport,
+        onOrdersInvoicedReport: _showOrdersInvoicedReport,
+        onOrdersDelayedReport: _showOrdersDelayedReport,
+        onItemwiseReturnsSummaryReport: _showItemwiseReturnsSummaryReport,
+        onCustomerwiseReturnsSummaryReport:
+            _showCustomerwiseReturnsSummaryReport,
       ),
     ];
 

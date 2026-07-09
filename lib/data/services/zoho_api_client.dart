@@ -1505,4 +1505,181 @@ class ZohoApiClient {
       },
     ];
   }
+
+  // 18. Single expense detail (GET /expenses/{id}) — the list endpoint only
+  // returns expense headers, so itemized line items must be fetched per-expense.
+  Future<Map<String, dynamic>> fetchExpenseDetail(String expenseId) async {
+    final response = await _dio.get('/expenses/$expenseId');
+    if (response.statusCode != 200) {
+      throw Exception(
+        'GET /expenses/$expenseId failed: ${response.statusCode}',
+      );
+    }
+    return Map<String, dynamic>.from(response.data['expense'] ?? {});
+  }
+
+  // 19. Full expense list with itemized line items — powers the Expense
+  // Summary and Transactions Summary reports.
+  Future<List<Map<String, dynamic>>> fetchExpenses() async {
+    if (!_isMockMode()) {
+      try {
+        final headers = await _fetchAllPages('/expenses', {});
+        final details = <Map<String, dynamic>>[];
+        for (final header in headers) {
+          final id = header['expense_id']?.toString();
+          if (id == null || id.isEmpty) continue;
+          try {
+            details.add(await fetchExpenseDetail(id));
+          } catch (e) {
+            // Skip expenses whose detail fails to load rather than failing the whole report.
+            AppLogger.error('ZohoApi', 'fetchExpenseDetail($id) error: $e');
+          }
+        }
+        return details;
+      } catch (e) {
+        AppLogger.error('ZohoApi', 'fetchExpenses error: $e');
+        throw Exception('Failed to fetch expenses from Zoho: $e');
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    final now = DateTime.now();
+    return [
+      {
+        'expense_id': 'exp_9001',
+        'date': now
+            .subtract(const Duration(days: 2))
+            .toIso8601String()
+            .split('T')[0],
+        'total': 850.0,
+        'line_items': [
+          {'account_name': 'Fuel', 'amount': 600.0, 'description': 'Diesel'},
+          {
+            'account_name': 'Tolls',
+            'amount': 250.0,
+            'description': 'Highway toll',
+          },
+        ],
+      },
+      {
+        'expense_id': 'exp_9002',
+        'date': now
+            .subtract(const Duration(days: 1))
+            .toIso8601String()
+            .split('T')[0],
+        'total': 300.0,
+        'line_items': [
+          {'account_name': 'Meals', 'amount': 300.0, 'description': 'Lunch'},
+        ],
+      },
+    ];
+  }
+
+  // 20. Full customer-payment (receipt) list — powers the Invoice Receipts
+  // Summary and Transactions Summary reports.
+  Future<List<Map<String, dynamic>>> fetchReceipts() async {
+    if (!_isMockMode()) {
+      try {
+        return await _fetchAllPages('/customerpayments', {});
+      } catch (e) {
+        AppLogger.error('ZohoApi', 'fetchReceipts error: $e');
+        throw Exception('Failed to fetch receipts from Zoho: $e');
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    final now = DateTime.now();
+    return [
+      {
+        'payment_id': 'pay_9001',
+        'payment_number': 'PAY-00001',
+        'customer_id': 'cust_101',
+        'customer_name': 'Metro Hypermarket',
+        'date': now
+            .subtract(const Duration(days: 1))
+            .toIso8601String()
+            .split('T')[0],
+        'amount': 2850.00,
+        'payment_mode': 'Cash',
+        'reference_number': '',
+        'invoices': [
+          {
+            'invoice_id': 'inv_9001',
+            'invoice_number': 'INV-00001',
+            'amount_applied': 2850.00,
+          },
+        ],
+      },
+    ];
+  }
+
+  // 21. Single credit-note detail (GET /creditnotes/{id}) — the list endpoint
+  // only returns headers, so line items must be fetched per-credit-note.
+  Future<Map<String, dynamic>> fetchSalesReturnDetail(
+    String creditNoteId,
+  ) async {
+    final response = await _dio.get('/creditnotes/$creditNoteId');
+    if (response.statusCode != 200) {
+      throw Exception(
+        'GET /creditnotes/$creditNoteId failed: ${response.statusCode}',
+      );
+    }
+    return Map<String, dynamic>.from(response.data['creditnote'] ?? {});
+  }
+
+  // 22. Full sales-return (credit note) list with line items — powers the
+  // Sales Returns reports.
+  Future<List<Map<String, dynamic>>> fetchSalesReturns() async {
+    if (!_isMockMode()) {
+      try {
+        final headers = await _fetchAllPages('/creditnotes', {});
+        final details = <Map<String, dynamic>>[];
+        for (final header in headers) {
+          final id = header['creditnote_id']?.toString();
+          if (id == null || id.isEmpty) continue;
+          try {
+            details.add(await fetchSalesReturnDetail(id));
+          } catch (e) {
+            // Skip returns whose detail fails to load rather than failing the whole report.
+            AppLogger.error(
+              'ZohoApi',
+              'fetchSalesReturnDetail($id) error: $e',
+            );
+          }
+        }
+        return details;
+      } catch (e) {
+        AppLogger.error('ZohoApi', 'fetchSalesReturns error: $e');
+        throw Exception('Failed to fetch sales returns from Zoho: $e');
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    final now = DateTime.now();
+    return [
+      {
+        'creditnote_id': 'cn_9001',
+        'creditnote_number': 'CN-00001',
+        'customer_id': 'cust_101',
+        'customer_name': 'Metro Hypermarket',
+        'date': now
+            .subtract(const Duration(days: 2))
+            .toIso8601String()
+            .split('T')[0],
+        'reason': 'Damaged goods',
+        'line_items': [
+          {
+            'item_id': 'item_501',
+            'name': 'Premium Fresh Milk (1L)',
+            'sku': 'MLK-1L',
+            'quantity': 2,
+            'returned_quantity': 2,
+            'rate': 60.00,
+            'tax_percentage': 5.0,
+            'discount': 0.0,
+          },
+        ],
+      },
+    ];
+  }
 }

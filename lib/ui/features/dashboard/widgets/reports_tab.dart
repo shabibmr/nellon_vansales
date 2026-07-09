@@ -8,6 +8,22 @@ class ReportsTab extends StatelessWidget {
   final VoidCallback onAgingReport;
   final VoidCallback onStockReport;
 
+  final VoidCallback onTransactionsSummaryReport;
+  final VoidCallback onExpenseSummaryReport;
+  final VoidCallback onInvoiceReceiptsSummaryReport;
+  final VoidCallback onSalesSummaryByCustomerValueReport;
+  final VoidCallback onSalesSummaryByCustomerItemReport;
+
+  final VoidCallback onItemwiseOrdersSummaryReport;
+  final VoidCallback onOrdersSummaryByCustomerReport;
+  final VoidCallback onOrdersReadyReport;
+  final VoidCallback onPendingOrdersReport;
+  final VoidCallback onOrdersInvoicedReport;
+  final VoidCallback onOrdersDelayedReport;
+
+  final VoidCallback onItemwiseReturnsSummaryReport;
+  final VoidCallback onCustomerwiseReturnsSummaryReport;
+
   const ReportsTab({
     super.key,
     required this.isDark,
@@ -15,6 +31,19 @@ class ReportsTab extends StatelessWidget {
     required this.onCustomerLedger,
     required this.onAgingReport,
     required this.onStockReport,
+    required this.onTransactionsSummaryReport,
+    required this.onExpenseSummaryReport,
+    required this.onInvoiceReceiptsSummaryReport,
+    required this.onSalesSummaryByCustomerValueReport,
+    required this.onSalesSummaryByCustomerItemReport,
+    required this.onItemwiseOrdersSummaryReport,
+    required this.onOrdersSummaryByCustomerReport,
+    required this.onOrdersReadyReport,
+    required this.onPendingOrdersReport,
+    required this.onOrdersInvoicedReport,
+    required this.onOrdersDelayedReport,
+    required this.onItemwiseReturnsSummaryReport,
+    required this.onCustomerwiseReturnsSummaryReport,
   });
 
   @override
@@ -74,6 +103,162 @@ class ReportsTab extends StatelessWidget {
                 color: AppTheme.successEmerald,
                 isDark: isDark,
                 onTap: onStockReport,
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                'TRANSACTIONS SUMMARY',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _ReportTile(
+                title: 'Aggregate of All',
+                subtitle: 'Invoices, receipts, expenses and returns by type.',
+                icon: Icons.dashboard_outlined,
+                color: AppTheme.primaryIndigo,
+                isDark: isDark,
+                onTap: onTransactionsSummaryReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Expense Summary',
+                subtitle: 'Expense entries grouped by category.',
+                icon: Icons.local_gas_station_outlined,
+                color: AppTheme.errorRose,
+                isDark: isDark,
+                onTap: onExpenseSummaryReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Invoice Receipts Summary',
+                subtitle: 'Receipts collected, grouped by payment mode.',
+                icon: Icons.point_of_sale_outlined,
+                color: AppTheme.successEmerald,
+                isDark: isDark,
+                onTap: onInvoiceReceiptsSummaryReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Sales Summary by Customer (Value)',
+                subtitle: 'Invoice count and total value per customer.',
+                icon: Icons.trending_up_rounded,
+                color: AppTheme.infoSky,
+                isDark: isDark,
+                onTap: onSalesSummaryByCustomerValueReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Sales Summary by Customer (By Item)',
+                subtitle: 'Itemwise sales breakdown per customer.',
+                icon: Icons.shopping_bag_outlined,
+                color: AppTheme.warningAmber,
+                isDark: isDark,
+                onTap: onSalesSummaryByCustomerItemReport,
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                'ORDERS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _ReportTile(
+                title: 'Itemwise Orders Summary',
+                subtitle: 'Ordered quantities and amounts per item.',
+                icon: Icons.bar_chart_rounded,
+                color: AppTheme.infoSky,
+                isDark: isDark,
+                onTap: onItemwiseOrdersSummaryReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Orders Summary by Customer',
+                subtitle: 'Order count and total value per customer.',
+                icon: Icons.people_outline_rounded,
+                color: AppTheme.primaryIndigo,
+                isDark: isDark,
+                onTap: onOrdersSummaryByCustomerReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Orders Ready',
+                subtitle: 'Open orders due for shipment.',
+                icon: Icons.local_shipping_outlined,
+                color: AppTheme.successEmerald,
+                isDark: isDark,
+                onTap: onOrdersReadyReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Pending Orders',
+                subtitle: 'Open orders not yet shipped or delayed.',
+                icon: Icons.hourglass_empty_rounded,
+                color: AppTheme.warningAmber,
+                isDark: isDark,
+                onTap: onPendingOrdersReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Orders Invoiced',
+                subtitle: 'Orders already converted to an invoice.',
+                icon: Icons.receipt_long_outlined,
+                color: AppTheme.infoSky,
+                isDark: isDark,
+                onTap: onOrdersInvoicedReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Orders Delayed',
+                subtitle: 'Open orders past their shipment date.',
+                icon: Icons.warning_amber_rounded,
+                color: AppTheme.errorRose,
+                isDark: isDark,
+                onTap: onOrdersDelayedReport,
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                'SALES RETURNS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _ReportTile(
+                title: 'Itemwise Summary',
+                subtitle: 'Returned quantities and refunds per item.',
+                icon: Icons.assignment_return_outlined,
+                color: AppTheme.warningAmber,
+                isDark: isDark,
+                onTap: onItemwiseReturnsSummaryReport,
+              ),
+              const SizedBox(height: 10),
+              _ReportTile(
+                title: 'Customerwise Summary',
+                subtitle: 'Return count and refunds per customer.',
+                icon: Icons.people_outline_rounded,
+                color: AppTheme.errorRose,
+                isDark: isDark,
+                onTap: onCustomerwiseReturnsSummaryReport,
               ),
               const SizedBox(height: 24),
             ],
