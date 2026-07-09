@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../data/services/report_export_service.dart';
 import '../theme/app_theme.dart';
 import 'date_range_filter_card.dart';
 
@@ -49,6 +50,9 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
   final Widget Function(BuildContext context, T row) itemBuilder;
   final List<ReportSummaryChip> summaryChips;
 
+  /// Optional widget rendered above the summary chips (e.g. a hero total).
+  final Widget? banner;
+
   final DateTime? startDate;
   final DateTime? endDate;
   final VoidCallback? onStartDateTap;
@@ -59,6 +63,15 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
   final String emptyTitle;
   final String emptyMessage;
   final String emptyFilteredMessage;
+
+  /// Column labels used for Excel/PDF export, in the same order as
+  /// [exportRow]'s output. Omit (along with [exportRow]) to hide export
+  /// actions for reports that don't support tabular export.
+  final List<String>? exportHeaders;
+
+  /// Converts one row into its plain-text export cells, matching
+  /// [exportHeaders] order.
+  final List<String> Function(T row)? exportRow;
 
   const SortableReportScaffold({
     super.key,
@@ -72,6 +85,7 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
     required this.onSort,
     required this.itemBuilder,
     this.summaryChips = const [],
+    this.banner,
     this.startDate,
     this.endDate,
     this.onStartDateTap,
@@ -81,9 +95,39 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
     this.emptyTitle = 'No data',
     this.emptyMessage = 'No records found.',
     this.emptyFilteredMessage = 'No records in the selected date range.',
+    this.exportHeaders,
+    this.exportRow,
   });
 
   bool get _hasDateFilter => onStartDateTap != null && onEndDateTap != null;
+
+  bool get _canExport =>
+      exportHeaders != null && exportRow != null && rows.isNotEmpty;
+
+  List<List<String>> _exportRows() => rows.map(exportRow!).toList();
+
+  Future<void> _handleExport(BuildContext context, String action) async {
+    final headers = exportHeaders!;
+    final data = _exportRows();
+    try {
+      switch (action) {
+        case 'csv':
+          await ReportExportService.exportCsv(title, headers, data);
+          break;
+        case 'pdf':
+          await ReportExportService.exportPdf(title, headers, data);
+          break;
+        case 'print':
+          await ReportExportService.printReport(title, headers, data);
+          break;
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
 
   Widget _sortIcon(F field) {
     if (sortField != field) {
@@ -122,11 +166,54 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
               icon: const Icon(Icons.refresh_rounded),
               onPressed: onRefresh,
             ),
+          if (_canExport)
+            PopupMenuButton<String>(
+              tooltip: 'Export report',
+              icon: const Icon(Icons.ios_share_rounded),
+              onSelected: (action) => _handleExport(context, action),
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'csv',
+                  child: Row(
+                    children: [
+                      Icon(Icons.grid_on_rounded, size: 18),
+                      SizedBox(width: 10),
+                      Text('Export as Excel (CSV)'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'pdf',
+                  child: Row(
+                    children: [
+                      Icon(Icons.picture_as_pdf_outlined, size: 18),
+                      SizedBox(width: 10),
+                      Text('Export as PDF'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'print',
+                  child: Row(
+                    children: [
+                      Icon(Icons.print_outlined, size: 18),
+                      SizedBox(width: 10),
+                      Text('Print'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
       body: SafeArea(
         child: Column(
           children: [
+            if (banner != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: banner,
+              ),
             if (_hasDateFilter)
               DateRangeFilterCard(
                 startDate: startDate,

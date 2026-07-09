@@ -202,6 +202,12 @@ class _CustomerwiseReturnsSummaryReportPageState
         ReportColumn(label: 'RETURNS', flex: 2, field: _SortField.count),
         ReportColumn(label: 'REFUNDED', flex: 3, field: _SortField.amount),
       ],
+      exportHeaders: const ['Customer', 'Returns', 'Refunded'],
+      exportRow: (row) => [
+        row.customerName,
+        '${row.returnCount}',
+        row.totalRefunded.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         return Card(
           margin: EdgeInsets.zero,

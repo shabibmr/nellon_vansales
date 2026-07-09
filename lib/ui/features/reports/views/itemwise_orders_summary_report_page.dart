@@ -217,6 +217,14 @@ class _ItemwiseOrdersSummaryReportPageState
         ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
         ReportColumn(label: 'CUST', flex: 2, field: _SortField.customers),
       ],
+      exportHeaders: const ['Item', 'SKU', 'Qty', 'Amount', 'Customers'],
+      exportRow: (row) => [
+        row.itemName,
+        row.sku,
+        '${row.totalQty}',
+        row.totalAmount.toStringAsFixed(2),
+        '${row.customerCount}',
+      ],
       itemBuilder: (context, row) {
         final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
         return Card(

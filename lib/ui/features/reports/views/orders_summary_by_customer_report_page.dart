@@ -200,6 +200,12 @@ class _OrdersSummaryByCustomerReportPageState
         ReportColumn(label: 'ORDERS', flex: 2, field: _SortField.count),
         ReportColumn(label: 'VALUE', flex: 3, field: _SortField.value),
       ],
+      exportHeaders: const ['Customer', 'Orders', 'Value'],
+      exportRow: (row) => [
+        row.customerName,
+        '${row.orderCount}',
+        row.totalValue.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         final pct = totalValue > 0 ? (row.totalValue / totalValue) : 0.0;
         return Card(

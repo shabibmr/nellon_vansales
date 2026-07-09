@@ -273,6 +273,12 @@ class _TransactionsSummaryReportPageState
         ReportColumn(label: 'COUNT', flex: 2, field: _SortField.count),
         ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
       ],
+      exportHeaders: const ['Type', 'Count', 'Amount'],
+      exportRow: (row) => [
+        row.type,
+        '${row.count}',
+        row.totalAmount.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         return Card(
           margin: EdgeInsets.zero,

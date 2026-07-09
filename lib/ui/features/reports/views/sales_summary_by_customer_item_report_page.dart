@@ -219,6 +219,13 @@ class _SalesSummaryByCustomerItemReportPageState
         ReportColumn(label: 'QTY', flex: 2, field: _SortField.qty),
         ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
       ],
+      exportHeaders: const ['Customer', 'Item', 'Qty', 'Amount'],
+      exportRow: (row) => [
+        row.customerName,
+        row.itemName,
+        '${row.totalQty}',
+        row.totalAmount.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         return Card(
           margin: EdgeInsets.zero,

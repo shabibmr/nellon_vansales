@@ -211,6 +211,13 @@ class _ItemwiseReturnsSummaryReportPageState
         ReportColumn(label: 'QTY', flex: 2, field: _SortField.qty),
         ReportColumn(label: 'REFUNDED', flex: 3, field: _SortField.amount),
       ],
+      exportHeaders: const ['Item', 'SKU', 'Qty', 'Refunded'],
+      exportRow: (row) => [
+        row.itemName,
+        row.sku,
+        '${row.totalQty}',
+        row.totalRefunded.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         return Card(
           margin: EdgeInsets.zero,

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../../../data/models/sales_invoice_model.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
@@ -9,6 +8,7 @@ import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
+import '../../../core/widgets/sortable_report_scaffold.dart';
 
 /// Aggregated row for a single item across all filtered invoices.
 class _ItemSalesRow {
@@ -47,7 +47,6 @@ class ItemSalesReportPage extends StatefulWidget {
 class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
   final ZohoApiClient _apiClient = sl<ZohoApiClient>();
-  final DateFormat _dateFmt = DateFormat('dd MMM yyyy');
 
   DateTime? _startDate;
   DateTime? _endDate;
@@ -169,545 +168,178 @@ class _ItemSalesReportPageState extends State<ItemSalesReportPage> {
     });
   }
 
-  Widget _sortIcon(_SortField field) {
-    if (_sortField != field) {
-      return const Icon(Icons.unfold_more, size: 14, color: Colors.grey);
-    }
-    return Icon(
-      _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-      size: 14,
-      color: AppTheme.primaryIndigo,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
     final rows = _buildReport();
-    final hasFilter = _startDate != null || _endDate != null;
 
     final totalQty = rows.fold(0, (sum, r) => sum + r.totalQty);
     final totalAmount = rows.fold(0.0, (sum, r) => sum + r.totalAmount);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Item Sales Report'),
-        actions: [
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              tooltip: 'Refresh from Zoho',
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: _fetchFromZoho,
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-        children: [
-          // Date filter card
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Card(
-              elevation: isDark ? 0 : 2,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.filter_alt_outlined,
-                          size: 16,
-                          color: AppTheme.primaryIndigo,
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Filter by Date',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (hasFilter)
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            onPressed: () => setState(() {
-                              _startDate = null;
-                              _endDate = null;
-                            }),
-                            child: const Text(
-                              'Clear',
-                              style: TextStyle(
-                                color: AppTheme.errorRose,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DateChip(
-                            label: _startDate != null
-                                ? _dateFmt.format(_startDate!)
-                                : 'Start Date',
-                            hasValue: _startDate != null,
-                            isDark: isDark,
-                            onTap: () => _pickDate(true),
-                          ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('to', style: TextStyle(fontSize: 12)),
-                        ),
-                        Expanded(
-                          child: _DateChip(
-                            label: _endDate != null
-                                ? _dateFmt.format(_endDate!)
-                                : 'End Date',
-                            hasValue: _endDate != null,
-                            isDark: isDark,
-                            onTap: () => _pickDate(false),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+    return SortableReportScaffold<_ItemSalesRow, _SortField>(
+      title: 'Item Sales Report',
+      isLoading: _isLoading,
+      onRefresh: _fetchFromZoho,
+      rows: rows,
+      sortField: _sortField,
+      sortAscending: _sortAscending,
+      onSort: _toggleSort,
+      startDate: _startDate,
+      endDate: _endDate,
+      onStartDateTap: () => _pickDate(true),
+      onEndDateTap: () => _pickDate(false),
+      onClearDate: () => setState(() {
+        _startDate = null;
+        _endDate = null;
+      }),
+      emptyIcon: Icons.bar_chart_rounded,
+      emptyTitle: 'No sales data',
+      emptyMessage: 'No invoices recorded yet.',
+      emptyFilteredMessage: 'No invoices in the selected date range.',
+      summaryChips: [
+        ReportSummaryChip(
+          label: 'Items',
+          value: '${rows.length}',
+          color: AppTheme.infoSky,
+        ),
+        ReportSummaryChip(
+          label: 'Units Sold',
+          value: '$totalQty',
+          color: AppTheme.primaryIndigo,
+        ),
+        ReportSummaryChip(
+          label: 'Total',
+          value: '$cs${totalAmount.toStringAsFixed(2)}',
+          color: AppTheme.successEmerald,
+        ),
+      ],
+      columns: const [
+        ReportColumn(
+          label: 'ITEM',
+          flex: 5,
+          field: _SortField.name,
+          alignEnd: false,
+        ),
+        ReportColumn(label: 'QTY', flex: 2, field: _SortField.qty),
+        ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
+        ReportColumn(label: 'CUST', flex: 2, field: _SortField.customers),
+      ],
+      exportHeaders: const ['Item', 'SKU', 'Qty', 'Amount', 'Customers'],
+      exportRow: (row) => [
+        row.itemName,
+        row.sku,
+        '${row.totalQty}',
+        row.totalAmount.toStringAsFixed(2),
+        '${row.customerCount}',
+      ],
+      itemBuilder: (context, row) {
+        final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
 
-          // Summary strip
-          if (rows.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _SummaryChip(
-                      label: 'Items',
-                      value: '${rows.length}',
-                      color: AppTheme.infoSky,
-                      isDark: isDark,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SummaryChip(
-                      label: 'Units Sold',
-                      value: '$totalQty',
-                      color: AppTheme.primaryIndigo,
-                      isDark: isDark,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SummaryChip(
-                      label: 'Total',
-                      value: '$cs${totalAmount.toStringAsFixed(2)}',
-                      color: AppTheme.successEmerald,
-                      isDark: isDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 8),
-
-          // Column headers
-          if (rows.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E293B)
-                      : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       flex: 5,
-                      child: GestureDetector(
-                        onTap: () => _toggleSort(_SortField.name),
-                        child: Row(
-                          children: [
-                            const Text(
-                              'ITEM',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            row.itemName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
                             ),
-                            const SizedBox(width: 2),
-                            _sortIcon(_SortField.name),
-                          ],
-                        ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'SKU: ${row.sku}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
                       flex: 2,
-                      child: GestureDetector(
-                        onTap: () => _toggleSort(_SortField.qty),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            _sortIcon(_SortField.qty),
-                            const SizedBox(width: 2),
-                            const Text(
-                              'QTY',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                      child: Text(
+                        '${row.totalQty}',
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
                     Expanded(
                       flex: 3,
-                      child: GestureDetector(
-                        onTap: () => _toggleSort(_SortField.amount),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            _sortIcon(_SortField.amount),
-                            const SizedBox(width: 2),
-                            const Text(
-                              'AMOUNT',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                      child: Text(
+                        '$cs${row.totalAmount.toStringAsFixed(2)}',
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppTheme.primaryIndigo,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Expanded(
                       flex: 2,
-                      child: GestureDetector(
-                        onTap: () => _toggleSort(_SortField.customers),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            _sortIcon(_SortField.customers),
-                            const SizedBox(width: 2),
-                            const Text(
-                              'CUST',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                      child: Text(
+                        '${row.customerCount}',
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ),
-
-          const SizedBox(height: 4),
-
-          // List body
-          Expanded(
-            child: rows.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.bar_chart_rounded,
-                          size: 64,
-                          color: isDark
-                              ? const Color(0xFF334155)
-                              : const Color(0xFFCBD5E1),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No sales data',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          hasFilter
-                              ? 'No invoices in the selected date range.'
-                              : 'No invoices recorded yet.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? const Color(0xFF475569)
-                                : const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    itemCount: rows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final row = rows[index];
-                      final pct = totalAmount > 0
-                          ? (row.totalAmount / totalAmount)
-                          : 0.0;
-
-                      return Card(
-                        margin: EdgeInsets.zero,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    flex: 5,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          row.itemName,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'SKU: ${row.sku}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? AppTheme.darkTextSecondary
-                                                : AppTheme.lightTextSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Text(
-                                      '${row.totalQty}',
-                                      textAlign: TextAlign.end,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 3,
-                                    child: Text(
-                                      '$cs${row.totalAmount.toStringAsFixed(2)}',
-                                      textAlign: TextAlign.end,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                        color: AppTheme.primaryIndigo,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Text(
-                                      '${row.customerCount}',
-                                      textAlign: TextAlign.end,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark
-                                            ? AppTheme.darkTextSecondary
-                                            : AppTheme.lightTextSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              // Share-of-total progress bar
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: pct,
-                                  backgroundColor: isDark
-                                      ? const Color(0xFF1E293B)
-                                      : const Color(0xFFE2E8F0),
-                                  color: AppTheme.primaryIndigo,
-                                  minHeight: 4,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${(pct * 100).toStringAsFixed(1)}% of total sales',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: isDark
-                                      ? AppTheme.darkTextSecondary
-                                      : AppTheme.lightTextSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                const SizedBox(height: 8),
+                // Share-of-total progress bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: pct,
+                    backgroundColor: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                    color: AppTheme.primaryIndigo,
+                    minHeight: 4,
                   ),
-          ),
-        ],
-      ),
-      ),
-    );
-  }
-}
-
-class _DateChip extends StatelessWidget {
-  final String label;
-  final bool hasValue;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _DateChip({
-    required this.label,
-    required this.hasValue,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          ),
-          borderRadius: BorderRadius.circular(8),
-          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.date_range,
-              size: 14,
-              color: AppTheme.primaryIndigo,
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: hasValue
-                      ? (isDark ? AppTheme.darkText : AppTheme.lightText)
-                      : (isDark
-                            ? AppTheme.darkTextSecondary
-                            : AppTheme.lightTextSecondary),
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final bool isDark;
-
-  const _SummaryChip({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: color,
+                const SizedBox(height: 4),
+                Text(
+                  '${(pct * 100).toStringAsFixed(1)}% of total sales',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.lightTextSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                color: isDark ? AppTheme.darkText : AppTheme.lightText,
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -220,6 +220,12 @@ class _ExpenseSummaryReportPageState extends State<ExpenseSummaryReportPage> {
         ReportColumn(label: 'ENTRIES', flex: 2, field: _SortField.count),
         ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
       ],
+      exportHeaders: const ['Category', 'Entries', 'Amount'],
+      exportRow: (row) => [
+        row.category,
+        '${row.entryCount}',
+        row.totalAmount.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
         final isDark = Theme.of(context).brightness == Brightness.dark;

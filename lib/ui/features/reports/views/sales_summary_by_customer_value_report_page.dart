@@ -202,6 +202,12 @@ class _SalesSummaryByCustomerValueReportPageState
         ReportColumn(label: 'INVOICES', flex: 2, field: _SortField.count),
         ReportColumn(label: 'VALUE', flex: 3, field: _SortField.value),
       ],
+      exportHeaders: const ['Customer', 'Invoices', 'Value'],
+      exportRow: (row) => [
+        row.customerName,
+        '${row.invoiceCount}',
+        row.totalValue.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         final pct = totalValue > 0 ? (row.totalValue / totalValue) : 0.0;
         return Card(

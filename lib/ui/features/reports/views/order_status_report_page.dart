@@ -8,7 +8,9 @@ import '../../../../domain/models/sales_order.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/document_list_card.dart';
-import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/sortable_report_scaffold.dart';
+
+enum _SortField { date, total }
 
 /// Which bucket of sales orders an [OrderStatusReportPage] shows.
 ///
@@ -43,6 +45,8 @@ class _OrderStatusReportPageState extends State<OrderStatusReportPage> {
   final ZohoApiClient _apiClient = sl<ZohoApiClient>();
   final DateFormat _dateFmt = DateFormat('dd MMM yyyy');
 
+  _SortField _sortField = _SortField.date;
+  bool _sortAscending = false;
   bool _isLoading = false;
   List<SalesOrder> _allOrders = [];
 
@@ -90,62 +94,78 @@ class _OrderStatusReportPageState extends State<OrderStatusReportPage> {
     }
   }
 
+  void _toggleSort(_SortField field) {
+    setState(() {
+      if (_sortField == field) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortField = field;
+        _sortAscending = false;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
     final orders = _allOrders.where(_matches).toList()
-      ..sort((a, b) => b.shipmentDate.compareTo(a.shipmentDate));
+      ..sort((a, b) {
+        final cmp = switch (_sortField) {
+          _SortField.date => a.shipmentDate.compareTo(b.shipmentDate),
+          _SortField.total => a.total.compareTo(b.total),
+        };
+        return _sortAscending ? cmp : -cmp;
+      });
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              tooltip: 'Refresh from Zoho',
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: _fetchFromZoho,
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: orders.isEmpty
-            ? const EmptyState(
-                icon: Icons.assignment_outlined,
-                title: 'No orders found',
-                message: 'No sales orders match this status right now.',
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                itemCount: orders.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final order = orders[index];
-                  return DocumentListCard(
-                    docNumber: order.orderNumber,
-                    customerName: order.customerName,
-                    date: _dateFmt.format(order.date),
-                    subtitle: 'Ship: ${_dateFmt.format(order.shipmentDate)}',
-                    total: '$cs${order.total.toStringAsFixed(2)}',
-                    itemCount: order.items.length,
-                    isPendingSync: order.isPendingSync,
-                    extraBadgeLabel: order.isConverted ? 'Invoiced' : null,
-                    onTap: () {},
-                  );
-                },
-              ),
-      ),
+    return SortableReportScaffold<SalesOrder, _SortField>(
+      title: widget.title,
+      isLoading: _isLoading,
+      onRefresh: _fetchFromZoho,
+      rows: orders,
+      sortField: _sortField,
+      sortAscending: _sortAscending,
+      onSort: _toggleSort,
+      emptyIcon: Icons.assignment_outlined,
+      emptyTitle: 'No orders found',
+      emptyMessage: 'No sales orders match this status right now.',
+      columns: const [
+        ReportColumn(
+          label: 'ORDER / SHIP DATE',
+          flex: 5,
+          field: _SortField.date,
+          alignEnd: false,
+        ),
+        ReportColumn(label: 'TOTAL', flex: 3, field: _SortField.total),
+      ],
+      exportHeaders: const [
+        'Order Number',
+        'Customer',
+        'Date',
+        'Ship Date',
+        'Total',
+        'Status',
+      ],
+      exportRow: (order) => [
+        order.orderNumber,
+        order.customerName,
+        _dateFmt.format(order.date),
+        _dateFmt.format(order.shipmentDate),
+        order.total.toStringAsFixed(2),
+        order.isConverted ? 'Invoiced' : 'Open',
+      ],
+      itemBuilder: (context, order) {
+        return DocumentListCard(
+          docNumber: order.orderNumber,
+          customerName: order.customerName,
+          date: _dateFmt.format(order.date),
+          subtitle: 'Ship: ${_dateFmt.format(order.shipmentDate)}',
+          total: '$cs${order.total.toStringAsFixed(2)}',
+          itemCount: order.items.length,
+          isPendingSync: order.isPendingSync,
+          extraBadgeLabel: order.isConverted ? 'Invoiced' : null,
+          onTap: () {},
+        );
+      },
     );
   }
 }

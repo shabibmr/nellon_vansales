@@ -197,6 +197,20 @@ class _InvoiceReceiptsSummaryReportPageState
         ReportColumn(label: 'COUNT', flex: 2, field: _SortField.count),
         ReportColumn(label: 'COLLECTED', flex: 4, field: _SortField.collected),
       ],
+      exportHeaders: const [
+        'Mode',
+        'Count',
+        'Collected',
+        'Allocated',
+        'Unallocated',
+      ],
+      exportRow: (row) => [
+        row.mode,
+        '${row.receiptCount}',
+        row.totalCollected.toStringAsFixed(2),
+        row.totalAllocated.toStringAsFixed(2),
+        row.totalUnallocated.toStringAsFixed(2),
+      ],
       itemBuilder: (context, row) {
         return Card(
           margin: EdgeInsets.zero,
