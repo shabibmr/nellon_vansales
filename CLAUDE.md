@@ -52,9 +52,9 @@ lib/
 2. `FirebaseAuthService`
 3. `ZohoApiClient` (depends on `HiveDatabaseService`)
 4. `SyncWorker` (depends on Hive + API client)
-5. Repository implementations (`AuthRepository`, `SyncRepository`, `SalesRepository`)
+5. Repository implementations (`AuthRepository`, `SyncRepository`, `SalesRepository`, `SalespersonRepository`)
 6. Licensing/device services (`LocalStorageService`, `DeviceInfoService`, `LicenseService`)
-7. `VoucherPdfService`
+7. `VoucherPdfService` (also registered as `VoucherPdfRepository`; a stale-temp-file cleanup runs on boot)
 
 Use `sl<T>()` to resolve anywhere; `setupDependencyInjection()` is called once in `main.dart`.
 
@@ -71,9 +71,10 @@ Data models in `data/models/` handle JSON serialization for Hive. Domain models 
 
 `ZohoApiClient` talks to Zoho Books v3 REST API with OAuth 2.0 (access token auto-refresh via Dio interceptor). Credentials (`_clientId`, `_clientSecret`, `_refreshToken`, `_organizationId`) are set in `zoho_api_client.dart` and can be **overridden at runtime** via `updateCredentials()`, which `ServerConfigCubit` calls after loading remote server config. `_isMockMode()` falls back to a mock sandbox only if credentials are still `YOUR_...` placeholders.
 
-**Important gotcha — transactions are mostly mocked right now.** Two compile-time flags in `zoho_api_client.dart` decide what actually hits Zoho:
+**Important gotcha — transactions are mostly mocked right now.** Three flags in `zoho_api_client.dart` decide what actually hits Zoho (defaults shown; runtime-overridable via `updateMockFlags()`, driven by `ServerConfigCubit`/`ServerConfig`):
 - `_mockTransactions = true` → invoices, receipts, returns, and expenses are simulated against a sandbox and **not** pushed live.
 - `_mockSalesOrderTransactions = false` → only **sales orders** push live (still requires real credentials).
+- `_mockStockTransfers = true` → stock transfers (Issue-to-Van) are simulated and **not** pushed live.
 - Master-data downloads (customers, items, routes, etc.) always run live regardless of these flags.
 
 `SyncWorker` manages the offline queue (`syncPendingItems()`):
@@ -84,7 +85,7 @@ Data models in `data/models/` handle JSON serialization for Hive. Domain models 
 
 ### State Management (BLoC)
 
-All 14 BLoCs/Cubits are provided globally at the `MaterialApp` level in `app.dart` (`MultiBlocProvider`):
+All 16 BLoCs/Cubits are provided globally at the `MaterialApp` level in `app.dart` (`MultiBlocProvider`):
 
 | BLoC / Cubit | Responsibility |
 |--------------|----------------|
@@ -98,6 +99,8 @@ All 14 BLoCs/Cubits are provided globally at the `MaterialApp` level in `app.dar
 | `ExpenseBloc` | Expense logging |
 | `ReceiptBloc` | Receipt/collection vouchers with per-invoice allocation |
 | `SalesReturnBloc` | Sales returns (per-invoice) |
+| `StockTransferBloc` | Stock transfer (Issue-to-Van) workflow |
+| `SalespersonCubit` | Salesperson selection/context |
 | `CustomerLedgerBloc` | Customer ledger; reads directly from `ZohoApiClient` |
 | `LicenseCubit` | Device license verification/provisioning |
 | `ServerConfigCubit` | Loads remote server config; injects Zoho credentials via `updateCredentials()` |
@@ -122,6 +125,7 @@ Each transaction type has a sync-queue entry (`SyncQueueItem`) and a `ZohoApiCli
 - `receipt` → `syncReceiptVoucher` *(mocked)*
 - `return` → `syncSalesReturn` *(mocked)*
 - `expense` → `syncExpense` *(mocked)*
+- `stock_transfer` → `syncStockTransfer` *(mocked)*
 
 ### Licensing
 
@@ -133,7 +137,7 @@ Each transaction type has a sync-queue entry (`SyncQueueItem`) and a `ZohoApiCli
 
 ### Reports, Ledger & Voucher PDF
 
-- **Reports** — `lib/ui/features/reports/`: item sales report, aging receivables report.
+- **Reports** — `lib/ui/features/reports/`: ~13 report pages (item sales, aging receivables, expense summary, invoice/receipts summary, itemwise/customerwise orders and returns summaries, order status, sales summary by customer/item/value, stock report, transactions summary) unified on one shared scaffold, with CSV/PDF/print export.
 - **Ledger** — `lib/ui/features/ledger/`: customer ledger (`CustomerLedgerBloc` reads Zoho directly).
 - **Voucher PDF** — `lib/ui/features/voucher_pdf/` + `VoucherPdfService`: per-transaction PDF templates (invoice, receipt, expense, sales return, sales order) with print/export actions.
 
