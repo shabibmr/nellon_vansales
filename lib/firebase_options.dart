@@ -27,10 +27,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -59,8 +56,16 @@ class DefaultFirebaseOptions {
     projectId: 'nellon-vansales',
     storageBucket: 'nellon-vansales.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyAZAwJKW8kCDGq7jKpU7l1HVfC8i9hXN1Y',
+    appId: '1:133071346342:ios:165289c2578667ddc6f267',
+    messagingSenderId: '133071346342',
+    projectId: 'nellon-vansales',
+    storageBucket: 'nellon-vansales.firebasestorage.app',
+    iosClientId: '133071346342-01hh7nckn44cr0taqh4gtsa7rf02negf.apps.googleusercontent.com',
+    iosBundleId: 'com.nellon.vansales.vanSales',
+  );
+  static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyAZAwJKW8kCDGq7jKpU7l1HVfC8i9hXN1Y',
     appId: '1:133071346342:ios:165289c2578667ddc6f267',
     messagingSenderId: '133071346342',
@@ -69,12 +74,12 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.nellon.vansales.vanSales',
   );
 
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyAZAwJKW8kCDGq7jKpU7l1HVfC8i9hXN1Y',
-    appId: '1:133071346342:ios:165289c2578667ddc6f267',
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyBdQ-hxJvqgt9-fXiSF0M0X7hGBFazE7as',
+    appId: '1:133071346342:web:220af63159dc13e5c6f267',
     messagingSenderId: '133071346342',
     projectId: 'nellon-vansales',
+    authDomain: 'nellon-vansales.firebaseapp.com',
     storageBucket: 'nellon-vansales.firebasestorage.app',
-    iosBundleId: 'com.nellon.vansales.vanSales',
   );
 }
