@@ -61,6 +61,23 @@ void main() {
       expect(cubit.state.isMockModeEnabled, isTrue);
     });
 
+    test(
+      'setConfig with empty credentials emits error and keeps existing creds',
+      () {
+        const emptyConfig = ServerConfig(
+          clientId: '',
+          clientSecret: '',
+          code: '',
+        );
+
+        cubit.setConfig(emptyConfig);
+
+        expect(cubit.state, isA<ServerConfigError>());
+        // The client must not have been switched into placeholder/empty mode.
+        expect(apiClient.usesPlaceholderCredentials, isFalse);
+      },
+    );
+
     test('setConfig enables mock when any remote flag is true', () {
       cubit.setConfig(config);
 

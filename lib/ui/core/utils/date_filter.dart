@@ -1,3 +1,10 @@
+/// Calendar day for [date], stripping any time-of-day component.
+/// Defaults to the device clock's current day when [date] is omitted.
+DateTime todayDate([DateTime? date]) {
+  final d = date ?? DateTime.now();
+  return DateTime(d.year, d.month, d.day);
+}
+
 /// Filters [items] down to those whose date (from [dateOf]) falls within the
 /// inclusive `[startDate, endDate]` range, comparing at day granularity so
 /// time-of-day components don't affect inclusion. Either bound may be null

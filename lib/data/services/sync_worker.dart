@@ -13,10 +13,14 @@ import '../models/payment_account_model.dart';
 import '../models/tax_model.dart';
 import '../models/expense_account_model.dart';
 import '../models/organization_model.dart';
-import '../models/open_invoice_model.dart';
 import '../../domain/models/route.dart';
 
-/// Enumerates all types of Master data configurations synced from the backend.
+/// Enumerates master/reference data configurations synced from the backend.
+///
+/// **Transactions are never included** (invoices, receipts, sales orders,
+/// returns, expenses). Those are pushed via the offline queue and, when needed
+/// for UI (e.g. open balances), fetched live from Zoho — never bulk-synced
+/// from the Sync Masters page.
 enum MasterType {
   /// General organization settings (Currency symbols, names, formatting context).
   organization,
@@ -41,9 +45,6 @@ enum MasterType {
 
   /// Customer entities.
   customers,
-
-  /// Unpaid invoices snapshot.
-  openInvoices,
 
   /// Master list of all Zoho Books salespersons (sales users).
   salespersons,
@@ -70,8 +71,6 @@ extension MasterTypeLabel on MasterType {
         return 'Items';
       case MasterType.customers:
         return 'Customers';
-      case MasterType.openInvoices:
-        return 'Open Invoices';
       case MasterType.salespersons:
         return 'Salespersons';
     }
@@ -470,12 +469,6 @@ class SyncWorker {
           final list = await _apiClient.fetchCustomers();
           await _dbService.saveCustomers(
             list.map((c) => CustomerModel.fromJson(c)).toList(),
-          );
-          break;
-        case MasterType.openInvoices:
-          final list = await _apiClient.fetchOpenInvoices();
-          await _dbService.saveOpenInvoices(
-            list.map((i) => OpenInvoiceModel.fromJson(i)).toList(),
           );
           break;
         case MasterType.salespersons:

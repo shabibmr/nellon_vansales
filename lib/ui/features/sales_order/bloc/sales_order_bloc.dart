@@ -147,8 +147,8 @@ class SalesOrderState extends Equatable {
 
   SalesOrderState copyWith({
     List<SalesOrder>? orders,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? Function()? startDate,
+    DateTime? Function()? endDate,
     bool? isLoading,
     String? errorMessage,
     String? successMessage,
@@ -161,8 +161,8 @@ class SalesOrderState extends Equatable {
   }) {
     return SalesOrderState(
       orders: orders ?? this.orders,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: startDate != null ? startDate() : this.startDate,
+      endDate: endDate != null ? endDate() : this.endDate,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage ?? this.errorMessage,
       successMessage: successMessage ?? this.successMessage,
@@ -204,7 +204,10 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     required SyncRepository syncRepository,
   }) : _salesRepository = salesRepository,
        _syncRepository = syncRepository,
-       super(const SalesOrderState()) {
+       super(SalesOrderState(
+         startDate: todayDate(),
+         endDate: todayDate(),
+       )) {
     on<LoadOrders>(_onLoadOrders);
     on<RefreshOrdersFromZoho>(_onRefreshOrdersFromZoho);
     on<SetDateFilter>(_onSetDateFilter);
@@ -252,7 +255,10 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
   }
 
   void _onSetDateFilter(SetDateFilter event, Emitter<SalesOrderState> emit) {
-    emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
+    emit(state.copyWith(
+      startDate: () => event.startDate,
+      endDate: () => event.endDate,
+    ));
   }
 
   void _onStartNewOrder(StartNewOrder event, Emitter<SalesOrderState> emit) {

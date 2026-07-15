@@ -2,6 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/ui/core/utils/date_filter.dart';
 
 void main() {
+  group('todayDate', () {
+    test('returns calendar day of now when no argument is given', () {
+      final now = DateTime.now();
+      final result = todayDate();
+      expect(result, DateTime(now.year, now.month, now.day));
+      expect(result.hour, 0);
+      expect(result.minute, 0);
+    });
+
+    test('strips time-of-day from a provided date', () {
+      final result = todayDate(DateTime(2026, 7, 15, 23, 59, 59));
+      expect(result, DateTime(2026, 7, 15));
+    });
+  });
+
   group('filterByDateRange', () {
     final items = [
       DateTime(2026, 1, 1),

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/theme/app_theme.dart';
@@ -7,12 +6,16 @@ import 'empty_state.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/models/item.dart';
 import '../../../domain/repositories/sales_repository.dart';
+import '../../../data/services/injection.dart';
+import '../bloc/async_search_bloc.dart';
+import '../bloc/async_search_event.dart';
+import '../bloc/async_search_state.dart';
 
-/// Reusable stateful widget that facilitates asynchronous search queries.
+/// Reusable widget that facilitates debounced in-memory search over local cache.
 ///
 /// Implements a performant, debounced text search field that lets users search
 /// for either [Customer]s or [Item]s within local cached directories.
-class AsyncSearchWidget extends StatefulWidget {
+class AsyncSearchWidget extends StatelessWidget {
   /// Callback triggered when a customer contact is selected from search results.
   final Function(Customer)? onCustomerSelected;
 
@@ -27,187 +30,134 @@ class AsyncSearchWidget extends StatefulWidget {
   });
 
   @override
-  State<AsyncSearchWidget> createState() => _AsyncSearchWidgetState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => AsyncSearchBloc(salesRepository: sl<SalesRepository>()),
+      child: _AsyncSearchView(
+        onCustomerSelected: onCustomerSelected,
+        onItemSelected: onItemSelected,
+      ),
+    );
+  }
 }
 
-/// Enumerates the search category modes.
-enum SearchType {
-  /// Query customers list.
-  customers,
+class _AsyncSearchView extends StatefulWidget {
+  final Function(Customer)? onCustomerSelected;
+  final Function(Item)? onItemSelected;
 
-  /// Query van inventory list.
-  items,
+  const _AsyncSearchView({
+    this.onCustomerSelected,
+    this.onItemSelected,
+  });
+
+  @override
+  State<_AsyncSearchView> createState() => _AsyncSearchViewState();
 }
 
-class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
+class _AsyncSearchViewState extends State<_AsyncSearchView> {
   final _searchController = TextEditingController();
-  SearchType _activeSearchType = SearchType.customers;
-  Timer? _debounceTimer;
-
-  bool _isLoading = false;
-  List<Customer> _customerResults = [];
-  List<Item> _itemResults = [];
-  bool _hasSearched = false;
 
   @override
   void dispose() {
     _searchController.dispose();
-    _debounceTimer?.cancel();
     super.dispose();
   }
 
-  /// Triggers a debounced search function whenever the text changes.
-  ///
-  /// Delays search execution by 400ms after the user stops typing to prevent
-  /// continuous database/cache search operations.
   void _onSearchChanged(String query) {
-    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-
-    if (query.trim().isEmpty) {
-      setState(() {
-        _customerResults = [];
-        _itemResults = [];
-        _isLoading = false;
-        _hasSearched = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _hasSearched = true;
-    });
-
-    _debounceTimer = Timer(const Duration(milliseconds: 400), () {
-      _executeAsyncSearch(query.trim());
-    });
-  }
-
-  /// Queries the local [SalesRepository] for customer or inventory records matching the search term.
-  ///
-  /// Normalizes queries to lowercase and performs substring matching on key properties (name, sku, company, phone).
-  Future<void> _executeAsyncSearch(String query) async {
-    final salesRepo = context.read<SalesRepository>();
-    final lowercaseQuery = query.toLowerCase();
-
-    // Simulating realistic database index search / network latency
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (!mounted) return;
-
-    if (_activeSearchType == SearchType.customers) {
-      final allCustomers = salesRepo.getCustomers();
-      final filtered = allCustomers.where((cust) {
-        return cust.name.toLowerCase().contains(lowercaseQuery) ||
-            cust.companyName.toLowerCase().contains(lowercaseQuery) ||
-            cust.phone.contains(query);
-      }).toList();
-
-      setState(() {
-        _customerResults = filtered;
-        _isLoading = false;
-      });
-    } else {
-      final allItems = salesRepo.getItems();
-      final filtered = allItems.where((item) {
-        return item.name.toLowerCase().contains(lowercaseQuery) ||
-            item.sku.toLowerCase().contains(lowercaseQuery);
-      }).toList();
-
-      setState(() {
-        _itemResults = filtered;
-        _isLoading = false;
-      });
-    }
+    context.read<AsyncSearchBloc>().add(SearchQueryChanged(query));
   }
 
   void _clearSearch() {
     _searchController.clear();
-    _onSearchChanged('');
+    context.read<AsyncSearchBloc>().add(const SearchCleared());
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 1. Sleek Material 3 Segmented Toggle
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4.0),
-          child: SegmentedButton<SearchType>(
-            segments: const [
-              ButtonSegment<SearchType>(
-                value: SearchType.customers,
-                label: Text('Clients'),
-                icon: Icon(Icons.people_outline_rounded),
-              ),
-              ButtonSegment<SearchType>(
-                value: SearchType.items,
-                label: Text('Inventory'),
-                icon: Icon(Icons.inventory_2_outlined),
-              ),
-            ],
-            selected: {_activeSearchType},
-            onSelectionChanged: (Set<SearchType> newSelection) {
-              setState(() {
-                _activeSearchType = newSelection.first;
-                _clearSearch();
-              });
-            },
-            style: SegmentedButton.styleFrom(
-              selectedBackgroundColor: AppTheme.primaryIndigo.withValues(
-                alpha: 0.15,
-              ),
-              selectedForegroundColor: AppTheme.primaryIndigo,
-              side: BorderSide(
-                color: isDark
-                    ? const Color(0xFF334155)
-                    : const Color(0xFFE2E8F0),
+    return BlocBuilder<AsyncSearchBloc, AsyncSearchState>(
+      builder: (context, state) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: SegmentedButton<SearchType>(
+                segments: const [
+                  ButtonSegment<SearchType>(
+                    value: SearchType.customers,
+                    label: Text('Clients'),
+                    icon: Icon(Icons.people_outline_rounded),
+                  ),
+                  ButtonSegment<SearchType>(
+                    value: SearchType.items,
+                    label: Text('Inventory'),
+                    icon: Icon(Icons.inventory_2_outlined),
+                  ),
+                ],
+                selected: {state.searchType},
+                onSelectionChanged: (Set<SearchType> newSelection) {
+                  _searchController.clear();
+                  context.read<AsyncSearchBloc>().add(
+                        SearchTypeChanged(newSelection.first),
+                      );
+                },
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: AppTheme.primaryIndigo.withValues(
+                    alpha: 0.15,
+                  ),
+                  selectedForegroundColor: AppTheme.primaryIndigo,
+                  side: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // 2. Interactive Search Box with clear button and loader
-        TextFormField(
-          controller: _searchController,
-          onChanged: _onSearchChanged,
-          decoration: InputDecoration(
-            hintText: _activeSearchType == SearchType.customers
-                ? 'Search active client names, shops...'
-                : 'Search catalog SKU, product names...',
-            prefixIcon: const Icon(
-              Icons.search_rounded,
-              color: AppTheme.primaryIndigo,
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              decoration: InputDecoration(
+                hintText: state.searchType == SearchType.customers
+                    ? 'Search active client names, shops...'
+                    : 'Search catalog SKU, product names...',
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: AppTheme.primaryIndigo,
+                ),
+                suffixIcon: state.query.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.cancel,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
+                          size: 20,
+                        ),
+                        onPressed: _clearSearch,
+                      )
+                    : null,
+              ),
             ),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: Icon(
-                      Icons.cancel,
-                      color: isDark
-                          ? AppTheme.darkTextSecondary
-                          : AppTheme.lightTextSecondary,
-                      size: 20,
-                    ),
-                    onPressed: _clearSearch,
-                  )
-                : null,
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // 3. Asynchronous List View Results
-        Expanded(child: _buildResultsSection(isDark)),
-      ],
+            const SizedBox(height: 16),
+            Expanded(child: _buildResultsSection(context, state, isDark)),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildResultsSection(bool isDark) {
+  Widget _buildResultsSection(
+    BuildContext context,
+    AsyncSearchState state,
+    bool isDark,
+  ) {
     final cs = context.org.currencySymbol;
-    if (_isLoading) {
+
+    if (state.status == AsyncSearchStatus.loading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -228,13 +178,13 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
       );
     }
 
-    if (!_hasSearched) {
+    if (!state.hasSearched) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _activeSearchType == SearchType.customers
+              state.searchType == SearchType.customers
                   ? Icons.people_outline_rounded
                   : Icons.inventory_2_outlined,
               size: 48,
@@ -242,7 +192,7 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Type to find ${_activeSearchType.name}',
+              'Type to find ${state.searchType.name}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -256,15 +206,15 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
       );
     }
 
-    if (_activeSearchType == SearchType.customers) {
-      if (_customerResults.isEmpty) {
+    if (state.searchType == SearchType.customers) {
+      if (state.status == AsyncSearchStatus.empty) {
         return _buildEmptyState('No matching customers found.');
       }
       return ListView.separated(
-        itemCount: _customerResults.length,
+        itemCount: state.customerResults.length,
         separatorBuilder: (context, index) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
-          final customer = _customerResults[index];
+          final customer = state.customerResults[index];
           return Card(
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(
@@ -286,8 +236,10 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
-                customer.companyName,
+                _customerAddressOrLocation(customer),
                 style: const TextStyle(fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               trailing: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -314,14 +266,14 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
         },
       );
     } else {
-      if (_itemResults.isEmpty) {
+      if (state.status == AsyncSearchStatus.empty) {
         return _buildEmptyState('No matching catalog items found.');
       }
       return ListView.separated(
-        itemCount: _itemResults.length,
+        itemCount: state.itemResults.length,
         separatorBuilder: (context, index) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
-          final item = _itemResults[index];
+          final item = state.itemResults[index];
           return Card(
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(
@@ -380,4 +332,20 @@ class _AsyncSearchWidgetState extends State<AsyncSearchWidget> {
   Widget _buildEmptyState(String message) {
     return EmptyState(icon: Icons.info_outline, title: message);
   }
+}
+
+/// Prefer street address; fall back to GPS coordinates, then company name.
+String _customerAddressOrLocation(Customer customer) {
+  final address = customer.address.trim();
+  if (address.isNotEmpty) return address;
+
+  if (customer.latitude != null && customer.longitude != null) {
+    return '${customer.latitude!.toStringAsFixed(5)}, '
+        '${customer.longitude!.toStringAsFixed(5)}';
+  }
+
+  final company = customer.companyName.trim();
+  if (company.isNotEmpty) return company;
+
+  return 'No address on file';
 }

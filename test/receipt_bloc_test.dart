@@ -30,6 +30,16 @@ class FakeSalesRepository implements SalesRepository {
     return openInvoices;
   }
 
+  int fetchRemoteOpenInvoicesCount = 0;
+  bool throwOnFetchRemoteOpenInvoices = false;
+
+  @override
+  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async {
+    fetchRemoteOpenInvoicesCount++;
+    if (throwOnFetchRemoteOpenInvoices) throw Exception('offline');
+    return getOpenInvoices(customerId: customerId);
+  }
+
   @override
   List<Customer> getCustomers() => customers;
 
@@ -229,7 +239,7 @@ void main() {
     expect(alloc2.amountApplied, 100.0);
   });
 
-  test('SetEditingReceiptCustomer refreshes the open-invoice master snapshot '
+  test('SetEditingReceiptCustomer fetches open invoices live from Zoho '
       'before allocating', () async {
     var future = bloc.stream.first;
     bloc.add(StartNewReceipt());
@@ -239,12 +249,12 @@ void main() {
     bloc.add(SetEditingReceiptCustomer(testCustomer));
     await future;
 
-    expect(syncRepo.syncedMasters, contains(MasterType.openInvoices));
+    expect(salesRepo.fetchRemoteOpenInvoicesCount, 1);
   });
 
   test('SetEditingReceiptCustomer still allocates from the local cache when '
       'the live refresh fails (offline)', () async {
-    syncRepo.throwOnSyncMaster = true;
+    salesRepo.throwOnFetchRemoteOpenInvoices = true;
 
     var future = bloc.stream.first;
     bloc.add(StartNewReceipt());

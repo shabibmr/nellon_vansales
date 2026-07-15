@@ -121,8 +121,8 @@ class ExpenseState extends Equatable {
 
   ExpenseState copyWith({
     List<ExpenseEntry>? expenses,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? Function()? startDate,
+    DateTime? Function()? endDate,
     bool? isLoading,
     String? errorMessage,
     String? successMessage,
@@ -140,8 +140,8 @@ class ExpenseState extends Equatable {
   }) {
     return ExpenseState(
       expenses: expenses ?? this.expenses,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: startDate != null ? startDate() : this.startDate,
+      endDate: endDate != null ? endDate() : this.endDate,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage: clearSuccess
@@ -187,7 +187,10 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
   final SyncRepository _syncRepository;
 
   ExpenseBloc({required this._salesRepository, required this._syncRepository})
-    : super(const ExpenseState()) {
+    : super(ExpenseState(
+        startDate: todayDate(),
+        endDate: todayDate(),
+      )) {
     on<LoadExpenses>(_onLoadExpenses);
     on<SetExpenseDateFilter>(_onSetDateFilter);
     on<StartNewExpense>(_onStartNewExpense);
@@ -218,7 +221,10 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     SetExpenseDateFilter event,
     Emitter<ExpenseState> emit,
   ) {
-    emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
+    emit(state.copyWith(
+      startDate: () => event.startDate,
+      endDate: () => event.endDate,
+    ));
   }
 
   void _onStartNewExpense(StartNewExpense event, Emitter<ExpenseState> emit) {

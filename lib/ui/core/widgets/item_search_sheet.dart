@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/models/item.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
+import '../cubit/list_filter_cubit.dart';
 
 /// Generic item-search bottom sheet shared by sales order, invoice, and return flows.
 ///
 /// The caller provides the pre-filtered [items] list and handles flow-specific
 /// follow-up dialogs via [onSelected].
-class ItemSearchSheet extends StatefulWidget {
+class ItemSearchSheet extends StatelessWidget {
   final List<Item> items;
   final String title;
   final String emptyMessage;
@@ -29,139 +31,172 @@ class ItemSearchSheet extends StatefulWidget {
     required List<Item> items,
     required String title,
     required String emptyMessage,
-    required Future<void> Function(Item item, BuildContext sheetContext)
-    onSelected,
+    required Future<void> Function(Item item, BuildContext sheetContext) onSelected,
     Color accentColor = AppTheme.primaryIndigo,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: isDark
           ? AppTheme.darkBackground
           : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => ItemSearchSheet(
-        items: items,
-        title: title,
-        emptyMessage: emptyMessage,
-        onSelected: onSelected,
-        accentColor: accentColor,
+      builder: (context) => BlocProvider<ListFilterCubit<Item>>(
+        create: (_) => ListFilterCubit<Item>(
+          initialItems: items,
+          filterPredicate: (item, query) {
+            final q = query.toLowerCase();
+            return item.name.toLowerCase().contains(q) ||
+                item.sku.toLowerCase().contains(q);
+          },
+        ),
+        child: ItemSearchSheet(
+          items: items,
+          title: title,
+          emptyMessage: emptyMessage,
+          onSelected: onSelected,
+          accentColor: accentColor,
+        ),
       ),
     );
   }
 
   @override
-  State<ItemSearchSheet> createState() => _ItemSearchSheetState();
+  Widget build(BuildContext context) {
+    return _ItemSearchSheetBody(
+      title: title,
+      emptyMessage: emptyMessage,
+      onSelected: onSelected,
+      accentColor: accentColor,
+    );
+  }
 }
 
-class _ItemSearchSheetState extends State<ItemSearchSheet> {
-  late List<Item> _filtered;
-  String _query = '';
+class _ItemSearchSheetBody extends StatefulWidget {
+  final String title;
+  final String emptyMessage;
+  final Color accentColor;
+  final Future<void> Function(Item item, BuildContext sheetContext) onSelected;
+
+  const _ItemSearchSheetBody({
+    required this.title,
+    required this.emptyMessage,
+    required this.onSelected,
+    required this.accentColor,
+  });
 
   @override
-  void initState() {
-    super.initState();
-    _filtered = widget.items;
-  }
+  State<_ItemSearchSheetBody> createState() => _ItemSearchSheetBodyState();
+}
 
-  void _onSearch(String query) {
-    setState(() {
-      _query = query;
-      if (query.isEmpty) {
-        _filtered = widget.items;
-      } else {
-        final q = query.toLowerCase();
-        _filtered = widget.items.where((item) {
-          return item.name.toLowerCase().contains(q) ||
-              item.sku.toLowerCase().contains(q);
-        }).toList();
-      }
-    });
+class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (context, scrollController) {
-        return Column(
-          children: [
-            const SizedBox(height: 12),
-            Center(
-              child: Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              widget.title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: TextField(
-                autofocus: true,
-                onChanged: _onSearch,
-                decoration: InputDecoration(
-                  hintText: 'Search items by name or SKU...',
-                  prefixIcon: Icon(Icons.search, color: widget.accentColor),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+    // Lift the sheet above the soft keyboard so the search field stays at the
+    // top and the results list remains visible (not covered mid-sheet).
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.92,
+        minChildSize: 0.55,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) {
+          return Column(
+            children: [
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
-            ),
-            const Divider(),
-            Expanded(
-              child: _filtered.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.inventory_2_outlined,
-                            size: 48,
-                            color: isDark
-                                ? const Color(0xFF334155)
-                                : const Color(0xFFCBD5E1),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _query.isEmpty
-                                ? widget.emptyMessage
-                                : 'No items match your search',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
+              const SizedBox(height: 12),
+              Text(
+                widget.title,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  onChanged: (val) =>
+                      context.read<ListFilterCubit<Item>>().setQuery(val),
+                  decoration: InputDecoration(
+                    hintText: 'Search items by name or SKU...',
+                    prefixIcon: Icon(Icons.search, color: widget.accentColor),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: BlocBuilder<ListFilterCubit<Item>, ListFilterState<Item>>(
+                  builder: (context, state) {
+                    final filtered = state.filteredItems;
+
+                    if (filtered.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.inventory_2_outlined,
+                              size: 48,
                               color: isDark
-                                  ? AppTheme.darkTextSecondary
-                                  : AppTheme.lightTextSecondary,
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFCBD5E1),
                             ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
+                            const SizedBox(height: 12),
+                            Text(
+                              state.query.isEmpty
+                                  ? widget.emptyMessage
+                                  : 'No items match your search',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
                       controller: scrollController,
-                      itemCount: _filtered.length,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: filtered.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        final item = _filtered[index];
+                        final item = filtered[index];
                         return ListTile(
                           title: Text(
                             item.name,
@@ -185,11 +220,14 @@ class _ItemSearchSheetState extends State<ItemSearchSheet> {
                           onTap: () => widget.onSelected(item, context),
                         );
                       },
-                    ),
-            ),
-          ],
-        );
-      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

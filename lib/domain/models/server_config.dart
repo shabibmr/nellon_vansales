@@ -6,6 +6,10 @@ class ServerConfig extends Equatable {
   final String clientSecret;
   final String code; // Represents the Zoho authorization code or refresh token
 
+  /// Zoho Books organization ID. Empty means "keep the client's current
+  /// (hardcoded) organization" — see `ZohoApiClient.updateCredentials`.
+  final String organizationId;
+
   /// Runtime toggle for simulating invoice/receipt/return/expense uploads
   /// against a sandbox instead of pushing them live to Zoho. Replaces the
   /// old compile-time `_mockTransactions` flag in `ZohoApiClient`.
@@ -25,6 +29,7 @@ class ServerConfig extends Equatable {
     required this.clientId,
     required this.clientSecret,
     required this.code,
+    this.organizationId = '',
     this.mockTransactions = true,
     this.mockSalesOrderTransactions = false,
     this.mockStockTransfers = true,
@@ -42,6 +47,7 @@ class ServerConfig extends Equatable {
       clientId: map['client_id'] as String? ?? '',
       clientSecret: map['client_secret'] as String? ?? '',
       code: map['code'] as String? ?? '',
+      organizationId: map['organization_id'] as String? ?? '',
       mockTransactions: map['mock_transactions'] as bool? ?? true,
       mockSalesOrderTransactions:
           map['mock_sales_order_transactions'] as bool? ?? false,
@@ -55,6 +61,7 @@ class ServerConfig extends Equatable {
       'client_id': clientId,
       'client_secret': clientSecret,
       'code': code,
+      'organization_id': organizationId,
       'mock_transactions': mockTransactions,
       'mock_sales_order_transactions': mockSalesOrderTransactions,
       'mock_stock_transfers': mockStockTransfers,
@@ -66,6 +73,7 @@ class ServerConfig extends Equatable {
     clientId,
     clientSecret,
     code,
+    organizationId,
     mockTransactions,
     mockSalesOrderTransactions,
     mockStockTransfers,

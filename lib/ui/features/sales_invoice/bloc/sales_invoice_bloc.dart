@@ -211,8 +211,8 @@ class SalesInvoiceState extends Equatable {
 
   SalesInvoiceState copyWith({
     List<SalesInvoice>? invoices,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? Function()? startDate,
+    DateTime? Function()? endDate,
     bool? isLoading,
     String? errorMessage,
     String? successMessage,
@@ -225,14 +225,16 @@ class SalesInvoiceState extends Equatable {
     String? sourceOrderId,
     SalesOrder? sourceOrder,
     bool clearSource = false,
+    bool clearMessages = false,
   }) {
     return SalesInvoiceState(
       invoices: invoices ?? this.invoices,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: startDate != null ? startDate() : this.startDate,
+      endDate: endDate != null ? endDate() : this.endDate,
       isLoading: isLoading ?? this.isLoading,
-      errorMessage: errorMessage ?? this.errorMessage,
-      successMessage: successMessage ?? this.successMessage,
+      errorMessage: clearMessages ? null : (errorMessage ?? this.errorMessage),
+      successMessage:
+          clearMessages ? null : (successMessage ?? this.successMessage),
       editingInvoiceId: editingInvoiceId ?? this.editingInvoiceId,
       editingDate: editingDate ?? this.editingDate,
       editingCustomer: editingCustomer ?? this.editingCustomer,
@@ -275,7 +277,10 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     required SyncRepository syncRepository,
   }) : _salesRepository = salesRepository,
        _syncRepository = syncRepository,
-       super(const SalesInvoiceState()) {
+       super(SalesInvoiceState(
+         startDate: todayDate(),
+         endDate: todayDate(),
+       )) {
     // List & Editor handlers
     on<LoadInvoices>(_onLoadInvoices);
     on<SetDateFilter>(_onSetDateFilter);
@@ -311,7 +316,10 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
   }
 
   void _onSetDateFilter(SetDateFilter event, Emitter<SalesInvoiceState> emit) {
-    emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
+    emit(state.copyWith(
+      startDate: () => event.startDate,
+      endDate: () => event.endDate,
+    ));
   }
 
   void _onStartNewInvoice(
@@ -621,7 +629,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
   }
 
   void _onClearMessages(ClearMessages event, Emitter<SalesInvoiceState> emit) {
-    emit(state.copyWith(errorMessage: null, successMessage: null));
+    emit(state.copyWith(clearMessages: true));
   }
 
   // --- Legacy cart compatibility implementations ---
@@ -712,12 +720,13 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     CheckoutRequested event,
     Emitter<SalesInvoiceState> emit,
   ) async {
+    if (state.isLoading) return;
     if (state.editingItems.isEmpty) {
       emit(state.copyWith(errorMessage: 'Cart is empty'));
       return;
     }
 
-    emit(state.copyWith(isLoading: true));
+    emit(state.copyWith(isLoading: true, clearMessages: true));
     try {
       final tempId = 'temp_inv_${DateTime.now().millisecondsSinceEpoch}';
       final invoice = SalesInvoice(

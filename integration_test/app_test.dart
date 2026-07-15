@@ -151,6 +151,9 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
+  @override
+  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async =>
+      [];
 
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) async {}

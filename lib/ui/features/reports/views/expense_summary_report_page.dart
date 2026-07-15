@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../data/models/expense_entry_model.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
@@ -9,6 +10,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_picker.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../bloc/report_bloc.dart';
+import '../bloc/report_event.dart';
+import '../bloc/report_state.dart';
 
 /// Aggregated row for a single expense category across the filtered period.
 class _CategoryRow {
@@ -28,37 +32,10 @@ enum _SortField { category, count, amount }
 /// category. Supports date-range filtering and column sorting. The local
 /// expense cache is painted instantly on open while the live fetch is in
 /// flight.
-class ExpenseSummaryReportPage extends StatefulWidget {
+class ExpenseSummaryReportPage extends StatelessWidget {
   const ExpenseSummaryReportPage({super.key});
 
-  @override
-  State<ExpenseSummaryReportPage> createState() =>
-      _ExpenseSummaryReportPageState();
-}
-
-class _ExpenseSummaryReportPageState extends State<ExpenseSummaryReportPage> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
-  final ZohoApiClient _apiClient = sl<ZohoApiClient>();
-
-  DateTime? _startDate;
-  DateTime? _endDate;
-  _SortField _sortField = _SortField.amount;
-  bool _sortAscending = false;
-  bool _isLoading = false;
-
-  List<ExpenseEntry> _allExpenses = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _allExpenses = _db.getLocalExpenses();
-    _fetchFromZoho();
-  }
-
-  /// Zoho's raw expense JSON uses `line_items`/`account_name`; the local
-  /// [ExpenseEntryModel] expects `lines`/`category`. Adapt just enough of the
-  /// shape so aggregation-by-category reflects Zoho's actual ledger accounts.
-  Map<String, dynamic> _normalizeExpenseJson(Map<String, dynamic> json) {
+  static Map<String, dynamic> _normalizeExpenseJson(Map<String, dynamic> json) {
     final lineItems = (json['line_items'] as List?) ?? const [];
     return {
       ...json,
@@ -75,41 +52,56 @@ class _ExpenseSummaryReportPageState extends State<ExpenseSummaryReportPage> {
     };
   }
 
-  Future<void> _fetchFromZoho() async {
-    if (_isLoading) return;
-    setState(() => _isLoading = true);
-    try {
-      final raw = await _apiClient.fetchExpenses();
-      final expenses = raw
-          .map((json) => ExpenseEntryModel.fromJson(_normalizeExpenseJson(json)))
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _allExpenses = expenses;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      showErrorSnackBar(context, 'Could not load report from Zoho: $e');
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider<ReportBloc<ExpenseEntry>>(
+      create: (_) => ReportBloc<ExpenseEntry>(
+        getLocal: () => sl<HiveDatabaseService>().getLocalExpenses(),
+        fetchRemote: () async {
+          final raw = await sl<ZohoApiClient>().fetchExpenses();
+          return raw
+              .map((json) => ExpenseEntryModel.fromJson(_normalizeExpenseJson(json)))
+              .toList();
+        },
+        initialSortField: _SortField.amount,
+        initialSortAscending: false,
+      ),
+      child: const _ExpenseSummaryReportView(),
+    );
+  }
+}
+
+class _ExpenseSummaryReportView extends StatelessWidget {
+  const _ExpenseSummaryReportView();
+
+  Future<void> _pickDate(BuildContext context, bool isStart) async {
+    final bloc = context.read<ReportBloc<ExpenseEntry>>();
+    final current = isStart ? bloc.state.startDate : bloc.state.endDate;
+    final picked = await showThemedDatePicker(context, initialDate: current);
+    if (picked != null) {
+      if (isStart) {
+        bloc.add(SetDateRange(picked, bloc.state.endDate));
+      } else {
+        bloc.add(SetDateRange(bloc.state.startDate, picked));
+      }
     }
   }
 
-  List<_CategoryRow> _buildReport() {
+  List<_CategoryRow> _buildReport(ReportState<ExpenseEntry> state) {
     final map = <String, _CategoryRow>{};
 
-    for (final entry in _allExpenses) {
+    for (final entry in state.rows) {
       final day = DateTime(entry.date.year, entry.date.month, entry.date.day);
-      if (_startDate != null) {
+      if (state.startDate != null) {
         final s = DateTime(
-          _startDate!.year,
-          _startDate!.month,
-          _startDate!.day,
+          state.startDate!.year,
+          state.startDate!.month,
+          state.startDate!.day,
         );
         if (day.isBefore(s)) continue;
       }
-      if (_endDate != null) {
-        final e = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+      if (state.endDate != null) {
+        final e = DateTime(state.endDate!.year, state.endDate!.month, state.endDate!.day);
         if (day.isAfter(e)) continue;
       }
 
@@ -124,9 +116,12 @@ class _ExpenseSummaryReportPageState extends State<ExpenseSummaryReportPage> {
     }
 
     final rows = map.values.toList();
+    final sortField = state.sortField as _SortField? ?? _SortField.amount;
+    final sortAscending = state.sortAscending;
+
     rows.sort((a, b) {
       int cmp;
-      switch (_sortField) {
+      switch (sortField) {
         case _SortField.category:
           cmp = a.category.compareTo(b.category);
           break;
@@ -137,161 +132,145 @@ class _ExpenseSummaryReportPageState extends State<ExpenseSummaryReportPage> {
           cmp = a.totalAmount.compareTo(b.totalAmount);
           break;
       }
-      return _sortAscending ? cmp : -cmp;
+      return sortAscending ? cmp : -cmp;
     });
     return rows;
-  }
-
-  Future<void> _pickDate(bool isStart) async {
-    final current = isStart ? _startDate : _endDate;
-    final picked = await showThemedDatePicker(context, initialDate: current);
-    if (picked != null && mounted) {
-      setState(() {
-        if (isStart) {
-          _startDate = picked;
-        } else {
-          _endDate = picked;
-        }
-      });
-    }
-  }
-
-  void _toggleSort(_SortField field) {
-    setState(() {
-      if (_sortField == field) {
-        _sortAscending = !_sortAscending;
-      } else {
-        _sortField = field;
-        _sortAscending = false;
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
-    final rows = _buildReport();
-    final totalCount = rows.fold(0, (sum, r) => sum + r.entryCount);
-    final totalAmount = rows.fold(0.0, (sum, r) => sum + r.totalAmount);
 
-    return SortableReportScaffold<_CategoryRow, _SortField>(
-      title: 'Expense Summary',
-      isLoading: _isLoading,
-      onRefresh: _fetchFromZoho,
-      rows: rows,
-      sortField: _sortField,
-      sortAscending: _sortAscending,
-      onSort: _toggleSort,
-      startDate: _startDate,
-      endDate: _endDate,
-      onStartDateTap: () => _pickDate(true),
-      onEndDateTap: () => _pickDate(false),
-      onClearDate: () => setState(() {
-        _startDate = null;
-        _endDate = null;
-      }),
-      emptyIcon: Icons.receipt_long_outlined,
-      emptyTitle: 'No expenses',
-      emptyMessage: 'No expenses recorded yet.',
-      summaryChips: [
-        ReportSummaryChip(
-          label: 'Categories',
-          value: '${rows.length}',
-          color: AppTheme.infoSky,
-        ),
-        ReportSummaryChip(
-          label: 'Entries',
-          value: '$totalCount',
-          color: AppTheme.primaryIndigo,
-        ),
-        ReportSummaryChip(
-          label: 'Total',
-          value: '$cs${totalAmount.toStringAsFixed(2)}',
-          color: AppTheme.errorRose,
-        ),
-      ],
-      columns: const [
-        ReportColumn(
-          label: 'CATEGORY',
-          flex: 5,
-          field: _SortField.category,
-          alignEnd: false,
-        ),
-        ReportColumn(label: 'ENTRIES', flex: 2, field: _SortField.count),
-        ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
-      ],
-      exportHeaders: const ['Category', 'Entries', 'Amount'],
-      exportRow: (row) => [
-        row.category,
-        '${row.entryCount}',
-        row.totalAmount.toStringAsFixed(2),
-      ],
-      itemBuilder: (context, row) {
-        final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Text(
-                        row.category,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
+    return BlocListener<ReportBloc<ExpenseEntry>, ReportState<ExpenseEntry>>(
+      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listener: (context, state) {
+        showErrorSnackBar(context, 'Could not load report from Zoho: ${state.error}');
+      },
+      child: BlocBuilder<ReportBloc<ExpenseEntry>, ReportState<ExpenseEntry>>(
+        builder: (context, state) {
+          final rows = _buildReport(state);
+          final totalCount = rows.fold(0, (sum, r) => sum + r.entryCount);
+          final totalAmount = rows.fold(0.0, (sum, r) => sum + r.totalAmount);
+
+          return SortableReportScaffold<_CategoryRow, _SortField>(
+            title: 'Expense Summary',
+            isLoading: state.isLoading,
+            onRefresh: () => context.read<ReportBloc<ExpenseEntry>>().add(const RefreshReport()),
+            rows: rows,
+            sortField: state.sortField as _SortField? ?? _SortField.amount,
+            sortAscending: state.sortAscending,
+            onSort: (field) => context.read<ReportBloc<ExpenseEntry>>().add(SetSort(field)),
+            startDate: state.startDate,
+            endDate: state.endDate,
+            onStartDateTap: () => _pickDate(context, true),
+            onEndDateTap: () => _pickDate(context, false),
+            onClearDate: () => context.read<ReportBloc<ExpenseEntry>>().add(const SetDateRange(null, null)),
+            emptyIcon: Icons.receipt_long_outlined,
+            emptyTitle: 'No expenses',
+            emptyMessage: 'No expenses recorded yet.',
+            summaryChips: [
+              ReportSummaryChip(
+                label: 'Categories',
+                value: '${rows.length}',
+                color: AppTheme.infoSky,
+              ),
+              ReportSummaryChip(
+                label: 'Entries',
+                value: '$totalCount',
+                color: AppTheme.primaryIndigo,
+              ),
+              ReportSummaryChip(
+                label: 'Total',
+                value: '$cs${totalAmount.toStringAsFixed(2)}',
+                color: AppTheme.errorRose,
+              ),
+            ],
+            columns: const [
+              ReportColumn(
+                label: 'CATEGORY',
+                flex: 5,
+                field: _SortField.category,
+                alignEnd: false,
+              ),
+              ReportColumn(label: 'ENTRIES', flex: 2, field: _SortField.count),
+              ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
+            ],
+            exportHeaders: const ['Category', 'Entries', 'Amount'],
+            exportRow: (row) => [
+              row.category,
+              '${row.entryCount}',
+              row.totalAmount.toStringAsFixed(2),
+            ],
+            itemBuilder: (context, row) {
+              final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+
+              return Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: Text(
+                              row.category,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '${row.entryCount}',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              '$cs${row.totalAmount.toStringAsFixed(2)}',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppTheme.errorRose,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '${row.entryCount}',
-                        textAlign: TextAlign.end,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? AppTheme.darkTextSecondary
-                              : AppTheme.lightTextSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        '$cs${row.totalAmount.toStringAsFixed(2)}',
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: pct,
+                          backgroundColor: isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFE2E8F0),
                           color: AppTheme.errorRose,
+                          minHeight: 4,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: pct,
-                    backgroundColor: isDark
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFFE2E8F0),
-                    color: AppTheme.errorRose,
-                    minHeight: 4,
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../domain/models/salesperson.dart';
+import '../../../../ui/core/cubit/salesperson_cubit.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import 'van_metric_card.dart';
@@ -23,6 +26,13 @@ class AnalyticsReportsTab extends StatelessWidget {
     required this.completedDeliveries,
   });
 
+  static String _timeGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
@@ -34,6 +44,48 @@ class AnalyticsReportsTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              BlocBuilder<SalespersonCubit, Salesperson?>(
+                builder: (context, salesperson) {
+                  final name = salesperson?.name.trim();
+                  final greeting = _timeGreeting();
+                  final title = (name != null && name.isNotEmpty)
+                      ? '$greeting, $name'
+                      : greeting;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: isGlass
+                                ? Colors.white
+                                : (isDark
+                                    ? AppTheme.darkText
+                                    : AppTheme.lightText),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Here's today's van performance.",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isGlass
+                                ? AppTheme.glassTextSecondary
+                                : (isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
               // ── Metric cards ──────────────────────────────
               Row(
                 children: [

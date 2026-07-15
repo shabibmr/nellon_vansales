@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../data/models/sales_order_model.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
@@ -9,6 +10,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_picker.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../bloc/report_bloc.dart';
+import '../bloc/report_event.dart';
+import '../bloc/report_state.dart';
 
 /// Aggregated row for a single item across all filtered orders.
 class _ItemOrderRow {
@@ -36,67 +40,57 @@ enum _SortField { name, qty, amount, customers }
 /// aggregates them by item, showing total quantity ordered, total amount,
 /// and number of customers per item. Supports date-range filtering and
 /// column sorting.
-class ItemwiseOrdersSummaryReportPage extends StatefulWidget {
+class ItemwiseOrdersSummaryReportPage extends StatelessWidget {
   const ItemwiseOrdersSummaryReportPage({super.key});
 
   @override
-  State<ItemwiseOrdersSummaryReportPage> createState() =>
-      _ItemwiseOrdersSummaryReportPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider<ReportBloc<SalesOrder>>(
+      create: (_) => ReportBloc<SalesOrder>(
+        getLocal: () => sl<HiveDatabaseService>().getLocalOrders(),
+        fetchRemote: () async {
+          final raw = await sl<ZohoApiClient>().fetchSalesOrders();
+          return raw.map((json) => SalesOrderModel.fromJson(json)).toList();
+        },
+        initialSortField: _SortField.amount,
+        initialSortAscending: false,
+      ),
+      child: const _ItemwiseOrdersSummaryReportView(),
+    );
+  }
 }
 
-class _ItemwiseOrdersSummaryReportPageState
-    extends State<ItemwiseOrdersSummaryReportPage> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
-  final ZohoApiClient _apiClient = sl<ZohoApiClient>();
+class _ItemwiseOrdersSummaryReportView extends StatelessWidget {
+  const _ItemwiseOrdersSummaryReportView();
 
-  DateTime? _startDate;
-  DateTime? _endDate;
-  _SortField _sortField = _SortField.amount;
-  bool _sortAscending = false;
-  bool _isLoading = false;
-
-  List<SalesOrder> _allOrders = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _allOrders = _db.getLocalOrders();
-    _fetchFromZoho();
-  }
-
-  Future<void> _fetchFromZoho() async {
-    if (_isLoading) return;
-    setState(() => _isLoading = true);
-    try {
-      final raw = await _apiClient.fetchSalesOrders();
-      final orders = raw.map((json) => SalesOrderModel.fromJson(json)).toList();
-      if (!mounted) return;
-      setState(() {
-        _allOrders = orders;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      showErrorSnackBar(context, 'Could not load report from Zoho: $e');
+  Future<void> _pickDate(BuildContext context, bool isStart) async {
+    final bloc = context.read<ReportBloc<SalesOrder>>();
+    final current = isStart ? bloc.state.startDate : bloc.state.endDate;
+    final picked = await showThemedDatePicker(context, initialDate: current);
+    if (picked != null) {
+      if (isStart) {
+        bloc.add(SetDateRange(picked, bloc.state.endDate));
+      } else {
+        bloc.add(SetDateRange(bloc.state.startDate, picked));
+      }
     }
   }
 
-  List<_ItemOrderRow> _buildReport() {
+  List<_ItemOrderRow> _buildReport(ReportState<SalesOrder> state) {
     final map = <String, _ItemOrderRow>{};
 
-    for (final order in _allOrders) {
+    for (final order in state.rows) {
       final day = DateTime(order.date.year, order.date.month, order.date.day);
-      if (_startDate != null) {
+      if (state.startDate != null) {
         final s = DateTime(
-          _startDate!.year,
-          _startDate!.month,
-          _startDate!.day,
+          state.startDate!.year,
+          state.startDate!.month,
+          state.startDate!.day,
         );
         if (day.isBefore(s)) continue;
       }
-      if (_endDate != null) {
-        final e = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+      if (state.endDate != null) {
+        final e = DateTime(state.endDate!.year, state.endDate!.month, state.endDate!.day);
         if (day.isAfter(e)) continue;
       }
 
@@ -116,9 +110,12 @@ class _ItemwiseOrdersSummaryReportPageState
     }
 
     final rows = map.values.toList();
+    final sortField = state.sortField as _SortField? ?? _SortField.amount;
+    final sortAscending = state.sortAscending;
+
     rows.sort((a, b) {
       int cmp;
-      switch (_sortField) {
+      switch (sortField) {
         case _SortField.name:
           cmp = a.itemName.compareTo(b.itemName);
           break;
@@ -132,194 +129,178 @@ class _ItemwiseOrdersSummaryReportPageState
           cmp = a.customerCount.compareTo(b.customerCount);
           break;
       }
-      return _sortAscending ? cmp : -cmp;
+      return sortAscending ? cmp : -cmp;
     });
     return rows;
-  }
-
-  Future<void> _pickDate(bool isStart) async {
-    final current = isStart ? _startDate : _endDate;
-    final picked = await showThemedDatePicker(context, initialDate: current);
-    if (picked != null && mounted) {
-      setState(() {
-        if (isStart) {
-          _startDate = picked;
-        } else {
-          _endDate = picked;
-        }
-      });
-    }
-  }
-
-  void _toggleSort(_SortField field) {
-    setState(() {
-      if (_sortField == field) {
-        _sortAscending = !_sortAscending;
-      } else {
-        _sortField = field;
-        _sortAscending = false;
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
-    final rows = _buildReport();
-    final totalQty = rows.fold(0, (sum, r) => sum + r.totalQty);
-    final totalAmount = rows.fold(0.0, (sum, r) => sum + r.totalAmount);
 
-    return SortableReportScaffold<_ItemOrderRow, _SortField>(
-      title: 'Itemwise Orders Summary',
-      isLoading: _isLoading,
-      onRefresh: _fetchFromZoho,
-      rows: rows,
-      sortField: _sortField,
-      sortAscending: _sortAscending,
-      onSort: _toggleSort,
-      startDate: _startDate,
-      endDate: _endDate,
-      onStartDateTap: () => _pickDate(true),
-      onEndDateTap: () => _pickDate(false),
-      onClearDate: () => setState(() {
-        _startDate = null;
-        _endDate = null;
-      }),
-      emptyIcon: Icons.shopping_cart_outlined,
-      emptyTitle: 'No order data',
-      emptyMessage: 'No orders recorded yet.',
-      summaryChips: [
-        ReportSummaryChip(
-          label: 'Items',
-          value: '${rows.length}',
-          color: AppTheme.infoSky,
-        ),
-        ReportSummaryChip(
-          label: 'Units Ordered',
-          value: '$totalQty',
-          color: AppTheme.primaryIndigo,
-        ),
-        ReportSummaryChip(
-          label: 'Total',
-          value: '$cs${totalAmount.toStringAsFixed(2)}',
-          color: AppTheme.successEmerald,
-        ),
-      ],
-      columns: const [
-        ReportColumn(
-          label: 'ITEM',
-          flex: 5,
-          field: _SortField.name,
-          alignEnd: false,
-        ),
-        ReportColumn(label: 'QTY', flex: 2, field: _SortField.qty),
-        ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
-        ReportColumn(label: 'CUST', flex: 2, field: _SortField.customers),
-      ],
-      exportHeaders: const ['Item', 'SKU', 'Qty', 'Amount', 'Customers'],
-      exportRow: (row) => [
-        row.itemName,
-        row.sku,
-        '${row.totalQty}',
-        row.totalAmount.toStringAsFixed(2),
-        '${row.customerCount}',
-      ],
-      itemBuilder: (context, row) {
-        final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
-        return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Column(
+    return BlocListener<ReportBloc<SalesOrder>, ReportState<SalesOrder>>(
+      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listener: (context, state) {
+        showErrorSnackBar(context, 'Could not load report from Zoho: ${state.error}');
+      },
+      child: BlocBuilder<ReportBloc<SalesOrder>, ReportState<SalesOrder>>(
+        builder: (context, state) {
+          final rows = _buildReport(state);
+          final totalQty = rows.fold(0, (sum, r) => sum + r.totalQty);
+          final totalAmount = rows.fold(0.0, (sum, r) => sum + r.totalAmount);
+
+          return SortableReportScaffold<_ItemOrderRow, _SortField>(
+            title: 'Itemwise Orders Summary',
+            isLoading: state.isLoading,
+            onRefresh: () => context.read<ReportBloc<SalesOrder>>().add(const RefreshReport()),
+            rows: rows,
+            sortField: state.sortField as _SortField? ?? _SortField.amount,
+            sortAscending: state.sortAscending,
+            onSort: (field) => context.read<ReportBloc<SalesOrder>>().add(SetSort(field)),
+            startDate: state.startDate,
+            endDate: state.endDate,
+            onStartDateTap: () => _pickDate(context, true),
+            onEndDateTap: () => _pickDate(context, false),
+            onClearDate: () => context.read<ReportBloc<SalesOrder>>().add(const SetDateRange(null, null)),
+            emptyIcon: Icons.shopping_cart_outlined,
+            emptyTitle: 'No order data',
+            emptyMessage: 'No orders recorded yet.',
+            summaryChips: [
+              ReportSummaryChip(
+                label: 'Items',
+                value: '${rows.length}',
+                color: AppTheme.infoSky,
+              ),
+              ReportSummaryChip(
+                label: 'Units Ordered',
+                value: '$totalQty',
+                color: AppTheme.primaryIndigo,
+              ),
+              ReportSummaryChip(
+                label: 'Total',
+                value: '$cs${totalAmount.toStringAsFixed(2)}',
+                color: AppTheme.successEmerald,
+              ),
+            ],
+            columns: const [
+              ReportColumn(
+                label: 'ITEM',
+                flex: 5,
+                field: _SortField.name,
+                alignEnd: false,
+              ),
+              ReportColumn(label: 'QTY', flex: 2, field: _SortField.qty),
+              ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
+              ReportColumn(label: 'CUST', flex: 2, field: _SortField.customers),
+            ],
+            exportHeaders: const ['Item', 'SKU', 'Qty', 'Amount', 'Customers'],
+            exportRow: (row) => [
+              row.itemName,
+              row.sku,
+              '${row.totalQty}',
+              row.totalAmount.toStringAsFixed(2),
+              '${row.customerCount}',
+            ],
+            itemBuilder: (context, row) {
+              final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
+
+              return Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            row.itemName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  row.itemName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'SKU: ${row.sku}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'SKU: ${row.sku}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? AppTheme.darkTextSecondary
-                                  : AppTheme.lightTextSecondary,
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '${row.totalQty}',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              '$cs${row.totalAmount.toStringAsFixed(2)}',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppTheme.primaryIndigo,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '${row.customerCount}',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '${row.totalQty}',
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        '$cs${row.totalAmount.toStringAsFixed(2)}',
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: pct,
+                          backgroundColor: isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFE2E8F0),
                           color: AppTheme.primaryIndigo,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '${row.customerCount}',
-                        textAlign: TextAlign.end,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark
-                              ? AppTheme.darkTextSecondary
-                              : AppTheme.lightTextSecondary,
+                          minHeight: 4,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: pct,
-                    backgroundColor: isDark
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFFE2E8F0),
-                    color: AppTheme.primaryIndigo,
-                    minHeight: 4,
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

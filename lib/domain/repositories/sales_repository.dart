@@ -90,8 +90,16 @@ abstract class SalesRepository {
   /// Retrieves the current collection of pending synchronization items.
   List<SyncQueueItem> getSyncQueue();
 
-  /// Retrieves open (unpaid) customer invoices.
+  /// Retrieves open (unpaid) customer invoices from the local cache, if any.
+  /// Prefer [fetchRemoteOpenInvoices] for live balances when online.
   List<OpenInvoice> getOpenInvoices({String? customerId});
+
+  /// Fetches open (unpaid) invoices live from Zoho Books.
+  ///
+  /// When [customerId] is set, scopes the request to that customer. Results are
+  /// also written into the local open-invoice cache so offline UI can fall back
+  /// to the last successful live fetch.
+  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId});
 
   /// Gets all stock transfers (Issue to Van / Stock Unloading) recorded locally.
   List<StockTransfer> getLocalStockTransfers();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../data/models/sales_invoice_model.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
@@ -9,6 +10,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_picker.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../bloc/report_bloc.dart';
+import '../bloc/report_event.dart';
+import '../bloc/report_state.dart';
 
 /// Aggregated row for a single customer across the filtered invoices.
 class _CustomerRow {
@@ -27,69 +31,57 @@ enum _SortField { name, count, value }
 /// Fetches every invoice live from Zoho Books and aggregates them by
 /// customer, showing invoice count and total value per customer. Supports
 /// date-range filtering and column sorting.
-class SalesSummaryByCustomerValueReportPage extends StatefulWidget {
+class SalesSummaryByCustomerValueReportPage extends StatelessWidget {
   const SalesSummaryByCustomerValueReportPage({super.key});
 
   @override
-  State<SalesSummaryByCustomerValueReportPage> createState() =>
-      _SalesSummaryByCustomerValueReportPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider<ReportBloc<SalesInvoice>>(
+      create: (_) => ReportBloc<SalesInvoice>(
+        getLocal: () => sl<HiveDatabaseService>().getLocalInvoices(),
+        fetchRemote: () async {
+          final raw = await sl<ZohoApiClient>().fetchInvoices();
+          return raw.map((json) => SalesInvoiceModel.fromJson(json)).toList();
+        },
+        initialSortField: _SortField.value,
+        initialSortAscending: false,
+      ),
+      child: const _SalesSummaryByCustomerValueReportView(),
+    );
+  }
 }
 
-class _SalesSummaryByCustomerValueReportPageState
-    extends State<SalesSummaryByCustomerValueReportPage> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
-  final ZohoApiClient _apiClient = sl<ZohoApiClient>();
+class _SalesSummaryByCustomerValueReportView extends StatelessWidget {
+  const _SalesSummaryByCustomerValueReportView();
 
-  DateTime? _startDate;
-  DateTime? _endDate;
-  _SortField _sortField = _SortField.value;
-  bool _sortAscending = false;
-  bool _isLoading = false;
-
-  List<SalesInvoice> _allInvoices = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _allInvoices = _db.getLocalInvoices();
-    _fetchFromZoho();
-  }
-
-  Future<void> _fetchFromZoho() async {
-    if (_isLoading) return;
-    setState(() => _isLoading = true);
-    try {
-      final raw = await _apiClient.fetchInvoices();
-      final invoices = raw
-          .map((json) => SalesInvoiceModel.fromJson(json))
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _allInvoices = invoices;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      showErrorSnackBar(context, 'Could not load report from Zoho: $e');
+  Future<void> _pickDate(BuildContext context, bool isStart) async {
+    final bloc = context.read<ReportBloc<SalesInvoice>>();
+    final current = isStart ? bloc.state.startDate : bloc.state.endDate;
+    final picked = await showThemedDatePicker(context, initialDate: current);
+    if (picked != null) {
+      if (isStart) {
+        bloc.add(SetDateRange(picked, bloc.state.endDate));
+      } else {
+        bloc.add(SetDateRange(bloc.state.startDate, picked));
+      }
     }
   }
 
-  List<_CustomerRow> _buildReport() {
+  List<_CustomerRow> _buildReport(ReportState<SalesInvoice> state) {
     final map = <String, _CustomerRow>{};
 
-    for (final inv in _allInvoices) {
+    for (final inv in state.rows) {
       final day = DateTime(inv.date.year, inv.date.month, inv.date.day);
-      if (_startDate != null) {
+      if (state.startDate != null) {
         final s = DateTime(
-          _startDate!.year,
-          _startDate!.month,
-          _startDate!.day,
+          state.startDate!.year,
+          state.startDate!.month,
+          state.startDate!.day,
         );
         if (day.isBefore(s)) continue;
       }
-      if (_endDate != null) {
-        final e = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+      if (state.endDate != null) {
+        final e = DateTime(state.endDate!.year, state.endDate!.month, state.endDate!.day);
         if (day.isAfter(e)) continue;
       }
 
@@ -105,9 +97,12 @@ class _SalesSummaryByCustomerValueReportPageState
     }
 
     final rows = map.values.toList();
+    final sortField = state.sortField as _SortField? ?? _SortField.value;
+    final sortAscending = state.sortAscending;
+
     rows.sort((a, b) {
       int cmp;
-      switch (_sortField) {
+      switch (sortField) {
         case _SortField.name:
           cmp = a.customerName.compareTo(b.customerName);
           break;
@@ -118,164 +113,148 @@ class _SalesSummaryByCustomerValueReportPageState
           cmp = a.totalValue.compareTo(b.totalValue);
           break;
       }
-      return _sortAscending ? cmp : -cmp;
+      return sortAscending ? cmp : -cmp;
     });
     return rows;
-  }
-
-  Future<void> _pickDate(bool isStart) async {
-    final current = isStart ? _startDate : _endDate;
-    final picked = await showThemedDatePicker(context, initialDate: current);
-    if (picked != null && mounted) {
-      setState(() {
-        if (isStart) {
-          _startDate = picked;
-        } else {
-          _endDate = picked;
-        }
-      });
-    }
-  }
-
-  void _toggleSort(_SortField field) {
-    setState(() {
-      if (_sortField == field) {
-        _sortAscending = !_sortAscending;
-      } else {
-        _sortField = field;
-        _sortAscending = false;
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
-    final rows = _buildReport();
-    final totalInvoices = rows.fold(0, (sum, r) => sum + r.invoiceCount);
-    final totalValue = rows.fold(0.0, (sum, r) => sum + r.totalValue);
 
-    return SortableReportScaffold<_CustomerRow, _SortField>(
-      title: 'Sales Summary by Customer',
-      isLoading: _isLoading,
-      onRefresh: _fetchFromZoho,
-      rows: rows,
-      sortField: _sortField,
-      sortAscending: _sortAscending,
-      onSort: _toggleSort,
-      startDate: _startDate,
-      endDate: _endDate,
-      onStartDateTap: () => _pickDate(true),
-      onEndDateTap: () => _pickDate(false),
-      onClearDate: () => setState(() {
-        _startDate = null;
-        _endDate = null;
-      }),
-      emptyIcon: Icons.people_outline_rounded,
-      emptyTitle: 'No sales data',
-      emptyMessage: 'No invoices recorded yet.',
-      summaryChips: [
-        ReportSummaryChip(
-          label: 'Customers',
-          value: '${rows.length}',
-          color: AppTheme.infoSky,
-        ),
-        ReportSummaryChip(
-          label: 'Invoices',
-          value: '$totalInvoices',
-          color: AppTheme.primaryIndigo,
-        ),
-        ReportSummaryChip(
-          label: 'Total',
-          value: '$cs${totalValue.toStringAsFixed(2)}',
-          color: AppTheme.successEmerald,
-        ),
-      ],
-      columns: const [
-        ReportColumn(
-          label: 'CUSTOMER',
-          flex: 5,
-          field: _SortField.name,
-          alignEnd: false,
-        ),
-        ReportColumn(label: 'INVOICES', flex: 2, field: _SortField.count),
-        ReportColumn(label: 'VALUE', flex: 3, field: _SortField.value),
-      ],
-      exportHeaders: const ['Customer', 'Invoices', 'Value'],
-      exportRow: (row) => [
-        row.customerName,
-        '${row.invoiceCount}',
-        row.totalValue.toStringAsFixed(2),
-      ],
-      itemBuilder: (context, row) {
-        final pct = totalValue > 0 ? (row.totalValue / totalValue) : 0.0;
-        return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Text(
-                        row.customerName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+    return BlocListener<ReportBloc<SalesInvoice>, ReportState<SalesInvoice>>(
+      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listener: (context, state) {
+        showErrorSnackBar(context, 'Could not load report from Zoho: ${state.error}');
+      },
+      child: BlocBuilder<ReportBloc<SalesInvoice>, ReportState<SalesInvoice>>(
+        builder: (context, state) {
+          final rows = _buildReport(state);
+          final totalInvoices = rows.fold(0, (sum, r) => sum + r.invoiceCount);
+          final totalValue = rows.fold(0.0, (sum, r) => sum + r.totalValue);
+
+          return SortableReportScaffold<_CustomerRow, _SortField>(
+            title: 'Sales Summary by Customer',
+            isLoading: state.isLoading,
+            onRefresh: () => context.read<ReportBloc<SalesInvoice>>().add(const RefreshReport()),
+            rows: rows,
+            sortField: state.sortField as _SortField? ?? _SortField.value,
+            sortAscending: state.sortAscending,
+            onSort: (field) => context.read<ReportBloc<SalesInvoice>>().add(SetSort(field)),
+            startDate: state.startDate,
+            endDate: state.endDate,
+            onStartDateTap: () => _pickDate(context, true),
+            onEndDateTap: () => _pickDate(context, false),
+            onClearDate: () => context.read<ReportBloc<SalesInvoice>>().add(const SetDateRange(null, null)),
+            emptyIcon: Icons.people_outline_rounded,
+            emptyTitle: 'No sales data',
+            emptyMessage: 'No invoices recorded yet.',
+            summaryChips: [
+              ReportSummaryChip(
+                label: 'Customers',
+                value: '${rows.length}',
+                color: AppTheme.infoSky,
+              ),
+              ReportSummaryChip(
+                label: 'Invoices',
+                value: '$totalInvoices',
+                color: AppTheme.primaryIndigo,
+              ),
+              ReportSummaryChip(
+                label: 'Total',
+                value: '$cs${totalValue.toStringAsFixed(2)}',
+                color: AppTheme.successEmerald,
+              ),
+            ],
+            columns: const [
+              ReportColumn(
+                label: 'CUSTOMER',
+                flex: 5,
+                field: _SortField.name,
+                alignEnd: false,
+              ),
+              ReportColumn(label: 'INVOICES', flex: 2, field: _SortField.count),
+              ReportColumn(label: 'VALUE', flex: 3, field: _SortField.value),
+            ],
+            exportHeaders: const ['Customer', 'Invoices', 'Value'],
+            exportRow: (row) => [
+              row.customerName,
+              '${row.invoiceCount}',
+              row.totalValue.toStringAsFixed(2),
+            ],
+            itemBuilder: (context, row) {
+              final pct = totalValue > 0 ? (row.totalValue / totalValue) : 0.0;
+
+              return Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: Text(
+                              row.customerName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '${row.invoiceCount}',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              '$cs${row.totalValue.toStringAsFixed(2)}',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppTheme.primaryIndigo,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '${row.invoiceCount}',
-                        textAlign: TextAlign.end,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? AppTheme.darkTextSecondary
-                              : AppTheme.lightTextSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        '$cs${row.totalValue.toStringAsFixed(2)}',
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: pct,
+                          backgroundColor: isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFE2E8F0),
                           color: AppTheme.primaryIndigo,
+                          minHeight: 4,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: pct,
-                    backgroundColor: isDark
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFFE2E8F0),
-                    color: AppTheme.primaryIndigo,
-                    minHeight: 4,
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

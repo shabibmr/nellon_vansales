@@ -28,17 +28,30 @@ class ZohoApiClient {
   String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
   String _refreshToken =
       '1000.ccb7c895a473ba5569c55565c0aed87d.c2f3a5530356193d39a19c511efed856';
-  final String _organizationId = '783019958';
+  String _organizationId = '783019958';
 
   /// Updates Zoho OAuth integration credentials on the fly (called upon loading server config).
+  ///
+  /// Empty values are ignored, keeping the current (working) values — an
+  /// incomplete remote config must never wipe usable credentials.
+  /// [organizationId] is optional and updated independently of the OAuth
+  /// triple, since older Firestore docs won't carry it.
   void updateCredentials({
     required String clientId,
     required String clientSecret,
     required String refreshToken,
+    String organizationId = '',
   }) {
-    _clientId = clientId;
-    _clientSecret = clientSecret;
-    _refreshToken = refreshToken;
+    if (clientId.trim().isNotEmpty &&
+        clientSecret.trim().isNotEmpty &&
+        refreshToken.trim().isNotEmpty) {
+      _clientId = clientId;
+      _clientSecret = clientSecret;
+      _refreshToken = refreshToken;
+    }
+    if (organizationId.trim().isNotEmpty) {
+      _organizationId = organizationId;
+    }
   }
 
   /// Runtime toggle for mocking transaction uploads (invoices, receipts, returns,
@@ -107,30 +120,45 @@ class ZohoApiClient {
             return handler.next(options);
           }
 
-          final accessToken = await _getOrRefreshAccessToken();
-          if (accessToken != null) {
-            options.headers['Authorization'] = 'Zoho-oauthtoken $accessToken';
-            options.headers['JSONString'] = 'true';
-            options.queryParameters['organization_id'] = _organizationId;
+          final String accessToken;
+          try {
+            accessToken = await _getOrRefreshAccessToken();
+          } catch (e) {
+            // Fail the request with the real auth error instead of sending
+            // an unauthenticated call that dies as an opaque 401.
+            return handler.reject(
+              DioException(
+                requestOptions: options,
+                error: e,
+                message: 'Zoho authentication failed: $e',
+              ),
+            );
           }
+          options.headers['Authorization'] = 'Zoho-oauthtoken $accessToken';
+          options.headers['JSONString'] = 'true';
+          options.queryParameters['organization_id'] = _organizationId;
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401 && !_isMockMode()) {
             // Force refresh token on 401 Unauthorized
-            final newAccessToken = await _refreshAccessToken(force: true);
-            if (newAccessToken != null) {
-              final requestOptions = error.requestOptions;
-              requestOptions.headers['Authorization'] =
-                  'Zoho-oauthtoken $newAccessToken';
+            final String newAccessToken;
+            try {
+              newAccessToken = await _refreshAccessToken(force: true);
+            } catch (_) {
+              // Refresh failed — surface the original 401.
+              return handler.next(error);
+            }
+            final requestOptions = error.requestOptions;
+            requestOptions.headers['Authorization'] =
+                'Zoho-oauthtoken $newAccessToken';
 
-              // Retry the original request
-              try {
-                final response = await _dio.fetch(requestOptions);
-                return handler.resolve(response);
-              } catch (e) {
-                return handler.next(error);
-              }
+            // Retry the original request
+            try {
+              final response = await _dio.fetch(requestOptions);
+              return handler.resolve(response);
+            } catch (e) {
+              return handler.next(error);
             }
           }
           return handler.next(error);
@@ -141,8 +169,8 @@ class ZohoApiClient {
 
   /// Returns true if the client credentials remain the placeholder templates (forcing mock behavior).
   bool _isMockMode() {
-    // Falls back to mock mode if credentials are still placeholder templates
-    return _clientId.contains('YOUR_CLIENT_ID');
+    // Falls back to mock mode if credentials are still placeholder templates or empty
+    return _clientId.isEmpty || _clientId.contains('YOUR_CLIENT_ID');
   }
 
   /// True if any transaction type (invoices, receipts, returns, expenses, or
@@ -157,7 +185,9 @@ class ZohoApiClient {
   // --- OAuth 2.0 Handlers ---
 
   /// Fetches the cached OAuth access token or triggers a refresh workflow if expired.
-  Future<String?> _getOrRefreshAccessToken() async {
+  ///
+  /// Throws if the refresh workflow fails (see [_refreshAccessToken]).
+  Future<String> _getOrRefreshAccessToken() async {
     if (_isMockMode()) return 'mock_access_token';
 
     final cachedToken = _dbService.oauthAccessToken;
@@ -175,7 +205,12 @@ class ZohoApiClient {
   }
 
   /// Standard OAuth refresh execution block that obtains a fresh access token from Zoho Accounts.
-  Future<String?> _refreshAccessToken({bool force = false}) async {
+  ///
+  /// Throws an [Exception] describing the failure (bad credentials, revoked
+  /// refresh token, network error) instead of silently returning null, so
+  /// callers — e.g. the Masters Sync page — can show the real cause rather
+  /// than a generic fetch failure.
+  Future<String> _refreshAccessToken({bool force = false}) async {
     if (_isMockMode()) return 'mock_access_token';
 
     final refreshToken = _refreshToken;
@@ -189,22 +224,30 @@ class ZohoApiClient {
           'grant_type': 'refresh_token',
         },
       );
-      if (response.statusCode == 200) {
-        final newAccessToken = response.data['access_token'];
-        final expiresInSeconds = response.data['expires_in'] as int? ?? 3600;
-        final expiryMillis =
-            DateTime.now().millisecondsSinceEpoch + (expiresInSeconds * 1000);
-
-        // Save newAccessToken and expire_in to local database
-        await _dbService.setOauthAccessToken(newAccessToken);
-        await _dbService.setOauthTokenExpiry(expiryMillis);
-
-        return newAccessToken;
+      final newAccessToken = response.statusCode == 200
+          ? response.data['access_token'] as String?
+          : null;
+      if (newAccessToken == null) {
+        // Zoho returns 200 with an `error` body (e.g. "invalid_code") for
+        // bad refresh tokens, so a missing access_token is also a failure.
+        throw Exception(
+          'HTTP ${response.statusCode}: ${response.data}',
+        );
       }
+
+      final expiresInSeconds = response.data['expires_in'] as int? ?? 3600;
+      final expiryMillis =
+          DateTime.now().millisecondsSinceEpoch + (expiresInSeconds * 1000);
+
+      // Save newAccessToken and expire_in to local database
+      await _dbService.setOauthAccessToken(newAccessToken);
+      await _dbService.setOauthTokenExpiry(expiryMillis);
+
+      return newAccessToken;
     } catch (e) {
       AppLogger.error('ZohoApi', 'OAuth Refresh Error: $e');
+      throw Exception('Zoho OAuth token refresh failed: $e');
     }
-    return null;
   }
 
   // --- Generic helpers ---
@@ -1377,11 +1420,21 @@ class ZohoApiClient {
     };
   }
 
-  // 15. Open Invoices (GET /invoices?status=unpaid) — for receipt allocation
-  Future<List<Map<String, dynamic>>> fetchOpenInvoices() async {
+  // 15. Open Invoices (GET /invoices?status=unpaid) — live fetch only
+  // (not part of master sync). Optional [customerId] scopes the list for
+  // receipt allocation so we don't pull every open invoice in the org.
+  Future<List<Map<String, dynamic>>> fetchOpenInvoices({
+    String? customerId,
+  }) async {
     if (!_isMockMode()) {
       try {
-        return await _fetchAllPages('/invoices', {'status': 'unpaid'});
+        final params = <String, dynamic>{'status': 'unpaid'};
+        if (customerId != null &&
+            customerId.isNotEmpty &&
+            !customerId.startsWith('temp_')) {
+          params['customer_id'] = customerId;
+        }
+        return await _fetchAllPages('/invoices', params);
       } catch (e) {
         AppLogger.error('ZohoApi', 'fetchOpenInvoices error: $e');
         throw Exception('Failed to fetch open invoices from Zoho: $e');

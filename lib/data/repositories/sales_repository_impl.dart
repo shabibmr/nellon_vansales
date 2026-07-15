@@ -12,6 +12,7 @@ import '../../domain/models/stock_transfer.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../models/sync_queue_item.dart';
 import '../models/sales_order_model.dart';
+import '../models/open_invoice_model.dart';
 import '../services/hive_database_service.dart';
 import '../services/zoho_api_client.dart';
 
@@ -115,6 +116,26 @@ class SalesRepositoryImpl implements SalesRepository {
   @override
   List<OpenInvoice> getOpenInvoices({String? customerId}) =>
       _dbService.getOpenInvoices(customerId: customerId);
+
+  @override
+  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async {
+    final raw = await _apiClient.fetchOpenInvoices(customerId: customerId);
+    final list = raw.map((json) => OpenInvoiceModel.fromJson(json)).toList();
+
+    if (customerId == null || customerId.isEmpty) {
+      await _dbService.saveOpenInvoices(list);
+      return list;
+    }
+
+    // Merge customer-scoped live results into the local cache without
+    // wiping open invoices for other customers.
+    final others = _dbService
+        .getOpenInvoices()
+        .where((i) => i.customerId != customerId)
+        .toList();
+    await _dbService.saveOpenInvoices([...others, ...list]);
+    return list;
+  }
 
   @override
   Future<void> updateCustomerGps(String customerId, double latitude, double longitude) =>

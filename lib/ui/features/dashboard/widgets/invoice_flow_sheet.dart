@@ -8,23 +8,20 @@ import '../../../../ui/core/utils/currency.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/cubit/list_filter_cubit.dart';
 import '../../sales_invoice/bloc/sales_invoice_bloc.dart';
 
 /// Draggable bottom sheet representing the active Invoice Checkout Flow.
 ///
-/// Permits browsing van stock, adding/incrementing items in the cart, showing dynamic tax and totals calculations,
-/// validating customer credit limits, and filing invoices.
-class InvoiceFlowSheet extends StatefulWidget {
-  /// Customer profile to bill.
+/// Cart state is owned by the global [SalesInvoiceBloc]. A [ClearCart] event is
+/// dispatched when the sheet opens so stale items from the editor or a previous
+/// session do not leak in. Checkout success/failure is outcome-driven via
+/// [BlocListener] — the sheet does not pop optimistically.
+class InvoiceFlowSheet extends StatelessWidget {
   final Customer customer;
-
-  /// Visual context.
   final bool isDark;
-
-  /// Callback triggered when the sales invoice checkout successfully completes.
   final VoidCallback onInvoiceSubmitted;
 
-  /// Creates a new [InvoiceFlowSheet].
   const InvoiceFlowSheet({
     super.key,
     required this.customer,
@@ -33,20 +30,50 @@ class InvoiceFlowSheet extends StatefulWidget {
   });
 
   @override
-  State<InvoiceFlowSheet> createState() => _InvoiceFlowSheetState();
+  Widget build(BuildContext context) {
+    final items = sl<HiveDatabaseService>().getItems();
+
+    return BlocProvider<ListFilterCubit<Item>>(
+      create: (_) => ListFilterCubit<Item>(
+        initialItems: items,
+        filterPredicate: (item, query) {
+          final q = query.toLowerCase();
+          return item.name.toLowerCase().contains(q) ||
+              item.sku.toLowerCase().contains(q);
+        },
+      ),
+      child: _InvoiceFlowSheetBody(
+        customer: customer,
+        isDark: isDark,
+        onInvoiceSubmitted: onInvoiceSubmitted,
+      ),
+    );
+  }
 }
 
-class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
-  late List<Item> _items;
-  final Map<Item, int> _localCart = {};
+class _InvoiceFlowSheetBody extends StatefulWidget {
+  final Customer customer;
+  final bool isDark;
+  final VoidCallback onInvoiceSubmitted;
+
+  const _InvoiceFlowSheetBody({
+    required this.customer,
+    required this.isDark,
+    required this.onInvoiceSubmitted,
+  });
+
+  @override
+  State<_InvoiceFlowSheetBody> createState() => _InvoiceFlowSheetBodyState();
+}
+
+class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
   final TextEditingController _searchController = TextEditingController();
-  String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _items = _db.getItems();
+    // Prevent stale cart items from a previous checkout / editor session.
+    context.read<SalesInvoiceBloc>().add(ClearCart());
   }
 
   @override
@@ -55,301 +82,342 @@ class _InvoiceFlowSheetState extends State<InvoiceFlowSheet> {
     super.dispose();
   }
 
-  /// Items filtered by the current search query, matching on name or SKU.
-  List<Item> get _visibleItems {
-    final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return _items;
-    return _items
-        .where(
-          (item) =>
-              item.name.toLowerCase().contains(query) ||
-              item.sku.toLowerCase().contains(query),
-        )
-        .toList();
-  }
-
   @override
   Widget build(BuildContext context) {
-    double cartSubTotal = 0.0;
-    double cartTaxTotal = 0.0;
-    double cartTotal = 0.0;
-
-    _localCart.forEach((item, qty) {
-      final sub = item.rate * qty;
-      final tax = sub * (item.taxPercentage / 100);
-      cartSubTotal += sub;
-      cartTaxTotal += tax;
-      cartTotal += (sub + tax);
-    });
-
     final cs = context.org.currencySymbol;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.6,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (context, scrollController) {
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'New Invoice: ${widget.customer.name}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
 
-              // Item search bar — filters the catalog by name or SKU.
-              TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _query = value),
-                decoration: InputDecoration(
-                  hintText: 'Search items by name or SKU...',
-                  prefixIcon: const Icon(
-                    Icons.search_rounded,
-                    color: AppTheme.primaryIndigo,
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<SalesInvoiceBloc, SalesInvoiceState>(
+          listenWhen: (prev, curr) =>
+              prev.errorMessage != curr.errorMessage &&
+              curr.errorMessage != null,
+          listener: (context, state) {
+            showErrorSnackBar(context, state.errorMessage!);
+            context.read<SalesInvoiceBloc>().add(ClearMessages());
+          },
+        ),
+        BlocListener<SalesInvoiceBloc, SalesInvoiceState>(
+          listenWhen: (prev, curr) =>
+              prev.successMessage != curr.successMessage &&
+              curr.successMessage != null,
+          listener: (context, state) {
+            final message = state.successMessage!;
+            context.read<SalesInvoiceBloc>().add(ClearMessages());
+            Navigator.pop(context);
+            showSuccessSnackBar(context, message);
+            widget.onInvoiceSubmitted();
+          },
+        ),
+      ],
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.6,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) {
+          return Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'New Invoice: ${widget.customer.name}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                  suffixIcon: _query.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(
-                            Icons.cancel,
-                            size: 20,
-                            color: widget.isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary,
-                          ),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _query = '');
-                          },
-                        )
-                      : null,
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Item Catalog Scroll
-              Expanded(
-                child: _visibleItems.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No items match "$_query"',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: widget.isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary,
-                          ),
+                const SizedBox(height: 16),
+                BlocBuilder<ListFilterCubit<Item>, ListFilterState<Item>>(
+                  buildWhen: (prev, curr) => prev.query != curr.query,
+                  builder: (context, filterState) {
+                    return TextField(
+                      controller: _searchController,
+                      onChanged: (value) => context
+                          .read<ListFilterCubit<Item>>()
+                          .setQuery(value),
+                      decoration: InputDecoration(
+                        hintText: 'Search items by name or SKU...',
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: AppTheme.primaryIndigo,
                         ),
-                      )
-                    : ListView.separated(
-                        controller: scrollController,
-                        itemCount: _visibleItems.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final item = _visibleItems[index];
-                          final cartQty = _localCart[item] ?? 0;
+                        suffixIcon: filterState.query.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(
+                                  Icons.cancel,
+                                  size: 20,
+                                  color: widget.isDark
+                                      ? AppTheme.darkTextSecondary
+                                      : AppTheme.lightTextSecondary,
+                                ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  context
+                                      .read<ListFilterCubit<Item>>()
+                                      .setQuery('');
+                                },
+                              )
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: BlocBuilder<SalesInvoiceBloc, SalesInvoiceState>(
+                    buildWhen: (prev, curr) =>
+                        prev.editingItems != curr.editingItems,
+                    builder: (context, invoiceState) {
+                      return BlocBuilder<ListFilterCubit<Item>,
+                          ListFilterState<Item>>(
+                        builder: (context, filterState) {
+                          final visible = filterState.filteredItems;
 
-                          return Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
-                                          ),
-                                        ),
-                                        Text(
-                                          'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}',
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'In Van Stock: ${item.stock} items',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: item.stock > 0
-                                                ? AppTheme.successEmerald
-                                                : AppTheme.errorRose,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                          if (visible.isEmpty) {
+                            return Center(
+                              child: Text(
+                                filterState.query.isEmpty
+                                    ? 'No items in van stock'
+                                    : 'No items match "${filterState.query}"',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: widget.isDark
+                                      ? AppTheme.darkTextSecondary
+                                      : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                            );
+                          }
 
-                                  // Add/Remove Counter UI
-                                  if (cartQty == 0)
-                                    ElevatedButton(
-                                      onPressed: item.stock == 0
-                                          ? null
-                                          : () {
-                                              setState(() {
-                                                _localCart[item] = 1;
-                                              });
-                                            },
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 8,
+                          return ListView.separated(
+                            controller: scrollController,
+                            itemCount: visible.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final item = visible[index];
+                              final cartQty = invoiceState.cart[item] ?? 0;
+
+                              return Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                              ),
+                                            ),
+                                            Text(
+                                              'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}',
+                                              style:
+                                                  const TextStyle(fontSize: 11),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'In Van Stock: ${item.stock} items',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: item.stock > 0
+                                                    ? AppTheme.successEmerald
+                                                    : AppTheme.errorRose,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      child: const Text('ADD'),
-                                    )
-                                  else
-                                    Row(
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.remove_circle_outline,
-                                            color: AppTheme.errorRose,
+                                      if (cartQty == 0)
+                                        ElevatedButton(
+                                          onPressed: item.stock == 0
+                                              ? null
+                                              : () {
+                                                  context
+                                                      .read<SalesInvoiceBloc>()
+                                                      .add(AddToCart(item, 1));
+                                                },
+                                          style: ElevatedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 8,
+                                            ),
                                           ),
-                                          onPressed: () {
-                                            setState(() {
-                                              if (cartQty == 1) {
-                                                _localCart.remove(item);
-                                              } else {
-                                                _localCart[item] = cartQty - 1;
-                                              }
-                                            });
-                                          },
+                                          child: const Text('ADD'),
+                                        )
+                                      else
+                                        Row(
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                                color: AppTheme.errorRose,
+                                              ),
+                                              onPressed: () {
+                                                final bloc = context
+                                                    .read<SalesInvoiceBloc>();
+                                                if (cartQty == 1) {
+                                                  bloc.add(
+                                                      RemoveFromCart(item));
+                                                } else {
+                                                  bloc.add(UpdateCartQuantity(
+                                                    item,
+                                                    cartQty - 1,
+                                                  ));
+                                                }
+                                              },
+                                            ),
+                                            Text(
+                                              cartQty.toString(),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.add_circle_outline,
+                                                color: AppTheme.successEmerald,
+                                              ),
+                                              onPressed: () {
+                                                context
+                                                    .read<SalesInvoiceBloc>()
+                                                    .add(UpdateCartQuantity(
+                                                      item,
+                                                      cartQty + 1,
+                                                    ));
+                                              },
+                                            ),
+                                          ],
                                         ),
-                                        Text(
-                                          cartQty.toString(),
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.add_circle_outline,
-                                            color: AppTheme.successEmerald,
-                                          ),
-                                          onPressed: () {
-                                            if (cartQty < item.stock) {
-                                              setState(() {
-                                                _localCart[item] = cartQty + 1;
-                                              });
-                                            } else {
-                                              showErrorSnackBar(
-                                                context,
-                                                'Cannot exceed available van stock',
-                                              );
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-
-              // Cart summary totals & Checkout trigger
-              Container(
-                padding: const EdgeInsets.only(top: 16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      color: widget.isDark
-                          ? const Color(0xFF334155)
-                          : const Color(0xFFE2E8F0),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Sub Total:',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        Text('$cs${cartSubTotal.toStringAsFixed(2)}'),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('VAT:', style: TextStyle(fontSize: 13)),
-                        Text('$cs${cartTaxTotal.toStringAsFixed(2)}'),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Invoice Total:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                          ),
-                        ),
-                        Text(
-                          '$cs${cartTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                            color: AppTheme.primaryIndigo,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    ElevatedButton(
-                      onPressed: _localCart.isEmpty
-                          ? null
-                          : () {
-                              final bloc = context.read<SalesInvoiceBloc>();
-                              bloc.add(ClearCart());
-                              _localCart.forEach((item, qty) {
-                                bloc.add(AddToCart(item, qty));
-                              });
-                              bloc.add(
-                                CheckoutRequested(
-                                  customer: widget.customer,
-                                  notes: 'Van Sales Checkout',
+                                    ],
+                                  ),
                                 ),
                               );
-
-                              Navigator.pop(context);
-                              showSuccessSnackBar(
-                                context,
-                                'Invoice generated & queued offline! Subtotal: ${formatCurrency(cartTotal, cs)}',
-                              );
-                              widget.onInvoiceSubmitted();
                             },
-                      child: const Text('SUBMIT SALES INVOICE'),
-                    ),
-                  ],
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+                BlocBuilder<SalesInvoiceBloc, SalesInvoiceState>(
+                  buildWhen: (prev, curr) =>
+                      prev.editingItems != curr.editingItems ||
+                      prev.isLoading != curr.isLoading,
+                  builder: (context, invoiceState) {
+                    double cartSubTotal = 0.0;
+                    double cartTaxTotal = 0.0;
+                    double cartTotal = 0.0;
+
+                    for (final line in invoiceState.editingItems) {
+                      final sub = line.rate * line.quantity;
+                      final tax = sub * (line.taxPercentage / 100);
+                      cartSubTotal += sub;
+                      cartTaxTotal += tax;
+                      cartTotal += sub + tax;
+                    }
+
+                    final canSubmit = invoiceState.editingItems.isNotEmpty &&
+                        !invoiceState.isLoading;
+
+                    return Container(
+                      padding: const EdgeInsets.only(top: 16),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                            color: widget.isDark
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFE2E8F0),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Sub Total:',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                              Text('$cs${cartSubTotal.toStringAsFixed(2)}'),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('VAT:', style: TextStyle(fontSize: 13)),
+                              Text('$cs${cartTaxTotal.toStringAsFixed(2)}'),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Invoice Total:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                '$cs${cartTotal.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  color: AppTheme.primaryIndigo,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: canSubmit
+                                ? () {
+                                    context.read<SalesInvoiceBloc>().add(
+                                          CheckoutRequested(
+                                            customer: widget.customer,
+                                            notes: 'Van Sales Checkout',
+                                          ),
+                                        );
+                                  }
+                                : null,
+                            child: invoiceState.isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    'SUBMIT SALES INVOICE'
+                                    '${cartTotal > 0 ? ' (${formatCurrency(cartTotal, cs)})' : ''}',
+                                  ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

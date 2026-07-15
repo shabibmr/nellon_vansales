@@ -144,7 +144,9 @@ class FakeZohoApiClient extends ZohoApiClient {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> fetchOpenInvoices() async {
+  Future<List<Map<String, dynamic>>> fetchOpenInvoices({
+    String? customerId,
+  }) async {
     callCounts['fetchOpenInvoices'] =
         (callCounts['fetchOpenInvoices'] ?? 0) + 1;
     return [
@@ -188,11 +190,12 @@ void main() {
       expect(fakeApi.callCounts['fetchRoutes'], 1);
       expect(fakeApi.callCounts['fetchItems'], 1);
       expect(fakeApi.callCounts['fetchCustomers'], 1);
-      expect(fakeApi.callCounts['fetchOpenInvoices'], 1);
+      expect(fakeApi.callCounts['fetchOpenInvoices'], isNull);
       expect(fakeApi.callCounts['fetchSalespersons'], 1);
 
-      // Verify all 10 categories of master data successfully saved locally
-      expect(fakeDb.savedData.length, 10);
+      // Verify all master categories successfully saved locally
+      // (open invoices are live-fetched, not master-synced)
+      expect(fakeDb.savedData.length, MasterType.values.length);
     },
   );
 

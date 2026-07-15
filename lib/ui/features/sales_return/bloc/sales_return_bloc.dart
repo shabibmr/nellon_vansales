@@ -133,8 +133,8 @@ class SalesReturnState extends Equatable {
 
   SalesReturnState copyWith({
     List<SalesReturn>? returns,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? Function()? startDate,
+    DateTime? Function()? endDate,
     bool? isLoading,
     String? errorMessage,
     String? successMessage,
@@ -147,8 +147,8 @@ class SalesReturnState extends Equatable {
   }) {
     return SalesReturnState(
       returns: returns ?? this.returns,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: startDate != null ? startDate() : this.startDate,
+      endDate: endDate != null ? endDate() : this.endDate,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage ?? this.errorMessage,
       successMessage: successMessage ?? this.successMessage,
@@ -189,7 +189,10 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     required SyncRepository syncRepository,
   }) : _salesRepository = salesRepository,
        _syncRepository = syncRepository,
-       super(const SalesReturnState()) {
+       super(SalesReturnState(
+         startDate: todayDate(),
+         endDate: todayDate(),
+       )) {
     on<LoadReturns>(_onLoadReturns);
     on<SetReturnDateFilter>(_onSetDateFilter);
     on<StartNewReturn>(_onStartNewReturn);
@@ -220,7 +223,10 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     SetReturnDateFilter event,
     Emitter<SalesReturnState> emit,
   ) {
-    emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
+    emit(state.copyWith(
+      startDate: () => event.startDate,
+      endDate: () => event.endDate,
+    ));
   }
 
   void _onStartNewReturn(StartNewReturn event, Emitter<SalesReturnState> emit) {

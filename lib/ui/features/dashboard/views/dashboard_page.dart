@@ -49,127 +49,103 @@ import '../../ledger/views/customer_ledger_page.dart';
 import '../../sync/views/masters_sync_page.dart';
 import '../../licensing/widgets/mock_live_switch_tile.dart';
 import '../../../core/extensions/org_context_extension.dart';
+import '../cubit/dashboard_nav_cubit.dart';
+import '../cubit/daily_stats_cubit.dart';
+import '../cubit/daily_stats_state.dart';
 
 /// The central workspace of the Van Sales application.
 ///
-/// Features a multi-tab view (route sequence, dashboard, operations, and reports)
+/// Features a BLoC-driven multi-tab view (route sequence, dashboard, operations, and reports)
 /// displaying real-time daily sales, collections, route stats, and triggers to create new entities.
-class DashboardPage extends StatefulWidget {
-  /// Creates a new [DashboardPage].
+class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
   @override
-  State<DashboardPage> createState() => _DashboardPageState();
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<DashboardNavCubit>(
+          create: (_) => DashboardNavCubit(),
+        ),
+        BlocProvider<DailyStatsCubit>(
+          create: (_) => DailyStatsCubit(dbService: sl<HiveDatabaseService>()),
+        ),
+      ],
+      child: const _DashboardPageView(),
+    );
+  }
 }
 
-class _DashboardPageState extends State<DashboardPage> {
-  int _currentIndex = 0;
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
+class _DashboardPageView extends StatelessWidget {
+  const _DashboardPageView();
 
-  // Daily Statistics
-  double _todaySales = 0.0;
-  double _todayPayments = 0.0;
-  double _todayExpenses = 0.0;
-  double _todayReturns = 0.0;
-  int _completedDeliveries = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDailyStats();
-  }
-
-  /// Queries the local Hive database for daily records and accumulates totals to display stats.
-  void _loadDailyStats() {
-    final invoices = _db.getLocalInvoices();
-    final receipts = _db.getLocalReceipts();
-    final expenses = _db.getLocalExpenses();
-    final returns = _db.getLocalReturns();
-
-    setState(() {
-      _todaySales = invoices.fold(0.0, (sum, item) => sum + item.total);
-      _todayPayments = receipts.fold(0.0, (sum, item) => sum + item.amount);
-      _todayExpenses = expenses.fold(0.0, (sum, item) => sum + item.amount);
-      _todayReturns = returns.fold(0.0, (sum, item) => sum + item.total);
-      _completedDeliveries = invoices
-          .map((inv) => inv.customerId)
-          .toSet()
-          .length;
-    });
-  }
-
-  void _showGlobalSearchSheet(bool isDark) {
+  void _showGlobalSearchSheet(BuildContext context, bool isDark) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark
-          ? AppTheme.darkBackground
-          : AppTheme.lightBackground,
+      useSafeArea: true,
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (sheetCtx) {
         return GlobalSearchSheet(
           isDark: isDark,
           onCustomerSelected: (customer) {
-            Navigator.pop(context); // Close search
-            _showClientOperationsSheet(
-              customer,
-              isDark,
-            ); // Open customer actions sheet!
+            Navigator.pop(sheetCtx); // Close search
+            _showClientOperationsSheet(context, customer, isDark); // Open customer actions sheet!
           },
           onItemSelected: (item) {
-            Navigator.pop(context); // Close search
-            _showItemDetailsDialog(item, isDark); // Open quick details dialog
+            Navigator.pop(sheetCtx); // Close search
+            _showItemDetailsDialog(context, item, isDark); // Open quick details dialog
           },
         );
       },
     );
   }
 
-  void _showItemDetailsDialog(Item item, bool isDark) {
+  void _showItemDetailsDialog(BuildContext context, Item item, bool isDark) {
     showDialog(
       context: context,
       builder: (context) => ItemDetailsDialog(item: item),
     );
   }
 
-  void _showClientOperationsSheet(Customer customer, bool isDark) {
+  void _showClientOperationsSheet(BuildContext context, Customer customer, bool isDark) {
+    final dailyStatsCubit = context.read<DailyStatsCubit>();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark
-          ? AppTheme.darkBackground
-          : AppTheme.lightBackground,
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (sheetCtx) {
         return ClientOperationsSheet(
           customer: customer,
           isDark: isDark,
           onNewInvoiceTap: () {
-            Navigator.pop(context);
-            _launchInvoiceFlow(customer, isDark);
+            Navigator.pop(sheetCtx);
+            _launchInvoiceFlow(context, dailyStatsCubit, customer, isDark);
           },
           onNewOrderTap: () {
-            Navigator.pop(context);
-            _launchSalesOrderFlow(customer);
+            Navigator.pop(sheetCtx);
+            _launchSalesOrderFlow(context, dailyStatsCubit, customer);
           },
           onReceiptPaymentTap: () {
-            Navigator.pop(context);
-            _launchPaymentFlow(customer, isDark);
+            Navigator.pop(sheetCtx);
+            _launchPaymentFlow(context, dailyStatsCubit, customer, isDark);
           },
           onSalesReturnTap: () {
-            Navigator.pop(context);
-            _launchSalesReturnFlow(customer, isDark);
+            Navigator.pop(sheetCtx);
+            _launchSalesReturnFlow(context, dailyStatsCubit, customer, isDark);
           },
         );
       },
     );
   }
 
-  void _launchSalesOrderFlow(Customer customer) {
+  void _launchSalesOrderFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer) {
     final bloc = context.read<SalesOrderBloc>();
     bloc.add(StartNewOrder());
     bloc.add(UpdateOrderCustomer(customer));
@@ -178,17 +154,15 @@ class _DashboardPageState extends State<DashboardPage> {
       context,
       MaterialPageRoute(builder: (context) => const SalesOrderEditorPage()),
     ).then((_) {
-      _loadDailyStats();
+      statsCubit.refresh();
     });
   }
 
-  void _launchInvoiceFlow(Customer customer, bool isDark) {
+  void _launchInvoiceFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark
-          ? AppTheme.darkBackground
-          : AppTheme.lightBackground,
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -197,73 +171,73 @@ class _DashboardPageState extends State<DashboardPage> {
           customer: customer,
           isDark: isDark,
           onInvoiceSubmitted: () {
-            _loadDailyStats();
+            statsCubit.refresh();
           },
         );
       },
     );
   }
 
-  void _launchPaymentFlow(Customer customer, bool isDark) {
+  void _launchPaymentFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
     showDialog(
       context: context,
       builder: (context) => ReceiptPaymentDialog(
         customer: customer,
         onPaymentLogged: () {
-          _loadDailyStats();
+          statsCubit.refresh();
         },
       ),
     );
   }
 
-  void _launchSalesReturnFlow(Customer customer, bool isDark) {
+  void _launchSalesReturnFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
     showDialog(
       context: context,
       builder: (context) => SalesReturnDialog(
         customer: customer,
         onReturnConfirmed: () {
-          _loadDailyStats();
+          statsCubit.refresh();
         },
       ),
     );
   }
 
-  void _showItemSalesReport() {
+  void _showItemSalesReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ItemSalesReportPage()),
     );
   }
 
-  void _showAgingReport() {
+  void _showAgingReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AgingReceivablesReportPage()),
     );
   }
 
-  void _showStockReport() {
+  void _showStockReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const StockReportPage()),
     );
   }
 
-  void _showTransactionsSummaryReport() {
+  void _showTransactionsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const TransactionsSummaryReportPage()),
     );
   }
 
-  void _showExpenseSummaryReport() {
+  void _showExpenseSummaryReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ExpenseSummaryReportPage()),
     );
   }
 
-  void _showInvoiceReceiptsSummaryReport() {
+  void _showInvoiceReceiptsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -272,7 +246,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showSalesSummaryByCustomerValueReport() {
+  void _showSalesSummaryByCustomerValueReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -281,7 +255,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showSalesSummaryByCustomerItemReport() {
+  void _showSalesSummaryByCustomerItemReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -290,7 +264,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showItemwiseOrdersSummaryReport() {
+  void _showItemwiseOrdersSummaryReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -299,7 +273,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showOrdersSummaryByCustomerReport() {
+  void _showOrdersSummaryByCustomerReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -308,7 +282,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showOrdersReadyReport() {
+  void _showOrdersReadyReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -320,7 +294,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showPendingOrdersReport() {
+  void _showPendingOrdersReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -332,7 +306,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showOrdersInvoicedReport() {
+  void _showOrdersInvoicedReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -344,7 +318,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showOrdersDelayedReport() {
+  void _showOrdersDelayedReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -356,7 +330,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showItemwiseReturnsSummaryReport() {
+  void _showItemwiseReturnsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -365,7 +339,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showCustomerwiseReturnsSummaryReport() {
+  void _showCustomerwiseReturnsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -374,31 +348,31 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showSalesReturnListPage() {
+  void _showSalesReturnListPage(BuildContext context, DailyStatsCubit statsCubit) {
     context.read<SalesReturnBloc>().add(LoadReturns());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const SalesReturnListPage()),
-    ).then((_) => _loadDailyStats());
+    ).then((_) => statsCubit.refresh());
   }
 
-  void _showExpenseListPage() {
+  void _showExpenseListPage(BuildContext context, DailyStatsCubit statsCubit) {
     context.read<ExpenseBloc>().add(LoadExpenses());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ExpenseListPage()),
-    ).then((_) => _loadDailyStats());
+    ).then((_) => statsCubit.refresh());
   }
 
-  void _showReceiptListPage() {
+  void _showReceiptListPage(BuildContext context, DailyStatsCubit statsCubit) {
     context.read<ReceiptBloc>().add(LoadReceipts());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ReceiptListPage()),
-    ).then((_) => _loadDailyStats());
+    ).then((_) => statsCubit.refresh());
   }
 
-  void _showCustomerLedgerPage() {
+  void _showCustomerLedgerPage(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -410,38 +384,38 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showMastersSyncPage() {
+  void _showMastersSyncPage(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const MastersSyncPage()),
     );
   }
 
-  void _showIssueToVanPage() {
+  void _showIssueToVanPage(BuildContext context, DailyStatsCubit statsCubit) {
     context.read<StockTransferBloc>().add(LoadIssueGrid());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const IssueToVanPage()),
-    ).then((_) => _loadDailyStats());
+    ).then((_) => statsCubit.refresh());
   }
 
-  void _showStockUnloadingPage() {
+  void _showStockUnloadingPage(BuildContext context, DailyStatsCubit statsCubit) {
     context.read<StockTransferBloc>().add(LoadUnloadGrid());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const StockUnloadingPage()),
-    ).then((_) => _loadDailyStats());
+    ).then((_) => statsCubit.refresh());
   }
 
-  void _showCashClosingForm(bool isDark) {
+  void _showCashClosingForm(BuildContext context, DailyStatsCubit statsCubit, double todaySales, double todayPayments, double todayExpenses) {
     showDialog(
       context: context,
       builder: (context) => CashClosingDialog(
-        todaySales: _todaySales,
-        todayPayments: _todayPayments,
-        todayExpenses: _todayExpenses,
+        todaySales: todaySales,
+        todayPayments: todayPayments,
+        todayExpenses: todayExpenses,
         onSessionReconciled: () {
-          _loadDailyStats();
+          statsCubit.refresh();
         },
       ),
     );
@@ -471,103 +445,169 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     };
 
-    final tabs = [
-      RouteSequenceTab(
-        isDark: isDark || isGlass,
-        onCustomerTap: (customer) =>
-            _showClientOperationsSheet(customer, isDark),
-      ),
-      AnalyticsReportsTab(
-        isDark: isDark,
-        isGlass: isGlass,
-        todaySales: _todaySales,
-        todayPayments: _todayPayments,
-        todayExpenses: _todayExpenses,
-        todayReturns: _todayReturns,
-        completedDeliveries: _completedDeliveries,
-      ),
-      OperationsTab(
-        isDark: isDark || isGlass,
-        onCashClosing: () => _showCashClosingForm(isDark),
-        onManageExpenses: _showExpenseListPage,
-        onManageReceipts: _showReceiptListPage,
-        onManageReturns: _showSalesReturnListPage,
-        onManageInvoices: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const SalesInvoiceListPage(),
-            ),
-          ).then((_) {
-            _loadDailyStats();
-          });
-        },
-        onManageOrders: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const SalesOrderListPage()),
-          ).then((_) {
-            _loadDailyStats();
-          });
-        },
-        onIssueToVan: _showIssueToVanPage,
-        onStockUnloading: _showStockUnloadingPage,
-      ),
-      ReportsTab(
-        isDark: isDark,
-        onItemSalesReport: _showItemSalesReport,
-        onCustomerLedger: _showCustomerLedgerPage,
-        onAgingReport: _showAgingReport,
-        onStockReport: _showStockReport,
-        onTransactionsSummaryReport: _showTransactionsSummaryReport,
-        onExpenseSummaryReport: _showExpenseSummaryReport,
-        onInvoiceReceiptsSummaryReport: _showInvoiceReceiptsSummaryReport,
-        onSalesSummaryByCustomerValueReport:
-            _showSalesSummaryByCustomerValueReport,
-        onSalesSummaryByCustomerItemReport:
-            _showSalesSummaryByCustomerItemReport,
-        onItemwiseOrdersSummaryReport: _showItemwiseOrdersSummaryReport,
-        onOrdersSummaryByCustomerReport: _showOrdersSummaryByCustomerReport,
-        onOrdersReadyReport: _showOrdersReadyReport,
-        onPendingOrdersReport: _showPendingOrdersReport,
-        onOrdersInvoicedReport: _showOrdersInvoicedReport,
-        onOrdersDelayedReport: _showOrdersDelayedReport,
-        onItemwiseReturnsSummaryReport: _showItemwiseReturnsSummaryReport,
-        onCustomerwiseReturnsSummaryReport:
-            _showCustomerwiseReturnsSummaryReport,
-      ),
-    ];
+    final statsCubit = context.read<DailyStatsCubit>();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWideScreen = constraints.maxWidth > 800.0;
+    return BlocBuilder<DashboardNavCubit, int>(
+      builder: (context, currentIndex) {
+        return BlocBuilder<DailyStatsCubit, DailyStatsState>(
+          builder: (context, statsState) {
+            final tabs = [
+              RouteSequenceTab(
+                isDark: isDark || isGlass,
+                onCustomerTap: (customer) => _showClientOperationsSheet(context, customer, isDark),
+              ),
+              AnalyticsReportsTab(
+                isDark: isDark,
+                isGlass: isGlass,
+                todaySales: statsState.todaySales,
+                todayPayments: statsState.todayPayments,
+                todayExpenses: statsState.todayExpenses,
+                todayReturns: statsState.todayReturns,
+                completedDeliveries: statsState.completedDeliveries,
+              ),
+              OperationsTab(
+                isDark: isDark || isGlass,
+                onCashClosing: () => _showCashClosingForm(
+                  context,
+                  statsCubit,
+                  statsState.todaySales,
+                  statsState.todayPayments,
+                  statsState.todayExpenses,
+                ),
+                onManageExpenses: () => _showExpenseListPage(context, statsCubit),
+                onManageReceipts: () => _showReceiptListPage(context, statsCubit),
+                onManageReturns: () => _showSalesReturnListPage(context, statsCubit),
+                onManageInvoices: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SalesInvoiceListPage(),
+                    ),
+                  ).then((_) {
+                    statsCubit.refresh();
+                  });
+                },
+                onManageOrders: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SalesOrderListPage()),
+                  ).then((_) {
+                    statsCubit.refresh();
+                  });
+                },
+                onIssueToVan: () => _showIssueToVanPage(context, statsCubit),
+                onStockUnloading: () => _showStockUnloadingPage(context, statsCubit),
+              ),
+              ReportsTab(
+                isDark: isDark,
+                onItemSalesReport: () => _showItemSalesReport(context),
+                onCustomerLedger: () => _showCustomerLedgerPage(context),
+                onAgingReport: () => _showAgingReport(context),
+                onStockReport: () => _showStockReport(context),
+                onTransactionsSummaryReport: () => _showTransactionsSummaryReport(context),
+                onExpenseSummaryReport: () => _showExpenseSummaryReport(context),
+                onInvoiceReceiptsSummaryReport: () => _showInvoiceReceiptsSummaryReport(context),
+                onSalesSummaryByCustomerValueReport: () => _showSalesSummaryByCustomerValueReport(context),
+                onSalesSummaryByCustomerItemReport: () => _showSalesSummaryByCustomerItemReport(context),
+                onItemwiseOrdersSummaryReport: () => _showItemwiseOrdersSummaryReport(context),
+                onOrdersSummaryByCustomerReport: () => _showOrdersSummaryByCustomerReport(context),
+                onOrdersReadyReport: () => _showOrdersReadyReport(context),
+                onPendingOrdersReport: () => _showPendingOrdersReport(context),
+                onOrdersInvoicedReport: () => _showOrdersInvoicedReport(context),
+                onOrdersDelayedReport: () => _showOrdersDelayedReport(context),
+                onItemwiseReturnsSummaryReport: () => _showItemwiseReturnsSummaryReport(context),
+                onCustomerwiseReturnsSummaryReport: () => _showCustomerwiseReturnsSummaryReport(context),
+              ),
+            ];
 
-        return Scaffold(
-          drawer: isWideScreen
-              ? null
-              : Drawer(
-                  backgroundColor: isGlass
-                      ? AppTheme.glassBackground2
-                      : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
-                  child: SafeArea(
-                    child: Column(
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-                          child: Row(
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final isWideScreen = constraints.maxWidth > 800.0;
+
+                return Scaffold(
+                  drawer: isWideScreen
+                      ? null
+                      : Drawer(
+                          backgroundColor: isGlass
+                              ? AppTheme.glassBackground2
+                              : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
+                          child: SafeArea(
+                            child: Column(
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.local_shipping_rounded,
+                                        color: AppTheme.primaryIndigo,
+                                        size: 28,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          context.org.companyName,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: Icon(
+                                    Icons.search_rounded,
+                                    color: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
+                                  ),
+                                  title: const Text('Global Database Search'),
+                                  onTap: () {
+                                    Navigator.pop(context); // close the drawer
+                                    _showGlobalSearchSheet(context, isDark);
+                                  },
+                                ),
+                                ListTile(
+                                  leading: Icon(themeIcon, color: themeColor),
+                                  title: Text(themeTooltip),
+                                  onTap: () => context.read<ThemeCubit>().toggleTheme(),
+                                ),
+                                const MockLiveSwitchTile(),
+                              ],
+                            ),
+                          ),
+                        ),
+                  appBar: AppBar(
+                    title: isWideScreen
+                        ? Text(
+                            switch (currentIndex) {
+                              0 => 'Customers & Routes',
+                              1 => 'Analytics & Dashboard',
+                              2 => 'Operations Panel',
+                              3 => 'Reports & Statements',
+                              _ => 'Dashboard',
+                            },
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : Row(
                             children: [
                               const Icon(
                                 Icons.local_shipping_rounded,
                                 color: AppTheme.primaryIndigo,
-                                size: 28,
+                                size: 20,
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   context.org.companyName,
                                   style: const TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -575,216 +615,160 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ],
                           ),
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: Icon(
-                            Icons.search_rounded,
-                            color: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
-                          ),
-                          title: const Text('Global Database Search'),
-                          onTap: () {
-                            Navigator.pop(context); // close the drawer
-                            _showGlobalSearchSheet(isDark);
-                          },
-                        ),
-                        ListTile(
-                          leading: Icon(themeIcon, color: themeColor),
-                          title: Text(themeTooltip),
-                          onTap: () => context.read<ThemeCubit>().toggleTheme(),
-                        ),
-                        const MockLiveSwitchTile(),
-                      ],
-                    ),
-                  ),
-                ),
-          appBar: AppBar(
-            title: isWideScreen
-                ? Text(
-                    switch (_currentIndex) {
-                      0 => 'Customers & Routes',
-                      1 => 'Analytics & Dashboard',
-                      2 => 'Operations Panel',
-                      3 => 'Reports & Statements',
-                      _ => 'Dashboard',
-                    },
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  )
-                : Row(
-                    children: [
-                      const Icon(
-                        Icons.local_shipping_rounded,
-                        color: AppTheme.primaryIndigo,
-                        size: 20,
+                    actions: [
+                      BlocBuilder<SyncBloc, SyncState>(
+                        builder: (context, syncState) {
+                          final isSyncing = syncState.isSyncing;
+                          final hasPending = syncState.pendingCount > 0;
+                          final syncColor = isSyncing
+                              ? AppTheme.primaryIndigo
+                              : (hasPending
+                                    ? AppTheme.warningAmber
+                                    : AppTheme.successEmerald);
+
+                          return Tooltip(
+                            message: isSyncing
+                                ? 'Syncing… · Tap to open Sync Masters'
+                                : (hasPending
+                                      ? '${syncState.pendingCount} items pending · Tap to open Sync Masters'
+                                      : 'All synced · Tap to open Sync Masters'),
+                            child: InkWell(
+                              onTap: () => _showMastersSyncPage(context),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: syncColor,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 72),
+                                      child: Text(
+                                        isSyncing
+                                            ? 'Syncing'
+                                            : (hasPending
+                                                  ? '${syncState.pendingCount} Pending'
+                                                  : 'Synced'),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: syncColor,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Icon(
+                                      isSyncing
+                                          ? Icons.sync_outlined
+                                          : Icons.cloud_done_outlined,
+                                      size: 15,
+                                      color: syncColor,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          context.org.companyName,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                      const SizedBox(width: 4),
                     ],
                   ),
-            actions: [
-              BlocBuilder<SyncBloc, SyncState>(
-                builder: (context, syncState) {
-                  final isSyncing = syncState.isSyncing;
-                  final hasPending = syncState.pendingCount > 0;
-                  final syncColor = isSyncing
-                      ? AppTheme.primaryIndigo
-                      : (hasPending
-                            ? AppTheme.warningAmber
-                            : AppTheme.successEmerald);
-
-                  return Tooltip(
-                    message: isSyncing
-                        ? 'Syncing… · Tap to open Sync Masters'
-                        : (hasPending
-                              ? '${syncState.pendingCount} items pending · Tap to open Sync Masters'
-                              : 'All synced · Tap to open Sync Masters'),
-                    child: InkWell(
-                      onTap: _showMastersSyncPage,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                  body: isWideScreen
+                      ? Row(
                           children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: syncColor,
-                              ),
+                            _buildSidebar(
+                              context,
+                              currentIndex,
+                              isDark,
+                              isGlass,
+                              themeIcon,
+                              themeColor,
+                              themeTooltip,
                             ),
-                            const SizedBox(width: 5),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 72),
-                              child: Text(
-                                isSyncing
-                                    ? 'Syncing'
-                                    : (hasPending
-                                          ? '${syncState.pendingCount} Pending'
-                                          : 'Synced'),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: syncColor,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            Icon(
-                              isSyncing
-                                  ? Icons.sync_outlined
-                                  : Icons.cloud_done_outlined,
-                              size: 15,
-                              color: syncColor,
+                            const VerticalDivider(width: 1, thickness: 1),
+                            Expanded(
+                              child: tabs[currentIndex],
                             ),
                           ],
+                        )
+                      : tabs[currentIndex],
+                  bottomNavigationBar: isWideScreen
+                      ? null
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: isGlass
+                                ? AppTheme.glassBackground2
+                                : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
+                            border: Border(
+                              top: BorderSide(
+                                color: isGlass
+                                    ? AppTheme.glassBorder
+                                    : (isDark
+                                          ? const Color(0xFF334155)
+                                          : const Color(0xFFE2E8F0)),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: SafeArea(
+                            top: false,
+                            // Customers tab (index 0) is hidden from the bottom
+                            // bar for now. Bar slots map to tab indices 1–3.
+                            child: BottomNavigationBar(
+                              currentIndex: currentIndex <= 0
+                                  ? 0
+                                  : (currentIndex - 1).clamp(0, 2),
+                              backgroundColor: Colors.transparent,
+                              selectedItemColor: isGlass
+                                  ? Colors.cyanAccent
+                                  : AppTheme.primaryIndigo,
+                              unselectedItemColor: isGlass
+                                  ? AppTheme.glassTextSecondary
+                                  : (isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary),
+                              elevation: 0,
+                              onTap: (index) => context
+                                  .read<DashboardNavCubit>()
+                                  .setTab(index + 1),
+                              type: BottomNavigationBarType.fixed,
+                              items: const [
+                                BottomNavigationBarItem(
+                                  icon: Icon(Icons.dashboard_outlined),
+                                  activeIcon: Icon(Icons.dashboard),
+                                  label: 'Dashboard',
+                                ),
+                                BottomNavigationBarItem(
+                                  icon: Icon(Icons.settings_suggest_outlined),
+                                  activeIcon: Icon(Icons.settings_suggest),
+                                  label: 'Operations',
+                                ),
+                                BottomNavigationBarItem(
+                                  icon: Icon(Icons.assessment_outlined),
+                                  activeIcon: Icon(Icons.assessment),
+                                  label: 'Reports',
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 4),
-            ],
-          ),
-          body: isWideScreen
-              ? Row(
-                  children: [
-                    _buildSidebar(
-                      context,
-                      isDark,
-                      isGlass,
-                      themeIcon,
-                      themeColor,
-                      themeTooltip,
-                    ),
-                    const VerticalDivider(width: 1, thickness: 1),
-                    Expanded(
-                      child: tabs[_currentIndex],
-                    ),
-                  ],
-                )
-              : tabs[_currentIndex],
-          bottomNavigationBar: isWideScreen
-              ? null
-              : Container(
-                  decoration: BoxDecoration(
-                    color: isGlass
-                        ? AppTheme.glassBackground2
-                        : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
-                    border: Border(
-                      top: BorderSide(
-                        color: isGlass
-                            ? AppTheme.glassBorder
-                            : (isDark
-                                  ? const Color(0xFF334155)
-                                  : const Color(0xFFE2E8F0)),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: BottomNavigationBar(
-                      currentIndex: _currentIndex,
-                      backgroundColor: Colors.transparent,
-                      selectedItemColor: isGlass
-                          ? Colors.cyanAccent
-                          : AppTheme.primaryIndigo,
-                      unselectedItemColor: isGlass
-                          ? AppTheme.glassTextSecondary
-                          : (isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary),
-                      elevation: 0,
-                      onTap: (index) {
-                        setState(() {
-                          _currentIndex = index;
-                        });
-                      },
-                      type: BottomNavigationBarType.fixed,
-                      items: const [
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.people_outline),
-                          activeIcon: Icon(Icons.people),
-                          label: 'Customers',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.dashboard_outlined),
-                          activeIcon: Icon(Icons.dashboard),
-                          label: 'Dashboard',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.settings_suggest_outlined),
-                          activeIcon: Icon(Icons.settings_suggest),
-                          label: 'Operations',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.assessment_outlined),
-                          activeIcon: Icon(Icons.assessment),
-                          label: 'Reports',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -792,6 +776,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildSidebar(
     BuildContext context,
+    int currentIndex,
     bool isDark,
     bool isGlass,
     IconData themeIcon,
@@ -855,6 +840,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 children: [
                   _buildSidebarNavItem(
+                    context: context,
+                    currentIndex: currentIndex,
                     index: 0,
                     icon: Icons.people_outline,
                     activeIcon: Icons.people,
@@ -864,6 +851,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   const SizedBox(height: 4),
                   _buildSidebarNavItem(
+                    context: context,
+                    currentIndex: currentIndex,
                     index: 1,
                     icon: Icons.dashboard_outlined,
                     activeIcon: Icons.dashboard,
@@ -873,6 +862,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   const SizedBox(height: 4),
                   _buildSidebarNavItem(
+                    context: context,
+                    currentIndex: currentIndex,
                     index: 2,
                     icon: Icons.settings_suggest_outlined,
                     activeIcon: Icons.settings_suggest,
@@ -882,6 +873,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   const SizedBox(height: 4),
                   _buildSidebarNavItem(
+                    context: context,
+                    currentIndex: currentIndex,
                     index: 3,
                     icon: Icons.assessment_outlined,
                     activeIcon: Icons.assessment,
@@ -909,7 +902,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       color: isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo,
                     ),
                     title: const Text('Global Search', style: TextStyle(fontSize: 13)),
-                    onTap: () => _showGlobalSearchSheet(isDark),
+                    onTap: () => _showGlobalSearchSheet(context, isDark),
                   ),
                   ListTile(
                     dense: true,
@@ -933,6 +926,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildSidebarNavItem({
+    required BuildContext context,
+    required int currentIndex,
     required int index,
     required IconData icon,
     required IconData activeIcon,
@@ -940,25 +935,19 @@ class _DashboardPageState extends State<DashboardPage> {
     required bool isGlass,
     required bool isDark,
   }) {
-    final isSelected = _currentIndex == index;
+    final isSelected = currentIndex == index;
     final activeColor = isGlass ? Colors.cyanAccent : AppTheme.primaryIndigo;
     final inactiveColor = isGlass
         ? AppTheme.glassTextSecondary
         : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary);
 
     return InkWell(
-      onTap: () {
-        setState(() {
-          _currentIndex = index;
-        });
-      },
+      onTap: () => context.read<DashboardNavCubit>().setTab(index),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected
-              ? activeColor.withValues(alpha: 0.1)
-              : Colors.transparent,
+          color: isSelected ? activeColor.withValues(alpha: 0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(

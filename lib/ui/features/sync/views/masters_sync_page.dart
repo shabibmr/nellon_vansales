@@ -1,11 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
+import '../../../../data/services/injection.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/status_pill.dart';
@@ -13,159 +12,90 @@ import '../../../core/widgets/sync_item_card.dart';
 import '../../route/bloc/route_bloc.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../bloc/sync_bloc.dart';
+import '../bloc/masters_sync_bloc.dart';
+import '../bloc/masters_sync_event.dart';
+import '../bloc/masters_sync_state.dart';
 
 /// The Core Master Data Bootstrap / Sync Screen.
 ///
-/// Two tabs: "Sync Masters" for downloading org/items/taxes data from Zoho,
-/// and "Sync Queue" to inspect offline transaction upload status.
-class MastersSyncPage extends StatefulWidget {
+/// Two tabs: "Sync Masters" for downloading reference data from Zoho
+/// (organization, items, customers, taxes, etc.), and "Sync Queue" to
+/// **inspect** offline upload status only.
+///
+/// This page never pulls or pushes business transactions (invoices, receipts,
+/// orders, returns, expenses). Those upload automatically via [SyncWorker]
+/// when connectivity is available.
+class MastersSyncPage extends StatelessWidget {
   /// Creates a new [MastersSyncPage].
   const MastersSyncPage({super.key});
 
   @override
-  State<MastersSyncPage> createState() => _MastersSyncPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider<MastersSyncBloc>(
+      create: (_) => MastersSyncBloc(
+        syncRepository: context.read<SyncRepository>(),
+      )..add(MastersSyncStarted()),
+      child: const _MastersSyncPageView(),
+    );
+  }
 }
 
-class _MastersSyncPageState extends State<MastersSyncPage>
+class _MastersSyncPageView extends StatefulWidget {
+  const _MastersSyncPageView();
+
+  @override
+  State<_MastersSyncPageView> createState() => _MastersSyncPageViewState();
+}
+
+class _MastersSyncPageViewState extends State<_MastersSyncPageView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-
-  final Set<MasterType> _inFlight = {};
-  bool _bulkInFlight = false;
-  final Map<MasterType, String?> _lastError = {};
-  final Set<MasterType> _syncedTypes = {};
-  String? _bulkSyncStatus;
-  bool? _bulkSyncSuccess;
-
-  StreamSubscription<String>? _statusSubscription;
-  final List<String> _consoleLogs = [];
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _statusSubscription = context.read<SyncRepository>().syncStatusStream.listen((
-      status,
-    ) {
-      if (mounted) {
-        setState(() {
-          _consoleLogs.add(
-            '[${DateTime.now().toLocal().toString().substring(11, 19)}] $status',
-          );
-          if (_consoleLogs.length > 100) {
-            _consoleLogs.removeAt(0);
-          }
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-      }
-    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _statusSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _syncOne(MasterType type) async {
-    if (_inFlight.contains(type) || _bulkInFlight) return;
-    setState(() {
-      _inFlight.add(type);
-      _lastError[type] = null;
-      _syncedTypes.remove(type);
-    });
-    try {
-      await context.read<SyncRepository>().syncMaster(type);
-      if (mounted) {
-        setState(() => _syncedTypes.add(type));
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(
-          () => _lastError[type] = e.toString().replaceAll('Exception: ', ''),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _inFlight.remove(type));
-      if (mounted) context.read<RouteBloc>().add(LoadRoutes());
+  /// Blocks logout if today's route activity hasn't been reconciled yet via
+  /// the Cash Closing workflow — otherwise a day's cash-in-hand discrepancy
+  /// could be walked away from unnoticed.
+  Future<void> _attemptLogout(BuildContext context) async {
+    final hasPendingClosing = sl<HiveDatabaseService>()
+        .hasPendingCashClosingForToday();
+    if (!hasPendingClosing) {
+      context.read<AuthBloc>().add(LogoutRequested());
+      return;
     }
-  }
 
-  Future<void> _syncAll() async {
-    if (_bulkInFlight) return;
-    setState(() {
-      _bulkInFlight = true;
-      _lastError.clear();
-      _syncedTypes.clear();
-      _bulkSyncStatus = 'Sync in progress...';
-      _bulkSyncSuccess = null;
-    });
-    final syncRepo = context.read<SyncRepository>();
-    try {
-      for (final type in MasterType.values) {
-        if (!mounted) break;
-        setState(() {
-          _inFlight.add(type);
-          _lastError[type] = null;
-        });
-        try {
-          await syncRepo.syncMaster(type);
-          if (mounted) {
-            setState(() {
-              _syncedTypes.add(type);
-            });
-          }
-        } catch (e) {
-          if (mounted) {
-            setState(() {
-              _lastError[type] = e.toString().replaceAll('Exception: ', '');
-            });
-          }
-        } finally {
-          if (mounted) {
-            setState(() {
-              _inFlight.remove(type);
-            });
-          }
-        }
-      }
-
-      final hasMasters = syncRepo.hasCoreMasters();
-      setState(() {
-        if (hasMasters) {
-          _bulkSyncStatus = 'Master data sync completed successfully!';
-          _bulkSyncSuccess = true;
-        } else {
-          _bulkSyncStatus =
-              'Sync completed but some core databases are empty. Try syncing again.';
-          _bulkSyncSuccess = false;
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _bulkSyncStatus = 'Sync failed: $e';
-        _bulkSyncSuccess = false;
-      });
-    } finally {
-      if (mounted) setState(() => _bulkInFlight = false);
-      if (mounted) context.read<RouteBloc>().add(LoadRoutes());
-    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cash Closing Required'),
+        content: const Text(
+          "You have unreconciled sales activity today. Please complete "
+          "today's Cash Closing from the Dashboard before logging out.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasMasters = context.read<SyncRepository>().hasCoreMasters();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -195,7 +125,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
             ),
             Tab(
               icon: Icon(Icons.list_alt_rounded, size: 18),
-              text: 'Sync Queue',
+              text: 'Upload Queue',
             ),
           ],
         ),
@@ -203,76 +133,112 @@ class _MastersSyncPageState extends State<MastersSyncPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildSyncMastersTab(isDark, hasMasters),
+          _buildSyncMastersTab(isDark),
           _buildSyncQueueTab(isDark),
         ],
       ),
     );
   }
 
-  // --- Sync Masters Tab ---
+  Widget _buildSyncMastersTab(bool isDark) {
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<MastersSyncBloc, MastersSyncState>(
+          listenWhen: (prev, curr) =>
+              prev.consoleLogs.length < curr.consoleLogs.length,
+          listener: (context, state) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollController.hasClients) {
+                _scrollController.animateTo(
+                  _scrollController.position.maxScrollExtent,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                );
+              }
+            });
+          },
+        ),
+        // Refresh routes after a master type finishes (success path).
+        BlocListener<MastersSyncBloc, MastersSyncState>(
+          listenWhen: (prev, curr) =>
+              curr.syncedTypes.length > prev.syncedTypes.length ||
+              (prev.bulkInFlight && !curr.bulkInFlight),
+          listener: (context, state) {
+            context.read<RouteBloc>().add(LoadRoutes());
+          },
+        ),
+      ],
+      child: BlocBuilder<MastersSyncBloc, MastersSyncState>(
+        builder: (context, state) {
+          final syncedCount = state.syncedTypes.length;
+          final totalCount = MasterType.values.length;
 
-  Widget _buildSyncMastersTab(bool isDark, bool hasMasters) {
-    final syncedCount = _syncedTypes.length;
-    final totalCount = MasterType.values.length;
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          return Column(
             children: [
-              _buildHeroCard(isDark, syncedCount, totalCount),
-              if (_bulkSyncStatus != null) ...[
-                const SizedBox(height: 16),
-                _buildStatusBanner(isDark),
-              ],
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.only(left: 4, bottom: 10),
-                child: Row(
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   children: [
-                    Text(
-                      'DATA CATEGORIES',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: isDark
-                            ? AppTheme.darkTextSecondary
-                            : AppTheme.lightTextSecondary,
+                    _buildHeroCard(context, state, isDark, syncedCount, totalCount),
+                    if (state.bulkSyncStatus != null) ...[
+                      const SizedBox(height: 16),
+                      _buildStatusBanner(state, isDark),
+                    ],
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 10),
+                      child: Row(
+                        children: [
+                          Text(
+                            'DATA CATEGORIES',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '$syncedCount / $totalCount',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
-                    Text(
-                      '$syncedCount / $totalCount',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: isDark
-                            ? AppTheme.darkTextSecondary
-                            : AppTheme.lightTextSecondary,
+                    ...MasterType.values.map(
+                      (type) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _buildMasterCard(context, state, type, isDark),
                       ),
                     ),
                   ],
                 ),
               ),
-              ...MasterType.values.map(
-                (type) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _buildMasterCard(type, isDark),
-                ),
-              ),
+              _buildConsoleLogs(context, state),
+              _buildBottomBar(context, state.canProceed),
             ],
-          ),
-        ),
-        _buildConsoleLogs(),
-        _buildBottomBar(hasMasters),
-      ],
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildHeroCard(bool isDark, int syncedCount, int totalCount) {
+  Widget _buildHeroCard(
+    BuildContext context,
+    MastersSyncState state,
+    bool isDark,
+    int syncedCount,
+    int totalCount,
+  ) {
     final progress = totalCount == 0 ? 0.0 : syncedCount / totalCount;
     return Container(
       padding: const EdgeInsets.all(20),
@@ -285,7 +251,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryIndigo.withAlpha(70),
+            color: AppTheme.primaryIndigo.withValues(alpha: 0.27),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -299,7 +265,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(40),
+                  color: Colors.white.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
@@ -323,7 +289,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Download the latest catalog from Zoho Books',
+                      'Reference data only — no invoices or other transactions',
                       style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
@@ -357,9 +323,9 @@ class _MastersSyncPageState extends State<MastersSyncPage>
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: _bulkInFlight && progress == 0 ? null : progress,
+              value: state.bulkInFlight && progress == 0 ? null : progress,
               minHeight: 8,
-              backgroundColor: Colors.white.withAlpha(50),
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
               valueColor: const AlwaysStoppedAnimation(Colors.white),
             ),
           ),
@@ -367,8 +333,10 @@ class _MastersSyncPageState extends State<MastersSyncPage>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _bulkInFlight ? null : _syncAll,
-              icon: _bulkInFlight
+              onPressed: state.bulkInFlight
+                  ? null
+                  : () => context.read<MastersSyncBloc>().add(SyncAllRequested()),
+              icon: state.bulkInFlight
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -378,12 +346,12 @@ class _MastersSyncPageState extends State<MastersSyncPage>
                       ),
                     )
                   : const Icon(Icons.sync_rounded),
-              label: Text(_bulkInFlight ? 'Syncing all…' : 'Sync All Masters'),
+              label: Text(state.bulkInFlight ? 'Syncing all…' : 'Sync All Masters'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 backgroundColor: Colors.white,
                 foregroundColor: AppTheme.primaryIndigo,
-                disabledBackgroundColor: Colors.white.withAlpha(180),
+                disabledBackgroundColor: Colors.white.withValues(alpha: 0.7),
                 disabledForegroundColor: AppTheme.primaryIndigo,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -401,22 +369,22 @@ class _MastersSyncPageState extends State<MastersSyncPage>
     );
   }
 
-  Widget _buildStatusBanner(bool isDark) {
-    final success = _bulkSyncSuccess;
+  Widget _buildStatusBanner(MastersSyncState state, bool isDark) {
+    final success = state.bulkSyncSuccess;
     final Color bg = success == true
         ? (isDark
-              ? AppTheme.successEmerald.withAlpha(40)
+              ? AppTheme.successEmerald.withValues(alpha: 0.16)
               : const Color(0xFFE8F5E9))
         : success == false
-        ? (isDark ? AppTheme.errorRose.withAlpha(40) : const Color(0xFFFFEBEE))
+        ? (isDark ? AppTheme.errorRose.withValues(alpha: 0.16) : const Color(0xFFFFEBEE))
         : (isDark
-              ? AppTheme.primaryIndigo.withAlpha(40)
+              ? AppTheme.primaryIndigo.withValues(alpha: 0.16)
               : const Color(0xFFE8EAF6));
     final Color border = success == true
-        ? AppTheme.successEmerald.withAlpha(100)
+        ? AppTheme.successEmerald.withValues(alpha: 0.39)
         : success == false
-        ? AppTheme.errorRose.withAlpha(100)
-        : AppTheme.primaryIndigo.withAlpha(100);
+        ? AppTheme.errorRose.withValues(alpha: 0.39)
+        : AppTheme.primaryIndigo.withValues(alpha: 0.39);
     final Color fg = success == true
         ? (isDark ? Colors.green[200]! : const Color(0xFF2E7D32))
         : success == false
@@ -446,7 +414,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              _bulkSyncStatus!,
+              state.bulkSyncStatus!,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -459,10 +427,15 @@ class _MastersSyncPageState extends State<MastersSyncPage>
     );
   }
 
-  Widget _buildMasterCard(MasterType type, bool isDark) {
-    final isBusy = _inFlight.contains(type) || _bulkInFlight;
-    final error = _lastError[type];
-    final isSynced = _syncedTypes.contains(type) && error == null;
+  Widget _buildMasterCard(
+    BuildContext context,
+    MastersSyncState state,
+    MasterType type,
+    bool isDark,
+  ) {
+    final isBusy = state.inFlight.contains(type) || state.bulkInFlight;
+    final error = state.lastError[type];
+    final isSynced = state.syncedTypes.contains(type) && error == null;
 
     Color accent;
     Widget trailing;
@@ -505,7 +478,11 @@ class _MastersSyncPageState extends State<MastersSyncPage>
       subtitle: error ?? _descForType(type),
       accentColor: accent,
       trailing: trailing,
-      onTap: isBusy ? null : () => _syncOne(type),
+      onTap: isBusy
+          ? null
+          : () {
+              context.read<MastersSyncBloc>().add(SyncOneRequested(type));
+            },
       hasError: error != null,
     );
   }
@@ -528,8 +505,6 @@ class _MastersSyncPageState extends State<MastersSyncPage>
         return Icons.inventory_2_rounded;
       case MasterType.customers:
         return Icons.people_alt_rounded;
-      case MasterType.openInvoices:
-        return Icons.description_rounded;
       case MasterType.salespersons:
         return Icons.badge_rounded;
     }
@@ -553,50 +528,19 @@ class _MastersSyncPageState extends State<MastersSyncPage>
         return 'Product catalog & van stock';
       case MasterType.customers:
         return 'Contacts, balances & credit limits';
-      case MasterType.openInvoices:
-        return 'Outstanding invoices for collection';
       case MasterType.salespersons:
         return 'Sales users & location assignments';
     }
   }
 
-  /// Blocks logout if today's route activity hasn't been reconciled yet via
-  /// the Cash Closing workflow — otherwise a day's cash-in-hand discrepancy
-  /// could be walked away from unnoticed.
-  Future<void> _attemptLogout(BuildContext context) async {
-    final hasPendingClosing = sl<HiveDatabaseService>()
-        .hasPendingCashClosingForToday();
-    if (!hasPendingClosing) {
-      context.read<AuthBloc>().add(LogoutRequested());
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cash Closing Required'),
-        content: const Text(
-          "You have unreconciled sales activity today. Please complete "
-          "today's Cash Closing from the Dashboard before logging out.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomBar(bool hasMasters) {
+  Widget _buildBottomBar(BuildContext context, bool hasMasters) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(12),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -5),
           ),
@@ -669,7 +613,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: AppTheme.successEmerald.withAlpha(30),
+                      color: AppTheme.successEmerald.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -706,7 +650,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
 
         return Column(
           children: [
-            if (failedCount > 0) _buildQueueActionsBar(failedCount, syncState),
+            if (failedCount > 0) _buildQueueActionsBar(context, failedCount, syncState),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),
@@ -726,15 +670,16 @@ class _MastersSyncPageState extends State<MastersSyncPage>
     );
   }
 
-  Widget _buildQueueActionsBar(int failedCount, SyncState syncState) {
+  Widget _buildQueueActionsBar(BuildContext context, int failedCount, SyncState syncState) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: AppTheme.errorRose.withAlpha(20),
+      color: AppTheme.errorRose.withValues(alpha: 0.08),
       child: Row(
         children: [
           Expanded(
             child: Text(
-              '$failedCount item${failedCount == 1 ? '' : 's'} failed to sync',
+              '$failedCount item${failedCount == 1 ? '' : 's'} failed — '
+              'uploads retry automatically when online',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -742,15 +687,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
               ),
             ),
           ),
-          TextButton.icon(
-            onPressed: syncState.isSyncing
-                ? null
-                : () => context.read<SyncBloc>().add(
-                    const TriggerSync(forceRetryAll: true),
-                  ),
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text('Retry Failed'),
-          ),
+          // Queue is view/manage only on this page — never push transactions here.
           TextButton.icon(
             onPressed: () =>
                 context.read<SyncBloc>().add(ClearFailedItemsRequested()),
@@ -797,9 +734,6 @@ class _MastersSyncPageState extends State<MastersSyncPage>
                                 ? Icons.assignment_return_rounded
                                 : Icons.person_add_rounded))));
 
-    // The sync worker tags failed items' errorMessage with "[Retryable]" or
-    // "[Needs Attention]" based on whether the underlying error was
-    // transient (network/server) or permanent (validation/business-rule).
     final rawError = syncItem.errorMessage;
     final isRetryable = rawError?.startsWith('[Retryable]') ?? false;
     final isNeedsAttention = rawError?.startsWith('[Needs Attention]') ?? false;
@@ -867,7 +801,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
 
   // --- Diagnostic Console ---
 
-  Widget _buildConsoleLogs() {
+  Widget _buildConsoleLogs(BuildContext context, MastersSyncState state) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 120,
@@ -911,12 +845,10 @@ class _MastersSyncPageState extends State<MastersSyncPage>
                     ),
                   ],
                 ),
-                if (_consoleLogs.isNotEmpty)
+                if (state.consoleLogs.isNotEmpty)
                   GestureDetector(
                     onTap: () {
-                      setState(() {
-                        _consoleLogs.clear();
-                      });
+                      context.read<MastersSyncBloc>().add(ClearLogsRequested());
                     },
                     child: const Text(
                       'CLEAR',
@@ -932,7 +864,7 @@ class _MastersSyncPageState extends State<MastersSyncPage>
             ),
           ),
           Expanded(
-            child: _consoleLogs.isEmpty
+            child: state.consoleLogs.isEmpty
                 ? const Center(
                     child: Text(
                       'No logs yet. Start sync to capture diagnostics.',
@@ -946,9 +878,9 @@ class _MastersSyncPageState extends State<MastersSyncPage>
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(8),
-                    itemCount: _consoleLogs.length,
+                    itemCount: state.consoleLogs.length,
                     itemBuilder: (context, index) {
-                      final log = _consoleLogs[index];
+                      final log = state.consoleLogs[index];
                       Color textColor = Colors.white70;
                       if (log.toLowerCase().contains('failed') ||
                           log.toLowerCase().contains('error')) {

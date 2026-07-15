@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
@@ -9,6 +10,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_picker.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../bloc/report_bloc.dart';
+import '../bloc/report_event.dart';
+import '../bloc/report_state.dart';
 
 /// Aggregated row for a single payment mode across the filtered period.
 class _ModeRow {
@@ -28,69 +32,57 @@ enum _SortField { mode, count, collected }
 /// Fetches every customer payment (receipt) live from Zoho Books and
 /// aggregates by payment mode, showing receipt count, total collected,
 /// total applied to invoices, and total left unallocated (customer credit).
-class InvoiceReceiptsSummaryReportPage extends StatefulWidget {
+class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
   const InvoiceReceiptsSummaryReportPage({super.key});
 
   @override
-  State<InvoiceReceiptsSummaryReportPage> createState() =>
-      _InvoiceReceiptsSummaryReportPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider<ReportBloc<ReceiptVoucher>>(
+      create: (_) => ReportBloc<ReceiptVoucher>(
+        getLocal: () => sl<HiveDatabaseService>().getLocalReceipts(),
+        fetchRemote: () async {
+          final raw = await sl<ZohoApiClient>().fetchReceipts();
+          return raw.map((json) => ReceiptVoucherModel.fromJson(json)).toList();
+        },
+        initialSortField: _SortField.collected,
+        initialSortAscending: false,
+      ),
+      child: const _InvoiceReceiptsSummaryReportView(),
+    );
+  }
 }
 
-class _InvoiceReceiptsSummaryReportPageState
-    extends State<InvoiceReceiptsSummaryReportPage> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
-  final ZohoApiClient _apiClient = sl<ZohoApiClient>();
+class _InvoiceReceiptsSummaryReportView extends StatelessWidget {
+  const _InvoiceReceiptsSummaryReportView();
 
-  DateTime? _startDate;
-  DateTime? _endDate;
-  _SortField _sortField = _SortField.collected;
-  bool _sortAscending = false;
-  bool _isLoading = false;
-
-  List<ReceiptVoucher> _allReceipts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _allReceipts = _db.getLocalReceipts();
-    _fetchFromZoho();
-  }
-
-  Future<void> _fetchFromZoho() async {
-    if (_isLoading) return;
-    setState(() => _isLoading = true);
-    try {
-      final raw = await _apiClient.fetchReceipts();
-      final receipts = raw
-          .map((json) => ReceiptVoucherModel.fromJson(json))
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _allReceipts = receipts;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      showErrorSnackBar(context, 'Could not load report from Zoho: $e');
+  Future<void> _pickDate(BuildContext context, bool isStart) async {
+    final bloc = context.read<ReportBloc<ReceiptVoucher>>();
+    final current = isStart ? bloc.state.startDate : bloc.state.endDate;
+    final picked = await showThemedDatePicker(context, initialDate: current);
+    if (picked != null) {
+      if (isStart) {
+        bloc.add(SetDateRange(picked, bloc.state.endDate));
+      } else {
+        bloc.add(SetDateRange(bloc.state.startDate, picked));
+      }
     }
   }
 
-  List<_ModeRow> _buildReport() {
+  List<_ModeRow> _buildReport(ReportState<ReceiptVoucher> state) {
     final map = <String, _ModeRow>{};
 
-    for (final rcpt in _allReceipts) {
+    for (final rcpt in state.rows) {
       final day = DateTime(rcpt.date.year, rcpt.date.month, rcpt.date.day);
-      if (_startDate != null) {
+      if (state.startDate != null) {
         final s = DateTime(
-          _startDate!.year,
-          _startDate!.month,
-          _startDate!.day,
+          state.startDate!.year,
+          state.startDate!.month,
+          state.startDate!.day,
         );
         if (day.isBefore(s)) continue;
       }
-      if (_endDate != null) {
-        final e = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+      if (state.endDate != null) {
+        final e = DateTime(state.endDate!.year, state.endDate!.month, state.endDate!.day);
         if (day.isAfter(e)) continue;
       }
 
@@ -105,9 +97,12 @@ class _InvoiceReceiptsSummaryReportPageState
     }
 
     final rows = map.values.toList();
+    final sortField = state.sortField as _SortField? ?? _SortField.collected;
+    final sortAscending = state.sortAscending;
+
     rows.sort((a, b) {
       int cmp;
-      switch (_sortField) {
+      switch (sortField) {
         case _SortField.mode:
           cmp = a.mode.compareTo(b.mode);
           break;
@@ -118,174 +113,157 @@ class _InvoiceReceiptsSummaryReportPageState
           cmp = a.totalCollected.compareTo(b.totalCollected);
           break;
       }
-      return _sortAscending ? cmp : -cmp;
+      return sortAscending ? cmp : -cmp;
     });
     return rows;
-  }
-
-  Future<void> _pickDate(bool isStart) async {
-    final current = isStart ? _startDate : _endDate;
-    final picked = await showThemedDatePicker(context, initialDate: current);
-    if (picked != null && mounted) {
-      setState(() {
-        if (isStart) {
-          _startDate = picked;
-        } else {
-          _endDate = picked;
-        }
-      });
-    }
-  }
-
-  void _toggleSort(_SortField field) {
-    setState(() {
-      if (_sortField == field) {
-        _sortAscending = !_sortAscending;
-      } else {
-        _sortField = field;
-        _sortAscending = false;
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
-    final rows = _buildReport();
-    final totalCount = rows.fold(0, (sum, r) => sum + r.receiptCount);
-    final totalCollected = rows.fold(0.0, (sum, r) => sum + r.totalCollected);
 
-    return SortableReportScaffold<_ModeRow, _SortField>(
-      title: 'Invoice Receipts Summary',
-      isLoading: _isLoading,
-      onRefresh: _fetchFromZoho,
-      rows: rows,
-      sortField: _sortField,
-      sortAscending: _sortAscending,
-      onSort: _toggleSort,
-      startDate: _startDate,
-      endDate: _endDate,
-      onStartDateTap: () => _pickDate(true),
-      onEndDateTap: () => _pickDate(false),
-      onClearDate: () => setState(() {
-        _startDate = null;
-        _endDate = null;
-      }),
-      emptyIcon: Icons.account_balance_wallet_outlined,
-      emptyTitle: 'No receipts',
-      emptyMessage: 'No receipts recorded yet.',
-      summaryChips: [
-        ReportSummaryChip(
-          label: 'Receipts',
-          value: '$totalCount',
-          color: AppTheme.infoSky,
-        ),
-        ReportSummaryChip(
-          label: 'Total Collected',
-          value: '$cs${totalCollected.toStringAsFixed(2)}',
-          color: AppTheme.successEmerald,
-        ),
-      ],
-      columns: const [
-        ReportColumn(
-          label: 'MODE',
-          flex: 4,
-          field: _SortField.mode,
-          alignEnd: false,
-        ),
-        ReportColumn(label: 'COUNT', flex: 2, field: _SortField.count),
-        ReportColumn(label: 'COLLECTED', flex: 4, field: _SortField.collected),
-      ],
-      exportHeaders: const [
-        'Mode',
-        'Count',
-        'Collected',
-        'Allocated',
-        'Unallocated',
-      ],
-      exportRow: (row) => [
-        row.mode,
-        '${row.receiptCount}',
-        row.totalCollected.toStringAsFixed(2),
-        row.totalAllocated.toStringAsFixed(2),
-        row.totalUnallocated.toStringAsFixed(2),
-      ],
-      itemBuilder: (context, row) {
-        return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 4,
-                      child: Text(
-                        row.mode,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '${row.receiptCount}',
-                        textAlign: TextAlign.end,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? AppTheme.darkTextSecondary
-                              : AppTheme.lightTextSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 4,
-                      child: Text(
-                        '$cs${row.totalCollected.toStringAsFixed(2)}',
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: AppTheme.successEmerald,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Allocated: $cs${row.totalAllocated.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppTheme.darkTextSecondary
-                            : AppTheme.lightTextSecondary,
-                      ),
-                    ),
-                    Text(
-                      'Unallocated: $cs${row.totalUnallocated.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.warningAmber,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
+    return BlocListener<ReportBloc<ReceiptVoucher>, ReportState<ReceiptVoucher>>(
+      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listener: (context, state) {
+        showErrorSnackBar(context, 'Could not load report from Zoho: ${state.error}');
       },
+      child: BlocBuilder<ReportBloc<ReceiptVoucher>, ReportState<ReceiptVoucher>>(
+        builder: (context, state) {
+          final rows = _buildReport(state);
+          final totalCount = rows.fold(0, (sum, r) => sum + r.receiptCount);
+          final totalCollected = rows.fold(0.0, (sum, r) => sum + r.totalCollected);
+
+          return SortableReportScaffold<_ModeRow, _SortField>(
+            title: 'Invoice Receipts Summary',
+            isLoading: state.isLoading,
+            onRefresh: () => context.read<ReportBloc<ReceiptVoucher>>().add(const RefreshReport()),
+            rows: rows,
+            sortField: state.sortField as _SortField? ?? _SortField.collected,
+            sortAscending: state.sortAscending,
+            onSort: (field) => context.read<ReportBloc<ReceiptVoucher>>().add(SetSort(field)),
+            startDate: state.startDate,
+            endDate: state.endDate,
+            onStartDateTap: () => _pickDate(context, true),
+            onEndDateTap: () => _pickDate(context, false),
+            onClearDate: () => context.read<ReportBloc<ReceiptVoucher>>().add(const SetDateRange(null, null)),
+            emptyIcon: Icons.account_balance_wallet_outlined,
+            emptyTitle: 'No receipts',
+            emptyMessage: 'No receipts recorded yet.',
+            summaryChips: [
+              ReportSummaryChip(
+                label: 'Receipts',
+                value: '$totalCount',
+                color: AppTheme.infoSky,
+              ),
+              ReportSummaryChip(
+                label: 'Total Collected',
+                value: '$cs${totalCollected.toStringAsFixed(2)}',
+                color: AppTheme.successEmerald,
+              ),
+            ],
+            columns: const [
+              ReportColumn(
+                label: 'MODE',
+                flex: 4,
+                field: _SortField.mode,
+                alignEnd: false,
+              ),
+              ReportColumn(label: 'COUNT', flex: 2, field: _SortField.count),
+              ReportColumn(label: 'COLLECTED', flex: 4, field: _SortField.collected),
+            ],
+            exportHeaders: const [
+              'Mode',
+              'Count',
+              'Collected',
+              'Allocated',
+              'Unallocated',
+            ],
+            exportRow: (row) => [
+              row.mode,
+              '${row.receiptCount}',
+              row.totalCollected.toStringAsFixed(2),
+              row.totalAllocated.toStringAsFixed(2),
+              row.totalUnallocated.toStringAsFixed(2),
+            ],
+            itemBuilder: (context, row) {
+              return Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              row.mode,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '${row.receiptCount}',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              '$cs${row.totalCollected.toStringAsFixed(2)}',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppTheme.successEmerald,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Allocated: $cs${row.totalAllocated.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
+                            ),
+                          ),
+                          Text(
+                            'Unallocated: $cs${row.totalUnallocated.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.warningAmber,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

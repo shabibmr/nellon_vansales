@@ -40,11 +40,29 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
       return;
     }
 
+    // An incomplete Firestore doc (empty client_id/client_secret/code) must
+    // not wipe the client's current working credentials — empty strings pass
+    // the placeholder check and leave the app "live" but unable to
+    // authenticate, so every master fetch dies with a silent 401.
+    if (config.clientId.isEmpty ||
+        config.clientSecret.isEmpty ||
+        config.code.isEmpty) {
+      emit(
+        ServerConfigError(
+          'Server configuration is incomplete (empty Zoho credentials in '
+          'server_config/zoho). Keeping previously configured credentials.',
+          isMockModeEnabled: _apiClient.isMockModeEnabled,
+        ),
+      );
+      return;
+    }
+
     try {
       _apiClient.updateCredentials(
         clientId: config.clientId,
         clientSecret: config.clientSecret,
         refreshToken: config.code,
+        organizationId: config.organizationId,
       );
 
       final mockEnabled = _resolveMockMode(config);

@@ -58,6 +58,7 @@ class LicenseService {
         'client_id': '',
         'client_secret': '',
         'code': '',
+        'organization_id': '',
         'mock_transactions': true,
         'mock_sales_order_transactions': false,
         'mock_stock_transfers': true,

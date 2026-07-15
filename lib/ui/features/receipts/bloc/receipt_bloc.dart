@@ -7,7 +7,6 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/services/sync_worker.dart';
 import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
@@ -129,8 +128,8 @@ class ReceiptState extends Equatable {
 
   ReceiptState copyWith({
     List<ReceiptVoucher>? receipts,
-    DateTime? startDate,
-    DateTime? endDate,
+    DateTime? Function()? startDate,
+    DateTime? Function()? endDate,
     bool? isLoading,
     String? errorMessage,
     String? successMessage,
@@ -147,8 +146,8 @@ class ReceiptState extends Equatable {
   }) {
     return ReceiptState(
       receipts: receipts ?? this.receipts,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: startDate != null ? startDate() : this.startDate,
+      endDate: endDate != null ? endDate() : this.endDate,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage: clearSuccess
@@ -192,7 +191,10 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
   final SyncRepository _syncRepository;
 
   ReceiptBloc({required this._salesRepository, required this._syncRepository})
-    : super(const ReceiptState()) {
+    : super(ReceiptState(
+        startDate: todayDate(),
+        endDate: todayDate(),
+      )) {
     on<LoadReceipts>(_onLoadReceipts);
     on<SetReceiptDateFilter>(_onSetDateFilter);
     on<StartNewReceipt>(_onStartNewReceipt);
@@ -224,7 +226,10 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
     SetReceiptDateFilter event,
     Emitter<ReceiptState> emit,
   ) {
-    emit(state.copyWith(startDate: event.startDate, endDate: event.endDate));
+    emit(state.copyWith(
+      startDate: () => event.startDate,
+      endDate: () => event.endDate,
+    ));
   }
 
   void _onStartNewReceipt(StartNewReceipt event, Emitter<ReceiptState> emit) {
@@ -284,10 +289,11 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
     Emitter<ReceiptState> emit,
   ) async {
     try {
-      // Pull a live open-invoice snapshot before choosing allocation targets,
-      // so a payment doesn't get FIFO-applied against an invoice that was
-      // already settled (or miss one raised) since the last master sync.
-      await _syncRepository.syncMaster(MasterType.openInvoices);
+      // Pull open invoices live from Zoho before choosing allocation targets
+      // so payments aren't FIFO-applied against a stale master snapshot.
+      await _salesRepository.fetchRemoteOpenInvoices(
+        customerId: event.customer.id,
+      );
     } catch (_) {
       // Offline or the fetch failed — fall back to whatever open-invoice
       // snapshot is already cached locally.
