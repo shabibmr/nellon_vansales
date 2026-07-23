@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'app_logger.dart';
+import 'document_number_service.dart';
 import 'error_classification.dart';
 import 'hive_database_service.dart';
 import 'zoho_api_client.dart';
@@ -85,6 +86,7 @@ extension MasterTypeLabel on MasterType {
 class SyncWorker {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final DocumentNumberService _numberService;
   final Future<List<ConnectivityResult>> Function() _checkConnectivity;
 
   final _syncStatusController = StreamController<String>.broadcast();
@@ -112,10 +114,15 @@ class SyncWorker {
   Timer? _autoRetryTimer;
 
   SyncWorker({
-    required this._dbService,
-    required this._apiClient,
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    DocumentNumberService? numberService,
     Future<List<ConnectivityResult>> Function()? checkConnectivity,
-  }) : _checkConnectivity =
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _numberService = numberService ??
+           DocumentNumberService(dbService: dbService, apiClient: apiClient),
+       _checkConnectivity =
            checkConnectivity ?? Connectivity().checkConnectivity {
     if (checkConnectivity == null) {
       // Listen to network changes
@@ -225,7 +232,7 @@ class SyncWorker {
         // _resolveTempCustomerIdsInQueue / _resolveTempOrderIdsInQueue),
         // the stale snapshot would still carry the old temp id and this
         // item would sync against the wrong reference.
-        final item = _dbService.getSyncQueue().firstWhere(
+        var item = _dbService.getSyncQueue().firstWhere(
           (q) => q.id == pendingItems[i].id,
           orElse: () => pendingItems[i],
         );
@@ -238,90 +245,55 @@ class SyncWorker {
           item.copyWith(status: SyncStatus.syncing),
         );
 
-        try {
-          String remoteId = '';
-          switch (item.type) {
-            case 'customer':
-              remoteId = await _apiClient.syncCustomer(item.payload);
-              // CRITICAL: Replace temporary offline customer ID with permanent Zoho ID in all subsequent queue items!
-              await _resolveTempCustomerIdsInQueue(item.id, remoteId);
-              break;
-            case 'customer_gps_update':
-              // Lightweight GPS enrichment update (contact must already exist in Zoho)
-              final cid =
-                  item.payload['contact_id']?.toString() ??
-                  item.payload['customer_id']?.toString();
-              final lat = (item.payload['latitude'] as num?)?.toDouble();
-              final lng = (item.payload['longitude'] as num?)?.toDouble();
-              if (cid != null && lat != null && lng != null) {
-                await _apiClient.updateCustomerGps(cid, lat, lng);
-              }
-              break;
-            case 'invoice':
-              remoteId = await _apiClient.syncInvoice(item.payload);
-              break;
-            case 'sales_order':
-              remoteId = await _apiClient.syncSalesOrder(item.payload);
-              // Persist the permanent Zoho salesorder_id on the local order and
-              // patch any pending conversion so it can target the real id.
-              await _persistOrderZohoId(item.id, remoteId);
-              await _resolveTempOrderIdsInQueue(item.id, remoteId);
-              break;
-            case 'update_sales_order':
-              remoteId = await _apiClient.updateSalesOrder(
-                item.payload['salesorder_id'],
-                item.payload,
-              );
-              await _persistOrderZohoId(item.id, remoteId);
-              break;
-            case 'convert_so':
-              remoteId = await _apiClient.convertSalesOrderToInvoice(
-                item.payload['salesorder_id'],
-              );
-              break;
-            case 'receipt':
-              remoteId = await _apiClient.syncReceiptVoucher(item.payload);
-              break;
-            case 'return':
-              remoteId = await _apiClient.syncSalesReturn(item.payload);
-              break;
-            case 'expense':
-              remoteId = await _apiClient.syncExpense(item.payload);
-              break;
-            case 'stock_transfer':
-              remoteId = await _apiClient.syncStockTransfer(item.payload);
-              break;
-            default:
-              throw Exception(
-                'Unsupported transaction sync type: ${item.type}',
-              );
-          }
+        var renumberAttemptsLeft = 2;
+        while (true) {
+          try {
+            await _dispatchSync(item);
 
-          // Mark completed and remove from queue
-          await _dbService.dequeueSyncItem(item.id);
-          successCount++;
-        } catch (e) {
-          final category = classifySyncError(e);
-          AppLogger.error(
-            'Sync',
-            'Sync error on item ${item.id} ($category): $e',
-          );
-          // Mark failed and cache error logs, tagging the message with the
-          // error category so the Sync Queue UI can distinguish "retryable"
-          // failures from ones needing manual attention.
-          final tag = category == ErrorCategory.transient
-              ? '[Retryable]'
-              : '[Needs Attention]';
-          await _dbService.updateSyncItem(
-            item.copyWith(
-              status: SyncStatus.failed,
-              errorMessage: '$tag $e',
-              // Anchor exponential backoff to this attempt, not the item's
-              // original creation time.
-              timestamp: DateTime.now(),
-              retryCount: item.retryCount + 1,
-            ),
-          );
+            // Mark completed and remove from queue
+            await _dbService.dequeueSyncItem(item.id);
+            successCount++;
+            break;
+          } catch (e) {
+            final docType = _docTypeForItemType(item.type);
+            if (docType != null &&
+                renumberAttemptsLeft > 0 &&
+                _isDuplicateNumberError(e)) {
+              renumberAttemptsLeft--;
+              try {
+                item = await _renumberAndPersist(item, docType);
+                continue;
+              } catch (renumberError) {
+                AppLogger.error(
+                  'Sync',
+                  'Renumber failed for item ${item.id}: $renumberError',
+                );
+              }
+            }
+
+            final category = classifySyncError(e);
+            AppLogger.error(
+              'Sync',
+              'Sync error on item ${item.id} ($category): $e',
+            );
+            // Mark failed and cache error logs, tagging the message with the
+            // error category so the Sync Queue UI can distinguish "retryable"
+            // failures from ones needing manual attention.
+            final tag = category == ErrorCategory.transient
+                ? '[Retryable]'
+                : '[Needs Attention]';
+            await _dbService.updateSyncItem(
+              item.copyWith(
+                status: SyncStatus.failed,
+                errorMessage: '$tag $e',
+                // Anchor exponential backoff to this attempt, not the item's
+                // original creation time.
+                timestamp: DateTime.now(),
+                retryCount: item.retryCount + 1,
+              ),
+            );
+            break;
+          }
         }
       }
 
@@ -330,6 +302,10 @@ class SyncWorker {
             ? 'Sync Successful: All transactions synced!'
             : 'Sync Partial: $successCount/${pendingItems.length} synced successfully.',
       );
+
+      if (successCount == pendingItems.length) {
+        unawaited(_numberService.seedCounters());
+      }
     } finally {
       _isSyncing = false;
       _syncCountController.add(
@@ -338,6 +314,175 @@ class SyncWorker {
             .where((x) => x.status != SyncStatus.completed)
             .length,
       );
+    }
+  }
+
+  /// Dispatches [item] to the matching `ZohoApiClient.syncX` call and runs
+  /// the type-specific post-success side effects (temp-id resolution etc.).
+  Future<void> _dispatchSync(SyncQueueItem item) async {
+    switch (item.type) {
+      case 'customer':
+        final remoteId = await _apiClient.syncCustomer(item.payload);
+        // CRITICAL: Replace temporary offline customer ID with permanent Zoho ID in all subsequent queue items!
+        await _resolveTempCustomerIdsInQueue(item.id, remoteId);
+      case 'customer_gps_update':
+        // Lightweight GPS enrichment update (contact must already exist in Zoho)
+        final cid =
+            item.payload['contact_id']?.toString() ??
+            item.payload['customer_id']?.toString();
+        final lat = (item.payload['latitude'] as num?)?.toDouble();
+        final lng = (item.payload['longitude'] as num?)?.toDouble();
+        if (cid != null && lat != null && lng != null) {
+          await _apiClient.updateCustomerGps(cid, lat, lng);
+        }
+      case 'invoice':
+        await _apiClient.syncInvoice(item.payload);
+      case 'sales_order':
+        final remoteId = await _apiClient.syncSalesOrder(item.payload);
+        // Persist the permanent Zoho salesorder_id on the local order and
+        // patch any pending conversion so it can target the real id.
+        await _persistOrderZohoId(item.id, remoteId);
+        await _resolveTempOrderIdsInQueue(item.id, remoteId);
+      case 'update_sales_order':
+        final remoteId = await _apiClient.updateSalesOrder(
+          item.payload['salesorder_id'],
+          item.payload,
+        );
+        await _persistOrderZohoId(item.id, remoteId);
+      case 'convert_so':
+        await _apiClient.convertSalesOrderToInvoice(
+          item.payload['salesorder_id'],
+        );
+      case 'receipt':
+        await _apiClient.syncReceiptVoucher(item.payload);
+      case 'return':
+        await _apiClient.syncSalesReturn(item.payload);
+      case 'expense':
+        await _apiClient.syncExpense(item.payload);
+      case 'stock_transfer':
+        await _apiClient.syncStockTransfer(item.payload);
+      default:
+        throw Exception('Unsupported transaction sync type: ${item.type}');
+    }
+  }
+
+  /// Maps a queue item's [type] to the [DocType] whose offline counter it
+  /// consumes, or null for types with no app-side numbering (customers,
+  /// expenses, stock transfers, GPS updates, order updates/conversions).
+  DocType? _docTypeForItemType(String type) {
+    switch (type) {
+      case 'invoice':
+        return DocType.invoice;
+      case 'sales_order':
+        return DocType.salesOrder;
+      case 'receipt':
+        return DocType.receipt;
+      case 'return':
+        return DocType.creditNote;
+      default:
+        return null;
+    }
+  }
+
+  /// The stored payload key holding the app-generated document number for a
+  /// queue item [type] with a [_docTypeForItemType] match.
+  String? _numberKeyForItemType(String type) {
+    switch (type) {
+      case 'invoice':
+        return 'invoice_number';
+      case 'sales_order':
+        return 'salesorder_number';
+      case 'receipt':
+        return 'payment_number';
+      case 'return':
+        return 'creditnote_number';
+      default:
+        return null;
+    }
+  }
+
+  /// Whether [e] represents a Zoho "document number already exists" rejection.
+  ///
+  /// The client wraps Dio failures into plain `Exception` strings today, so
+  /// this matches on Zoho's duplicate-number error code (4062) or common
+  /// wording. TODO: rethrow the underlying `DioException` from the `syncX`
+  /// methods so this can inspect `error.response?.data['code']` directly.
+  bool _isDuplicateNumberError(Object e) {
+    final message = e.toString().toLowerCase();
+    return message.contains('"code":4062') ||
+        message.contains('code: 4062') ||
+        (message.contains('number') &&
+            (message.contains('already exists') ||
+                message.contains('already been used') ||
+                message.contains('has already been taken')));
+  }
+
+  /// Re-seeds [docType]'s counter, rewrites [item]'s number key (and receipt
+  /// `reference_number`) to the fresh value, persists the queue item, and
+  /// patches the matching local-history record so printed/browsed history
+  /// stays in sync with what was actually pushed to Zoho.
+  Future<SyncQueueItem> _renumberAndPersist(
+    SyncQueueItem item,
+    DocType docType,
+  ) async {
+    final newNumber = await _numberService.reseedAndNext(docType);
+    final numberKey = _numberKeyForItemType(item.type)!;
+    final updatedPayload = Map<String, dynamic>.from(item.payload);
+    updatedPayload[numberKey] = newNumber;
+    if (item.type == 'receipt') {
+      updatedPayload['reference_number'] = newNumber;
+    }
+
+    final updated = item.copyWith(
+      payload: updatedPayload,
+      status: SyncStatus.syncing,
+    );
+    await _dbService.updateSyncItem(updated);
+    await _patchLocalHistoryNumber(item.type, item.id, newNumber);
+    return updated;
+  }
+
+  /// Patches the locally-cached record's display number to match a
+  /// post-renumber payload, so PDFs/history lists never show a stale number
+  /// that Zoho rejected.
+  Future<void> _patchLocalHistoryNumber(
+    String type,
+    String localId,
+    String newNumber,
+  ) async {
+    switch (type) {
+      case 'invoice':
+        final invoices = _dbService.getLocalInvoices();
+        final index = invoices.indexWhere((i) => i.id == localId);
+        if (index >= 0) {
+          await _dbService.saveLocalInvoice(
+            invoices[index].copyWith(invoiceNumber: newNumber),
+          );
+        }
+      case 'sales_order':
+        final orders = _dbService.getLocalOrders();
+        final index = orders.indexWhere((o) => o.id == localId);
+        if (index >= 0) {
+          await _dbService.saveLocalOrder(
+            orders[index].copyWith(orderNumber: newNumber),
+          );
+        }
+      case 'receipt':
+        final receipts = _dbService.getLocalReceipts();
+        final index = receipts.indexWhere((r) => r.id == localId);
+        if (index >= 0) {
+          await _dbService.saveLocalReceipt(
+            receipts[index].copyWith(paymentNumber: newNumber),
+          );
+        }
+      case 'return':
+        final returns = _dbService.getLocalReturns();
+        final index = returns.indexWhere((r) => r.id == localId);
+        if (index >= 0) {
+          await _dbService.saveLocalReturn(
+            returns[index].copyWith(creditNoteNumber: newNumber),
+          );
+        }
     }
   }
 
@@ -461,6 +606,10 @@ class SyncWorker {
         case MasterType.items:
           final activeWarehouse = _dbService.assignedWarehouseId ?? 'van_wh_01';
           final list = await _apiClient.fetchItems(activeWarehouse);
+          // Multi-UOM (`unit_conversions`) is intentionally NOT downloaded here.
+          // The /items LIST endpoint never returns it, so it is fetched lazily
+          // and cached per-item the first time an item is selected from Item
+          // Search (see SalesRepository.resolveItemUnitConversions).
           await _dbService.saveItems(
             list.map((i) => ItemModel.fromJson(i)).toList(),
           );

@@ -41,11 +41,35 @@ abstract class SalesRepository {
   /// Saves or refreshes item stocks locally.
   Future<void> saveItems(List<Item> items);
 
+  /// Resolves an item's multi-UOM conversions on demand.
+  ///
+  /// Returns the item unchanged if it already carries conversions or if they
+  /// are cached locally; otherwise fetches `GET /items/{id}` from Zoho, caches
+  /// the result (even when empty), and returns the enriched item. Falls back to
+  /// the base-unit-only item when offline or the fetch fails.
+  Future<Item> resolveItemUnitConversions(Item item);
+
   /// Gets all sales invoices recorded locally.
   List<SalesInvoice> getLocalInvoices();
 
   /// Logs a new sales invoice locally and pushes it to local database cache.
   Future<void> saveLocalInvoice(SalesInvoice invoice);
+
+  /// Loads a single invoice by id: local cache first, then Zoho Books.
+  Future<SalesInvoice?> fetchInvoiceById(String invoiceId);
+
+  /// Downloads invoices from Zoho Books, merges them into the local cache,
+  /// and returns the resulting local list.
+  Future<List<SalesInvoice>> fetchRemoteInvoices({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+
+  /// Loads a single receipt/payment by id: local cache first, then Zoho Books.
+  Future<ReceiptVoucher?> fetchReceiptById(String paymentId);
+
+  /// Loads a single sales return (credit note) by id: local cache first, then Zoho.
+  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId);
 
   /// Gets all sales orders recorded locally.
   List<SalesOrder> getLocalOrders();
@@ -54,8 +78,12 @@ abstract class SalesRepository {
   Future<void> saveLocalOrder(SalesOrder order);
 
   /// Downloads sales orders from Zoho Books, merges them into the local cache,
-  /// and returns the resulting local list.
-  Future<List<SalesOrder>> fetchRemoteOrders();
+  /// and returns the resulting local list. Omitting the date range pulls
+  /// unfiltered (all salesperson history); passing one scopes the Zoho query.
+  Future<List<SalesOrder>> fetchRemoteOrders({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
 
   /// Reads a single sales order from Zoho Books by its permanent `zohoOrderId`.
   Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId);
@@ -66,17 +94,38 @@ abstract class SalesRepository {
   /// Logs a new collection receipt locally and caches it.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher);
 
+  /// Downloads receipts from Zoho Books, merges them into the local cache,
+  /// and returns the resulting local list.
+  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+
   /// Gets all sales returns logged locally.
   List<SalesReturn> getLocalReturns();
 
   /// Logs a credit note/sales return locally and caches it.
   Future<void> saveLocalReturn(SalesReturn salesReturn);
 
+  /// Downloads sales returns from Zoho Books, merges them into the local
+  /// cache, and returns the resulting local list.
+  Future<List<SalesReturn>> fetchRemoteReturns({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+
   /// Gets all route expenses filed locally.
   List<ExpenseEntry> getLocalExpenses();
 
   /// Saves a new multi-line expense entry locally.
   Future<void> saveLocalExpense(ExpenseEntry expense);
+
+  /// Downloads expenses from Zoho Books, merges them into the local cache,
+  /// and returns the resulting local list.
+  Future<List<ExpenseEntry>> fetchRemoteExpenses({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
 
   /// Gets the daily cash closing reconciliation record, if filed.
   CashClosing? getLocalCashClosing();
@@ -106,4 +155,11 @@ abstract class SalesRepository {
 
   /// Logs a new stock transfer locally, caches it, and adjusts van stock levels.
   Future<void> saveLocalStockTransfer(StockTransfer transfer);
+
+  /// Downloads stock transfers from Zoho, merges them into the local cache,
+  /// and returns the resulting local list.
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
 }

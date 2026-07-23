@@ -17,9 +17,11 @@ import '../../domain/models/organization.dart';
 import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
 import '../../domain/models/stock_transfer.dart';
+import '../../domain/models/unit_conversion.dart';
 import '../../domain/utils/stock_rules.dart';
 import '../models/customer_model.dart';
 import '../models/item_model.dart';
+import '../models/unit_conversion_model.dart';
 import '../models/sales_invoice_model.dart';
 import '../models/receipt_voucher_model.dart';
 import '../models/sales_return_model.dart';
@@ -46,10 +48,12 @@ class HiveDatabaseService {
   static const String _masterBoxName = 'master_data_box';
   static const String _syncQueueBoxName = 'sync_queue_box';
   static const String _localHistoryBoxName = 'local_history_box';
+  static const String _itemUomBoxName = 'item_uom_box';
 
   late Box _masterBox;
   late Box _syncQueueBox;
   late Box _localHistoryBox;
+  late Box _itemUomBox;
 
   /// Lazily-built id-indexed cache backing [getCustomerById], invalidated
   /// whenever [saveCustomers] persists a new master list.
@@ -61,6 +65,7 @@ class HiveDatabaseService {
     _masterBox = await Hive.openBox(_masterBoxName);
     _syncQueueBox = await Hive.openBox(_syncQueueBoxName);
     _localHistoryBox = await Hive.openBox(_localHistoryBoxName);
+    _itemUomBox = await Hive.openBox(_itemUomBoxName);
   }
 
   /// Clears all local caches, queues, and transaction histories.
@@ -68,6 +73,7 @@ class HiveDatabaseService {
     await _masterBox.clear();
     await _syncQueueBox.clear();
     await _localHistoryBox.clear();
+    await _itemUomBox.clear();
   }
 
   /// Gets the ID of the selected active delivery route.
@@ -96,11 +102,122 @@ class HiveDatabaseService {
     await _masterBox.put('assigned_warehouse_id', warehouseId);
   }
 
+  /// Org HQ / primary Zoho location id (from `is_primary` on `GET /locations`).
+  String? get primaryWarehouseId => _masterBox.get('primary_warehouse_id');
+
+  /// Persists the organization primary location for Issue-to-Van HQ side.
+  Future<void> setPrimaryWarehouseId(String? warehouseId) async {
+    if (warehouseId == null || warehouseId.isEmpty) {
+      await _masterBox.delete('primary_warehouse_id');
+    } else {
+      await _masterBox.put('primary_warehouse_id', warehouseId);
+    }
+  }
+
+  /// Local voucher number prefix for the active van/location session.
+  String? get voucherPrefix => _masterBox.get('voucher_prefix') as String?;
+
+  /// Persists the session voucher prefix (empty/null clears).
+  Future<void> setVoucherPrefix(String? prefix) async {
+    final trimmed = prefix?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      await _masterBox.delete('voucher_prefix');
+    } else {
+      await _masterBox.put('voucher_prefix', trimmed);
+    }
+  }
+
+  /// E.164 phone number bound to the current session (`cm_salesperson_profile.record_name`).
+  String? get sessionPhone => _masterBox.get('session_phone') as String?;
+
+  /// Persists the session phone (empty/null clears).
+  Future<void> setSessionPhone(String? phone) async {
+    final trimmed = phone?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      await _masterBox.delete('session_phone');
+    } else {
+      await _masterBox.put('session_phone', trimmed);
+    }
+  }
+
+  /// Zoho Chart of Accounts id for the session salesperson's cash ledger
+  /// (`cf_cash_account`); used as the receipt deposit account and expense
+  /// paid-through account.
+  String? get cashAccountId => _masterBox.get('cash_account_id') as String?;
+
+  /// Persists the session cash account id (empty/null clears).
+  Future<void> setCashAccountId(String? accountId) async {
+    final trimmed = accountId?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      await _masterBox.delete('cash_account_id');
+    } else {
+      await _masterBox.put('cash_account_id', trimmed);
+    }
+  }
+
+  /// Whether the session salesperson has no van mapped (`cf_van_location`
+  /// empty) and is therefore restricted to Sales Order creation only.
+  bool get ordersOnlyMode =>
+      _masterBox.get('orders_only_mode', defaultValue: false) as bool;
+
+  /// Persists the orders-only session flag.
+  Future<void> setOrdersOnlyMode(bool enabled) async {
+    await _masterBox.put('orders_only_mode', enabled);
+  }
+
+  /// Per-document-type offline numbering counter (e.g. tag `'INV'`, `'SO'`,
+  /// `'RCT'`, `'CN'`). Null when never seeded.
+  int? getDocCounter(String typeTag) =>
+      _masterBox.get('doc_counter_$typeTag') as int?;
+
+  /// Persists the next-to-use counter value for [typeTag].
+  Future<void> setDocCounter(String typeTag, int value) async {
+    await _masterBox.put('doc_counter_$typeTag', value);
+  }
+
+  /// Preferred Bluetooth thermal printer (JSON map: name + macAddress).
+  Map<String, dynamic>? getPreferredBluetoothPrinter() {
+    final raw = _masterBox.get('preferred_bluetooth_printer');
+    if (raw == null) return null;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Persists or clears the preferred Bluetooth thermal printer.
+  Future<void> setPreferredBluetoothPrinter(Map<String, dynamic>? json) async {
+    if (json == null) {
+      await _masterBox.delete('preferred_bluetooth_printer');
+    } else {
+      await _masterBox.put('preferred_bluetooth_printer', json);
+    }
+  }
+
+  /// Thermal paper size storage key (`inch4` | `inch2`). Defaults to null → inch4.
+  String? get thermalPaperSizeKey =>
+      _masterBox.get('thermal_paper_size') as String?;
+
+  /// Persists thermal paper size key.
+  Future<void> setThermalPaperSizeKey(String key) async {
+    await _masterBox.put('thermal_paper_size', key);
+  }
+
   /// Retrieves the list of synced master customer records.
+  ///
+  /// Uses `.map<Customer>` so the list is a true [List]<[Customer]> at runtime.
+  /// Without the type arg, Dart builds a `List<CustomerModel>`; later
+  /// `list[i] = customer.copyWith(...)` throws because [Customer.copyWith]
+  /// returns a plain [Customer] (list covariance).
   List<Customer> getCustomers() {
     final rawList = _masterBox.get('customers', defaultValue: []);
     return (rawList as List)
-        .map(
+        .map<Customer>(
           (item) => CustomerModel.fromJson(
             Map<String, dynamic>.from(jsonDecode(item)),
           ),
@@ -145,10 +262,15 @@ class HiveDatabaseService {
   }
 
   /// Retrieves the list of synced master stocked inventory products.
+  ///
+  /// Uses `.map<Item>` so the list is a true [List]<[Item]> at runtime.
+  /// Without the type arg, Dart builds a `List<ItemModel>`; later
+  /// `list[i] = item.copyWith(...)` (e.g. stock deduct on invoice save)
+  /// throws: type 'Item' is not a subtype of type 'ItemModel' of 'value'.
   List<Item> getItems() {
     final rawList = _masterBox.get('items', defaultValue: []);
     return (rawList as List)
-        .map(
+        .map<Item>(
           (item) =>
               ItemModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))),
         )
@@ -161,6 +283,42 @@ class HiveDatabaseService {
         .map((i) => jsonEncode(ItemModel.fromDomain(i).toJson()))
         .toList();
     await _masterBox.put('items', serialized);
+  }
+
+  /// Reads the cached multi-UOM conversions for a single item.
+  ///
+  /// Multi-UOM data is stored per-item in `item_uom_box` (keyed by item id),
+  /// decoupled from the `items` master list so a re-sync never wipes it.
+  /// Returns an empty list when the item has never been resolved.
+  List<UnitConversion> getItemUnitConversions(String itemId) {
+    final raw = _itemUomBox.get(itemId);
+    if (raw == null) return const [];
+    final decoded = jsonDecode(raw as String) as List;
+    return decoded
+        .map<UnitConversion>(
+          (c) => UnitConversionModel.fromJson(Map<String, dynamic>.from(c)),
+        )
+        .toList();
+  }
+
+  /// Whether an item's conversions have already been fetched from Zoho.
+  ///
+  /// A present-but-empty entry means "checked, none exist" — this lets the
+  /// resolver skip re-fetching items that genuinely have no conversions.
+  bool hasItemUnitConversions(String itemId) => _itemUomBox.containsKey(itemId);
+
+  /// Caches the resolved multi-UOM conversions for a single item.
+  ///
+  /// Persist even when [conversions] is empty so a later selection does not
+  /// re-hit `GET /items/{id}` for an item that has no alternate units.
+  Future<void> saveItemUnitConversions(
+    String itemId,
+    List<UnitConversion> conversions,
+  ) async {
+    final serialized = jsonEncode(
+      conversions.map((c) => UnitConversionModel.fromDomain(c).toJson()).toList(),
+    );
+    await _itemUomBox.put(itemId, serialized);
   }
 
   /// Retrieves the list of synced master routes.
@@ -244,6 +402,24 @@ class HiveDatabaseService {
       'current_salesperson',
       jsonEncode(SalespersonModel.fromDomain(salesperson).toJson()),
     );
+  }
+
+  /// Removes the session's active salesperson (e.g. on logout).
+  ///
+  /// Also clears van assignment, voucher prefix, session phone, cash account,
+  /// orders-only flag, and per-type numbering counters so nothing leaks into
+  /// the next salesperson's session. Primary warehouse is kept so Issue-to-Van
+  /// still knows HQ after the next login bootstrap.
+  Future<void> clearCurrentSalesperson() async {
+    await _masterBox.delete('current_salesperson');
+    await _masterBox.delete('assigned_warehouse_id');
+    await _masterBox.delete('voucher_prefix');
+    await _masterBox.delete('session_phone');
+    await _masterBox.delete('cash_account_id');
+    await _masterBox.delete('orders_only_mode');
+    for (final tag in const ['INV', 'SO', 'RCT', 'CN']) {
+      await _masterBox.delete('doc_counter_$tag');
+    }
   }
 
   /// Retrieves payment/bank ledgers for receipt mapping.
@@ -438,7 +614,7 @@ class HiveDatabaseService {
         if (itemIndex >= 0) {
           final existingItem = localItems[itemIndex];
           localItems[itemIndex] = existingItem.copyWith(
-            stock: existingItem.stock + line.quantity,
+            stock: existingItem.stock + line.quantityInBase,
           );
         }
       }
@@ -451,7 +627,7 @@ class HiveDatabaseService {
           itemId: existingItem.id,
           itemName: existingItem.name,
           available: existingItem.stock,
-          requested: line.quantity,
+          requested: line.quantityInBase,
         );
         localItems[itemIndex] = existingItem.copyWith(stock: updatedStock);
       }
@@ -468,6 +644,28 @@ class HiveDatabaseService {
         .toList();
     await _localHistoryBox.put('invoices', serialized);
     await saveItems(localItems);
+  }
+
+  /// Merges a freshly downloaded set of remote invoices into the local cache.
+  ///
+  /// Upsert, not replace: a local invoice survives untouched unless remote
+  /// carries a record with the same `id`. [SalesInvoice] has no separate
+  /// zoho-id field to match a still-pending local record against its synced
+  /// remote counterpart (unlike sales orders' `zohoOrderId`), so a locally
+  /// created invoice (`temp_inv_...` id) is simply kept until Zoho's list
+  /// happens to be re-fetched under that same id.
+  Future<void> saveRemoteInvoices(List<SalesInvoice> remote) async {
+    final current = _getAllLocalInvoices();
+    final remoteIds = remote.map((i) => i.id).toSet();
+    final keptLocal = current
+        .where((i) => !remoteIds.contains(i.id))
+        .toList();
+
+    final merged = [...keptLocal, ...remote];
+    final serialized = merged
+        .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
+        .toList();
+    await _localHistoryBox.put('invoices', serialized);
   }
 
   /// Retrieves the full, unfiltered list of sales orders recorded locally (for internal read-modify-write use).
@@ -512,21 +710,21 @@ class HiveDatabaseService {
 
   /// Merges a freshly downloaded set of remote sales orders into the local cache.
   ///
-  /// Offline-first rule: orders still awaiting their first sync (`isPendingSync`) are
-  /// preserved untouched; everything else is replaced by the authoritative remote set.
-  /// Remote orders are matched against local ones by `zohoOrderId` to avoid duplicates.
+  /// Upsert, not replace: a fetch may be date-scoped (e.g. today only), so any
+  /// local order outside that range must survive untouched. A local order is
+  /// dropped only when the remote set is authoritative for it — either it's
+  /// still pending sync and remote already confirms it (matched by
+  /// `zohoOrderId`), or it's already synced and remote carries a fresher copy
+  /// (matched by `id`). Remote records are always appended on top.
   Future<void> saveRemoteOrders(List<SalesOrder> remote) async {
-    final pendingLocal = _getAllLocalOrders()
-        .where((o) => o.isPendingSync)
-        .toList();
-
-    // Drop any pending-local order that the remote set already accounts for.
+    final current = _getAllLocalOrders();
     final remoteIds = remote.map((o) => o.id).toSet();
-    final keptLocal = pendingLocal
-        .where(
-          (o) => o.zohoOrderId == null || !remoteIds.contains(o.zohoOrderId),
-        )
-        .toList();
+    final keptLocal = current.where((o) {
+      if (o.isPendingSync) {
+        return o.zohoOrderId == null || !remoteIds.contains(o.zohoOrderId);
+      }
+      return !remoteIds.contains(o.id);
+    }).toList();
 
     final merged = [...keptLocal, ...remote];
     final serialized = merged
@@ -603,6 +801,28 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
+  /// Merges a freshly downloaded set of remote stock transfers into the local
+  /// cache. Same shape as [saveRemoteOrders]: a still-pending local transfer
+  /// is kept unless remote already confirms it via `zohoTransferId`; a synced
+  /// local transfer is kept unless remote carries a fresher copy by `id`.
+  Future<void> saveRemoteStockTransfers(List<StockTransfer> remote) async {
+    final current = _getAllLocalStockTransfers();
+    final remoteIds = remote.map((t) => t.id).toSet();
+    final keptLocal = current.where((t) {
+      if (t.isPendingSync) {
+        return t.zohoTransferId == null ||
+            !remoteIds.contains(t.zohoTransferId);
+      }
+      return !remoteIds.contains(t.id);
+    }).toList();
+
+    final merged = [...keptLocal, ...remote];
+    final serialized = merged
+        .map((t) => jsonEncode(StockTransferModel.fromDomain(t).toJson()))
+        .toList();
+    await _localHistoryBox.put('stock_transfers', serialized);
+  }
+
   /// Retrieves the full, unfiltered list of receipts recorded locally (for internal read-modify-write use).
   List<ReceiptVoucher> _getAllLocalReceipts() {
     final rawList = _localHistoryBox.get('receipts', defaultValue: []);
@@ -652,6 +872,22 @@ class HiveDatabaseService {
       );
     }
     await saveCustomers(localCustomers);
+  }
+
+  /// Merges a freshly downloaded set of remote receipts into the local cache.
+  /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  Future<void> saveRemoteReceipts(List<ReceiptVoucher> remote) async {
+    final current = _getAllLocalReceipts();
+    final remoteIds = remote.map((r) => r.id).toSet();
+    final keptLocal = current
+        .where((r) => !remoteIds.contains(r.id))
+        .toList();
+
+    final merged = [...keptLocal, ...remote];
+    final serialized = merged
+        .map((rec) => jsonEncode(ReceiptVoucherModel.fromDomain(rec).toJson()))
+        .toList();
+    await _localHistoryBox.put('receipts', serialized);
   }
 
   /// Retrieves the full, unfiltered list of sales returns recorded locally (for internal read-modify-write use).
@@ -707,6 +943,22 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
+  /// Merges a freshly downloaded set of remote sales returns into the local cache.
+  /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  Future<void> saveRemoteReturns(List<SalesReturn> remote) async {
+    final current = _getAllLocalReturns();
+    final remoteIds = remote.map((r) => r.id).toSet();
+    final keptLocal = current
+        .where((r) => !remoteIds.contains(r.id))
+        .toList();
+
+    final merged = [...keptLocal, ...remote];
+    final serialized = merged
+        .map((ret) => jsonEncode(SalesReturnModel.fromDomain(ret).toJson()))
+        .toList();
+    await _localHistoryBox.put('returns', serialized);
+  }
+
   /// Retrieves the full, unfiltered list of expenses recorded locally (for internal read-modify-write use).
   List<ExpenseEntry> _getAllLocalExpenses() {
     final rawList = _localHistoryBox.get('expenses', defaultValue: []);
@@ -739,6 +991,22 @@ class HiveDatabaseService {
     }
 
     final serialized = current
+        .map((exp) => jsonEncode(ExpenseEntryModel.fromDomain(exp).toJson()))
+        .toList();
+    await _localHistoryBox.put('expenses', serialized);
+  }
+
+  /// Merges a freshly downloaded set of remote expenses into the local cache.
+  /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  Future<void> saveRemoteExpenses(List<ExpenseEntry> remote) async {
+    final current = _getAllLocalExpenses();
+    final remoteIds = remote.map((e) => e.id).toSet();
+    final keptLocal = current
+        .where((e) => !remoteIds.contains(e.id))
+        .toList();
+
+    final merged = [...keptLocal, ...remote];
+    final serialized = merged
         .map((exp) => jsonEncode(ExpenseEntryModel.fromDomain(exp).toJson()))
         .toList();
     await _localHistoryBox.put('expenses', serialized);

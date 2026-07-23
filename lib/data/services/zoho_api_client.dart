@@ -2,15 +2,28 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'app_logger.dart';
 import 'hive_database_service.dart';
+import 'zoho_mock/zoho_mock_catalog.dart';
+import 'zoho_mock/zoho_mock_interceptor.dart';
 import 'zoho_payload_mapper.dart';
 
 /// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
 ///
 /// Implements standard JSON mappings, handles Zoho OAuth 2.0 access token self-refreshing retries,
 /// and includes simulated sandbox datasets when running in mock credential modes.
+///
+/// **Live and mock share one path until HTTP**: payload shaping
+/// ([ZohoPayloadMapper], location inject, expense account resolve) always runs;
+/// [ZohoMockInterceptor] short-circuits selected Dio requests with Zoho-shaped
+/// responses. Callers always parse `response.data['contact'|'invoice'|…]`.
 class ZohoApiClient {
   final Dio _dio = Dio();
   final HiveDatabaseService _dbService;
+
+  /// Mock transport catalog (fixtures + write envelopes). Exposed for tests.
+  late final ZohoMockCatalog mockCatalog;
+
+  /// Mock Dio interceptor. Exposed for tests (routing / last request).
+  late final ZohoMockInterceptor mockInterceptor;
 
   // Zoho OAuth 2.0 credentials (read from secure build configurations or environments in production)
   final String _accountsUrl = 'https://accounts.zoho.com/oauth/v2/token';
@@ -27,7 +40,7 @@ class ZohoApiClient {
   String _clientId = '1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP';
   String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
   String _refreshToken =
-      '1000.ccb7c895a473ba5569c55565c0aed87d.c2f3a5530356193d39a19c511efed856';
+      '1000.3d8170aff1fb3dfae0226035fb3d8d85.ed5c6198f2159770d21450c8912782d1';
   String _organizationId = '783019958';
 
   /// Updates Zoho OAuth integration credentials on the fly (called upon loading server config).
@@ -51,6 +64,7 @@ class ZohoApiClient {
     }
     if (organizationId.trim().isNotEmpty) {
       _organizationId = organizationId;
+      mockCatalog.organizationId = _organizationId;
     }
   }
 
@@ -102,20 +116,38 @@ class ZohoApiClient {
 
   /// Instantiates a new [ZohoApiClient].
   ///
-  /// Configures connect/receive timeouts and sets up a robust interceptor to:
-  /// - Automatically inject active Zoho OAuth header strings (`Zoho-oauthtoken <token>`).
-  /// - Intercept `401 Unauthorized` responses and trigger transparent token-refresh workflows.
-  /// - Re-execute the original request with the fresh token without user interruption.
-  ZohoApiClient({required this._dbService}) {
+  /// Configures connect/receive timeouts and sets up:
+  /// 1. [ZohoMockInterceptor] (first) — re-routes selected calls to local fixtures.
+  /// 2. Auth interceptor — OAuth header + 401 refresh for live requests.
+  ///
+  /// [mockLatency] is applied only to mocked requests (use [Duration.zero] in tests).
+  // ignore: prefer_initializing_formals — keep public param name `dbService` for DI call sites
+  ZohoApiClient({
+    required HiveDatabaseService dbService,
+    Duration mockLatency = const Duration(milliseconds: 300),
+  }) : _dbService = dbService {
     _dio.options.baseUrl = _apiUrl;
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
 
-    // Request & Refresh Token Interceptor
+    mockCatalog = ZohoMockCatalog(organizationId: _organizationId);
+    mockInterceptor = ZohoMockInterceptor(
+      catalog: mockCatalog,
+      flags: ZohoMockFlags(
+        isCredentialMockMode: _isMockMode,
+        mockTransactions: () => _mockTransactions,
+        mockSalesOrderTransactions: () => _mockSalesOrderTransactions,
+        mockStockTransfers: () => _mockStockTransfers,
+      ),
+      latency: mockLatency,
+    );
+    // Mock transport first so short-circuited requests never hit auth/network.
+    _dio.interceptors.add(mockInterceptor);
+
+    // Request & Refresh Token Interceptor (live path only)
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          // Check if we are running in mock sandbox mode
           if (_isMockMode()) {
             return handler.next(options);
           }
@@ -330,199 +362,111 @@ class ZohoApiClient {
 
   // 2. Fetch All Customers
   Future<List<Map<String, dynamic>>> fetchCustomers() async {
-    if (!_isMockMode()) {
-      try {
-        return await _fetchAllPages('/contacts', {'contact_type': 'customer'});
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchCustomers error: $e');
-        throw Exception('Failed to fetch customers from Zoho: $e');
-      }
+    try {
+      return await _fetchAllPages('/contacts', {'contact_type': 'customer'});
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchCustomers error: $e');
+      throw Exception('Failed to fetch customers from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 700));
-
-    // Realistic Mock Contacts
-    final allCustomers = [
-      {
-        'contact_id': 'cust_101',
-        'contact_name': 'Metro Hypermarket',
-        'company_name': 'Metro Group Ltd',
-        'email': 'procurement@metro.com',
-        'phone': '+91 99000 11223',
-        'address': 'Plot 42, Sector 5, North Corridor',
-        'outstanding_receivable_amount': 2850.00,
-        'credit_limit': 5000.00,
-        'route_id': 'route_north',
-        'sequence': 1,
-        // Sample GPS (for testing GPS location feature)
-        'cf_latitude': 12.9716,
-        'cf_longitude': 77.5946,
-      },
-      {
-        'contact_id': 'cust_102',
-        'contact_name': 'QuickMart Grocery',
-        'company_name': 'QuickMart Retail',
-        'email': 'billing@quickmart.in',
-        'phone': '+91 99000 44556',
-        'address': 'Building 3A, North Main St',
-        'outstanding_receivable_amount': 450.00,
-        'credit_limit': 1500.00,
-        'route_id': 'route_north',
-        'sequence': 2,
-        'latitude': 12.9720,
-        'longitude': 77.5950,
-      },
-      {
-        'contact_id': 'cust_103',
-        'contact_name': 'Daily Needs Superstore',
-        'company_name': 'Daily Needs Retailers',
-        'email': 'store@dailyneeds.com',
-        'phone': '+91 99000 77889',
-        'address': 'Shop 12, Shopping Center 2, North St',
-        'outstanding_receivable_amount': 0.00,
-        'credit_limit': 3000.00,
-        'route_id': 'route_north',
-        'sequence': 3,
-      },
-      {
-        'contact_id': 'cust_201',
-        'contact_name': 'Southside MegaMart',
-        'company_name': 'MegaMart Inc',
-        'email': 'south@megamart.com',
-        'phone': '+91 98000 11111',
-        'address': 'Avenue 9, South Retail Hub',
-        'outstanding_receivable_amount': 1200.00,
-        'credit_limit': 4000.00,
-        'route_id': 'route_south',
-        'sequence': 1,
-      },
-      {
-        'contact_id': 'cust_202',
-        'contact_name': 'Green Apple Organic',
-        'company_name': 'Green Apple Retail',
-        'email': 'hello@greenapple.com',
-        'phone': '+91 98000 22222',
-        'address': '22 High Street, South Hub',
-        'outstanding_receivable_amount': 0.00,
-        'credit_limit': 1000.00,
-        'route_id': 'route_south',
-        'sequence': 2,
-      },
-    ];
-
-    return allCustomers;
   }
 
   // 3. Fetch Items in Van Warehouse (Zoho Books Locations API)
   Future<List<Map<String, dynamic>>> fetchItems(String warehouseId) async {
-    if (!_isMockMode()) {
-      try {
-        final queryParams = <String, dynamic>{};
-        // Only query by location_id if it is a real numeric Zoho location ID (not empty or mock prefix)
-        if (warehouseId.isNotEmpty &&
-            !warehouseId.startsWith('van_wh_') &&
-            RegExp(r'^\d+$').hasMatch(warehouseId)) {
-          queryParams['location_id'] = warehouseId;
-        }
-
-        return await _fetchAllPages('/items', queryParams);
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchItems error: $e');
-        throw Exception('Failed to fetch items from Zoho: $e');
+    try {
+      final queryParams = <String, dynamic>{};
+      // Only query by location_id if it is a real numeric Zoho location ID (not empty or mock prefix)
+      if (warehouseId.isNotEmpty &&
+          !warehouseId.startsWith('van_wh_') &&
+          RegExp(r'^\d+$').hasMatch(warehouseId)) {
+        queryParams['location_id'] = warehouseId;
       }
+
+      return await _fetchAllPages('/items', queryParams);
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchItems error: $e');
+      throw Exception('Failed to fetch items from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 650));
-
-    // Realistic Stock allotted to this specific van's warehouse
-    return [
-      {
-        'item_id': 'item_501',
-        'name': 'Premium Fresh Milk (1L)',
-        'sku': 'MILK-PREM-1L',
-        'rate': 60.00,
-        'stock_on_hand': 120, // Assigned stock for this van warehouse
-        'description': 'Homogenized Pasteurised Whole Milk',
-        'tax_name': 'VAT 5%',
-        'tax_percentage': 5.0,
-      },
-      {
-        'item_id': 'item_502',
-        'name': 'Double Choc Cookies (250g)',
-        'sku': 'COOK-DCHOC-250G',
-        'rate': 120.00,
-        'stock_on_hand': 45,
-        'description': 'Baked chocolate cookies with premium chips',
-        'tax_name': 'VAT 12%',
-        'tax_percentage': 12.0,
-      },
-      {
-        'item_id': 'item_503',
-        'name': 'Mineral Spring Water (500ml)',
-        'sku': 'WATR-SPR-500ML',
-        'rate': 20.00,
-        'stock_on_hand': 200,
-        'description': 'Naturally filtered pure spring water',
-        'tax_name': 'VAT 18%',
-        'tax_percentage': 18.0,
-      },
-      {
-        'item_id': 'item_504',
-        'name': 'Organic Cheddar Cheese (200g)',
-        'sku': 'CHSE-CHED-200G',
-        'rate': 240.00,
-        'stock_on_hand': 30,
-        'description': 'Aged sharp premium cheddar block',
-        'tax_name': 'VAT 5%',
-        'tax_percentage': 5.0,
-      },
-      {
-        'item_id': 'item_505',
-        'name': 'Whole Wheat Sourdough Bread',
-        'sku': 'BRED-WHEAT-SOUR',
-        'rate': 90.00,
-        'stock_on_hand': 15,
-        'description': 'Artisanal high-fiber wheat sourdough loaf',
-        'tax_name': 'VAT 5%',
-        'tax_percentage': 5.0,
-      },
-    ];
   }
 
-  Map<String, dynamic> _injectLocationIdIfNeeded(Map<String, dynamic> json) {
-    final activeLocationId = _dbService.assignedWarehouseId;
-    if (activeLocationId != null &&
-        activeLocationId.isNotEmpty &&
-        !activeLocationId.startsWith('van_wh_') &&
-        RegExp(r'^\d+$').hasMatch(activeLocationId)) {
+  // 3b. Single item detail (GET /items/{id}) — the list endpoint does NOT
+  // return `unit_conversions`, so multi-UOM data is fetched per-item on demand
+  // (see SalesRepository.resolveItemUnitConversions).
+  Future<Map<String, dynamic>> fetchItemDetail(String itemId) async {
+    final response = await _dio.get('/items/$itemId');
+    if (response.statusCode != 200) {
+      throw Exception('GET /items/$itemId failed: ${response.statusCode}');
+    }
+    return Map<String, dynamic>.from(response.data['item'] ?? {});
+  }
+
+  /// Forces the transaction **header** `location_id` to the org's KGT primary
+  /// business location (B4) — overwrites any van id a queue item was stamped
+  /// with locally, since Option B keeps vans on line items only, never on
+  /// the header.
+  Map<String, dynamic> _withPrimaryHeaderLocation(Map<String, dynamic> json) {
+    final primaryId = _dbService.primaryWarehouseId;
+    if (primaryId != null &&
+        primaryId.isNotEmpty &&
+        RegExp(r'^\d+$').hasMatch(primaryId)) {
       final updatedJson = Map<String, dynamic>.from(json);
-      if (updatedJson['location_id'] == null) {
-        updatedJson['location_id'] = activeLocationId;
-      }
+      updatedJson['location_id'] = primaryId;
       return updatedJson;
     }
     return json;
   }
 
+  /// Stamps the session salesperson id onto a transaction header when absent
+  /// (B4). Not applicable to `customerpayments`/`expenses`, which have no
+  /// `salesperson_id` field in the Zoho schema.
+  Map<String, dynamic> _withSalespersonId(Map<String, dynamic> json) {
+    final salespersonId = _dbService.getCurrentSalesperson()?.id;
+    if (salespersonId != null &&
+        salespersonId.isNotEmpty &&
+        json['salesperson_id'] == null) {
+      final updatedJson = Map<String, dynamic>.from(json);
+      updatedJson['salesperson_id'] = salespersonId;
+      return updatedJson;
+    }
+    return json;
+  }
+
+  /// Stamps the session van location onto every `line_items` entry when
+  /// absent (B4/Option B) — the van, not the KGT primary, is what actually
+  /// deducts stock in Zoho. Locally-stored line items carry no `location_id`
+  /// at all (`Model.toJson()` never wrote one), so this is where the van id
+  /// first enters the payload for invoice/order/credit-note line items.
+  Map<String, dynamic> _withVanLineItemLocations(Map<String, dynamic> json) {
+    final vanId = _dbService.assignedWarehouseId;
+    final rawLines = json['line_items'];
+    if (vanId == null ||
+        vanId.isEmpty ||
+        !RegExp(r'^\d+$').hasMatch(vanId) ||
+        rawLines is! List) {
+      return json;
+    }
+    final updatedLines = rawLines.map((line) {
+      if (line is! Map) return line;
+      final map = Map<String, dynamic>.from(line);
+      map['location_id'] ??= vanId;
+      return map;
+    }).toList();
+    return {...json, 'line_items': updatedLines};
+  }
+
   // 4. Zoho Books Contacts API: Sync New Customer
   Future<String> syncCustomer(Map<String, dynamic> customerJson) async {
-    if (!_isMockMode() && !_mockTransactions) {
-      try {
-        final response = await _dio.post(
-          '/contacts',
-          data: ZohoPayloadMapper.zohoContactPayload(customerJson),
-        );
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['contact']['contact_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Customer Sync Failed: $e');
+    try {
+      final response = await _dio.post(
+        '/contacts',
+        data: ZohoPayloadMapper.zohoContactPayload(customerJson),
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['contact']['contact_id'] as String;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Customer Sync Failed: $e');
     }
-
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_cust_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   /// Update GPS (latitude/longitude) custom fields on an existing Zoho contact.
@@ -542,66 +486,55 @@ class ZohoApiClient {
       ],
     };
 
-    if (!_isMockMode() && !_mockTransactions) {
-      try {
-        final response = await _dio.put('/contacts/$contactId', data: payload);
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          final returnedId =
-              response.data['contact']?['contact_id']?.toString() ?? contactId;
-          return returnedId;
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Customer GPS Update Failed: $e');
+    try {
+      final response = await _dio.put('/contacts/$contactId', data: payload);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return response.data['contact']?['contact_id']?.toString() ?? contactId;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Customer GPS Update Failed: $e');
     }
-
-    // Mock response (simulates immediate success for GPS enrichment)
-    await Future.delayed(const Duration(milliseconds: 400));
-    return contactId;
   }
 
   // 5. Zoho Books Invoices API: Sync Sales Invoice
   Future<String> syncInvoice(Map<String, dynamic> invoiceJson) async {
-    invoiceJson = _injectLocationIdIfNeeded(invoiceJson);
-    if (!_isMockMode() && !_mockTransactions) {
-      try {
-        final response = await _dio.post(
-          '/invoices',
-          data: ZohoPayloadMapper.zohoInvoicePayload(invoiceJson),
-        );
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['invoice']['invoice_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Invoice Sync Failed: $e');
+    invoiceJson = _withVanLineItemLocations(
+      _withSalespersonId(_withPrimaryHeaderLocation(invoiceJson)),
+    );
+    try {
+      final response = await _dio.post(
+        '/invoices',
+        data: ZohoPayloadMapper.zohoInvoicePayload(invoiceJson),
+        queryParameters: const {'ignore_auto_number_generation': true},
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['invoice']['invoice_id'] as String;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Invoice Sync Failed: $e');
     }
-
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_inv_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // 5b. Zoho Books Sales Orders API: Sync Sales Order
   Future<String> syncSalesOrder(Map<String, dynamic> salesOrderJson) async {
-    salesOrderJson = _injectLocationIdIfNeeded(salesOrderJson);
-    if (!_isMockMode() && !_mockSalesOrderTransactions) {
-      try {
-        final response = await _dio.post(
-          '/salesorders',
-          data: ZohoPayloadMapper.zohoSalesOrderPayload(salesOrderJson),
-        );
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['salesorder']['salesorder_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Sales Order Sync Failed: $e');
+    salesOrderJson = _withVanLineItemLocations(
+      _withSalespersonId(_withPrimaryHeaderLocation(salesOrderJson)),
+    );
+    try {
+      final response = await _dio.post(
+        '/salesorders',
+        data: ZohoPayloadMapper.zohoSalesOrderPayload(salesOrderJson),
+        queryParameters: const {'ignore_auto_number_generation': true},
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['salesorder']['salesorder_id'] as String;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Sales Order Sync Failed: $e');
     }
-
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_so_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // 5c. Zoho Books Sales Orders API: Convert a Sales Order to an Invoice.
@@ -614,149 +547,114 @@ class ZohoApiClient {
     Map<String, dynamic>? body,
   ]) async {
     if (body != null) {
-      body = _injectLocationIdIfNeeded(body);
+      body = _withVanLineItemLocations(
+        _withSalespersonId(_withPrimaryHeaderLocation(body)),
+      );
     }
-    if (!_isMockMode() && !_mockSalesOrderTransactions) {
-      try {
-        final response = await _dio.post(
-          '/salesorders/$salesOrderId/converttoinvoice',
-          data: body ?? {},
-        );
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['invoice']['invoice_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Sales Order Conversion Failed: $e');
+    try {
+      final response = await _dio.post(
+        '/salesorders/$salesOrderId/converttoinvoice',
+        data: body ?? {},
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['invoice']['invoice_id'] as String;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Sales Order Conversion Failed: $e');
     }
+  }
 
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_inv_${DateTime.now().millisecondsSinceEpoch}';
+  /// `{'salesperson_id': id}` for the bound session salesperson, or `{}`
+  /// when no session is bound — list fetchers fall back to unfiltered pulls
+  /// in that case rather than returning nothing.
+  ///
+  /// Use only on modules that expose native `salesperson_id` (invoices, sales
+  /// orders, credit notes, open invoices). Customer payments and expenses do
+  /// **not** — see [_receiptSeriesReferenceFilterParams] /
+  /// [_paidThroughAccountFilterParams].
+  Map<String, dynamic> _salespersonFilterParams() {
+    final id = _dbService.getCurrentSalesperson()?.id;
+    return (id != null && id.isNotEmpty) ? {'salesperson_id': id} : {};
+  }
+
+  /// Scopes customer-payment lists to this salesperson's app-generated series.
+  ///
+  /// Zoho Payments have no `salesperson_id`; the app stores its offline number
+  /// (`{prefix}RCT-#####`) in `reference_number` (B4/B5). Empty prefix → no
+  /// filter (same unfiltered fallback as [_salespersonFilterParams]).
+  Map<String, dynamic> _receiptSeriesReferenceFilterParams() {
+    final prefix = _dbService.voucherPrefix?.trim();
+    if (prefix == null || prefix.isEmpty) return {};
+    return {'reference_number_startswith': '${prefix}RCT-'};
+  }
+
+  /// Scopes expense lists to the session salesperson's personal cash ledger.
+  ///
+  /// Zoho Expenses have no `salesperson_id`; van expenses are paid through
+  /// `cf_cash_account` (`paid_through_account_id`). Documented list filter on
+  /// `GET /expenses`. Empty session cash → no filter.
+  Map<String, dynamic> _paidThroughAccountFilterParams() {
+    final id = _dbService.cashAccountId?.trim();
+    return (id != null && id.isNotEmpty)
+        ? {'paid_through_account_id': id}
+        : {};
+  }
+
+  /// `{'date_start': ..., 'date_end': ...}` (yyyy-MM-dd) for whichever bounds
+  /// are supplied — omitted params are left out, preserving unfiltered pulls.
+  Map<String, dynamic> _dateRangeParams({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    final params = <String, dynamic>{};
+    if (startDate != null) {
+      params['date_start'] = startDate.toIso8601String().split('T')[0];
+    }
+    if (endDate != null) {
+      params['date_end'] = endDate.toIso8601String().split('T')[0];
+    }
+    return params;
   }
 
   // 5d. Zoho Books Sales Orders API: List all sales orders (paginated).
-  Future<List<Map<String, dynamic>>> fetchSalesOrders() async {
-    if (!_isMockMode()) {
-      try {
-        return await _fetchAllPages('/salesorders', {});
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchSalesOrders error: $e');
-        throw Exception('Failed to fetch sales orders from Zoho: $e');
+  Future<List<Map<String, dynamic>>> fetchSalesOrders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final list = await _fetchAllPages('/salesorders', {
+        ..._salespersonFilterParams(),
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+      });
+      final salespersonId = _dbService.getCurrentSalesperson()?.id;
+      if (salespersonId != null && salespersonId.isNotEmpty) {
+        return list.where((j) {
+          final spId = j['salesperson_id']?.toString();
+          return spId == null || spId.isEmpty || spId == salespersonId;
+        }).toList();
       }
+      return list;
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchSalesOrders error: $e');
+      throw Exception('Failed to fetch sales orders from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 600));
-    final now = DateTime.now();
-    return [
-      {
-        'salesorder_id': 'so_9001',
-        'salesorder_number': 'SO-00001',
-        'customer_id': 'cust_101',
-        'customer_name': 'Metro Hypermarket',
-        'date': now
-            .subtract(const Duration(days: 3))
-            .toIso8601String()
-            .split('T')[0],
-        'shipment_date': now
-            .add(const Duration(days: 4))
-            .toIso8601String()
-            .split('T')[0],
-        'status': 'open',
-        'notes': 'Standing weekly order',
-        'line_items': [
-          {
-            'item_id': 'item_501',
-            'name': 'Premium Fresh Milk (1L)',
-            'quantity': 20,
-            'rate': 60.00,
-            'tax_percentage': 5.0,
-            'discount': 0.0,
-          },
-          {
-            'item_id': 'item_503',
-            'name': 'Mineral Spring Water (500ml)',
-            'quantity': 50,
-            'rate': 20.00,
-            'tax_percentage': 18.0,
-            'discount': 0.0,
-          },
-        ],
-      },
-      {
-        'salesorder_id': 'so_9002',
-        'salesorder_number': 'SO-00002',
-        'customer_id': 'cust_201',
-        'customer_name': 'Southside MegaMart',
-        'date': now
-            .subtract(const Duration(days: 1))
-            .toIso8601String()
-            .split('T')[0],
-        'shipment_date': now
-            .add(const Duration(days: 6))
-            .toIso8601String()
-            .split('T')[0],
-        'status': 'invoiced',
-        'notes': '',
-        'line_items': [
-          {
-            'item_id': 'item_504',
-            'name': 'Organic Cheddar Cheese (200g)',
-            'quantity': 10,
-            'rate': 240.00,
-            'tax_percentage': 5.0,
-            'discount': 0.0,
-          },
-        ],
-      },
-    ];
   }
 
   // 5e. Zoho Books Sales Orders API: Read a single sales order by id.
   Future<Map<String, dynamic>> fetchSalesOrder(String salesOrderId) async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get('/salesorders/$salesOrderId');
-        if (response.statusCode != 200) {
-          throw Exception(
-            'GET /salesorders/$salesOrderId failed: ${response.statusCode}',
-          );
-        }
-        return Map<String, dynamic>.from(response.data['salesorder'] ?? {});
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchSalesOrder error: $e');
-        throw Exception('Failed to fetch sales order from Zoho: $e');
+    try {
+      final response = await _dio.get('/salesorders/$salesOrderId');
+      if (response.statusCode != 200) {
+        throw Exception(
+          'GET /salesorders/$salesOrderId failed: ${response.statusCode}',
+        );
       }
+      return Map<String, dynamic>.from(response.data['salesorder'] ?? {});
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchSalesOrder error: $e');
+      throw Exception('Failed to fetch sales order from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 400));
-    final now = DateTime.now();
-    return {
-      'salesorder_id': salesOrderId,
-      'salesorder_number': 'SO-00001',
-      'customer_id': 'cust_101',
-      'customer_name': 'Metro Hypermarket',
-      'date': now
-          .subtract(const Duration(days: 3))
-          .toIso8601String()
-          .split('T')[0],
-      'shipment_date': now
-          .add(const Duration(days: 4))
-          .toIso8601String()
-          .split('T')[0],
-      'status': 'open',
-      'notes': 'Standing weekly order',
-      'line_items': [
-        {
-          'item_id': 'item_501',
-          'name': 'Premium Fresh Milk (1L)',
-          'quantity': 20,
-          'rate': 60.00,
-          'tax_percentage': 5.0,
-          'discount': 0.0,
-        },
-      ],
-    };
   }
 
   // 5f. Zoho Books Sales Orders API: Update an existing sales order.
@@ -764,144 +662,162 @@ class ZohoApiClient {
     String salesOrderId,
     Map<String, dynamic> payload,
   ) async {
-    payload = _injectLocationIdIfNeeded(payload);
-    if (!_isMockMode() && !_mockSalesOrderTransactions) {
-      try {
-        final response = await _dio.put(
-          '/salesorders/$salesOrderId',
-          data: ZohoPayloadMapper.zohoSalesOrderPayload(payload),
-        );
-        if (response.statusCode == 200) {
-          return response.data['salesorder']['salesorder_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Sales Order Update Failed: $e');
+    payload = _withVanLineItemLocations(
+      _withSalespersonId(_withPrimaryHeaderLocation(payload)),
+    );
+    try {
+      final response = await _dio.put(
+        '/salesorders/$salesOrderId',
+        data: ZohoPayloadMapper.zohoSalesOrderPayload(payload),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return response.data['salesorder']['salesorder_id'] as String;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Sales Order Update Failed: $e');
     }
-
-    // Mock response: echo back the same id.
-    await Future.delayed(const Duration(seconds: 1));
-    return salesOrderId;
   }
 
   // 5g. Zoho Books Transfer Orders API: Sync Stock Transfer (Issue to Van / Stock Unloading).
   //
   // Transfers carry explicit from/to location ids in the payload already, so
-  // (unlike invoices/orders/receipts) this does NOT run _injectLocationIdIfNeeded.
+  // (unlike invoices/orders/receipts) this does NOT run _withPrimaryHeaderLocation.
   Future<String> syncStockTransfer(Map<String, dynamic> transferJson) async {
-    if (!_isMockMode() && !_mockStockTransfers) {
-      try {
-        // Transfer Orders belong to the Zoho Inventory API, not Books v3 — post
-        // to the absolute Inventory URL (overrides Dio's Books baseUrl; the
-        // interceptor still injects the token + organization_id).
-        final response = await _dio.post(
-          '$_inventoryApiUrl/transferorders',
-          data: ZohoPayloadMapper.zohoStockTransferPayload(transferJson),
-        );
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['transfer_order']['transfer_order_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Inventory Stock Transfer Sync Failed: $e');
+    try {
+      // Transfer Orders belong to the Zoho Inventory API, not Books v3 — post
+      // to the absolute Inventory URL (overrides Dio's Books baseUrl; the
+      // interceptor still injects the token + organization_id).
+      final response = await _dio.post(
+        '$_inventoryApiUrl/transferorders',
+        data: ZohoPayloadMapper.zohoStockTransferPayload(transferJson),
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['transfer_order']['transfer_order_id'] as String;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Inventory Stock Transfer Sync Failed: $e');
     }
+  }
 
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_to_${DateTime.now().millisecondsSinceEpoch}';
+  // 5h. Zoho Inventory Transfer Orders API: List stock transfers (paginated).
+  //
+  // Same absolute-URL override as `syncStockTransfer` — Transfer Orders live
+  // under Inventory, not Books v3. `_fetchAllPages` works unchanged since it
+  // takes a full request path and Dio treats an absolute URL as overriding
+  // `baseUrl`; Inventory's list responses follow the same
+  // `page_context.has_more_page` pagination convention as Books.
+  Future<List<Map<String, dynamic>>> fetchStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      return await _fetchAllPages(
+        '$_inventoryApiUrl/transferorders',
+        _dateRangeParams(startDate: startDate, endDate: endDate),
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchStockTransfers error: $e');
+      throw Exception('Failed to fetch stock transfers from Zoho: $e');
+    }
   }
 
   // 6. Zoho Books Customer Payments API: Sync Receipt Voucher
   Future<String> syncReceiptVoucher(Map<String, dynamic> paymentJson) async {
-    paymentJson = _injectLocationIdIfNeeded(paymentJson);
-    if (!_isMockMode() && !_mockTransactions) {
-      try {
-        final response = await _dio.post(
-          '/customerpayments',
-          data: ZohoPayloadMapper.zohoReceiptPayload(paymentJson),
-        );
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['payment']['payment_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Payment Sync Failed: $e');
-      }
+    paymentJson = _withPrimaryHeaderLocation(paymentJson);
+    // B4/B5: the app's offline receipt number has no home in Zoho's own
+    // `payment_number` series, so it travels as `reference_number`. Deposit
+    // account is the session salesperson's personal cash ledger.
+    final appNumber = paymentJson['payment_number']?.toString();
+    if (appNumber != null && appNumber.isNotEmpty) {
+      paymentJson = {...paymentJson, 'reference_number': appNumber};
     }
-
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_pay_${DateTime.now().millisecondsSinceEpoch}';
+    final cashAccountId = _dbService.cashAccountId;
+    if (cashAccountId != null && cashAccountId.isNotEmpty) {
+      paymentJson = {...paymentJson, 'account_id': cashAccountId};
+    }
+    try {
+      final response = await _dio.post(
+        '/customerpayments',
+        data: ZohoPayloadMapper.zohoReceiptPayload(paymentJson),
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['payment']['payment_id'] as String;
+      }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Payment Sync Failed: $e');
+    }
   }
 
   // 7. Zoho Books Credit Notes API: Sync Sales Return
   Future<String> syncSalesReturn(Map<String, dynamic> creditNoteJson) async {
-    creditNoteJson = _injectLocationIdIfNeeded(creditNoteJson);
-    if (!_isMockMode() && !_mockTransactions) {
-      try {
-        final response = await _dio.post(
-          '/creditnotes',
-          data: ZohoPayloadMapper.zohoCreditNotePayload(creditNoteJson),
-        );
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['creditnote']['creditnote_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Credit Note Sync Failed: $e');
+    creditNoteJson = _withVanLineItemLocations(
+      _withSalespersonId(_withPrimaryHeaderLocation(creditNoteJson)),
+    );
+    try {
+      final response = await _dio.post(
+        '/creditnotes',
+        data: ZohoPayloadMapper.zohoCreditNotePayload(creditNoteJson),
+        queryParameters: const {'ignore_auto_number_generation': true},
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['creditnote']['creditnote_id'] as String;
       }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Credit Note Sync Failed: $e');
     }
-
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_cred_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // 8. Zoho Books Expenses API: Sync Expense Entry
   Future<String> syncExpense(Map<String, dynamic> expenseJson) async {
-    expenseJson = _injectLocationIdIfNeeded(expenseJson);
-    if (!_isMockMode() && !_mockTransactions) {
-      try {
-        // Resolve local category lines into an itemized Zoho expense body with
-        // real ledger account IDs and a paid-through (cash) account at the root.
-        final zohoExpense = _buildZohoExpensePayload(expenseJson);
+    expenseJson = _withPrimaryHeaderLocation(expenseJson);
+    try {
+      // Resolve local category lines into an itemized Zoho expense body with
+      // real ledger account IDs and a paid-through (cash) account at the root.
+      final zohoExpense = _buildZohoExpensePayload(expenseJson);
 
-        // Multi-part formatting in case a receipt image exists
-        final receiptPath = expenseJson['receiptImagePath'];
-        dynamic dataPayload;
-
-        if (receiptPath != null && receiptPath.isNotEmpty) {
-          dataPayload = FormData.fromMap({
-            'JSONString': jsonEncode(zohoExpense),
-            'attachment': await MultipartFile.fromFile(
-              receiptPath,
-              filename: 'receipt.jpg',
-            ),
-          });
-        } else {
-          dataPayload = zohoExpense;
-        }
-
-        final response = await _dio.post('/expenses', data: dataPayload);
-        if (response.statusCode == 201 || response.statusCode == 200) {
-          return response.data['expense']['expense_id'];
-        }
-      } catch (e) {
-        throw Exception('Zoho Books Expense Sync Failed: $e');
+      // Multi-part only when a receipt path is present. Mock transport still
+      // receives JSON when no file is attached; avoid reading missing files.
+      final receiptPath = expenseJson['receiptImagePath']?.toString();
+      final dynamic dataPayload;
+      if (receiptPath != null &&
+          receiptPath.isNotEmpty &&
+          !_isMockMode() &&
+          !_mockTransactions) {
+        dataPayload = FormData.fromMap({
+          'JSONString': jsonEncode(zohoExpense),
+          'attachment': await MultipartFile.fromFile(
+            receiptPath,
+            filename: 'receipt.jpg',
+          ),
+        });
+      } else {
+        dataPayload = zohoExpense;
       }
-    }
 
-    // Mock response
-    await Future.delayed(const Duration(seconds: 1));
-    return 'zoho_exp_${DateTime.now().millisecondsSinceEpoch}';
+      final response = await _dio.post('/expenses', data: dataPayload);
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return response.data['expense']['expense_id'] as String;
+      }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Expense Sync Failed: $e');
+    }
   }
 
   /// Resolves a stored expense map (`lines[]` of category/amount/description)
   /// into an itemized Zoho `/expenses` body via [ZohoPayloadMapper].
   ///
   /// Each line's `category` is mapped to a real Zoho expense ledger `account_id`
-  /// from the synced expense accounts; `paid_through_account_id` defaults to the
-  /// first cash-type payment account (the app has no per-expense payer picker
-  /// yet). Throws if the master account lists are empty so the sync-queue item
-  /// surfaces as "Needs Attention" rather than sending an invalid payload.
+  /// from the synced expense accounts; `paid_through_account_id` is the
+  /// session salesperson's personal cash ledger (B4) — falling back to the
+  /// first cash-type payment account only if the session has none bound (logs
+  /// a warning, since that indicates an incomplete profile bind). Throws if
+  /// the master account lists are empty so the sync-queue item surfaces as
+  /// "Needs Attention" rather than sending an invalid payload.
   Map<String, dynamic> _buildZohoExpensePayload(
     Map<String, dynamic> expenseJson,
   ) {
@@ -913,21 +829,30 @@ class ZohoApiClient {
         'No expense accounts synced — cannot resolve expense ledger account_id.',
       );
     }
-    if (paymentAccounts.isEmpty) {
-      throw Exception(
-        'No payment accounts synced — cannot resolve paid_through_account_id.',
-      );
-    }
 
     String accountIdForCategory(String category) {
       final match = expenseAccounts.where((a) => a.category == category);
       return match.isNotEmpty ? match.first.id : expenseAccounts.first.id;
     }
 
-    final cashAccount = paymentAccounts.firstWhere(
-      (a) => a.accountType == 'cash',
-      orElse: () => paymentAccounts.first,
-    );
+    var paidThroughAccountId = _dbService.cashAccountId;
+    if (paidThroughAccountId == null || paidThroughAccountId.isEmpty) {
+      if (paymentAccounts.isEmpty) {
+        throw Exception(
+          'No session cash account bound and no payment accounts synced — '
+          'cannot resolve paid_through_account_id.',
+        );
+      }
+      AppLogger.error(
+        'ZohoApi',
+        'No session cash account bound — falling back to first org cash account for expense paid_through_account_id.',
+      );
+      final fallback = paymentAccounts.firstWhere(
+        (a) => a.accountType == 'cash',
+        orElse: () => paymentAccounts.first,
+      );
+      paidThroughAccountId = fallback.id;
+    }
 
     final rawLines = (expenseJson['lines'] as List?) ?? const [];
     final resolvedLines = rawLines.whereType<Map>().map((line) {
@@ -942,7 +867,7 @@ class ZohoApiClient {
     return ZohoPayloadMapper.zohoExpensePayload(
       expenseJson,
       resolvedLines: resolvedLines,
-      paidThroughAccountId: cashAccount.id,
+      paidThroughAccountId: paidThroughAccountId,
     );
   }
 
@@ -950,260 +875,157 @@ class ZohoApiClient {
 
   // 9. Warehouses/Locations (GET /locations)
   Future<List<Map<String, dynamic>>> fetchWarehouses() async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get('/locations');
-        if (response.statusCode == 200) {
-          final list = (response.data['locations'] as List? ?? []);
-          return list.map((w) => Map<String, dynamic>.from(w)).toList();
-        }
-        throw Exception(
-          'Failed to fetch locations: Server returned status code ${response.statusCode}',
-        );
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchWarehouses (locations) error: $e');
-        throw Exception('Failed to fetch locations from Zoho: $e');
+    try {
+      final response = await _dio.get('/locations');
+      if (response.statusCode == 200) {
+        final list = (response.data['locations'] as List? ?? []);
+        return list.map((w) => Map<String, dynamic>.from(w as Map)).toList();
       }
+      throw Exception(
+        'Failed to fetch locations: Server returned status code ${response.statusCode}',
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchWarehouses (locations) error: $e');
+      throw Exception('Failed to fetch locations from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    return [
-      {
-        'location_id': 'van_wh_01',
-        'location_name': 'Van Warehouse 01',
-        'address': 'Mobile / On-route',
-        'is_primary_location': true,
-      },
-    ];
   }
 
   // Salespersons (GET /salespersons)
   Future<List<Map<String, dynamic>>> fetchSalespersons() async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get('/salespersons');
-        if (response.statusCode == 200) {
-          // Zoho returns salespersons under `data` (verified against live API).
-          final list =
-              (response.data['data'] ?? response.data['salespersons'] ?? [])
-                  as List;
-          return list.map((s) => Map<String, dynamic>.from(s)).toList();
-        }
-        throw Exception(
-          'Failed to fetch salespersons: Server returned status code ${response.statusCode}',
-        );
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchSalespersons error: $e');
-        throw Exception('Failed to fetch salespersons from Zoho: $e');
+    try {
+      final response = await _dio.get('/salespersons');
+      if (response.statusCode == 200) {
+        // Zoho returns salespersons under `data` (verified against live API).
+        final list =
+            (response.data['data'] ?? response.data['salespersons'] ?? [])
+                as List;
+        return list.map((s) => Map<String, dynamic>.from(s as Map)).toList();
       }
+      throw Exception(
+        'Failed to fetch salespersons: Server returned status code ${response.statusCode}',
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchSalespersons error: $e');
+      throw Exception('Failed to fetch salespersons from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    return [
-      {
-        'salesperson_id': 'sp_mock_01',
-        'salesperson_name': 'Mock Sales Agent',
-        'salesperson_email': 'agent@example.com',
-        'status': 'active',
-      },
-    ];
   }
 
-  // Salesperson-to-Location mapping (GET /cm_salesperson_location — custom module).
-  // Zoho auto-generated the module api_name `cm_salesperson_location` and returns
-  // records under `module_records`. Each record carries the salesperson email in the
-  // module's primary field `record_name` and the mapped location in `cf_location_id`.
-  Future<List<Map<String, dynamic>>> fetchSalespersonLocationMappings() async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get('/cm_salesperson_location');
-        if (response.statusCode == 200) {
-          final list =
-              (response.data['module_records'] ?? response.data['data'] ?? [])
-                  as List;
-          return list.map((m) => Map<String, dynamic>.from(m)).toList();
-        }
-        throw Exception(
-          'Failed to fetch salesperson location mappings: Server returned status code ${response.statusCode}',
-        );
-      } catch (e) {
-        AppLogger.error(
-          'ZohoApi',
-          'fetchSalespersonLocationMappings error: $e',
-        );
-        throw Exception(
-          'Failed to fetch salesperson location mappings from Zoho: $e',
-        );
+  // Salesperson profile module (GET /cm_salesperson_profile — custom module).
+  // Primary field `record_name` holds the login phone in E.164; lookups
+  // (`cf_salesperson`, `cf_van_location`, `cf_cash_account`) return both the
+  // id and a `_formatted` display name. Records list as `status: draft`
+  // (Zoho quirk) — callers must NOT filter by record status, only `cf_active`.
+  Future<List<Map<String, dynamic>>> fetchSalespersonProfiles() async {
+    try {
+      final response = await _dio.get('/cm_salesperson_profile');
+      if (response.statusCode == 200) {
+        final list =
+            (response.data['module_records'] ?? response.data['data'] ?? [])
+                as List;
+        return list.map((m) => Map<String, dynamic>.from(m as Map)).toList();
       }
+      throw Exception(
+        'Failed to fetch salesperson profiles: Server returned status code ${response.statusCode}',
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchSalespersonProfiles error: $e');
+      throw Exception('Failed to fetch salesperson profiles from Zoho: $e');
     }
+  }
 
-    // No sensible mock mapping default; mock-mode logins simply resolve without a location.
-    await Future.delayed(const Duration(milliseconds: 300));
-    return [];
+  // Duplicate-proof offline numbering (B5): highest existing document numbers
+  // matching a given app-side prefix, used to seed local counters.
+  Future<List<String>> fetchDocumentNumbersStartingWith({
+    required String endpoint,
+    required String startswithParam,
+    required String numberKey,
+    required String prefix,
+  }) async {
+    try {
+      final records = await _fetchAllPages(endpoint, {startswithParam: prefix});
+      return records
+          .map((r) => r[numberKey]?.toString())
+          .whereType<String>()
+          .toList();
+    } catch (e) {
+      AppLogger.error(
+        'ZohoApi',
+        'fetchDocumentNumbersStartingWith($endpoint) error: $e',
+      );
+      throw Exception('Failed to fetch document numbers from Zoho: $e');
+    }
   }
 
   // 10. Payment Accounts (GET /bankaccounts — bank + cash accounts for receipts)
   Future<List<Map<String, dynamic>>> fetchPaymentAccounts() async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get('/bankaccounts');
-        if (response.statusCode == 200) {
-          final list = (response.data['bankaccounts'] as List? ?? []);
-          return list.map((a) => Map<String, dynamic>.from(a)).toList();
-        }
-        throw Exception(
-          'Failed to fetch payment accounts: Server returned status code ${response.statusCode}',
-        );
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchPaymentAccounts error: $e');
-        throw Exception('Failed to fetch payment accounts from Zoho: $e');
+    try {
+      final response = await _dio.get('/bankaccounts');
+      if (response.statusCode == 200) {
+        final list = (response.data['bankaccounts'] as List? ?? []);
+        return list.map((a) => Map<String, dynamic>.from(a as Map)).toList();
       }
+      throw Exception(
+        'Failed to fetch payment accounts: Server returned status code ${response.statusCode}',
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchPaymentAccounts error: $e');
+      throw Exception('Failed to fetch payment accounts from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    return [
-      {
-        'account_id': 'acc_cash',
-        'account_name': 'Petty Cash',
-        'account_type': 'cash',
-        'currency_code': 'INR',
-        'payment_mode': 'Cash',
-      },
-      {
-        'account_id': 'acc_bank',
-        'account_name': 'HDFC Current',
-        'account_type': 'bank',
-        'currency_code': 'INR',
-        'payment_mode': 'Bank Transfer',
-      },
-    ];
   }
 
   // 11. Taxes (GET /settings/taxes)
   Future<List<Map<String, dynamic>>> fetchTaxes() async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get('/settings/taxes');
-        if (response.statusCode == 200) {
-          final list = (response.data['taxes'] as List? ?? []);
-          return list.map((t) => Map<String, dynamic>.from(t)).toList();
-        }
-        throw Exception(
-          'Failed to fetch taxes: Server returned status code ${response.statusCode}',
-        );
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchTaxes error: $e');
-        throw Exception('Failed to fetch taxes from Zoho: $e');
+    try {
+      final response = await _dio.get('/settings/taxes');
+      if (response.statusCode == 200) {
+        final list = (response.data['taxes'] as List? ?? []);
+        return list.map((t) => Map<String, dynamic>.from(t as Map)).toList();
       }
+      throw Exception(
+        'Failed to fetch taxes: Server returned status code ${response.statusCode}',
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchTaxes error: $e');
+      throw Exception('Failed to fetch taxes from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    return [
-      {
-        'tax_id': 'tax_5',
-        'tax_name': 'VAT 5%',
-        'tax_percentage': 5.0,
-        'tax_type': 'tax',
-        'is_default_tax': true,
-      },
-      {
-        'tax_id': 'tax_12',
-        'tax_name': 'VAT 12%',
-        'tax_percentage': 12.0,
-        'tax_type': 'tax',
-      },
-      {
-        'tax_id': 'tax_18',
-        'tax_name': 'VAT 18%',
-        'tax_percentage': 18.0,
-        'tax_type': 'tax',
-      },
-    ];
   }
 
   // 12. Expense Accounts (GET /chartofaccounts?filter_by=AccountType.Expense)
   Future<List<Map<String, dynamic>>> fetchExpenseAccounts() async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get(
-          '/chartofaccounts',
-          queryParameters: {'filter_by': 'AccountType.Expense'},
-        );
-        if (response.statusCode == 200) {
-          final list = (response.data['chartofaccounts'] as List? ?? []);
-          return list.map((a) => Map<String, dynamic>.from(a)).toList();
-        }
-        throw Exception(
-          'Failed to fetch expense accounts: Server returned status code ${response.statusCode}',
-        );
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchExpenseAccounts error: $e');
-        throw Exception('Failed to fetch expense accounts from Zoho: $e');
+    try {
+      final response = await _dio.get(
+        '/chartofaccounts',
+        queryParameters: {'filter_by': 'AccountType.Expense'},
+      );
+      if (response.statusCode == 200) {
+        final list = (response.data['chartofaccounts'] as List? ?? []);
+        return list.map((a) => Map<String, dynamic>.from(a as Map)).toList();
       }
+      throw Exception(
+        'Failed to fetch expense accounts: Server returned status code ${response.statusCode}',
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchExpenseAccounts error: $e');
+      throw Exception('Failed to fetch expense accounts from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    return [
-      {
-        'account_id': 'exp_fuel',
-        'account_name': 'Fuel Expense',
-        'account_code': 'EXP-FUEL',
-        'category': 'Fuel',
-      },
-      {
-        'account_id': 'exp_toll',
-        'account_name': 'Tolls & Parking',
-        'account_code': 'EXP-TOLL',
-        'category': 'Tolls',
-      },
-      {
-        'account_id': 'exp_meal',
-        'account_name': 'Meals & Refreshments',
-        'account_code': 'EXP-MEAL',
-        'category': 'Meals',
-      },
-      {
-        'account_id': 'exp_maint',
-        'account_name': 'Vehicle Maintenance',
-        'account_code': 'EXP-MAINT',
-        'category': 'Maintenance',
-      },
-      {
-        'account_id': 'exp_misc',
-        'account_name': 'Miscellaneous',
-        'account_code': 'EXP-MISC',
-        'category': 'Miscellaneous',
-      },
-    ];
   }
 
   // 13. Organization (GET /organizations/{org_id})
   Future<Map<String, dynamic>?> fetchOrganization() async {
-    if (!_isMockMode()) {
-      try {
-        final response = await _dio.get('/organizations/$_organizationId');
-        if (response.statusCode == 200) {
-          final org = response.data['organization'];
-          if (org != null) return Map<String, dynamic>.from(org);
-        }
-        throw Exception(
-          'Failed to fetch organization: Server returned status code ${response.statusCode}',
-        );
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchOrganization error: $e');
-        throw Exception('Failed to fetch organization from Zoho: $e');
+    try {
+      mockCatalog.organizationId = _organizationId;
+      final response = await _dio.get('/organizations/$_organizationId');
+      if (response.statusCode == 200) {
+        final org = response.data['organization'];
+        if (org != null) return Map<String, dynamic>.from(org as Map);
       }
+      throw Exception(
+        'Failed to fetch organization: Server returned status code ${response.statusCode}',
+      );
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchOrganization error: $e');
+      throw Exception('Failed to fetch organization from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 250));
-    return {
-      'organization_id': _organizationId,
-      'name': 'Mock Org',
-      'currency_code': 'INR',
-      'currency_symbol': '₹',
-      'fiscal_year_start_month': 'april',
-      'time_zone': 'Asia/Kolkata',
-    };
   }
 
   // 14. Customer Statement — composed locally from primary records.
@@ -1219,242 +1041,165 @@ class ZohoApiClient {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    if (!_isMockMode()) {
-      try {
-        final from = startDate ?? DateTime(DateTime.now().year, 1, 1);
-        final to = endDate ?? DateTime.now();
+    // Same composition path for live and mock — underlying GETs go through Dio
+    // (and the mock transport when credentials are placeholders).
+    try {
+      final from = startDate ?? DateTime(DateTime.now().year, 1, 1);
+      final to = endDate ?? DateTime.now();
 
-        final results = await Future.wait([
-          _fetchContactDetail(contactId),
-          _fetchAllPages('/invoices', {'customer_id': contactId}),
-          _fetchAllPages('/customerpayments', {'customer_id': contactId}),
-          _fetchAllPages('/creditnotes', {'customer_id': contactId}),
-        ]);
+      final results = await Future.wait([
+        _fetchContactDetail(contactId),
+        _fetchAllPages('/invoices', {'customer_id': contactId}),
+        _fetchAllPages('/customerpayments', {'customer_id': contactId}),
+        _fetchAllPages('/creditnotes', {'customer_id': contactId}),
+      ]);
 
-        final contact = results[0] as Map<String, dynamic>;
-        final invoices = results[1] as List<Map<String, dynamic>>;
-        final payments = results[2] as List<Map<String, dynamic>>;
-        final creditNotes = results[3] as List<Map<String, dynamic>>;
+      final contact = results[0] as Map<String, dynamic>;
+      final invoices = results[1] as List<Map<String, dynamic>>;
+      final payments = results[2] as List<Map<String, dynamic>>;
+      final creditNotes = results[3] as List<Map<String, dynamic>>;
 
-        final contactName =
-            (contact['contact_name'] ?? contact['company_name'] ?? '')
-                as String;
-        final baseOpening = (contact['opening_balance_amount'] ?? 0).toDouble();
+      final contactName =
+          (contact['contact_name'] ?? contact['company_name'] ?? '') as String;
+      final baseOpening = (contact['opening_balance_amount'] ?? 0).toDouble();
 
-        DateTime parseDate(String? s) =>
-            s == null || s.isEmpty ? DateTime(1970) : DateTime.parse(s);
+      DateTime parseDate(String? s) =>
+          s == null || s.isEmpty ? DateTime(1970) : DateTime.parse(s);
 
-        bool before(DateTime d) =>
-            d.isBefore(DateTime(from.year, from.month, from.day));
-        bool inRange(DateTime d) {
-          final f = DateTime(from.year, from.month, from.day);
-          final t = DateTime(to.year, to.month, to.day, 23, 59, 59);
-          return !d.isBefore(f) && !d.isAfter(t);
-        }
-
-        // Compute opening balance: contact's books-start opening + everything before `from`.
-        double opening = baseOpening;
-        for (final inv in invoices) {
-          final d = parseDate(inv['date'] as String?);
-          if (before(d)) opening += (inv['total'] ?? 0).toDouble();
-        }
-        for (final pay in payments) {
-          final d = parseDate(pay['date'] as String?);
-          if (before(d)) opening -= (pay['amount'] ?? 0).toDouble();
-        }
-        for (final cn in creditNotes) {
-          final d = parseDate(cn['date'] as String?);
-          if (before(d)) opening -= (cn['total'] ?? 0).toDouble();
-        }
-
-        // Build in-period rows.
-        final rows = <Map<String, dynamic>>[];
-        for (final inv in invoices) {
-          final d = parseDate(inv['date'] as String?);
-          if (!inRange(d)) continue;
-          final number = (inv['invoice_number'] ?? '') as String;
-          rows.add({
-            'transaction_id': inv['invoice_id'] ?? '',
-            'transaction_number': number,
-            'date': inv['date'],
-            'transaction_type': 'invoice',
-            'debit': (inv['total'] ?? 0).toDouble(),
-            'credit': 0.0,
-            'description': 'Sales Invoice $number'.trim(),
-            '_sort': d.millisecondsSinceEpoch,
-          });
-        }
-        for (final pay in payments) {
-          final d = parseDate(pay['date'] as String?);
-          if (!inRange(d)) continue;
-          final number = (pay['payment_number'] ?? '') as String;
-          final mode = (pay['payment_mode'] ?? '') as String;
-          rows.add({
-            'transaction_id': pay['payment_id'] ?? '',
-            'transaction_number': number,
-            'date': pay['date'],
-            'transaction_type': 'payment',
-            'debit': 0.0,
-            'credit': (pay['amount'] ?? 0).toDouble(),
-            'description': mode.isEmpty
-                ? 'Payment Received'
-                : 'Payment Received — $mode',
-            '_sort': d.millisecondsSinceEpoch,
-          });
-        }
-        for (final cn in creditNotes) {
-          final d = parseDate(cn['date'] as String?);
-          if (!inRange(d)) continue;
-          final number = (cn['creditnote_number'] ?? '') as String;
-          rows.add({
-            'transaction_id': cn['creditnote_id'] ?? '',
-            'transaction_number': number,
-            'date': cn['date'],
-            'transaction_type': 'credit_note',
-            'debit': 0.0,
-            'credit': (cn['total'] ?? 0).toDouble(),
-            'description': 'Credit Note $number'.trim(),
-            '_sort': d.millisecondsSinceEpoch,
-          });
-        }
-
-        rows.sort((a, b) => (a['_sort'] as int).compareTo(b['_sort'] as int));
-
-        // Running balance
-        double running = opening;
-        for (final r in rows) {
-          running += (r['debit'] as double) - (r['credit'] as double);
-          r['balance'] = running;
-          r.remove('_sort');
-        }
-
-        return {
-          'contact_id': contactId,
-          'contact_name': contactName,
-          'opening_balance': opening,
-          'closing_balance': running,
-          'transactions': rows,
-        };
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchCustomerStatement error: $e');
-        throw Exception('Failed to fetch customer statement from Zoho: $e');
+      bool before(DateTime d) =>
+          d.isBefore(DateTime(from.year, from.month, from.day));
+      bool inRange(DateTime d) {
+        final f = DateTime(from.year, from.month, from.day);
+        final t = DateTime(to.year, to.month, to.day, 23, 59, 59);
+        return !d.isBefore(f) && !d.isAfter(t);
       }
-    }
 
-    // Mock data
-    await Future.delayed(const Duration(milliseconds: 800));
-    final now = DateTime.now();
-    final from = startDate ?? now.subtract(const Duration(days: 30));
-    return {
-      'contact_id': contactId,
-      'contact_name': 'Demo Customer',
-      'opening_balance': 5000.0,
-      'closing_balance': 2350.0,
-      'transactions': [
-        {
-          'transaction_id': 'tx_001',
-          'transaction_number': 'INV-2024-001',
-          'date': from
-              .add(const Duration(days: 2))
-              .toIso8601String()
-              .split('T')[0],
+      // Compute opening balance: contact's books-start opening + everything before `from`.
+      double opening = baseOpening;
+      for (final inv in invoices) {
+        final d = parseDate(inv['date'] as String?);
+        if (before(d)) opening += (inv['total'] ?? 0).toDouble();
+      }
+      for (final pay in payments) {
+        final d = parseDate(pay['date'] as String?);
+        if (before(d)) opening -= (pay['amount'] ?? 0).toDouble();
+      }
+      for (final cn in creditNotes) {
+        final d = parseDate(cn['date'] as String?);
+        if (before(d)) opening -= (cn['total'] ?? 0).toDouble();
+      }
+
+      // Build in-period rows.
+      final rows = <Map<String, dynamic>>[];
+      for (final inv in invoices) {
+        final d = parseDate(inv['date'] as String?);
+        if (!inRange(d)) continue;
+        final number = (inv['invoice_number'] ?? '') as String;
+        rows.add({
+          'transaction_id': inv['invoice_id'] ?? '',
+          'transaction_number': number,
+          'date': inv['date'],
           'transaction_type': 'invoice',
-          'debit': 3500.0,
+          'debit': (inv['total'] ?? 0).toDouble(),
           'credit': 0.0,
-          'balance': 8500.0,
-          'description': 'Sales Invoice #INV-2024-001',
-        },
-        {
-          'transaction_id': 'tx_002',
-          'transaction_number': 'PAY-2024-001',
-          'date': from
-              .add(const Duration(days: 5))
-              .toIso8601String()
-              .split('T')[0],
+          'description': 'Sales Invoice $number'.trim(),
+          '_sort': d.millisecondsSinceEpoch,
+        });
+      }
+      for (final pay in payments) {
+        final d = parseDate(pay['date'] as String?);
+        if (!inRange(d)) continue;
+        final number = (pay['payment_number'] ?? '') as String;
+        final mode = (pay['payment_mode'] ?? '') as String;
+        rows.add({
+          'transaction_id': pay['payment_id'] ?? '',
+          'transaction_number': number,
+          'date': pay['date'],
           'transaction_type': 'payment',
           'debit': 0.0,
-          'credit': 2000.0,
-          'balance': 6500.0,
-          'description': 'Payment Received - Cash',
-        },
-        {
-          'transaction_id': 'tx_003',
-          'transaction_number': 'INV-2024-002',
-          'date': from
-              .add(const Duration(days: 10))
-              .toIso8601String()
-              .split('T')[0],
-          'transaction_type': 'invoice',
-          'debit': 1200.0,
-          'credit': 0.0,
-          'balance': 7700.0,
-          'description': 'Sales Invoice #INV-2024-002',
-        },
-        {
-          'transaction_id': 'tx_004',
-          'transaction_number': 'PAY-2024-002',
-          'date': from
-              .add(const Duration(days: 15))
-              .toIso8601String()
-              .split('T')[0],
-          'transaction_type': 'payment',
-          'debit': 0.0,
-          'credit': 4500.0,
-          'balance': 3200.0,
-          'description': 'Payment Received - Bank Transfer',
-        },
-        {
-          'transaction_id': 'tx_005',
-          'transaction_number': 'CN-2024-001',
-          'date': from
-              .add(const Duration(days: 20))
-              .toIso8601String()
-              .split('T')[0],
+          'credit': (pay['amount'] ?? 0).toDouble(),
+          'description': mode.isEmpty
+              ? 'Payment Received'
+              : 'Payment Received — $mode',
+          '_sort': d.millisecondsSinceEpoch,
+        });
+      }
+      for (final cn in creditNotes) {
+        final d = parseDate(cn['date'] as String?);
+        if (!inRange(d)) continue;
+        final number = (cn['creditnote_number'] ?? '') as String;
+        rows.add({
+          'transaction_id': cn['creditnote_id'] ?? '',
+          'transaction_number': number,
+          'date': cn['date'],
           'transaction_type': 'credit_note',
           'debit': 0.0,
-          'credit': 850.0,
-          'balance': 2350.0,
-          'description': 'Credit Note - Sales Return',
-        },
-      ],
-    };
+          'credit': (cn['total'] ?? 0).toDouble(),
+          'description': 'Credit Note $number'.trim(),
+          '_sort': d.millisecondsSinceEpoch,
+        });
+      }
+
+      rows.sort((a, b) => (a['_sort'] as int).compareTo(b['_sort'] as int));
+
+      // Running balance
+      double running = opening;
+      for (final r in rows) {
+        running += (r['debit'] as double) - (r['credit'] as double);
+        r['balance'] = running;
+        r.remove('_sort');
+      }
+
+      return {
+        'contact_id': contactId,
+        'contact_name': contactName,
+        'opening_balance': opening,
+        'closing_balance': running,
+        'transactions': rows,
+      };
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchCustomerStatement error: $e');
+      throw Exception('Failed to fetch customer statement from Zoho: $e');
+    }
   }
 
-  // 15. Open Invoices (GET /invoices?status=unpaid) — live fetch only
+  // 15. Open Invoices (GET /invoices?filter_by=Status.All) — live fetch only
   // (not part of master sync). Optional [customerId] scopes the list for
   // receipt allocation so we don't pull every open invoice in the org.
+  //
+  // Zoho's `status` field is a literal enum (unpaid/overdue/partially_paid/
+  // paid/void/draft/...) — filtering the request to status=unpaid server-side
+  // silently dropped every overdue or partially-paid invoice, which in
+  // practice is most of a customer's real outstanding balance. Fetch
+  // everything via Status.All and filter client-side on outstanding balance
+  // instead, so all collectible invoices surface regardless of status label.
   Future<List<Map<String, dynamic>>> fetchOpenInvoices({
     String? customerId,
   }) async {
-    if (!_isMockMode()) {
-      try {
-        final params = <String, dynamic>{'status': 'unpaid'};
-        if (customerId != null &&
-            customerId.isNotEmpty &&
-            !customerId.startsWith('temp_')) {
-          params['customer_id'] = customerId;
-        }
-        return await _fetchAllPages('/invoices', params);
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchOpenInvoices error: $e');
-        throw Exception('Failed to fetch open invoices from Zoho: $e');
+    try {
+      final params = <String, dynamic>{
+        'filter_by': 'Status.All',
+        ..._salespersonFilterParams(),
+      };
+      if (customerId != null &&
+          customerId.isNotEmpty &&
+          !customerId.startsWith('temp_')) {
+        params['customer_id'] = customerId;
       }
+      final all = await _fetchAllPages('/invoices', params);
+      return all.where((inv) {
+        final status = (inv['status'] ?? '').toString().toLowerCase();
+        if (status == 'draft' || status == 'void') return false;
+        final rawBalance = inv['balance'];
+        final balance = rawBalance is num
+            ? rawBalance.toDouble()
+            : double.tryParse(rawBalance?.toString() ?? '') ?? 0.0;
+        return balance > 0;
+      }).toList();
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchOpenInvoices error: $e');
+      throw Exception('Failed to fetch open invoices from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    final now = DateTime.now();
-    return [
-      {
-        'invoice_id': 'inv_001',
-        'invoice_number': 'INV-001',
-        'customer_id': 'cust_101',
-        'date': now.subtract(const Duration(days: 20)).toIso8601String(),
-        'due_date': now.add(const Duration(days: 10)).toIso8601String(),
-        'total': 2850.00,
-        'balance': 2850.00,
-        'status': 'unpaid',
-      },
-    ];
   }
 
   // 16. Single invoice detail (GET /invoices/{id}) — the list endpoint only
@@ -1470,93 +1215,31 @@ class ZohoApiClient {
   }
 
   // 17. Full invoice list with line items — powers the Item Sales Report.
-  Future<List<Map<String, dynamic>>> fetchInvoices() async {
-    if (!_isMockMode()) {
-      try {
-        final headers = await _fetchAllPages('/invoices', {});
-        final details = <Map<String, dynamic>>[];
-        for (final header in headers) {
-          final id = header['invoice_id']?.toString();
-          if (id == null || id.isEmpty) continue;
-          try {
-            details.add(await fetchInvoiceDetail(id));
-          } catch (e) {
-            // Skip invoices whose detail fails to load rather than failing the whole report.
-            AppLogger.error('ZohoApi', 'fetchInvoiceDetail($id) error: $e');
-          }
+  Future<List<Map<String, dynamic>>> fetchInvoices({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final headers = await _fetchAllPages('/invoices', {
+        ..._salespersonFilterParams(),
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+      });
+      final details = <Map<String, dynamic>>[];
+      for (final header in headers) {
+        final id = header['invoice_id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        try {
+          details.add(await fetchInvoiceDetail(id));
+        } catch (e) {
+          // Skip invoices whose detail fails to load rather than failing the whole report.
+          AppLogger.error('ZohoApi', 'fetchInvoiceDetail($id) error: $e');
         }
-        return details;
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchInvoices error: $e');
-        throw Exception('Failed to fetch invoices from Zoho: $e');
       }
+      return details;
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchInvoices error: $e');
+      throw Exception('Failed to fetch invoices from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 600));
-    final now = DateTime.now();
-    return [
-      {
-        'invoice_id': 'inv_9001',
-        'invoice_number': 'INV-00001',
-        'customer_id': 'cust_101',
-        'customer_name': 'Metro Hypermarket',
-        'date': now
-            .subtract(const Duration(days: 3))
-            .toIso8601String()
-            .split('T')[0],
-        'due_date': now
-            .add(const Duration(days: 27))
-            .toIso8601String()
-            .split('T')[0],
-        'notes': '',
-        'line_items': [
-          {
-            'item_id': 'item_501',
-            'name': 'Premium Fresh Milk (1L)',
-            'sku': 'MLK-1L',
-            'quantity': 24,
-            'rate': 60.00,
-            'tax_percentage': 5.0,
-            'discount': 0.0,
-          },
-          {
-            'item_id': 'item_503',
-            'name': 'Mineral Spring Water (500ml)',
-            'sku': 'WTR-500',
-            'quantity': 48,
-            'rate': 20.00,
-            'tax_percentage': 18.0,
-            'discount': 0.0,
-          },
-        ],
-      },
-      {
-        'invoice_id': 'inv_9002',
-        'invoice_number': 'INV-00002',
-        'customer_id': 'cust_201',
-        'customer_name': 'Southside MegaMart',
-        'date': now
-            .subtract(const Duration(days: 1))
-            .toIso8601String()
-            .split('T')[0],
-        'due_date': now
-            .add(const Duration(days: 29))
-            .toIso8601String()
-            .split('T')[0],
-        'notes': '',
-        'line_items': [
-          {
-            'item_id': 'item_504',
-            'name': 'Organic Cheddar Cheese (200g)',
-            'sku': 'CHS-200',
-            'quantity': 12,
-            'rate': 240.00,
-            'tax_percentage': 5.0,
-            'discount': 0.0,
-          },
-        ],
-      },
-    ];
   }
 
   // 18. Single expense detail (GET /expenses/{id}) — the list endpoint only
@@ -1572,98 +1255,64 @@ class ZohoApiClient {
   }
 
   // 19. Full expense list with itemized line items — powers the Expense
-  // Summary and Transactions Summary reports.
-  Future<List<Map<String, dynamic>>> fetchExpenses() async {
-    if (!_isMockMode()) {
-      try {
-        final headers = await _fetchAllPages('/expenses', {});
-        final details = <Map<String, dynamic>>[];
-        for (final header in headers) {
-          final id = header['expense_id']?.toString();
-          if (id == null || id.isEmpty) continue;
-          try {
-            details.add(await fetchExpenseDetail(id));
-          } catch (e) {
-            // Skip expenses whose detail fails to load rather than failing the whole report.
-            AppLogger.error('ZohoApi', 'fetchExpenseDetail($id) error: $e');
-          }
+  // list page, Expense Summary and Transactions Summary reports.
+  // Scoped to the session cash ledger via paid_through_account_id (no
+  // salesperson_id on Zoho expenses).
+  Future<List<Map<String, dynamic>>> fetchExpenses({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final headers = await _fetchAllPages('/expenses', {
+        ..._paidThroughAccountFilterParams(),
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+      });
+      final details = <Map<String, dynamic>>[];
+      for (final header in headers) {
+        final id = header['expense_id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        try {
+          details.add(await fetchExpenseDetail(id));
+        } catch (e) {
+          // Skip expenses whose detail fails to load rather than failing the whole report.
+          AppLogger.error('ZohoApi', 'fetchExpenseDetail($id) error: $e');
         }
-        return details;
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchExpenses error: $e');
-        throw Exception('Failed to fetch expenses from Zoho: $e');
       }
+      return details;
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchExpenses error: $e');
+      throw Exception('Failed to fetch expenses from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 600));
-    final now = DateTime.now();
-    return [
-      {
-        'expense_id': 'exp_9001',
-        'date': now
-            .subtract(const Duration(days: 2))
-            .toIso8601String()
-            .split('T')[0],
-        'total': 850.0,
-        'line_items': [
-          {'account_name': 'Fuel', 'amount': 600.0, 'description': 'Diesel'},
-          {
-            'account_name': 'Tolls',
-            'amount': 250.0,
-            'description': 'Highway toll',
-          },
-        ],
-      },
-      {
-        'expense_id': 'exp_9002',
-        'date': now
-            .subtract(const Duration(days: 1))
-            .toIso8601String()
-            .split('T')[0],
-        'total': 300.0,
-        'line_items': [
-          {'account_name': 'Meals', 'amount': 300.0, 'description': 'Lunch'},
-        ],
-      },
-    ];
   }
 
-  // 20. Full customer-payment (receipt) list — powers the Invoice Receipts
-  // Summary and Transactions Summary reports.
-  Future<List<Map<String, dynamic>>> fetchReceipts() async {
-    if (!_isMockMode()) {
-      try {
-        return await _fetchAllPages('/customerpayments', {});
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchReceipts error: $e');
-        throw Exception('Failed to fetch receipts from Zoho: $e');
-      }
+  // 20. Single customer-payment detail (GET /customerpayments/{id}).
+  Future<Map<String, dynamic>> fetchReceiptDetail(String paymentId) async {
+    final response = await _dio.get('/customerpayments/$paymentId');
+    if (response.statusCode != 200) {
+      throw Exception(
+        'GET /customerpayments/$paymentId failed: ${response.statusCode}',
+      );
     }
+    return Map<String, dynamic>.from(response.data['payment'] ?? {});
+  }
 
-    await Future.delayed(const Duration(milliseconds: 600));
-    final now = DateTime.now();
-    return [
-      {
-        'payment_id': 'pay_9001',
-        'payment_number': 'PAY-00001',
-        'customer_id': 'cust_101',
-        'customer_name': 'Metro Hypermarket',
-        'date': now
-            .subtract(const Duration(days: 1))
-            .toIso8601String()
-            .split('T')[0],
-        'amount': 2850.00,
-        'payment_mode': 'Cash',
-        'reference_number': '',
-        'invoices': [
-          {
-            'invoice_id': 'inv_9001',
-            'invoice_number': 'INV-00001',
-            'amount_applied': 2850.00,
-          },
-        ],
-      },
-    ];
+  // 20b. Full customer-payment (receipt) list — powers the Receipt list page,
+  // Invoice Receipts Summary and Transactions Summary reports.
+  // Scoped via reference_number_startswith = {prefix}RCT- (app series lives
+  // in reference_number; Zoho payments have no salesperson_id).
+  Future<List<Map<String, dynamic>>> fetchReceipts({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      return await _fetchAllPages('/customerpayments', {
+        ..._receiptSeriesReferenceFilterParams(),
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+      });
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchReceipts error: $e');
+      throw Exception('Failed to fetch receipts from Zoho: $e');
+    }
   }
 
   // 21. Single credit-note detail (GET /creditnotes/{id}) — the list endpoint
@@ -1682,57 +1331,40 @@ class ZohoApiClient {
 
   // 22. Full sales-return (credit note) list with line items — powers the
   // Sales Returns reports.
-  Future<List<Map<String, dynamic>>> fetchSalesReturns() async {
-    if (!_isMockMode()) {
-      try {
-        final headers = await _fetchAllPages('/creditnotes', {});
-        final details = <Map<String, dynamic>>[];
-        for (final header in headers) {
-          final id = header['creditnote_id']?.toString();
-          if (id == null || id.isEmpty) continue;
-          try {
-            details.add(await fetchSalesReturnDetail(id));
-          } catch (e) {
-            // Skip returns whose detail fails to load rather than failing the whole report.
-            AppLogger.error(
-              'ZohoApi',
-              'fetchSalesReturnDetail($id) error: $e',
-            );
-          }
+  Future<List<Map<String, dynamic>>> fetchSalesReturns({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final headers = await _fetchAllPages('/creditnotes', {
+        ..._salespersonFilterParams(),
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+      });
+      final details = <Map<String, dynamic>>[];
+      for (final header in headers) {
+        final id = header['creditnote_id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        try {
+          details.add(await fetchSalesReturnDetail(id));
+        } catch (e) {
+          // Skip returns whose detail fails to load rather than failing the whole report.
+          AppLogger.error(
+            'ZohoApi',
+            'fetchSalesReturnDetail($id) error: $e',
+          );
         }
-        return details;
-      } catch (e) {
-        AppLogger.error('ZohoApi', 'fetchSalesReturns error: $e');
-        throw Exception('Failed to fetch sales returns from Zoho: $e');
       }
+      final locationId = _dbService.getCurrentSalesperson()?.locationId;
+      if (locationId != null && locationId.isNotEmpty) {
+        return details.where((j) {
+          final locId = j['location_id']?.toString();
+          return locId == null || locId.isEmpty || locId == locationId;
+        }).toList();
+      }
+      return details;
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchSalesReturns error: $e');
+      throw Exception('Failed to fetch sales returns from Zoho: $e');
     }
-
-    await Future.delayed(const Duration(milliseconds: 600));
-    final now = DateTime.now();
-    return [
-      {
-        'creditnote_id': 'cn_9001',
-        'creditnote_number': 'CN-00001',
-        'customer_id': 'cust_101',
-        'customer_name': 'Metro Hypermarket',
-        'date': now
-            .subtract(const Duration(days: 2))
-            .toIso8601String()
-            .split('T')[0],
-        'reason': 'Damaged goods',
-        'line_items': [
-          {
-            'item_id': 'item_501',
-            'name': 'Premium Fresh Milk (1L)',
-            'sku': 'MLK-1L',
-            'quantity': 2,
-            'returned_quantity': 2,
-            'rate': 60.00,
-            'tax_percentage': 5.0,
-            'discount': 0.0,
-          },
-        ],
-      },
-    ];
   }
 }

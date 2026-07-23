@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/services/injection.dart';
 import '../../../domain/models/item.dart';
+import '../../../domain/repositories/sales_repository.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
@@ -96,10 +98,29 @@ class _ItemSearchSheetBody extends StatefulWidget {
 class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
   final _searchController = TextEditingController();
 
+  /// Id of the item whose multi-UOM is being fetched, or null when idle.
+  /// Drives the per-tile spinner and blocks concurrent taps.
+  String? _resolvingItemId;
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Resolves the tapped item's multi-UOM (cached or `GET /items/{id}`) before
+  /// handing it to the caller, so the line editor opens with full unit options.
+  Future<void> _handleTap(Item item, BuildContext sheetContext) async {
+    if (_resolvingItemId != null) return;
+    setState(() => _resolvingItemId = item.id);
+    Item resolved = item;
+    try {
+      resolved = await sl<SalesRepository>().resolveItemUnitConversions(item);
+    } finally {
+      if (mounted) setState(() => _resolvingItemId = null);
+    }
+    if (!sheetContext.mounted) return;
+    await widget.onSelected(resolved, sheetContext);
   }
 
   @override
@@ -197,7 +218,9 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = filtered[index];
+                        final isResolving = _resolvingItemId == item.id;
                         return ListTile(
+                          enabled: _resolvingItemId == null,
                           title: Text(
                             item.name,
                             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -205,7 +228,15 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                           subtitle: Text(
                             'SKU: ${item.sku} | Rate: ${formatCurrency(item.rate, cs)}',
                           ),
-                          trailing: item.stock >= 0
+                          trailing: isResolving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : item.stock >= 0
                               ? Text(
                                   'Stock: ${item.stock}',
                                   style: TextStyle(
@@ -217,7 +248,7 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                                   ),
                                 )
                               : null,
-                          onTap: () => widget.onSelected(item, context),
+                          onTap: () => _handleTap(item, context),
                         );
                       },
                     );
