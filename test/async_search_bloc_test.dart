@@ -55,6 +55,12 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
 
   @override
+  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
   List<RouteModel> getRoutes() => [];
 
   @override
@@ -67,10 +73,28 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveItems(List<Item> items) async {}
 
   @override
+  Future<Item> resolveItemUnitConversions(Item item) async => item;
+
+  @override
   List<SalesInvoice> getLocalInvoices() => [];
 
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
+
+  @override
+  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+
+  @override
+  Future<List<SalesInvoice>> fetchRemoteInvoices({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
+  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+
+  @override
+  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
 
   @override
   List<SalesOrder> getLocalOrders() => [];
@@ -79,7 +103,10 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalOrder(SalesOrder order) async {}
 
   @override
-  Future<List<SalesOrder>> fetchRemoteOrders() async => [];
+  Future<List<SalesOrder>> fetchRemoteOrders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 
   @override
   Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
@@ -91,10 +118,22 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
 
   @override
+  Future<List<SalesReturn>> fetchRemoteReturns({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
   List<ExpenseEntry> getLocalExpenses() => [];
 
   @override
   Future<void> saveLocalExpense(ExpenseEntry expense) async {}
+
+  @override
+  Future<List<ExpenseEntry>> fetchRemoteExpenses({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 
   @override
   CashClosing? getLocalCashClosing() => null;
@@ -107,6 +146,12 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
+
+  @override
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 }
 
 void main() {

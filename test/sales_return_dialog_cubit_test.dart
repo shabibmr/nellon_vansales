@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
+import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
@@ -72,6 +74,12 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
 
   @override
+  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
   List<RouteModel> getRoutes() => [];
 
   @override
@@ -84,7 +92,25 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveItems(List<Item> items) async {}
 
   @override
+  Future<Item> resolveItemUnitConversions(Item item) async => item;
+
+  @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
+
+  @override
+  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+
+  @override
+  Future<List<SalesInvoice>> fetchRemoteInvoices({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
+  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+
+  @override
+  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
 
   @override
   List<SalesOrder> getLocalOrders() => [];
@@ -93,7 +119,10 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalOrder(SalesOrder order) async {}
 
   @override
-  Future<List<SalesOrder>> fetchRemoteOrders() async => [];
+  Future<List<SalesOrder>> fetchRemoteOrders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 
   @override
   Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
@@ -102,10 +131,22 @@ class FakeSalesRepository implements SalesRepository {
   List<SalesReturn> getLocalReturns() => savedReturns;
 
   @override
+  Future<List<SalesReturn>> fetchRemoteReturns({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
   List<ExpenseEntry> getLocalExpenses() => [];
 
   @override
   Future<void> saveLocalExpense(ExpenseEntry expense) async {}
+
+  @override
+  Future<List<ExpenseEntry>> fetchRemoteExpenses({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 
   @override
   CashClosing? getLocalCashClosing() => null;
@@ -118,14 +159,33 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
+
+  @override
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 }
 
 class FakeHiveDatabaseService extends HiveDatabaseService {
+  final Map<String, int> _counters = {};
+
   @override
   String? get assignedWarehouseId => 'van_wh_01';
 
   @override
   String? get activeRouteId => null;
+
+  @override
+  String? get voucherPrefix => 'SHB-';
+
+  @override
+  int? getDocCounter(String typeTag) => _counters[typeTag];
+
+  @override
+  Future<void> setDocCounter(String typeTag, int value) async {
+    _counters[typeTag] = value;
+  }
 }
 
 class FakeSyncWorker extends SyncWorker {
@@ -204,6 +264,18 @@ void main() {
   late SalesReturnDialogCubit cubit;
 
   setUp(() {
+    final sl = GetIt.instance;
+    if (sl.isRegistered<DocumentNumberService>()) {
+      sl.unregister<DocumentNumberService>();
+    }
+    final fakeDb = FakeHiveDatabaseService();
+    sl.registerSingleton<DocumentNumberService>(
+      DocumentNumberService(
+        dbService: fakeDb,
+        apiClient: FakeZohoApiClient(),
+      ),
+    );
+
     repo = FakeSalesRepository()
       ..invoices = [invoice]
       ..items = [milk, bread];
@@ -217,6 +289,10 @@ void main() {
 
   tearDown(() async {
     await cubit.close();
+    final sl = GetIt.instance;
+    if (sl.isRegistered<DocumentNumberService>()) {
+      sl.unregister<DocumentNumberService>();
+    }
   });
 
   test('loadEligibleItems filters to purchased items only', () {
@@ -280,7 +356,7 @@ void main() {
     expect(repo.savedReturns.first.items.first.returnedQuantity, 2);
     expect(repo.savedReturns.first.reason, 'Damaged packaging');
     expect(
-      repo.savedReturns.first.creditNoteNumber.startsWith('RET-TEMP-'),
+      repo.savedReturns.first.creditNoteNumber.startsWith('SHB-CN-'),
       isTrue,
     );
     expect(repo.queue.length, 1);
