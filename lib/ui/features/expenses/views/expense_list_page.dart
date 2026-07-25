@@ -142,7 +142,9 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const ExpenseEditorPage(),
+                                    builder: (_) => const ExpenseEditorPage(
+                                      readOnly: true,
+                                    ),
                                   ),
                                 );
                               },

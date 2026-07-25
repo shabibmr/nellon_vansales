@@ -147,7 +147,9 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const ReceiptEditorPage(),
+                                  builder: (_) => const ReceiptEditorPage(
+                                    readOnly: true,
+                                  ),
                                 ),
                               );
                             },

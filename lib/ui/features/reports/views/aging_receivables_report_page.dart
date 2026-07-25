@@ -3,10 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/customer_model.dart';
 import '../../../../data/models/open_invoice_model.dart';
-import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../data/services/zoho_api_client.dart';
-import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
@@ -72,10 +70,7 @@ class AgingReportData {
   final List<OpenInvoice> invoices;
   final Map<String, String> customerNames;
 
-  const AgingReportData({
-    required this.invoices,
-    required this.customerNames,
-  });
+  const AgingReportData({required this.invoices, required this.customerNames});
 }
 
 /// Agewise Customer Receivables (AR Aging) report.
@@ -92,13 +87,6 @@ class AgingReceivablesReportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider<ReportBloc<AgingReportData>>(
       create: (_) => ReportBloc<AgingReportData>(
-        getLocal: () {
-          final invoices = sl<HiveDatabaseService>().getOpenInvoices();
-          final customerNames = {
-            for (final Customer c in sl<HiveDatabaseService>().getCustomers()) c.id: c.name,
-          };
-          return [AgingReportData(invoices: invoices, customerNames: customerNames)];
-        },
         fetchRemote: () async {
           final rawInvoices = await sl<ZohoApiClient>().fetchOpenInvoices();
           final rawCustomers = await sl<ZohoApiClient>().fetchCustomers();
@@ -109,7 +97,9 @@ class AgingReceivablesReportPage extends StatelessWidget {
             for (final customer in rawCustomers.map(CustomerModel.fromJson))
               customer.id: customer.name,
           };
-          return [AgingReportData(invoices: invoices, customerNames: customerNames)];
+          return [
+            AgingReportData(invoices: invoices, customerNames: customerNames),
+          ];
         },
         initialSortField: _SortField.total,
         initialSortAscending: false,
@@ -215,10 +205,17 @@ class _AgingReceivablesReportViewState
     final cs = context.org.currencySymbol;
     final DateFormat dateFmt = DateFormat('dd MMM yyyy');
 
-    return BlocListener<ReportBloc<AgingReportData>, ReportState<AgingReportData>>(
-      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+    return BlocListener<
+      ReportBloc<AgingReportData>,
+      ReportState<AgingReportData>
+    >(
+      listenWhen: (prev, curr) =>
+          curr.error != null && prev.error != curr.error,
       listener: (context, state) {
-        showErrorSnackBar(context, 'Could not load report from Zoho: ${state.error}');
+        showErrorSnackBar(
+          context,
+          'Could not load report from Zoho: ${state.error}',
+        );
       },
       child: BlocBuilder<ReportBloc<AgingReportData>, ReportState<AgingReportData>>(
         builder: (context, state) {
@@ -235,9 +232,9 @@ class _AgingReceivablesReportViewState
           return SortableReportScaffold<_AgingRow, _SortField>(
             title: 'Agewise Receivables',
             isLoading: state.isLoading,
-            onRefresh: () => context
-                .read<ReportBloc<AgingReportData>>()
-                .add(const RefreshReport()),
+            onRefresh: () => context.read<ReportBloc<AgingReportData>>().add(
+              const RefreshReport(),
+            ),
             rows: rows,
             sortField: state.sortField as _SortField? ?? _SortField.total,
             sortAscending: state.sortAscending,
@@ -255,7 +252,7 @@ class _AgingReceivablesReportViewState
                 : 'No outstanding receivables',
             emptyMessage: hasQuery
                 ? 'No customers match "${_query.trim()}".\n'
-                    'Try a different name.'
+                      'Try a different name.'
                 : 'Sync open invoices from the Masters page to populate this report.',
             banner: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -377,7 +374,11 @@ class _AgingReceivablesReportViewState
                 field: _SortField.name,
                 alignEnd: false,
               ),
-              ReportColumn(label: 'TOTAL DUE', flex: 3, field: _SortField.total),
+              ReportColumn(
+                label: 'TOTAL DUE',
+                flex: 3,
+                field: _SortField.total,
+              ),
             ],
             exportHeaders: [
               'Customer',
@@ -494,8 +495,8 @@ class _BucketCell extends StatelessWidget {
               color: active
                   ? color
                   : (isDark
-                      ? AppTheme.darkTextSecondary
-                      : AppTheme.lightTextSecondary),
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.lightTextSecondary),
             ),
           ),
           const SizedBox(height: 2),
@@ -509,8 +510,8 @@ class _BucketCell extends StatelessWidget {
                 color: active
                     ? (isDark ? AppTheme.darkText : AppTheme.lightText)
                     : (isDark
-                        ? const Color(0xFF475569)
-                        : const Color(0xFF94A3B8)),
+                          ? const Color(0xFF475569)
+                          : const Color(0xFF94A3B8)),
               ),
             ),
           ),

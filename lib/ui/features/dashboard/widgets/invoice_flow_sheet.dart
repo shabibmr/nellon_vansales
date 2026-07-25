@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
+import '../../../../domain/models/sales_invoice.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/utils/currency.dart';
+import '../../../../ui/core/utils/quantity_format.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/cubit/list_filter_cubit.dart';
+import '../../../../ui/core/widgets/item_line_editor_dialog.dart';
 import '../../sales_invoice/bloc/sales_invoice_bloc.dart';
 
 /// Draggable bottom sheet representing the active Invoice Checkout Flow.
@@ -17,6 +21,9 @@ import '../../sales_invoice/bloc/sales_invoice_bloc.dart';
 /// dispatched when the sheet opens so stale items from the editor or a previous
 /// session do not leak in. Checkout success/failure is outcome-driven via
 /// [BlocListener] — the sheet does not pop optimistically.
+///
+/// Item add/edit uses the same multi-UOM path as the full invoice editor:
+/// resolve conversions → [SharedItemLineEditorDialog] → [AddOrUpdateLineItem].
 class InvoiceFlowSheet extends StatelessWidget {
   final Customer customer;
   final bool isDark;
@@ -69,6 +76,9 @@ class _InvoiceFlowSheetBody extends StatefulWidget {
 class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
   final TextEditingController _searchController = TextEditingController();
 
+  /// Item id currently resolving multi-UOM (shows a spinner on that row).
+  String? _resolvingItemId;
+
   @override
   void initState() {
     super.initState();
@@ -80,6 +90,99 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  InvoiceLineItem? _lineForItem(
+    SalesInvoiceState state,
+    Item item,
+  ) {
+    for (final line in state.editingItems) {
+      if (line.item.id == item.id) return line;
+    }
+    return null;
+  }
+
+  /// Resolve multi-UOM, open the shared line editor, then upsert the cart line.
+  Future<void> _addOrEditItem(Item item, {InvoiceLineItem? existing}) async {
+    if (_resolvingItemId != null) return;
+
+    Item resolved = item;
+    var offlineFallback = false;
+
+    if (existing == null) {
+      setState(() => _resolvingItemId = item.id);
+      try {
+        final result =
+            await sl<SalesRepository>().resolveItemUnitConversions(item);
+        resolved = result.item;
+        offlineFallback = result.offlineFallback;
+      } finally {
+        if (mounted) setState(() => _resolvingItemId = null);
+      }
+      if (!mounted) return;
+      if (offlineFallback) {
+        showErrorSnackBar(
+          context,
+          "Couldn't load other units — using base unit.",
+        );
+      }
+    } else {
+      // Prefer conversions already on the line's item snapshot.
+      resolved = existing.item.unitConversions.isNotEmpty
+          ? existing.item
+          : item;
+      if (resolved.unitConversions.isEmpty) {
+        setState(() => _resolvingItemId = item.id);
+        try {
+          final result =
+              await sl<SalesRepository>().resolveItemUnitConversions(resolved);
+          resolved = result.item;
+          offlineFallback = result.offlineFallback;
+        } finally {
+          if (mounted) setState(() => _resolvingItemId = null);
+        }
+        if (!mounted) return;
+        if (offlineFallback) {
+          showErrorSnackBar(
+            context,
+            "Couldn't load other units — using base unit.",
+          );
+        }
+      }
+    }
+
+    if (!mounted) return;
+
+    final result = await showDialog<ItemLineEditorResult>(
+      context: context,
+      builder: (context) => SharedItemLineEditorDialog(
+        item: resolved,
+        initialQuantity: existing?.quantity ?? 0,
+        originalQuantity: existing?.quantityInBase ?? 0,
+        initialRate: existing?.rate,
+        initialDiscount: existing?.discount,
+        initialUom: existing?.displayUom,
+      ),
+    );
+
+    if (result == null || !mounted) return;
+    if (result.quantity <= 0) {
+      if (existing != null) {
+        context.read<SalesInvoiceBloc>().add(RemoveLineItem(resolved));
+      }
+      return;
+    }
+
+    context.read<SalesInvoiceBloc>().add(
+          AddOrUpdateLineItem(
+            item: resolved,
+            quantity: result.quantity,
+            rate: result.rate,
+            discount: result.discount,
+            uom: result.uom,
+            unitConversionId: result.unitConversionId,
+          ),
+        );
   }
 
   @override
@@ -198,7 +301,8 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final item = visible[index];
-                              final cartQty = invoiceState.cart[item] ?? 0;
+                              final line = _lineForItem(invoiceState, item);
+                              final isResolving = _resolvingItemId == item.id;
 
                               return Card(
                                 child: Padding(
@@ -218,13 +322,15 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
                                               ),
                                             ),
                                             Text(
-                                              'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}',
+                                              'SKU: ${item.sku} | Rate: $cs${item.rate.toStringAsFixed(2)}'
+                                              '${item.uom.isNotEmpty ? ' / ${item.uom}' : ''}',
                                               style:
                                                   const TextStyle(fontSize: 11),
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              'In Van Stock: ${item.stock} items',
+                                              'In Van Stock: ${formatQuantity(item.stock)}'
+                                              '${item.uom.isNotEmpty ? ' ${item.uom}' : ''}',
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.bold,
@@ -233,18 +339,38 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
                                                     : AppTheme.errorRose,
                                               ),
                                             ),
+                                            if (line != null) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'In cart: ${formatQuantity(line.quantity)}'
+                                                '${line.displayUom.isNotEmpty ? ' ${line.displayUom}' : ''}'
+                                                ' · ${formatCurrency(line.total, cs)}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppTheme.primaryIndigo,
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ),
-                                      if (cartQty == 0)
+                                      if (isResolving)
+                                        const SizedBox(
+                                          width: 36,
+                                          height: 36,
+                                          child: Padding(
+                                            padding: EdgeInsets.all(8),
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        )
+                                      else if (line == null)
                                         ElevatedButton(
                                           onPressed: item.stock == 0
                                               ? null
-                                              : () {
-                                                  context
-                                                      .read<SalesInvoiceBloc>()
-                                                      .add(AddToCart(item, 1));
-                                                },
+                                              : () => _addOrEditItem(item),
                                           style: ElevatedButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 14,
@@ -255,45 +381,25 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
                                         )
                                       else
                                         Row(
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
+                                            TextButton(
+                                              onPressed: () => _addOrEditItem(
+                                                item,
+                                                existing: line,
+                                              ),
+                                              child: const Text('EDIT'),
+                                            ),
                                             IconButton(
+                                              tooltip: 'Remove',
                                               icon: const Icon(
                                                 Icons.remove_circle_outline,
                                                 color: AppTheme.errorRose,
                                               ),
                                               onPressed: () {
-                                                final bloc = context
-                                                    .read<SalesInvoiceBloc>();
-                                                if (cartQty == 1) {
-                                                  bloc.add(
-                                                      RemoveFromCart(item));
-                                                } else {
-                                                  bloc.add(UpdateCartQuantity(
-                                                    item,
-                                                    cartQty - 1,
-                                                  ));
-                                                }
-                                              },
-                                            ),
-                                            Text(
-                                              cartQty.toString(),
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.add_circle_outline,
-                                                color: AppTheme.successEmerald,
-                                              ),
-                                              onPressed: () {
                                                 context
                                                     .read<SalesInvoiceBloc>()
-                                                    .add(UpdateCartQuantity(
-                                                      item,
-                                                      cartQty + 1,
-                                                    ));
+                                                    .add(RemoveLineItem(item));
                                               },
                                             ),
                                           ],
@@ -319,11 +425,9 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
                     double cartTotal = 0.0;
 
                     for (final line in invoiceState.editingItems) {
-                      final sub = line.rate * line.quantity;
-                      final tax = sub * (line.taxPercentage / 100);
-                      cartSubTotal += sub;
-                      cartTaxTotal += tax;
-                      cartTotal += sub + tax;
+                      cartSubTotal += line.subTotal;
+                      cartTaxTotal += line.taxAmount;
+                      cartTotal += line.total;
                     }
 
                     final canSubmit = invoiceState.editingItems.isNotEmpty &&
@@ -351,14 +455,14 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
                                 'Sub Total:',
                                 style: TextStyle(fontSize: 13),
                               ),
-                              Text('$cs${cartSubTotal.toStringAsFixed(2)}'),
+                              Text(formatCurrency(cartSubTotal, cs)),
                             ],
                           ),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('VAT:', style: TextStyle(fontSize: 13)),
-                              Text('$cs${cartTaxTotal.toStringAsFixed(2)}'),
+                              Text(formatCurrency(cartTaxTotal, cs)),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -373,7 +477,7 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
                                 ),
                               ),
                               Text(
-                                '$cs${cartTotal.toStringAsFixed(2)}',
+                                formatCurrency(cartTotal, cs),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w900,
                                   fontSize: 18,

@@ -12,27 +12,37 @@ class OrderLineItemModel extends OrderLineItem {
     required super.rate,
     required super.taxPercentage,
     super.discount = 0.0,
+    super.uom = '',
+    super.unitConversionId = '',
   });
 
   /// Factory constructor to parse local/remote JSON maps into an [OrderLineItemModel].
   factory OrderLineItemModel.fromJson(Map<String, dynamic> json) {
+    final item = ItemModel.fromJson(json['item'] ?? json);
+    final lineUom = (json['unit'] ?? json['uom'] ?? '').toString();
     return OrderLineItemModel(
-      item: ItemModel.fromJson(json['item'] ?? json),
-      quantity: json['quantity'] ?? 1,
+      item: item,
+      quantity: ((json['quantity'] ?? 1) as num).toDouble(),
       rate: (json['rate'] ?? 0.0).toDouble(),
       taxPercentage: (json['tax_percentage'] ?? 0.0).toDouble(),
       discount: (json['discount'] ?? 0.0).toDouble(),
+      uom: lineUom.isNotEmpty ? lineUom : item.uom,
+      unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
     );
   }
 
   /// Converts this [OrderLineItemModel] into a serialization compatible JSON map.
   Map<String, dynamic> toJson() {
+    final unit = displayUom;
     return {
       'item_id': item.id,
       'quantity': quantity,
       'rate': rate,
       'tax_percentage': taxPercentage,
       'discount': discount,
+      if (unit.isNotEmpty) 'unit': unit,
+      if (unit.isNotEmpty) 'uom': unit,
+      if (unitConversionId.isNotEmpty) 'unit_conversion_id': unitConversionId,
       'item': ItemModel.fromDomain(item).toJson(),
     };
   }
@@ -45,6 +55,8 @@ class OrderLineItemModel extends OrderLineItem {
       rate: lineItem.rate,
       taxPercentage: lineItem.taxPercentage,
       discount: lineItem.discount,
+      uom: lineItem.uom.isNotEmpty ? lineItem.uom : lineItem.item.uom,
+      unitConversionId: lineItem.unitConversionId,
     );
   }
 }

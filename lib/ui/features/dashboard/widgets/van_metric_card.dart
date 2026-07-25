@@ -26,6 +26,9 @@ class VanMetricCard extends StatelessWidget {
   /// Whether to render with glassmorphism blur effect.
   final bool isGlass;
 
+  /// Fired on tap — pass null to render a non-interactive card.
+  final VoidCallback? onTap;
+
   /// Creates a new [VanMetricCard] widget.
   const VanMetricCard({
     super.key,
@@ -35,6 +38,7 @@ class VanMetricCard extends StatelessWidget {
     required this.color,
     required this.isDark,
     this.isGlass = false,
+    this.onTap,
   });
 
   @override
@@ -44,37 +48,48 @@ class VanMetricCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: AppTheme.glassSurface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.glassBorder, width: 1),
-            ),
-            child: _cardContent(
-              titleColor: AppTheme.glassTextSecondary,
-              valueColor: AppTheme.glassText,
+          child: Material(
+            color: AppTheme.glassSurface,
+            child: InkWell(
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppTheme.glassBorder, width: 1),
+                ),
+                child: _cardContent(
+                  titleColor: AppTheme.glassTextSecondary,
+                  valueColor: AppTheme.glassText,
+                ),
+              ),
             ),
           ),
         ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+    return Material(
+      color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          width: 1,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+          ),
+          child: _cardContent(
+            titleColor: isDark
+                ? AppTheme.darkTextSecondary
+                : AppTheme.lightTextSecondary,
+            valueColor: isDark ? AppTheme.darkText : AppTheme.lightText,
+          ),
         ),
-      ),
-      child: _cardContent(
-        titleColor: isDark
-            ? AppTheme.darkTextSecondary
-            : AppTheme.lightTextSecondary,
-        valueColor: isDark ? AppTheme.darkText : AppTheme.lightText,
       ),
     );
   }

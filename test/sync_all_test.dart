@@ -2,12 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
+import 'package:van_sales/domain/models/item.dart';
 
 class FakeHiveDatabaseService extends HiveDatabaseService {
   final List<dynamic> savedData = [];
 
   @override
   String? get assignedWarehouseId => 'van_wh_01';
+
+  // The items master sync reads previously-stored items to preserve enriched
+  // unit_conversions; back it with an empty list instead of live Hive.
+  @override
+  List<Item> getItems() => <Item>[];
 
   @override
   String? get activeRouteId => null;
@@ -75,8 +81,8 @@ class FakeZohoApiClient extends ZohoApiClient {
     return {
       'organization_id': '783019958',
       'name': 'Test Org',
-      'currency_code': 'INR',
-      'currency_symbol': '₹',
+      'currency_code': 'AED',
+      'currency_symbol': 'AED',
     };
   }
 

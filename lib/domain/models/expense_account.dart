@@ -3,7 +3,7 @@ import 'package:equatable/equatable.dart';
 /// Represents a Zoho Books expense ledger account.
 ///
 /// The mobile application maps each local user-interface expense category
-/// (e.g., Fuel, Tolls, Meals, Maintenance, Miscellaneous) to one of these concrete accounts
+/// (e.g., Fuel, Tolls, Maintenance, Parking fee) to one of these concrete accounts
 /// for bookkeeping alignment.
 class ExpenseAccount extends Equatable {
   /// Unique ledger account identifier from Zoho (account_id).

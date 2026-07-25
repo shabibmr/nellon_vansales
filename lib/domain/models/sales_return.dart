@@ -9,8 +9,9 @@ class SalesReturnLineItem extends Equatable {
   /// The original invoiced line item reference.
   final InvoiceLineItem invoiceLineItem;
 
-  /// Quantity of items returned by the customer.
-  final int returnedQuantity;
+  /// Quantity of items returned by the customer, in the selected return
+  /// unit ([displayUom]).
+  final double returnedQuantity;
 
   /// The ID of the sales invoice from which the item is returned.
   final String? invoiceId;
@@ -18,16 +19,53 @@ class SalesReturnLineItem extends Equatable {
   /// The number of the sales invoice from which the item is returned.
   final String? invoiceNumber;
 
+  /// Unit the return is expressed in. Empty = same unit the item was sold in.
+  final String uom;
+
+  /// Zoho `unit_conversion_id` for [uom] when it is an alternate unit; empty
+  /// for the item's base unit (or when inheriting the sold unit).
+  final String unitConversionId;
+
   /// Creates a new [SalesReturnLineItem].
   const SalesReturnLineItem({
     required this.invoiceLineItem,
     required this.returnedQuantity,
     this.invoiceId,
     this.invoiceNumber,
+    this.uom = '',
+    this.unitConversionId = '',
   });
 
+  /// Effective UOM of the returned quantity — line override, else the unit
+  /// the item was originally sold in.
+  String get displayUom => uom.isNotEmpty ? uom : invoiceLineItem.displayUom;
+
+  /// Base-unit multiplier of the unit the item was originally sold in.
+  double get _soldConversionRate =>
+      invoiceLineItem.item.conversionRateFor(invoiceLineItem.displayUom);
+
+  /// Base-unit multiplier of the unit this return is expressed in.
+  double get _returnConversionRate =>
+      invoiceLineItem.item.conversionRateFor(displayUom);
+
+  /// Rate per returned unit, derived from the price actually charged on the
+  /// invoice: invoiced rate ÷ sold-unit rate × return-unit rate. Not rounded —
+  /// rates can carry more than 2 decimals (e.g. 4.875/kg); only line totals
+  /// are money-rounded.
+  double get rate {
+    if (_soldConversionRate <= 0) return invoiceLineItem.rate;
+    if (_returnConversionRate == _soldConversionRate) {
+      return invoiceLineItem.rate;
+    }
+    return invoiceLineItem.rate / _soldConversionRate * _returnConversionRate;
+  }
+
+  /// The returned quantity converted into the item's base unit.
+  double get returnedQuantityInBase =>
+      returnedQuantity * _returnConversionRate;
+
   /// Computes the cost excluding tax for the quantity returned.
-  double get subTotal => roundMoney(invoiceLineItem.rate * returnedQuantity);
+  double get subTotal => roundMoney(rate * returnedQuantity);
 
   /// Computes the tax portion applicable to the returned quantity, using the
   /// original invoiced line's tax rate.
@@ -41,8 +79,12 @@ class SalesReturnLineItem extends Equatable {
   /// back only 1.00 (2/10) of that discount rather than the full 5.00.
   double get discountAmount {
     if (invoiceLineItem.quantity <= 0) return 0.0;
-    final perUnitDiscount = invoiceLineItem.discount / invoiceLineItem.quantity;
-    return roundMoney(perUnitDiscount * returnedQuantity);
+    // Prorate in base units so a return in a different unit than sold still
+    // credits the right share of the original discount.
+    final soldBaseQty = invoiceLineItem.quantity * _soldConversionRate;
+    if (soldBaseQty <= 0) return 0.0;
+    final perBaseUnitDiscount = invoiceLineItem.discount / soldBaseQty;
+    return roundMoney(perBaseUnitDiscount * returnedQuantityInBase);
   }
 
   /// Computes the total return credit value, aligned with [InvoiceLineItem]'s
@@ -53,15 +95,19 @@ class SalesReturnLineItem extends Equatable {
   /// Creates a copy of this [SalesReturnLineItem] with replaced values for specific fields.
   SalesReturnLineItem copyWith({
     InvoiceLineItem? invoiceLineItem,
-    int? returnedQuantity,
+    double? returnedQuantity,
     String? invoiceId,
     String? invoiceNumber,
+    String? uom,
+    String? unitConversionId,
   }) {
     return SalesReturnLineItem(
       invoiceLineItem: invoiceLineItem ?? this.invoiceLineItem,
       returnedQuantity: returnedQuantity ?? this.returnedQuantity,
       invoiceId: invoiceId ?? this.invoiceId,
       invoiceNumber: invoiceNumber ?? this.invoiceNumber,
+      uom: uom ?? this.uom,
+      unitConversionId: unitConversionId ?? this.unitConversionId,
     );
   }
 
@@ -71,6 +117,8 @@ class SalesReturnLineItem extends Equatable {
     returnedQuantity,
     invoiceId,
     invoiceNumber,
+    uom,
+    unitConversionId,
   ];
 }
 

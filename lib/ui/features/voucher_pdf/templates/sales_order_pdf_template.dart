@@ -3,6 +3,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../core/utils/quantity_format.dart';
 import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Sales Order documents.
@@ -117,7 +118,8 @@ class SalesOrderPdfTemplate {
                         isSubText: true,
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '${order.items[i].quantity}',
+                        '${formatQuantity(order.items[i].quantity)}'
+                        '${order.items[i].displayUom.isNotEmpty ? ' ${order.items[i].displayUom}' : ''}',
                       ),
                       SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${order.items[i].rate.toStringAsFixed(2)}',

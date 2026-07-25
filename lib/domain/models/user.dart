@@ -11,8 +11,11 @@ class User extends Equatable {
   /// Full display name of the user.
   final String name;
 
-  /// Primary email address used for login.
+  /// Primary email address used for login (legacy; may be empty for phone-only accounts).
   final String email;
+
+  /// E.164 phone number used for login (e.g. `+971542891246`).
+  final String phone;
 
   /// Authorization role in the system (e.g., "agent", "admin").
   final String role;
@@ -28,6 +31,7 @@ class User extends Equatable {
     required this.id,
     required this.name,
     required this.email,
+    this.phone = '',
     required this.role,
     this.activeRouteId,
     this.assignedVanWarehouseId,
@@ -38,6 +42,7 @@ class User extends Equatable {
     String? id,
     String? name,
     String? email,
+    String? phone,
     String? role,
     String? activeRouteId,
     String? assignedVanWarehouseId,
@@ -46,6 +51,7 @@ class User extends Equatable {
       id: id ?? this.id,
       name: name ?? this.name,
       email: email ?? this.email,
+      phone: phone ?? this.phone,
       role: role ?? this.role,
       activeRouteId: activeRouteId ?? this.activeRouteId,
       assignedVanWarehouseId:
@@ -58,6 +64,7 @@ class User extends Equatable {
     id,
     name,
     email,
+    phone,
     role,
     activeRouteId,
     assignedVanWarehouseId,

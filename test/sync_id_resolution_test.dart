@@ -18,6 +18,7 @@ Future<List<ConnectivityResult>> fakeCheckConnectivity() async => [
 class FakeHiveDatabaseService extends HiveDatabaseService {
   final Map<String, SyncQueueItem> _queue = {};
   final Map<String, SalesOrder> _orders = {};
+  final Map<String, int> _counters = {};
 
   @override
   List<SyncQueueItem> getSyncQueue() => _queue.values.toList();
@@ -43,6 +44,20 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
   @override
   Future<void> saveLocalOrder(SalesOrder order) async {
     _orders[order.id] = order;
+  }
+
+  @override
+  String? get voucherPrefix => 'SHB-';
+
+  @override
+  String? get primaryWarehouseId => '3331482000000095023';
+
+  @override
+  int? getDocCounter(String typeTag) => _counters[typeTag];
+
+  @override
+  Future<void> setDocCounter(String typeTag, int value) async {
+    _counters[typeTag] = value;
   }
 }
 
@@ -147,7 +162,7 @@ void main() {
         await db.saveLocalOrder(
           SalesOrder(
             id: 'temp_so_1',
-            orderNumber: 'SO-TEMP-1',
+            orderNumber: 'SHB-SO-00001',
             customerId: 'cust_1',
             customerName: 'Acme',
             date: DateTime.now(),

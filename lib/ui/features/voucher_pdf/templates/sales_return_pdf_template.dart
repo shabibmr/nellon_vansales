@@ -3,6 +3,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../core/utils/quantity_format.dart';
 import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Sales Return (Credit Note) documents.
@@ -150,10 +151,11 @@ class SalesReturnPdfTemplate {
                         isSubText: true,
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '${returnVoucher.items[i].returnedQuantity}',
+                        '${formatQuantity(returnVoucher.items[i].returnedQuantity)}'
+                        '${returnVoucher.items[i].displayUom.isNotEmpty ? ' ${returnVoucher.items[i].displayUom}' : ''}',
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '$currencySymbol${returnVoucher.items[i].invoiceLineItem.rate.toStringAsFixed(2)}',
+                        '$currencySymbol${returnVoucher.items[i].rate.toStringAsFixed(2)}',
                       ),
                       SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${returnVoucher.items[i].total.toStringAsFixed(2)}',

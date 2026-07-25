@@ -7,6 +7,7 @@ import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/dashboard_nav_cubit.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/daily_stats_cubit.dart';
+import 'package:van_sales/ui/features/dashboard/cubit/list_layout_cubit.dart';
 
 class FakeHiveDatabaseService extends HiveDatabaseService {
   List<SalesInvoice> invoices = [];
@@ -59,6 +60,34 @@ void main() {
     test('setTab updates the tab index successfully', () {
       cubit.setTab(3);
       expect(cubit.state, 3);
+    });
+  });
+
+  group('ListLayoutCubit Tests', () {
+    late ListLayoutCubit cubit;
+
+    setUp(() {
+      cubit = ListLayoutCubit();
+    });
+
+    tearDown(() {
+      cubit.close();
+    });
+
+    test('defaults to list mode (false)', () {
+      expect(cubit.state, isFalse);
+    });
+
+    test('setGrid(true) enables grid mode', () {
+      cubit.setGrid(true);
+      expect(cubit.state, isTrue);
+    });
+
+    test('toggle flips list and grid modes', () {
+      cubit.toggle();
+      expect(cubit.state, isTrue);
+      cubit.toggle();
+      expect(cubit.state, isFalse);
     });
   });
 

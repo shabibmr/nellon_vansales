@@ -14,6 +14,12 @@ class ClientOperationsSheet extends StatelessWidget {
   final VoidCallback onReceiptPaymentTap;
   final VoidCallback onSalesReturnTap;
 
+  /// When true (no van mapped), invoice/return stay blocked; order + receipt stay active.
+  final bool ordersOnly;
+
+  /// Fired when a blocked tile is tapped in orders-only mode.
+  final VoidCallback? onBlocked;
+
   const ClientOperationsSheet({
     super.key,
     required this.customer,
@@ -22,6 +28,8 @@ class ClientOperationsSheet extends StatelessWidget {
     required this.onNewOrderTap,
     required this.onReceiptPaymentTap,
     required this.onSalesReturnTap,
+    this.ordersOnly = false,
+    this.onBlocked,
   });
 
   @override
@@ -123,6 +131,8 @@ class ClientOperationsSheet extends StatelessWidget {
                 color: AppTheme.primaryIndigo,
                 isDark: isDark,
                 onTap: onNewInvoiceTap,
+                enabled: !ordersOnly,
+                onBlocked: onBlocked,
               ),
               const SizedBox(height: 14),
               VanActionTile(
@@ -153,6 +163,8 @@ class ClientOperationsSheet extends StatelessWidget {
                 color: AppTheme.errorRose,
                 isDark: isDark,
                 onTap: onSalesReturnTap,
+                enabled: !ordersOnly,
+                onBlocked: onBlocked,
               ),
 
               // Optional navigate using GPS

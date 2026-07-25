@@ -6,6 +6,7 @@ import '../../../../data/services/injection.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/warehouse.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/utils/quantity_format.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/editor_footer.dart';
 import '../../../../ui/core/widgets/empty_state.dart';
@@ -42,7 +43,7 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
   TextEditingController _controllerFor(StockTransferRow row) {
     return _extraControllers.putIfAbsent(
       row.item.id,
-      () => TextEditingController(text: row.extraQty.toString()),
+      () => TextEditingController(text: formatQuantity(row.extraQtyEntered)),
     );
   }
 
@@ -50,6 +51,12 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
     final warehouses = _db.getWarehouses();
     if (warehouses.isEmpty) {
       return const Warehouse(id: '', name: 'Default Warehouse', address: '');
+    }
+    final primaryId = _db.primaryWarehouseId;
+    if (primaryId != null && primaryId.isNotEmpty) {
+      for (final w in warehouses) {
+        if (w.id == primaryId) return w;
+      }
     }
     return warehouses.firstWhere(
       (w) => w.isPrimary,
@@ -87,36 +94,96 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
     );
 
     if (selected == null || !mounted) return;
-    final qty = await _promptQuantity(selected!.name);
-    if (qty != null && qty > 0 && mounted) {
-      bloc.add(AddExtraItem(item: selected!, quantity: qty));
+    final entry = await _promptQuantity(selected!);
+    if (entry != null && entry.quantity > 0 && mounted) {
+      bloc.add(
+        AddExtraItem(
+          item: selected!,
+          quantity: entry.quantity,
+          uom: entry.uom,
+          conversionRate: entry.conversionRate,
+        ),
+      );
     }
   }
 
-  Future<int?> _promptQuantity(String itemName) async {
+  /// Prompts for a quantity and (for multi-UOM items) the unit it is entered
+  /// in. Returns null when cancelled.
+  Future<({double quantity, String uom, double conversionRate})?>
+      _promptQuantity(Item item) async {
     final controller = TextEditingController(text: '1');
-    final result = await showDialog<int>(
+    final unitOptions = [
+      if (item.uom.trim().isNotEmpty) item.uom.trim(),
+      ...item.unitConversions.map((c) => c.targetUnit),
+    ];
+    var selectedUom = unitOptions.isNotEmpty ? unitOptions.first : '';
+    final result =
+        await showDialog<({double quantity, String uom, double conversionRate})>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Extra Qty — $itemName'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(labelText: 'Quantity'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, int.tryParse(controller.text) ?? 0),
-            child: const Text('Add'),
-          ),
-        ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final decimals =
+              item.conversionFor(selectedUom)?.quantityDecimalPlaces ?? 3;
+          return AlertDialog(
+            title: Text('Extra Qty — ${item.name}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  keyboardType: decimals > 0
+                      ? const TextInputType.numberWithOptions(decimal: true)
+                      : TextInputType.number,
+                  autofocus: true,
+                  inputFormatters: [
+                    decimals > 0
+                        ? FilteringTextInputFormatter.allow(
+                            RegExp('^\\d*\\.?\\d{0,$decimals}'),
+                          )
+                        : FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  decoration: const InputDecoration(labelText: 'Quantity'),
+                ),
+                if (unitOptions.length > 1) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedUom,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Unit',
+                      isDense: true,
+                    ),
+                    items: unitOptions
+                        .map(
+                          (u) => DropdownMenuItem<String>(
+                            value: u,
+                            child: Text(u, overflow: TextOverflow.ellipsis),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (u) {
+                      if (u != null) setDialogState(() => selectedUom = u);
+                    },
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, (
+                  quantity: double.tryParse(controller.text) ?? 0,
+                  uom: selectedUom,
+                  conversionRate: item.conversionRateFor(selectedUom),
+                )),
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
       ),
     );
     controller.dispose();
@@ -201,7 +268,7 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                   rows: [
                     (
                       label: 'Total Quantity to Issue:',
-                      value: '${state.totalTransferQty}',
+                      value: formatQuantity(state.totalTransferQty),
                       emphasize: true,
                     ),
                   ],
@@ -233,6 +300,95 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
           },
         ),
       ),
+    );
+  }
+
+  /// Editable extra-quantity cell: a qty field entered in the row's selected
+  /// unit, plus a compact unit dropdown for multi-UOM items.
+  Widget _buildExtraQtyCell(BuildContext context, StockTransferRow row) {
+    final unitOptions = [
+      if (row.item.uom.trim().isNotEmpty) row.item.uom.trim(),
+      ...row.item.unitConversions.map((c) => c.targetUnit),
+    ];
+    final selUom = row.displayUom;
+    final decimals =
+        row.item.conversionFor(selUom)?.quantityDecimalPlaces ?? 3;
+
+    final qtyField = SizedBox(
+      width: 70,
+      child: TextField(
+        controller: _controllerFor(row),
+        keyboardType: decimals > 0
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.number,
+        textAlign: TextAlign.center,
+        inputFormatters: [
+          decimals > 0
+              ? FilteringTextInputFormatter.allow(
+                  RegExp('^\\d*\\.?\\d{0,$decimals}'),
+                )
+              : FilteringTextInputFormatter.digitsOnly,
+        ],
+        decoration: const InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(vertical: 8),
+        ),
+        onChanged: (val) {
+          context.read<StockTransferBloc>().add(
+            UpdateExtraQty(
+              itemId: row.item.id,
+              quantity: double.tryParse(val) ?? 0,
+            ),
+          );
+        },
+      ),
+    );
+
+    if (unitOptions.length <= 1) return qtyField;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        qtyField,
+        SizedBox(
+          height: 28,
+          child: DropdownButton<String>(
+            value: unitOptions.contains(selUom) ? selUom : unitOptions.first,
+            isDense: true,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppTheme.darkTextSecondary
+                  : AppTheme.lightTextSecondary,
+            ),
+            items: unitOptions
+                .map(
+                  (u) => DropdownMenuItem<String>(
+                    value: u,
+                    child: Text(u, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: (u) {
+              if (u == null) return;
+              context.read<StockTransferBloc>().add(
+                UpdateRowUnit(
+                  itemId: row.item.id,
+                  uom: u,
+                  conversionRate: row.item.conversionRateFor(u),
+                ),
+              );
+              // Re-express the entered quantity in the new unit.
+              final rate = row.item.conversionRateFor(u);
+              final entered = rate > 0 ? row.extraQty / rate : row.extraQty;
+              _extraControllers[row.item.id]?.text =
+                  row.extraQty > 0 ? formatQuantity(entered) : '';
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -300,40 +456,18 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                 ),
                 align: Alignment.centerLeft,
               ),
-              dataCell(Text('${row.currentStock}')),
-              dataCell(Text('${row.invoiceQty}')),
+              dataCell(Text(formatQuantity(row.currentStock))),
+              dataCell(Text(formatQuantity(row.invoiceQty))),
               dataCell(
                 Text(
-                  '${row.subtotal}',
+                  formatQuantity(row.subtotal),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-              dataCell(
-                SizedBox(
-                  width: 70,
-                  child: TextField(
-                    controller: _controllerFor(row),
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 8),
-                    ),
-                    onChanged: (val) {
-                      context.read<StockTransferBloc>().add(
-                        UpdateExtraQty(
-                          itemId: row.item.id,
-                          quantity: int.tryParse(val) ?? 0,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
+              dataCell(_buildExtraQtyCell(context, row)),
               dataCell(
                 Text(
-                  '${row.grandTotal}',
+                  formatQuantity(row.grandTotal),
                   style: const TextStyle(
                     fontWeight: FontWeight.w900,
                     color: AppTheme.primaryIndigo,

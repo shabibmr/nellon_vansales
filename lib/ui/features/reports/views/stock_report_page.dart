@@ -32,7 +32,6 @@ class StockReportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportBlocHost<Item>(
       create: (_) => ReportBloc<Item>(
-        getLocal: () => sl<HiveDatabaseService>().getItems(),
         fetchRemote: () async {
           final locationId = sl<HiveDatabaseService>().assignedWarehouseId;
           final raw = await sl<ZohoApiClient>().fetchItems(locationId ?? '');
@@ -133,9 +132,9 @@ class _StockReportBodyState extends State<_StockReportBody> {
             emptyTitle: hasQuery ? 'No matching items' : 'No stock found',
             emptyMessage: hasQuery
                 ? 'No items match "${filterState.query.trim()}".\n'
-                    'Try a different name or SKU.'
+                      'Try a different name or SKU.'
                 : 'No items are available for your assigned location.\n'
-                    'Sync masters or check your location mapping.',
+                      'Sync masters or check your location mapping.',
             banner: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -184,7 +183,9 @@ class _StockReportBodyState extends State<_StockReportBody> {
                             ),
                             onPressed: () {
                               _searchController.clear();
-                              context.read<ListFilterCubit<Item>>().setQuery('');
+                              context.read<ListFilterCubit<Item>>().setQuery(
+                                '',
+                              );
                             },
                           )
                         : null,
@@ -221,8 +222,9 @@ class _StockReportBodyState extends State<_StockReportBody> {
                 margin: EdgeInsets.zero,
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor:
-                        AppTheme.primaryIndigo.withValues(alpha: 0.1),
+                    backgroundColor: AppTheme.primaryIndigo.withValues(
+                      alpha: 0.1,
+                    ),
                     child: const Icon(
                       Icons.inventory_2_outlined,
                       color: AppTheme.primaryIndigo,

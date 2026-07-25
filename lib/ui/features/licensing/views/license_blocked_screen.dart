@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_logo.dart';
 
 /// A secure, premium screen displayed when a device has been blocked or license has expired.
 ///
@@ -159,15 +160,11 @@ class LicenseBlockedScreen extends StatelessWidget {
 
                   const Spacer(flex: 2),
 
-                  // Footer security banner
+                  // Footer brand + security banner
                   const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.security_rounded,
-                        size: 16,
-                        color: Color(0xFF475569),
-                      ),
+                      AppLogo(size: 20),
                       SizedBox(width: 8),
                       Text(
                         'Van Sales Pro • Enterprise Security Gate',

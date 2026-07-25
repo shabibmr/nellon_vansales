@@ -30,9 +30,7 @@ class ReportBlocHost<T> extends StatelessWidget {
         listener: (context, state) {
           showErrorSnackBar(context, '$errorPrefix: ${state.error}');
         },
-        child: BlocBuilder<ReportBloc<T>, ReportState<T>>(
-          builder: builder,
-        ),
+        child: BlocBuilder<ReportBloc<T>, ReportState<T>>(builder: builder),
       ),
     );
   }

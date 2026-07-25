@@ -6,6 +6,7 @@ import '../../../domain/repositories/sales_repository.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
+import '../utils/snackbars.dart';
 import '../cubit/list_filter_cubit.dart';
 
 /// Generic item-search bottom sheet shared by sales order, invoice, and return flows.
@@ -114,12 +115,22 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
     if (_resolvingItemId != null) return;
     setState(() => _resolvingItemId = item.id);
     Item resolved = item;
+    var offlineFallback = false;
     try {
-      resolved = await sl<SalesRepository>().resolveItemUnitConversions(item);
+      final result =
+          await sl<SalesRepository>().resolveItemUnitConversions(item);
+      resolved = result.item;
+      offlineFallback = result.offlineFallback;
     } finally {
       if (mounted) setState(() => _resolvingItemId = null);
     }
     if (!sheetContext.mounted) return;
+    if (offlineFallback) {
+      showErrorSnackBar(
+        sheetContext,
+        "Couldn't load other units — using base unit.",
+      );
+    }
     await widget.onSelected(resolved, sheetContext);
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/currency.dart';
+import '../utils/quantity_format.dart';
 
 /// A single editable line-item row shared by order/invoice/return editors.
 class LineItemRow {
@@ -8,9 +9,11 @@ class LineItemRow {
   final String sku;
   final double rate;
   final double taxPercentage;
-  final int quantity;
+  final double quantity;
   final double total;
   final double discount;
+  /// Unit of measure label (e.g. pcs, kg). Empty when unknown.
+  final String uom;
   final Color accentColor;
 
   const LineItemRow({
@@ -21,28 +24,32 @@ class LineItemRow {
     required this.quantity,
     required this.total,
     this.discount = 0.0,
+    this.uom = '',
     this.accentColor = AppTheme.primaryIndigo,
   });
 }
 
 /// Shared non-scrollable list of line item cards for editor pages.
+///
+/// When [onEdit] / [onRemove] are null the row is view-only (no tap, no delete).
 class LineItemList extends StatelessWidget {
   final List<LineItemRow> items;
   final String currencySymbol;
-  final void Function(int index) onEdit;
-  final void Function(int index) onRemove;
+  final void Function(int index)? onEdit;
+  final void Function(int index)? onRemove;
 
   const LineItemList({
     super.key,
     required this.items,
     required this.currencySymbol,
-    required this.onEdit,
-    required this.onRemove,
+    this.onEdit,
+    this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final editable = onEdit != null || onRemove != null;
 
     return ListView.separated(
       shrinkWrap: true,
@@ -53,7 +60,7 @@ class LineItemList extends StatelessWidget {
         final line = items[index];
         return Card(
           child: InkWell(
-            onTap: () => onEdit(index),
+            onTap: onEdit == null ? null : () => onEdit!(index),
             borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.all(12.0),
@@ -72,7 +79,9 @@ class LineItemList extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'SKU: ${line.sku} | Rate: ${formatCurrency(line.rate, currencySymbol)} | VAT: ${line.taxPercentage}%'
+                          'SKU: ${line.sku}'
+                          '${line.uom.isNotEmpty ? ' | UOM: ${line.uom}' : ''}'
+                          ' | Rate: ${formatCurrency(line.rate, currencySymbol)} | VAT: ${line.taxPercentage}%'
                           '${line.discount > 0 ? ' | Disc: ${formatCurrency(line.discount, currencySymbol)}' : ''}',
                           style: TextStyle(
                             fontSize: 11,
@@ -88,7 +97,9 @@ class LineItemList extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        'Qty: ${line.quantity}',
+                        line.uom.isNotEmpty
+                            ? 'Qty: ${formatQuantity(line.quantity)} ${line.uom}'
+                            : 'Qty: ${formatQuantity(line.quantity)}',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
@@ -105,17 +116,20 @@ class LineItemList extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: AppTheme.errorRose,
-                      size: 20,
+                  if (onRemove != null) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: AppTheme.errorRose,
+                        size: 20,
+                      ),
+                      onPressed: () => onRemove!(index),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
-                    onPressed: () => onRemove(index),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                  ] else if (!editable)
+                    const SizedBox(width: 4),
                 ],
               ),
             ),

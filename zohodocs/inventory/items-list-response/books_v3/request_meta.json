@@ -1,0 +1,12 @@
+{
+  "api_label": "Books v3",
+  "method": "GET",
+  "url_template": "https://www.zohoapis.com/books/v3/items?organization_id=783019958&per_page=200&page={n}",
+  "organization_id": "783019958",
+  "pages_ok": 6,
+  "total_items": 1081,
+  "success": true,
+  "error": null,
+  "fetched_at": "2026-07-17T12:37:25.2508729Z",
+  "spec_ref": "zohodocs/inventory/items.yml → list_items (GET /items)"
+}

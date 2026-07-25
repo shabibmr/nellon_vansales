@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/theme/theme_cubit.dart';
+import '../../../../ui/core/widgets/app_logo.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../data/services/hive_database_service.dart';
@@ -22,12 +23,17 @@ import '../widgets/invoice_flow_sheet.dart';
 import '../widgets/receipt_payment_dialog.dart';
 import '../widgets/sales_return_dialog.dart';
 import '../widgets/cash_closing_dialog.dart';
+import '../../sales_invoice/bloc/sales_invoice_bloc.dart';
 import '../../sales_invoice/views/sales_invoice_list_page.dart';
+import '../../sales_invoice/views/sales_invoice_editor_page.dart';
 import '../../sales_order/views/sales_order_list_page.dart';
 import '../../sales_order/bloc/sales_order_bloc.dart';
 import '../../sales_order/views/sales_order_editor_page.dart';
 import '../../sales_return/bloc/sales_return_bloc.dart';
 import '../../sales_return/views/sales_return_list_page.dart';
+import '../../sales_return/views/sales_return_editor_page.dart';
+import '../../expenses/views/expense_editor_page.dart';
+import '../../receipts/views/receipt_editor_page.dart';
 import '../../stock_transfer/bloc/stock_transfer_bloc.dart';
 import '../../stock_transfer/views/issue_to_van_page.dart';
 import '../../stock_transfer/views/stock_unloading_page.dart';
@@ -42,16 +48,20 @@ import '../../reports/views/sales_summary_by_customer_item_report_page.dart';
 import '../../reports/views/itemwise_orders_summary_report_page.dart';
 import '../../reports/views/orders_summary_by_customer_report_page.dart';
 import '../../reports/views/order_status_report_page.dart';
+import '../../reports/views/shipment_orders_report_page.dart';
 import '../../reports/views/itemwise_returns_summary_report_page.dart';
 import '../../reports/views/customerwise_returns_summary_report_page.dart';
 import '../../ledger/bloc/customer_ledger_bloc.dart';
 import '../../ledger/views/customer_ledger_page.dart';
 import '../../sync/views/masters_sync_page.dart';
 import '../../licensing/widgets/mock_live_switch_tile.dart';
+import '../../settings/views/settings_page.dart';
+import '../../profile/views/user_profile_page.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../cubit/dashboard_nav_cubit.dart';
 import '../cubit/daily_stats_cubit.dart';
 import '../cubit/daily_stats_state.dart';
+import '../cubit/list_layout_cubit.dart';
 
 /// The central workspace of the Van Sales application.
 ///
@@ -69,6 +79,9 @@ class DashboardPage extends StatelessWidget {
         ),
         BlocProvider<DailyStatsCubit>(
           create: (_) => DailyStatsCubit(dbService: sl<HiveDatabaseService>()),
+        ),
+        BlocProvider<ListLayoutCubit>(
+          create: (_) => ListLayoutCubit(),
         ),
       ],
       child: const _DashboardPageView(),
@@ -124,6 +137,8 @@ class _DashboardPageView extends StatelessWidget {
         return ClientOperationsSheet(
           customer: customer,
           isDark: isDark,
+          ordersOnly: sl<HiveDatabaseService>().ordersOnlyMode,
+          onBlocked: () => _blockIfOrdersOnly(context),
           onNewInvoiceTap: () {
             Navigator.pop(sheetCtx);
             _launchInvoiceFlow(context, dailyStatsCubit, customer, isDark);
@@ -159,6 +174,7 @@ class _DashboardPageView extends StatelessWidget {
   }
 
   void _launchInvoiceFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
+    if (_blockIfOrdersOnly(context)) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -191,6 +207,7 @@ class _DashboardPageView extends StatelessWidget {
   }
 
   void _launchSalesReturnFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
+    if (_blockIfOrdersOnly(context)) return;
     showDialog(
       context: context,
       builder: (context) => SalesReturnDialog(
@@ -282,6 +299,13 @@ class _DashboardPageView extends StatelessWidget {
     );
   }
 
+  void _showOrdersByShipmentDateReport(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ShipmentOrdersReportPage()),
+    );
+  }
+
   void _showOrdersReadyReport(BuildContext context) {
     Navigator.push(
       context,
@@ -348,7 +372,27 @@ class _DashboardPageView extends StatelessWidget {
     );
   }
 
+  void _showSalesInvoiceListPage(BuildContext context, DailyStatsCubit statsCubit) {
+    if (_blockIfOrdersOnly(context)) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SalesInvoiceListPage()),
+    ).then((_) {
+      statsCubit.refresh();
+    });
+  }
+
+  void _showSalesOrderListPage(BuildContext context, DailyStatsCubit statsCubit) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SalesOrderListPage()),
+    ).then((_) {
+      statsCubit.refresh();
+    });
+  }
+
   void _showSalesReturnListPage(BuildContext context, DailyStatsCubit statsCubit) {
+    if (_blockIfOrdersOnly(context)) return;
     context.read<SalesReturnBloc>().add(LoadReturns());
     Navigator.push(
       context,
@@ -372,6 +416,66 @@ class _DashboardPageView extends StatelessWidget {
     ).then((_) => statsCubit.refresh());
   }
 
+  /// Defense in depth for orders-only sessions (no van mapped): stock-touching
+  /// create/manage entry points check this before navigating — not just the
+  /// dashboard tiles. SO, Receipts, Expenses, and Cash Closing are allowed.
+  /// Returns true (and shows the explainer snackbar) when blocked.
+  bool _blockIfOrdersOnly(BuildContext context) {
+    if (!sl<HiveDatabaseService>().ordersOnlyMode) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Van not assigned — invoices, returns, and stock moves are blocked. '
+          'Sales Orders, Receipts, Expenses, and Cash Closing are available. '
+          'Contact admin for a van.',
+        ),
+      ),
+    );
+    return true;
+  }
+
+  void _createNewInvoice(BuildContext context, DailyStatsCubit statsCubit) {
+    if (_blockIfOrdersOnly(context)) return;
+    context.read<SalesInvoiceBloc>().add(StartNewInvoice());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SalesInvoiceEditorPage()),
+    ).then((_) => statsCubit.refresh());
+  }
+
+  void _createNewOrder(BuildContext context, DailyStatsCubit statsCubit) {
+    context.read<SalesOrderBloc>().add(StartNewOrder());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SalesOrderEditorPage()),
+    ).then((_) => statsCubit.refresh());
+  }
+
+  void _createNewExpense(BuildContext context, DailyStatsCubit statsCubit) {
+    context.read<ExpenseBloc>().add(StartNewExpense());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ExpenseEditorPage()),
+    ).then((_) => statsCubit.refresh());
+  }
+
+  void _createNewReceipt(BuildContext context, DailyStatsCubit statsCubit) {
+    context.read<ReceiptBloc>().add(StartNewReceipt());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReceiptEditorPage()),
+    ).then((_) => statsCubit.refresh());
+  }
+
+  void _createNewReturn(BuildContext context, DailyStatsCubit statsCubit) {
+    if (_blockIfOrdersOnly(context)) return;
+    context.read<SalesReturnBloc>().add(StartNewReturn());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SalesReturnEditorPage()),
+    ).then((_) => statsCubit.refresh());
+  }
+
   void _showCustomerLedgerPage(BuildContext context) {
     Navigator.push(
       context,
@@ -392,6 +496,7 @@ class _DashboardPageView extends StatelessWidget {
   }
 
   void _showIssueToVanPage(BuildContext context, DailyStatsCubit statsCubit) {
+    if (_blockIfOrdersOnly(context)) return;
     context.read<StockTransferBloc>().add(LoadIssueGrid());
     Navigator.push(
       context,
@@ -400,6 +505,7 @@ class _DashboardPageView extends StatelessWidget {
   }
 
   void _showStockUnloadingPage(BuildContext context, DailyStatsCubit statsCubit) {
+    if (_blockIfOrdersOnly(context)) return;
     context.read<StockTransferBloc>().add(LoadUnloadGrid());
     Navigator.push(
       context,
@@ -463,10 +569,20 @@ class _DashboardPageView extends StatelessWidget {
                 todayPayments: statsState.todayPayments,
                 todayExpenses: statsState.todayExpenses,
                 todayReturns: statsState.todayReturns,
+                todayOrdersTotal: statsState.todayOrdersTotal,
                 completedDeliveries: statsState.completedDeliveries,
+                last7DaysSales: statsState.last7DaysSales,
+                onTapSales: () => _showSalesInvoiceListPage(context, statsCubit),
+                onTapReceipts: () => _showReceiptListPage(context, statsCubit),
+                onTapExpenses: () => _showExpenseListPage(context, statsCubit),
+                onTapDeliveries: () => _showSalesInvoiceListPage(context, statsCubit),
+                onTapOrders: () => _showSalesOrderListPage(context, statsCubit),
+                onTapReturns: () => _showSalesReturnListPage(context, statsCubit),
               ),
               OperationsTab(
                 isDark: isDark || isGlass,
+                ordersOnly: sl<HiveDatabaseService>().ordersOnlyMode,
+                onBlocked: () => _blockIfOrdersOnly(context),
                 onCashClosing: () => _showCashClosingForm(
                   context,
                   statsCubit,
@@ -477,26 +593,15 @@ class _DashboardPageView extends StatelessWidget {
                 onManageExpenses: () => _showExpenseListPage(context, statsCubit),
                 onManageReceipts: () => _showReceiptListPage(context, statsCubit),
                 onManageReturns: () => _showSalesReturnListPage(context, statsCubit),
-                onManageInvoices: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SalesInvoiceListPage(),
-                    ),
-                  ).then((_) {
-                    statsCubit.refresh();
-                  });
-                },
-                onManageOrders: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SalesOrderListPage()),
-                  ).then((_) {
-                    statsCubit.refresh();
-                  });
-                },
+                onManageInvoices: () => _showSalesInvoiceListPage(context, statsCubit),
+                onManageOrders: () => _showSalesOrderListPage(context, statsCubit),
                 onIssueToVan: () => _showIssueToVanPage(context, statsCubit),
                 onStockUnloading: () => _showStockUnloadingPage(context, statsCubit),
+                onCreateInvoice: () => _createNewInvoice(context, statsCubit),
+                onCreateOrder: () => _createNewOrder(context, statsCubit),
+                onCreateExpense: () => _createNewExpense(context, statsCubit),
+                onCreateReceipt: () => _createNewReceipt(context, statsCubit),
+                onCreateReturn: () => _createNewReturn(context, statsCubit),
               ),
               ReportsTab(
                 isDark: isDark,
@@ -511,6 +616,7 @@ class _DashboardPageView extends StatelessWidget {
                 onSalesSummaryByCustomerItemReport: () => _showSalesSummaryByCustomerItemReport(context),
                 onItemwiseOrdersSummaryReport: () => _showItemwiseOrdersSummaryReport(context),
                 onOrdersSummaryByCustomerReport: () => _showOrdersSummaryByCustomerReport(context),
+                onOrdersByShipmentDateReport: () => _showOrdersByShipmentDateReport(context),
                 onOrdersReadyReport: () => _showOrdersReadyReport(context),
                 onPendingOrdersReport: () => _showPendingOrdersReport(context),
                 onOrdersInvoicedReport: () => _showOrdersInvoicedReport(context),
@@ -539,11 +645,7 @@ class _DashboardPageView extends StatelessWidget {
                                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
                                   child: Row(
                                     children: [
-                                      const Icon(
-                                        Icons.local_shipping_rounded,
-                                        color: AppTheme.primaryIndigo,
-                                        size: 28,
-                                      ),
+                                      const AppLogo(size: 36),
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Text(
@@ -575,6 +677,42 @@ class _DashboardPageView extends StatelessWidget {
                                   title: Text(themeTooltip),
                                   onTap: () => context.read<ThemeCubit>().toggleTheme(),
                                 ),
+                                ListTile(
+                                  leading: Icon(
+                                    Icons.person_outline,
+                                    color: isGlass
+                                        ? Colors.cyanAccent
+                                        : AppTheme.primaryIndigo,
+                                  ),
+                                  title: const Text('My Profile'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const UserProfilePage(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                ListTile(
+                                  leading: Icon(
+                                    Icons.settings_outlined,
+                                    color: isGlass
+                                        ? Colors.cyanAccent
+                                        : AppTheme.primaryIndigo,
+                                  ),
+                                  title: const Text('Printer & Settings'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const SettingsPage(),
+                                      ),
+                                    );
+                                  },
+                                ),
                                 const MockLiveSwitchTile(),
                               ],
                             ),
@@ -597,11 +735,7 @@ class _DashboardPageView extends StatelessWidget {
                           )
                         : Row(
                             children: [
-                              const Icon(
-                                Icons.local_shipping_rounded,
-                                color: AppTheme.primaryIndigo,
-                                size: 20,
-                              ),
+                              const AppLogo(size: 28),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -679,6 +813,30 @@ class _DashboardPageView extends StatelessWidget {
                                   ],
                                 ),
                               ),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'My Profile',
+                        icon: const Icon(Icons.person_outline),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const UserProfilePage(),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'Printer & Settings',
+                        icon: const Icon(Icons.settings_outlined),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsPage(),
                             ),
                           );
                         },
@@ -798,11 +956,7 @@ class _DashboardPageView extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.local_shipping_rounded,
-                    color: AppTheme.primaryIndigo,
-                    size: 28,
-                  ),
+                  const AppLogo(size: 40),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -913,6 +1067,56 @@ class _DashboardPageView extends StatelessWidget {
                     leading: Icon(themeIcon, color: themeColor),
                     title: Text(themeTooltip, style: const TextStyle(fontSize: 13)),
                     onTap: () => context.read<ThemeCubit>().toggleTheme(),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: Icon(
+                      Icons.person_outline,
+                      color: isGlass
+                          ? Colors.cyanAccent
+                          : AppTheme.primaryIndigo,
+                    ),
+                    title: const Text(
+                      'My Profile',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UserProfilePage(),
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: Icon(
+                      Icons.settings_outlined,
+                      color: isGlass
+                          ? Colors.cyanAccent
+                          : AppTheme.primaryIndigo,
+                    ),
+                    title: const Text(
+                      'Printer & Settings',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsPage(),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   const MockLiveSwitchTile(),

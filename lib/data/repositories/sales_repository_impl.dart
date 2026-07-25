@@ -58,15 +58,21 @@ class SalesRepositoryImpl implements SalesRepository {
   Future<void> saveItems(List<Item> items) => _dbService.saveItems(items);
 
   @override
-  Future<Item> resolveItemUnitConversions(Item item) async {
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(
+    Item item,
+  ) async {
     // Already enriched (e.g. carried on an existing line item) — nothing to do.
-    if (item.unitConversions.isNotEmpty) return item;
+    if (item.unitConversions.isNotEmpty) {
+      return (item: item, offlineFallback: false);
+    }
 
     // Previously resolved: serve from the dedicated item-UOM box. A cached but
     // empty entry means "checked, none exist" — still short-circuits the fetch.
     if (_dbService.hasItemUnitConversions(item.id)) {
       final cached = _dbService.getItemUnitConversions(item.id);
-      return cached.isEmpty ? item : item.copyWith(unitConversions: cached);
+      final resolved =
+          cached.isEmpty ? item : item.copyWith(unitConversions: cached);
+      return (item: resolved, offlineFallback: false);
     }
 
     // First selection while (hopefully) online — the /items list endpoint never
@@ -83,9 +89,10 @@ class SalesRepositoryImpl implements SalesRepository {
               .toList();
       // Persist even when empty so we don't re-hit Zoho for this item.
       await _dbService.saveItemUnitConversions(item.id, conversions);
-      return conversions.isEmpty
+      final resolved = conversions.isEmpty
           ? item
           : item.copyWith(unitConversions: conversions);
+      return (item: resolved, offlineFallback: false);
     } catch (e) {
       // Offline / rate-limited / any failure: fall back to base-unit-only and
       // do NOT cache, so a later online selection retries the fetch.
@@ -93,7 +100,7 @@ class SalesRepositoryImpl implements SalesRepository {
         'SalesRepository',
         'resolveItemUnitConversions(${item.id}) error: $e',
       );
-      return item;
+      return (item: item, offlineFallback: true);
     }
   }
 

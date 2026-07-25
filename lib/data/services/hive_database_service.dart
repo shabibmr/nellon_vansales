@@ -321,6 +321,14 @@ class HiveDatabaseService {
     await _itemUomBox.put(itemId, serialized);
   }
 
+  /// Drops every cached multi-UOM entry.
+  ///
+  /// Called when the items master is re-downloaded so the next selection
+  /// re-fetches conversions from Zoho (units may have changed).
+  Future<void> clearItemUnitConversions() async {
+    await _itemUomBox.clear();
+  }
+
   /// Retrieves the list of synced master routes.
   List<RouteModel> getRoutes() {
     final rawList = _masterBox.get('routes', defaultValue: []);

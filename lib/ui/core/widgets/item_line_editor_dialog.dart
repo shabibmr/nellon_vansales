@@ -7,6 +7,7 @@ import '../../../domain/models/item.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
+import '../utils/quantity_format.dart';
 import '../cubit/line_editor_cubit.dart';
 import 'dialog_scaffolding.dart';
 
@@ -21,14 +22,31 @@ const double _kWideLayoutMinWidth = 400;
 /// Layout is mobile-first and responsive: narrow phones use a compact 2-column
 /// field grid; wider surfaces put quantity/rate/discount on one row. Content is
 /// sized to fit without an always-on scroll view.
+/// Result of [SharedItemLineEditorDialog]: quantity, rate, discount, UOM and
+/// the Zoho unit_conversion_id of the selected unit ('' for the base unit).
+///
+/// [quantity] and [rate] are expressed in the selected unit.
+typedef ItemLineEditorResult = ({
+  double quantity,
+  double rate,
+  double discount,
+  String uom,
+  String unitConversionId,
+});
+
 class SharedItemLineEditorDialog extends StatelessWidget {
   final Item item;
-  final int initialQuantity;
-  final int originalQuantity;
+  final double initialQuantity;
+
+  /// The quantity already billed on the invoice being edited, in the item's
+  /// **base unit** (used to widen the stock cap when re-editing a line).
+  final double originalQuantity;
   final bool allowUnlimitedQuantity;
   final String title;
   final double? initialRate;
   final double? initialDiscount;
+  /// Pre-selected unit of measure (edit mode). Falls back to [Item.uom].
+  final String? initialUom;
 
   const SharedItemLineEditorDialog({
     super.key,
@@ -39,14 +57,18 @@ class SharedItemLineEditorDialog extends StatelessWidget {
     this.title = 'Line Item Details',
     this.initialRate,
     this.initialDiscount,
+    this.initialUom,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveUom = (initialUom?.trim().isNotEmpty ?? false)
+        ? initialUom!.trim()
+        : item.uom;
     return BlocProvider<LineEditorCubit>(
       create: (_) => LineEditorCubit(
         initialQuantity: initialQuantity,
-        initialRate: initialRate ?? item.rate,
+        initialRate: initialRate ?? item.rateFor(effectiveUom),
         initialDiscount: initialDiscount ?? 0.0,
         taxPercentage: item.taxPercentage,
       ),
@@ -58,6 +80,7 @@ class SharedItemLineEditorDialog extends StatelessWidget {
         title: title,
         initialRate: initialRate,
         initialDiscount: initialDiscount,
+        initialUom: initialUom,
       ),
     );
   }
@@ -68,12 +91,13 @@ class SharedItemLineEditorDialog extends StatelessWidget {
 /// All reactive display logic (totals panel) uses [BlocBuilder]; no [setState] is called.
 class _LineEditorDialogBody extends StatefulWidget {
   final Item item;
-  final int initialQuantity;
-  final int originalQuantity;
+  final double initialQuantity;
+  final double originalQuantity;
   final bool allowUnlimitedQuantity;
   final String title;
   final double? initialRate;
   final double? initialDiscount;
+  final String? initialUom;
 
   const _LineEditorDialogBody({
     required this.item,
@@ -83,6 +107,7 @@ class _LineEditorDialogBody extends StatefulWidget {
     required this.title,
     this.initialRate,
     this.initialDiscount,
+    this.initialUom,
   });
 
   @override
@@ -93,38 +118,115 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   late final TextEditingController _quantityController;
   late final TextEditingController _rateController;
   late final TextEditingController _discountController;
+  late final TextEditingController _uomController;
   final _formKey = GlobalKey<FormState>();
-  late final int _maxAllowedStock;
+
+  /// Whether the item carries Zoho unit conversions — drives dropdown vs the
+  /// legacy free-text UOM field.
+  bool get _hasUnitOptions => widget.item.unitConversions.isNotEmpty;
+
+  /// Currently selected unit when [_hasUnitOptions]; otherwise mirrors the
+  /// free-text controller.
+  late String _selectedUom;
+
+  /// Base-unit multiplier of the selected unit (1.0 for the base unit).
+  double get _conversionRate =>
+      widget.item.conversionRateFor(_currentUom);
+
+  /// Decimal places allowed for quantities in the selected unit. The base
+  /// unit has no Zoho-declared precision — allow up to 3.
+  int get _quantityDecimals =>
+      widget.item.conversionFor(_currentUom)?.quantityDecimalPlaces ?? 3;
+
+  String get _currentUom =>
+      _hasUnitOptions ? _selectedUom : _uomController.text.trim();
+
+  /// Max stock available for this line, in the item's base unit.
+  double get _maxAllowedBaseStock =>
+      widget.item.stock + widget.originalQuantity;
+
+  /// Max stock expressed in the currently selected unit.
+  double get _maxAllowedStock =>
+      _conversionRate > 0 ? _maxAllowedBaseStock / _conversionRate : 0;
 
   @override
   void initState() {
     super.initState();
-    _maxAllowedStock = widget.item.stock + widget.originalQuantity;
     _quantityController = TextEditingController(
-      text: widget.initialQuantity > 0 ? widget.initialQuantity.toString() : '1',
+      text: widget.initialQuantity > 0
+          ? formatQuantity(widget.initialQuantity)
+          : '1',
     );
+    final fromLine = widget.initialUom?.trim() ?? '';
+    final fromItem = widget.item.uom.trim();
+    final initialUom = fromLine.isNotEmpty
+        ? fromLine
+        : (fromItem.isNotEmpty ? fromItem : '');
+    // Guard against a stale line uom that no longer matches any known unit.
+    _selectedUom = _hasUnitOptions && !_unitOptions.contains(initialUom)
+        ? fromItem
+        : initialUom;
+    _uomController = TextEditingController(text: initialUom);
+    _uomController.addListener(_onUomChanged);
     _rateController = TextEditingController(
-      text: (widget.initialRate ?? widget.item.rate).toStringAsFixed(2),
+      text: (widget.initialRate ?? widget.item.rateFor(_currentUom))
+          .toStringAsFixed(2),
     );
     _discountController = TextEditingController(
       text: (widget.initialDiscount ?? 0.0).toStringAsFixed(2),
     );
   }
 
+  /// Base unit first, then every conversion target.
+  List<String> get _unitOptions => [
+        if (widget.item.uom.trim().isNotEmpty) widget.item.uom.trim(),
+        ...widget.item.unitConversions.map((c) => c.targetUnit),
+      ];
+
+  void _onUomChanged() {
+    // Rebuild so quantity suffixText tracks the live UOM value.
+    if (mounted) setState(() {});
+  }
+
+  /// Handles a dropdown unit switch: auto-fills the rate for the new unit
+  /// (base rate × conversion rate — still editable afterwards) and refreshes
+  /// the qty cap/decimals.
+  void _onUnitSelected(String? unit) {
+    if (unit == null || unit == _selectedUom) return;
+    setState(() => _selectedUom = unit);
+    final newRate = widget.item.rateFor(unit);
+    _rateController.text = newRate.toStringAsFixed(2);
+    context.read<LineEditorCubit>().setUnit(
+          baseRate: widget.item.rate,
+          conversionRate: widget.item.conversionRateFor(unit),
+        );
+    _formKey.currentState?.validate();
+  }
+
   @override
   void dispose() {
+    _uomController.removeListener(_onUomChanged);
     _quantityController.dispose();
     _rateController.dispose();
     _discountController.dispose();
+    _uomController.dispose();
     super.dispose();
   }
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
-      final qty = int.tryParse(_quantityController.text) ?? 0;
+      final qty = double.tryParse(_quantityController.text) ?? 0;
       final rate = double.tryParse(_rateController.text) ?? widget.item.rate;
       final discount = double.tryParse(_discountController.text) ?? 0.0;
-      Navigator.pop(context, (qty, rate, discount));
+      final result = (
+        quantity: qty,
+        rate: rate,
+        discount: discount,
+        uom: _currentUom,
+        unitConversionId:
+            widget.item.conversionFor(_currentUom)?.unitConversionId ?? '',
+      );
+      Navigator.pop<ItemLineEditorResult>(context, result);
     }
   }
 
@@ -141,32 +243,75 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   }
 
   Widget _buildQuantityField() {
+    final uomSuffix = _currentUom.isNotEmpty ? _currentUom : null;
+    final decimals = _quantityDecimals;
     return TextFormField(
       controller: _quantityController,
-      keyboardType: TextInputType.number,
+      keyboardType: decimals > 0
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : TextInputType.number,
       autofocus: true,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      inputFormatters: [
+        decimals > 0
+            ? FilteringTextInputFormatter.allow(
+                RegExp('^\\d*\\.?\\d{0,$decimals}'),
+              )
+            : FilteringTextInputFormatter.digitsOnly,
+      ],
       onChanged: (val) {
-        final qty = int.tryParse(val) ?? 0;
+        final qty = double.tryParse(val) ?? 0;
         context.read<LineEditorCubit>().setQuantity(qty);
       },
       decoration: _denseDecoration(
         labelText: 'Quantity',
         hintText: 'Qty',
-      ),
+      ).copyWith(suffixText: uomSuffix),
       validator: (val) {
         if (val == null || val.isEmpty) {
           return 'Required';
         }
-        final qty = int.tryParse(val);
+        final qty = double.tryParse(val);
         if (qty == null || qty <= 0) {
           return 'Must be > 0';
         }
         if (!widget.allowUnlimitedQuantity && qty > _maxAllowedStock) {
-          return 'Max $_maxAllowedStock';
+          return 'Max ${formatQuantity(_maxAllowedStock)}';
         }
         return null;
       },
+    );
+  }
+
+  /// UOM field. When the item has Zoho unit conversions this is a dropdown
+  /// (base unit + alternates) that re-prices the line on change; otherwise it
+  /// stays a free-text field so staff can fill blanks when Zoho unit data is
+  /// missing.
+  Widget _buildUomField() {
+    if (_hasUnitOptions) {
+      return DropdownButtonFormField<String>(
+        key: ValueKey('uom_$_selectedUom'),
+        initialValue: _unitOptions.contains(_selectedUom) ? _selectedUom : null,
+        isExpanded: true,
+        decoration: _denseDecoration(labelText: 'Unit', hintText: 'Unit'),
+        items: _unitOptions
+            .map(
+              (u) => DropdownMenuItem<String>(
+                value: u,
+                child: Text(u, overflow: TextOverflow.ellipsis),
+              ),
+            )
+            .toList(),
+        onChanged: _onUnitSelected,
+      );
+    }
+    final master = widget.item.uom.trim();
+    return TextFormField(
+      controller: _uomController,
+      textCapitalization: TextCapitalization.none,
+      decoration: _denseDecoration(
+        labelText: 'UOM',
+        hintText: master.isNotEmpty ? master : 'e.g. pcs, kg, box',
+      ),
     );
   }
 
@@ -219,7 +364,7 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
         if (parsedDiscount == null || parsedDiscount < 0) {
           return 'Must be ≥ 0';
         }
-        final qty = int.tryParse(_quantityController.text) ?? 0;
+        final qty = double.tryParse(_quantityController.text) ?? 0;
         final currentRate = double.tryParse(_rateController.text) ?? 0.0;
         if (parsedDiscount > (currentRate * qty)) {
           return 'Exceeds subtotal';
@@ -231,18 +376,24 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
 
   Widget _buildFields({required bool wide, required String currencySymbol}) {
     final qty = _buildQuantityField();
+    final uom = _buildUomField();
     final rate = _buildRateField(currencySymbol);
     final discount = _buildDiscountField(currencySymbol);
+
+    // Dropdown unit names ("25 Kg Bag") need more room than a short uom tag.
+    final uomFlex = _hasUnitOptions ? 2 : 1;
 
     if (wide) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: qty),
+          Expanded(flex: 2, child: qty),
           const SizedBox(width: 8),
-          Expanded(child: rate),
+          Expanded(flex: uomFlex, child: uom),
           const SizedBox(width: 8),
-          Expanded(child: discount),
+          Expanded(flex: 2, child: rate),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: discount),
         ],
       );
     }
@@ -253,21 +404,37 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: qty),
+            Expanded(flex: 2, child: qty),
             const SizedBox(width: 8),
-            Expanded(child: rate),
+            Expanded(flex: uomFlex, child: uom),
           ],
         ),
         const SizedBox(height: 10),
-        discount,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: rate),
+            const SizedBox(width: 8),
+            Expanded(child: discount),
+          ],
+        ),
       ],
     );
   }
 
   Widget _buildStockBadge({
     required bool isDark,
-    required int displayStock,
+    required double displayStock,
   }) {
+    final baseUom = widget.item.uom.trim();
+    final stockText = formatQuantity(displayStock);
+    // When an alternate unit is selected, also show the converted capacity
+    // (e.g. "Available in Van: 500 kg ≈ 20 25 Kg Bag").
+    final converted = _hasUnitOptions &&
+            _currentUom != baseUom &&
+            _conversionRate > 0
+        ? ' ≈ ${formatQuantity(displayStock / _conversionRate)} $_currentUom'
+        : '';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -279,9 +446,9 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
       ),
       child: Text(
         widget.allowUnlimitedQuantity
-            ? 'Available in Van: $displayStock items'
-            : 'Available in Van: $displayStock items'
-                '${widget.originalQuantity > 0 ? ' (incl. ${widget.originalQuantity} billed)' : ''}',
+            ? 'Available in Van: $stockText ${baseUom.isNotEmpty ? baseUom : 'items'}$converted'
+            : 'Available in Van: $stockText ${baseUom.isNotEmpty ? baseUom : 'items'}$converted'
+                '${widget.originalQuantity > 0 ? ' (incl. ${formatQuantity(widget.originalQuantity)} billed)' : ''}',
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.bold,
@@ -297,7 +464,7 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     required bool wide,
     required bool isDark,
     required String currencySymbol,
-    required int displayStock,
+    required double displayStock,
   }) {
     final nameBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +480,11 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
         ),
         const SizedBox(height: 2),
         Text(
-          'SKU: ${widget.item.sku} · ${formatCurrency(widget.item.rate, currencySymbol)}',
+          [
+            'SKU: ${widget.item.sku}',
+            if (widget.item.uom.isNotEmpty) 'UOM: ${widget.item.uom}',
+            formatCurrency(widget.item.rate, currencySymbol),
+          ].join(' · '),
           style: TextStyle(
             fontSize: 12,
             color: isDark
@@ -432,7 +603,7 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     final media = MediaQuery.of(context);
     final displayStock = widget.allowUnlimitedQuantity
         ? widget.item.stock
-        : _maxAllowedStock;
+        : _maxAllowedBaseStock;
 
     const horizontalInset = 12.0;
     const verticalInset = 12.0;

@@ -13,6 +13,8 @@ import '../bloc/receipt_allocation_bloc.dart';
 import '../bloc/receipt_allocation_event.dart';
 import '../bloc/receipt_allocation_state.dart';
 
+const _paymentModes = ['Cash', 'Cheque', 'Bank Transfer', 'Card'];
+
 /// Modal dialog for logging a [ReceiptVoucher] payment collection.
 ///
 /// Prompts the field for the payment amount and permits choosing the payment mode
@@ -57,13 +59,18 @@ class _ReceiptPaymentDialogView extends StatefulWidget {
   });
 
   @override
-  State<_ReceiptPaymentDialogView> createState() => _ReceiptPaymentDialogViewState();
+  State<_ReceiptPaymentDialogView> createState() =>
+      _ReceiptPaymentDialogViewState();
 }
 
 class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
   final _amountController = TextEditingController();
   final Map<String, TextEditingController> _allocationControllers = {};
   final Map<String, FocusNode> _allocationFocusNodes = {};
+
+  /// When true, allocation [TextEditingController] updates must not dispatch
+  /// [InvoiceAllocationEdited] (avoids FIFO → text sync → onChanged loops).
+  bool _syncingControllers = false;
 
   @override
   void initState() {
@@ -72,10 +79,24 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
   }
 
   void _onAmountChanged() {
+    if (!mounted) return;
     context.read<ReceiptAllocationBloc>().add(
       PaymentAmountChanged(_amountController.text),
     );
   }
+
+  void _setControllerText(TextEditingController ctrl, String text) {
+    if (ctrl.text == text) return;
+    _syncingControllers = true;
+    ctrl.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _syncingControllers = false;
+  }
+
+  String _normalizedPaymentMode(String mode) =>
+      _paymentModes.contains(mode) ? mode : _paymentModes.first;
 
   @override
   void dispose() {
@@ -93,8 +114,22 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
+    final theme = Theme.of(context);
+    // Glass / transparent themes make AlertDialog surfaces disappear; pin a real fill.
+    final surface = theme.colorScheme.surface;
+    final solidBg = surface.a == 0
+        ? (theme.brightness == Brightness.dark
+              ? AppTheme.darkSurface
+              : AppTheme.lightSurface)
+        : surface;
 
     return BlocListener<ReceiptAllocationBloc, ReceiptAllocationState>(
+      listenWhen: (prev, curr) =>
+          prev.submitSuccess != curr.submitSuccess ||
+          prev.submitError != curr.submitError ||
+          prev.allocations != curr.allocations ||
+          prev.openInvoices != curr.openInvoices ||
+          prev.paymentAmount != curr.paymentAmount,
       listener: (context, state) {
         if (state.submitSuccess) {
           Navigator.pop(context);
@@ -103,20 +138,22 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
             'Payment Voucher for ${formatCurrency(state.paymentAmount, cs)} queued offline!',
           );
           widget.onPaymentLogged();
-        } else if (state.submitError != null) {
+          return;
+        }
+        if (state.submitError != null) {
           showErrorSnackBar(context, state.submitError!);
         }
 
-        // Focus-aware sync of allocation controllers text
+        // Focus-aware sync of allocation controllers (never cascade into bloc).
         for (final inv in state.openInvoices) {
-          final alloc = state.allocations.firstWhere(
-            (a) => a.invoiceId == inv.invoiceId,
-            orElse: () => PaymentAllocation(
-              invoiceId: inv.invoiceId,
-              invoiceNumber: inv.invoiceNumber,
-              amountApplied: 0.0,
-            ),
-          );
+          PaymentAllocation? alloc;
+          for (final a in state.allocations) {
+            if (a.invoiceId == inv.invoiceId) {
+              alloc = a;
+              break;
+            }
+          }
+          final amountApplied = alloc?.amountApplied ?? 0.0;
           final ctrl = _allocationControllers.putIfAbsent(
             inv.invoiceId,
             () => TextEditingController(),
@@ -126,54 +163,57 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
             () => FocusNode(),
           );
 
-          final hasFocus = focusNode.hasFocus;
-          final expectedText = alloc.amountApplied > 0
-              ? alloc.amountApplied.toStringAsFixed(2)
+          final expectedText = amountApplied > 0
+              ? amountApplied.toStringAsFixed(2)
               : '';
-          if (ctrl.text != expectedText && !hasFocus) {
-            ctrl.text = expectedText;
+          if (ctrl.text != expectedText && !focusNode.hasFocus) {
+            _setControllerText(ctrl, expectedText);
           }
         }
       },
-      child: BlocBuilder<ReceiptAllocationBloc, ReceiptAllocationState>(
-        builder: (context, state) {
-          final totalAllocated = state.totalAllocated;
-          final paymentAmount = state.paymentAmount;
-          final submitting = state.submitting;
-
-          return AlertDialog(
-            title: Text('Receipt Payment: ${widget.customer.name}'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Log customer payment towards their outstanding balances directly into Zoho Books.',
-                    style: TextStyle(fontSize: 12),
+      // Keep AlertDialog shell stable — only inner sections rebuild on amount/FIFO.
+      child: AlertDialog(
+        backgroundColor: solidBg,
+        title: Text('Receipt Payment: ${widget.customer.name}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Log customer payment towards their outstanding balances directly into Zoho Books.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              // Amount field lives outside allocation BlocBuilders so typing
+              // does not recreate this TextFormField every keystroke.
+              TextFormField(
+                controller: _amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Payment Amount ($cs)',
+                  prefixIcon: const Icon(
+                    Icons.currency_rupee,
+                    color: AppTheme.primaryIndigo,
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Payment Amount ($cs)',
-                      prefixIcon: const Icon(
-                        Icons.currency_rupee,
-                        color: AppTheme.primaryIndigo,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                ),
+              ),
+              const SizedBox(height: 16),
 
-                  // Dropdown for payment modes
-                  DropdownButtonFormField<String>(
-                    initialValue: state.paymentMode,
-                    decoration: const InputDecoration(labelText: 'Payment Mode'),
-                    items: ['Cash', 'Cheque', 'Bank Transfer', 'Card']
+              BlocBuilder<ReceiptAllocationBloc, ReceiptAllocationState>(
+                buildWhen: (p, c) => p.paymentMode != c.paymentMode,
+                builder: (context, state) {
+                  final mode = _normalizedPaymentMode(state.paymentMode);
+                  return DropdownButtonFormField<String>(
+                    key: ValueKey('payment_mode_$mode'),
+                    initialValue: mode,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment Mode',
+                    ),
+                    items: _paymentModes
                         .map(
-                          (mode) => DropdownMenuItem(value: mode, child: Text(mode)),
+                          (m) => DropdownMenuItem(value: m, child: Text(m)),
                         )
                         .toList(),
                     onChanged: (val) {
@@ -183,38 +223,56 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
                         );
                       }
                     },
-                  ),
+                  );
+                },
+              ),
 
-                  if (state.openInvoices.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'INVOICE ALLOCATIONS',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          'Allocated: $cs${totalAllocated.toStringAsFixed(2)} / $cs${paymentAmount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: totalAllocated > paymentAmount + 0.005
-                                ? AppTheme.errorRose
-                                : AppTheme.successEmerald,
+              BlocBuilder<ReceiptAllocationBloc, ReceiptAllocationState>(
+                buildWhen: (p, c) =>
+                    p.openInvoices != c.openInvoices ||
+                    p.allocations != c.allocations ||
+                    p.paymentAmount != c.paymentAmount,
+                builder: (context, state) {
+                  if (state.openInvoices.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
+                  final totalAllocated = state.totalAllocated;
+                  final paymentAmount = state.paymentAmount;
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'INVOICE ALLOCATIONS',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: state.openInvoices.length,
-                      itemBuilder: (context, index) {
-                        final inv = state.openInvoices[index];
+                          Flexible(
+                            child: Text(
+                              'Allocated: $cs${totalAllocated.toStringAsFixed(2)} / $cs${paymentAmount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: totalAllocated > paymentAmount + 0.005
+                                    ? AppTheme.errorRose
+                                    : AppTheme.successEmerald,
+                              ),
+                              textAlign: TextAlign.end,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...state.openInvoices.map((inv) {
                         final ctrl = _allocationControllers.putIfAbsent(
                           inv.invoiceId,
                           () => TextEditingController(),
@@ -223,14 +281,14 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
                           inv.invoiceId,
                           () => FocusNode(),
                         );
-                        final alloc = state.allocations.firstWhere(
-                          (a) => a.invoiceId == inv.invoiceId,
-                          orElse: () => PaymentAllocation(
-                            invoiceId: inv.invoiceId,
-                            invoiceNumber: inv.invoiceNumber,
-                            amountApplied: 0.0,
-                          ),
-                        );
+                        PaymentAllocation? alloc;
+                        for (final a in state.allocations) {
+                          if (a.invoiceId == inv.invoiceId) {
+                            alloc = a;
+                            break;
+                          }
+                        }
+                        final amountApplied = alloc?.amountApplied ?? 0.0;
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -240,7 +298,8 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         inv.invoiceNumber,
@@ -262,30 +321,37 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
                                   child: TextFormField(
                                     controller: ctrl,
                                     focusNode: focusNode,
-                                    keyboardType: const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
                                     textAlign: TextAlign.end,
                                     style: const TextStyle(fontSize: 12),
                                     decoration: InputDecoration(
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
-                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 4,
+                                          ),
                                       prefixText: cs,
                                       hintText: '0.00',
-                                      errorText: alloc.amountApplied > inv.balance
+                                      errorText: amountApplied > inv.balance
                                           ? 'Too high'
                                           : null,
+                                      errorMaxLines: 1,
+                                      isDense: true,
                                     ),
                                     onChanged: (v) {
-                                      context.read<ReceiptAllocationBloc>().add(
-                                        InvoiceAllocationEdited(
-                                          invoiceId: inv.invoiceId,
-                                          invoiceNumber: inv.invoiceNumber,
-                                          value: v,
-                                        ),
-                                      );
+                                      if (_syncingControllers) return;
+                                      context
+                                          .read<ReceiptAllocationBloc>()
+                                          .add(
+                                            InvoiceAllocationEdited(
+                                              invoiceId: inv.invoiceId,
+                                              invoiceNumber: inv.invoiceNumber,
+                                              value: v,
+                                            ),
+                                          );
                                     },
                                   ),
                                 ),
@@ -293,36 +359,52 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
                             ),
                           ),
                         );
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: submitting ? null : () => Navigator.pop(context),
-                child: const Text('CANCEL'),
-              ),
-              ElevatedButton(
-                onPressed: !state.canSubmit || submitting
-                    ? null
-                    : () => context.read<ReceiptAllocationBloc>().add(
-                          ReceiptSubmitted(),
-                        ),
-                child: submitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text('LOG RECEIPT'),
+                      }),
+                    ],
+                  );
+                },
               ),
             ],
-          );
-        },
+          ),
+        ),
+        actions: [
+          BlocBuilder<ReceiptAllocationBloc, ReceiptAllocationState>(
+            buildWhen: (p, c) =>
+                p.submitting != c.submitting ||
+                p.paymentAmount != c.paymentAmount ||
+                p.allocations != c.allocations ||
+                p.openInvoices != c.openInvoices,
+            builder: (context, state) {
+              final submitting = state.submitting;
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: submitting
+                        ? null
+                        : () => Navigator.pop(context),
+                    child: const Text('CANCEL'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: !state.canSubmit || submitting
+                        ? null
+                        : () => context.read<ReceiptAllocationBloc>().add(
+                            ReceiptSubmitted(),
+                          ),
+                    child: submitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('LOG RECEIPT'),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }

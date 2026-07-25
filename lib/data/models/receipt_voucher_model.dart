@@ -61,9 +61,20 @@ class ReceiptVoucherModel extends ReceiptVoucher {
 
   /// Factory constructor to parse local database JSON maps into a [ReceiptVoucherModel].
   factory ReceiptVoucherModel.fromJson(Map<String, dynamic> json) {
+    final zohoPaymentNumber =
+        (json['payment_number'] ?? json['paymentNumber'] ?? '').toString();
+    final referenceNumber =
+        (json['reference_number'] ?? json['referenceNumber'] ?? '').toString();
+    // App series number travels to Zoho as reference_number (B4). Prefer it as
+    // the display/identity number when present so list UI and session filters
+    // see `{prefix}RCT-#####` rather than Zoho's auto payment_number.
+    final seriesInReference = referenceNumber.contains('RCT-');
     return ReceiptVoucherModel(
       id: json['payment_id'] ?? json['id'] ?? '',
-      paymentNumber: json['payment_number'] ?? json['paymentNumber'] ?? '',
+      paymentNumber:
+          seriesInReference && referenceNumber.isNotEmpty
+              ? referenceNumber
+              : zohoPaymentNumber,
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       customerName: json['customer_name'] ?? json['customerName'] ?? '',
       // Parses list of dynamic invoice objects into [PaymentAllocationModel] list.
@@ -74,8 +85,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
           [],
       amount: (json['amount'] ?? 0.0).toDouble(),
       paymentMode: json['payment_mode'] ?? json['paymentMode'] ?? 'Cash',
-      referenceNumber:
-          json['reference_number'] ?? json['referenceNumber'] ?? '',
+      referenceNumber: referenceNumber,
       date: json['date'] != null
           ? DateTime.parse(json['date'])
           : DateTime.now(),

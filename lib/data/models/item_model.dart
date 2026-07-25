@@ -1,4 +1,5 @@
 import '../../domain/models/item.dart';
+import 'unit_conversion_model.dart';
 
 /// Data transfer object representing stocked inventory [Item]s.
 ///
@@ -14,22 +15,30 @@ class ItemModel extends Item {
     required super.description,
     required super.taxName,
     required super.taxPercentage,
+    super.uom = '',
+    super.unitConversions = const [],
   });
 
   /// Factory constructor to parse local/remote JSON into an [ItemModel].
   ///
-  /// Mappes Zoho API keys (`item_id`, `stock_on_hand`, `tax_percentage`) with fallback defaults.
+  /// Maps Zoho API keys (`item_id`, `stock_on_hand`, `tax_percentage`, `unit`) with fallback defaults.
   factory ItemModel.fromJson(Map<String, dynamic> json) {
     return ItemModel(
       id: json['item_id'] ?? json['id'] ?? '',
       name: json['name'] ?? '',
       sku: json['sku'] ?? '',
       rate: (json['rate'] ?? json['price'] ?? 0.0).toDouble(),
-      stock: ((json['stock_on_hand'] ?? json['stock'] ?? 0) as num).toInt(),
+      stock: ((json['stock_on_hand'] ?? json['stock'] ?? 0) as num).toDouble(),
       description: json['description'] ?? '',
       taxName: json['tax_name'] ?? json['taxName'] ?? 'VAT 5%',
       taxPercentage: (json['tax_percentage'] ?? json['taxPercentage'] ?? 5.0)
           .toDouble(),
+      // Zoho Books/Inventory use `unit`; local cache may store `uom`.
+      uom: (json['unit'] ?? json['uom'] ?? '').toString(),
+      // Only present after unit-conversion enrichment (item detail fetch).
+      unitConversions: (json['unit_conversions'] as List<dynamic>? ?? const [])
+          .map((c) => UnitConversionModel.fromJson(c as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -46,6 +55,11 @@ class ItemModel extends Item {
       'description': description,
       'tax_name': taxName,
       'tax_percentage': taxPercentage,
+      'unit': uom,
+      'uom': uom,
+      'unit_conversions': unitConversions
+          .map((c) => UnitConversionModel.fromDomain(c).toJson())
+          .toList(),
     };
   }
 
@@ -60,6 +74,8 @@ class ItemModel extends Item {
       description: item.description,
       taxName: item.taxName,
       taxPercentage: item.taxPercentage,
+      uom: item.uom,
+      unitConversions: item.unitConversions,
     );
   }
 }

@@ -9,28 +9,60 @@ class DailyStatsCubit extends Cubit<DailyStatsState> {
     refresh();
   }
 
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   void refresh() {
     try {
-      final invoices = dbService.getLocalInvoices();
-      final receipts = dbService.getLocalReceipts();
-      final expenses = dbService.getLocalExpenses();
-      final returns = dbService.getLocalReturns();
+      final now = DateTime.now();
 
-      final todaySales = invoices.fold(0.0, (sum, item) => sum + item.total);
-      final todayPayments = receipts.fold(0.0, (sum, item) => sum + item.amount);
-      final todayExpenses = expenses.fold(0.0, (sum, item) => sum + item.amount);
-      final todayReturns = returns.fold(0.0, (sum, item) => sum + item.total);
-      final completedDeliveries = invoices
-          .map((inv) => inv.customerId)
-          .toSet()
-          .length;
+      final allInvoices = dbService.getLocalInvoices();
+      final allReceipts = dbService.getLocalReceipts();
+      final allExpenses = dbService.getLocalExpenses();
+      final allReturns = dbService.getLocalReturns();
+      final allOrders = dbService.getLocalOrders();
+
+      final todaysInvoices =
+          allInvoices.where((inv) => _isSameDay(inv.date, now)).toList();
+      final todaysReceipts =
+          allReceipts.where((rec) => _isSameDay(rec.date, now)).toList();
+      final todaysExpenses =
+          allExpenses.where((exp) => _isSameDay(exp.date, now)).toList();
+      final todaysReturns =
+          allReturns.where((ret) => _isSameDay(ret.date, now)).toList();
+      final todaysOrders =
+          allOrders.where((ord) => _isSameDay(ord.date, now)).toList();
+
+      final todaySales =
+          todaysInvoices.fold(0.0, (sum, item) => sum + item.total);
+      final todayPayments =
+          todaysReceipts.fold(0.0, (sum, item) => sum + item.amount);
+      final todayExpenses =
+          todaysExpenses.fold(0.0, (sum, item) => sum + item.amount);
+      final todayReturns =
+          todaysReturns.fold(0.0, (sum, item) => sum + item.total);
+      final todayOrdersTotal =
+          todaysOrders.fold(0.0, (sum, item) => sum + item.total);
+      final completedDeliveries =
+          todaysInvoices.map((inv) => inv.customerId).toSet().length;
+
+      final today = DateTime(now.year, now.month, now.day);
+      final last7DaysSales = List.generate(7, (i) {
+        final day = today.subtract(Duration(days: 6 - i));
+        final total = allInvoices
+            .where((inv) => _isSameDay(inv.date, day))
+            .fold(0.0, (sum, inv) => sum + inv.total);
+        return DailySalesPoint(date: day, total: total);
+      });
 
       emit(DailyStatsState(
         todaySales: todaySales,
         todayPayments: todayPayments,
         todayExpenses: todayExpenses,
         todayReturns: todayReturns,
+        todayOrdersTotal: todayOrdersTotal,
         completedDeliveries: completedDeliveries,
+        last7DaysSales: last7DaysSales,
       ));
     } catch (_) {
       // Don't crash dashboard; keep last stats or zeros

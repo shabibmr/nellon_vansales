@@ -5,19 +5,17 @@ import 'report_event.dart';
 import 'report_state.dart';
 
 class ReportBloc<T> extends Bloc<ReportEvent, ReportState<T>> {
-  final List<T> Function() getLocal;
   final Future<List<T>> Function() fetchRemote;
 
   bool _isFetching = false;
 
   ReportBloc({
-    required this.getLocal,
     required this.fetchRemote,
     Object? initialSortField,
     bool initialSortAscending = true,
   }) : super(ReportState<T>(
           isLoading: true,
-          rows: getLocal(),
+          rows: const [],
           // Default filter to today so reports open scoped to the current day.
           startDate: todayDate(),
           endDate: todayDate(),

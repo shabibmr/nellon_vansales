@@ -10,7 +10,12 @@ class SalespersonModel extends Salesperson {
     required super.id,
     required super.name,
     required super.email,
+    super.phone,
     super.locationId,
+    super.locationName,
+    super.voucherPrefix,
+    super.cashAccountId,
+    super.cashAccountName,
     super.status,
   });
 
@@ -22,7 +27,15 @@ class SalespersonModel extends Salesperson {
     final id = json['salesperson_id'] ?? json['id'] ?? '';
     final name = json['salesperson_name'] ?? json['name'] ?? '';
     final email = json['salesperson_email'] ?? json['email'] ?? '';
+    final phone = json['phone'] ?? json['session_phone'];
     final locationId = json['location_id'] ?? json['locationId'];
+    final locationName = json['location_name'] ?? json['locationName'];
+    final voucherPrefix = json['voucher_prefix'] ??
+        json['voucherPrefix'] ??
+        json['cf_voucher_prefix'];
+    final cashAccountId = json['cash_account_id'] ?? json['cashAccountId'];
+    final cashAccountName =
+        json['cash_account_name'] ?? json['cashAccountName'];
 
     // Zoho reports lifecycle as boolean `is_active` (verified against live API);
     // locally cached records round-trip a `status` string instead.
@@ -37,7 +50,12 @@ class SalespersonModel extends Salesperson {
       id: id.toString(),
       name: name.toString(),
       email: email.toString(),
+      phone: phone?.toString(),
       locationId: locationId?.toString(),
+      locationName: locationName?.toString(),
+      voucherPrefix: voucherPrefix?.toString(),
+      cashAccountId: cashAccountId?.toString(),
+      cashAccountName: cashAccountName?.toString(),
       status: status,
     );
   }
@@ -51,7 +69,12 @@ class SalespersonModel extends Salesperson {
       'name': name,
       'salesperson_email': email,
       'email': email,
+      'phone': phone,
       'location_id': locationId,
+      'location_name': locationName,
+      'voucher_prefix': voucherPrefix,
+      'cash_account_id': cashAccountId,
+      'cash_account_name': cashAccountName,
       'status': status,
     };
   }
@@ -62,7 +85,12 @@ class SalespersonModel extends Salesperson {
       id: s.id,
       name: s.name,
       email: s.email,
+      phone: s.phone,
       locationId: s.locationId,
+      locationName: s.locationName,
+      voucherPrefix: s.voucherPrefix,
+      cashAccountId: s.cashAccountId,
+      cashAccountName: s.cashAccountName,
       status: s.status,
     );
   }

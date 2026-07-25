@@ -610,9 +610,12 @@ class SyncWorker {
           // The /items LIST endpoint never returns it, so it is fetched lazily
           // and cached per-item the first time an item is selected from Item
           // Search (see SalesRepository.resolveItemUnitConversions).
+          // Drop the UOM cache so the next selection re-fetches after a masters
+          // refresh (conversions may have been added/changed in Zoho).
           await _dbService.saveItems(
             list.map((i) => ItemModel.fromJson(i)).toList(),
           );
+          await _dbService.clearItemUnitConversions();
           break;
         case MasterType.customers:
           final list = await _apiClient.fetchCustomers();

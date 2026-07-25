@@ -36,6 +36,8 @@ import 'ui/features/licensing/cubit/license_cubit.dart';
 import 'ui/features/licensing/cubit/server_config_cubit.dart';
 import 'ui/features/licensing/cubit/server_config_state.dart';
 import 'ui/features/licensing/views/license_gate.dart';
+import 'domain/repositories/thermal_printer_repository.dart';
+import 'ui/features/thermal_print/cubit/thermal_printer_cubit.dart';
 
 /// The root widget of the Van Sales Pro application.
 ///
@@ -146,6 +148,11 @@ class VanSalesApp extends StatelessWidget {
               dbService: sl<HiveDatabaseService>(),
             ),
           ),
+          BlocProvider<ThermalPrinterCubit>(
+            create: (context) => ThermalPrinterCubit(
+              repository: sl<ThermalPrinterRepository>(),
+            ),
+          ),
         ],
         child: BlocBuilder<ThemeCubit, AppThemeMode>(
           builder: (context, appThemeMode) {
@@ -198,7 +205,8 @@ class SessionGateway extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, authState) {
-        if (authState is Authenticated) {
+        // Keep SalespersonCubit in sync after login resolution or logout clear.
+        if (authState is Authenticated || authState is Unauthenticated) {
           context.read<SalespersonCubit>().refresh(sl<HiveDatabaseService>());
         }
       },

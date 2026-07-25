@@ -1,0 +1,11 @@
+{
+  "method": "GET",
+  "url": "https://www.zohoapis.com/books/v3/items?organization_id=783019958&location_id=3331482000180671517&per_page=200&page=1",
+  "location_id": "3331482000180671517",
+  "location_name": "SHINAD",
+  "organization_id": "783019958",
+  "total_items": 1070,
+  "pages": 6,
+  "non_zero_stock_items": 12,
+  "fetched_at": "2026-07-17T13:00:44.6793802Z"
+}

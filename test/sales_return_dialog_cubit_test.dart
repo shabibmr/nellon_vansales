@@ -92,7 +92,7 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveItems(List<Item> items) async {}
 
   @override
-  Future<Item> resolveItemUnitConversions(Item item) async => item;
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
 
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}

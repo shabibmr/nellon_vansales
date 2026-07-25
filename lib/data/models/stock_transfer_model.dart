@@ -4,18 +4,29 @@ import 'item_model.dart';
 /// Data transfer object representing a [StockTransferLine].
 class StockTransferLineModel extends StockTransferLine {
   /// Creates a new [StockTransferLineModel] instance.
-  const StockTransferLineModel({required super.item, required super.quantity});
+  const StockTransferLineModel({
+    required super.item,
+    required super.quantity,
+    super.uom = '',
+    super.conversionRate = 1.0,
+  });
 
   /// Factory constructor to parse local/remote JSON maps into a [StockTransferLineModel].
   factory StockTransferLineModel.fromJson(Map<String, dynamic> json) {
     return StockTransferLineModel(
       item: ItemModel.fromJson(json['item'] ?? json),
-      quantity: json['quantity'] ?? 0,
+      quantity: ((json['quantity'] ?? 0) as num).toDouble(),
+      uom: (json['entered_uom'] ?? '').toString(),
+      conversionRate: ((json['entered_conversion_rate'] ?? 1) as num)
+          .toDouble(),
     );
   }
 
   /// Converts this [StockTransferLineModel] into a Zoho Transfer Order line-item
   /// compatible JSON map, plus enough local shape to round-trip via [fromJson].
+  ///
+  /// `quantity`/`quantity_transfer` are always in the item's **base unit**;
+  /// `entered_uom`/`entered_conversion_rate` are local-only display keys.
   ///
   /// NOTE: `quantity_transfer` is the Zoho Books Transfer Orders line-item key
   /// for the quantity moved. Verify against the live API — isolated here so a
@@ -26,13 +37,20 @@ class StockTransferLineModel extends StockTransferLine {
       'name': item.name,
       'quantity_transfer': quantity,
       'quantity': quantity,
+      if (uom.isNotEmpty) 'entered_uom': uom,
+      if (uom.isNotEmpty) 'entered_conversion_rate': conversionRate,
       'item': ItemModel.fromDomain(item).toJson(),
     };
   }
 
   /// Translates a base domain [StockTransferLine] entity into its DTO representation.
   factory StockTransferLineModel.fromDomain(StockTransferLine line) {
-    return StockTransferLineModel(item: line.item, quantity: line.quantity);
+    return StockTransferLineModel(
+      item: line.item,
+      quantity: line.quantity,
+      uom: line.uom,
+      conversionRate: line.conversionRate,
+    );
   }
 }
 

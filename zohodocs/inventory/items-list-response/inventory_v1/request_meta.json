@@ -1,0 +1,12 @@
+{
+  "api_label": "Inventory v1",
+  "method": "GET",
+  "url_template": "https://www.zohoapis.com/inventory/v1/items?organization_id=783019958&per_page=200&page={n}",
+  "organization_id": "783019958",
+  "pages_ok": 0,
+  "total_items": 0,
+  "success": false,
+  "error": "\r\n{\r\n  \"code\": 57,\r\n  \"message\": \"You are not authorized to perform this operation\"\r\n}",
+  "fetched_at": "2026-07-17T12:37:12.6958484Z",
+  "spec_ref": "zohodocs/inventory/items.yml → list_items (GET /items)"
+}

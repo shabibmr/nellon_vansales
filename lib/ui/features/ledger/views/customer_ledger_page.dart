@@ -7,6 +7,7 @@ import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../bloc/customer_ledger_bloc.dart';
+import '../utils/open_ledger_transaction.dart';
 
 class CustomerLedgerPage extends StatefulWidget {
   const CustomerLedgerPage({super.key});
@@ -554,6 +555,7 @@ class _LedgerReportView extends StatelessWidget {
                       tx: tx,
                       isDark: isDark,
                       shortDate: shortDate,
+                      onTap: () => openLedgerTransaction(context, tx),
                     ),
                   ),
                 ],
@@ -605,11 +607,13 @@ class _TransactionRow extends StatelessWidget {
   final LedgerTransaction tx;
   final bool isDark;
   final DateFormat shortDate;
+  final VoidCallback? onTap;
 
   const _TransactionRow({
     required this.tx,
     required this.isDark,
     required this.shortDate,
+    this.onTap,
   });
 
   Color get _typeColor {
@@ -640,6 +644,15 @@ class _TransactionRow extends StatelessWidget {
     }
   }
 
+  bool get _canOpen {
+    final type = tx.type.toLowerCase().trim();
+    return tx.transactionId.isNotEmpty &&
+        (type == 'invoice' ||
+            type == 'payment' ||
+            type == 'credit_note' ||
+            type == 'debit_note');
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
@@ -650,92 +663,118 @@ class _TransactionRow extends StatelessWidget {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 60,
-                child: Text(
-                  shortDate.format(tx.date),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark
-                        ? AppTheme.darkTextSecondary
-                        : AppTheme.lightTextSecondary,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Row(
-                  children: [
-                    Icon(_typeIcon, size: 14, color: _typeColor),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            tx.description.isNotEmpty
-                                ? tx.description
-                                : tx.transactionNumber,
-                            style: textStyle.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (tx.transactionNumber.isNotEmpty &&
-                              tx.description != tx.transactionNumber)
-                            Text(
-                              tx.transactionNumber,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isDark
-                                    ? AppTheme.darkTextSecondary
-                                    : AppTheme.lightTextSecondary,
-                              ),
-                            ),
-                        ],
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _canOpen ? onTap : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 60,
+                    child: Text(
+                      shortDate.format(tx.date),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.lightTextSecondary,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                width: 72,
-                child: Text(
-                  tx.debit > 0 ? '$cs${tx.debit.toStringAsFixed(2)}' : '-',
-                  style: textStyle.copyWith(
-                    color: tx.debit > 0
-                        ? AppTheme.warningAmber
-                        : Colors.transparent,
-                    fontWeight: FontWeight.w600,
                   ),
-                  textAlign: TextAlign.right,
-                ),
-              ),
-              SizedBox(
-                width: 72,
-                child: Text(
-                  tx.credit > 0 ? '$cs${tx.credit.toStringAsFixed(2)}' : '-',
-                  style: textStyle.copyWith(
-                    color: tx.credit > 0
-                        ? AppTheme.successEmerald
-                        : Colors.transparent,
-                    fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(_typeIcon, size: 14, color: _typeColor),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                tx.description.isNotEmpty
+                                    ? tx.description
+                                    : tx.transactionNumber,
+                                style: textStyle.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: _canOpen
+                                      ? AppTheme.primaryIndigo
+                                      : null,
+                                  decoration: _canOpen
+                                      ? TextDecoration.underline
+                                      : null,
+                                  decorationColor: AppTheme.primaryIndigo
+                                      .withValues(alpha: 0.4),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (tx.transactionNumber.isNotEmpty &&
+                                  tx.description != tx.transactionNumber)
+                                Text(
+                                  tx.transactionNumber,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isDark
+                                        ? AppTheme.darkTextSecondary
+                                        : AppTheme.lightTextSecondary,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (_canOpen)
+                          Icon(
+                            Icons.chevron_right,
+                            size: 16,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
+                          ),
+                      ],
+                    ),
                   ),
-                  textAlign: TextAlign.right,
-                ),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      tx.debit > 0
+                          ? '$cs${tx.debit.toStringAsFixed(2)}'
+                          : '-',
+                      style: textStyle.copyWith(
+                        color: tx.debit > 0
+                            ? AppTheme.warningAmber
+                            : Colors.transparent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      tx.credit > 0
+                          ? '$cs${tx.credit.toStringAsFixed(2)}'
+                          : '-',
+                      style: textStyle.copyWith(
+                        color: tx.credit > 0
+                            ? AppTheme.successEmerald
+                            : Colors.transparent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 80,
+                    child: Text(
+                      '$cs${tx.balance.toStringAsFixed(2)}',
+                      style: textStyle.copyWith(fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(
-                width: 80,
-                child: Text(
-                  '$cs${tx.balance.toStringAsFixed(2)}',
-                  style: textStyle.copyWith(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.right,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
         Divider(

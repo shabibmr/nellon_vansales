@@ -26,41 +26,65 @@ import '../../../core/utils/date_filter.dart';
 /// For [StockTransferDirection.unload] (Stock Unloading): [currentStock] is
 /// the van's balance, [extraQty] is the editable transfer quantity (defaults
 /// to the full balance, capped at it), and [transferQty] is just [extraQty].
+/// All quantities ([currentStock], [invoiceQty], [extraQty]) are held in the
+/// item's **base unit**; [uom]/[conversionRate] only describe the unit the
+/// editable quantity is entered/displayed in (multi-UOM support).
 class StockTransferRow extends Equatable {
   final Item item;
-  final int currentStock;
-  final int invoiceQty;
-  final int extraQty;
+  final double currentStock;
+  final double invoiceQty;
+  final double extraQty;
+
+  /// Unit the editable quantity is entered in. Empty = the item's base unit.
+  final String uom;
+
+  /// Base-unit multiplier of [uom] (1.0 for the base unit).
+  final double conversionRate;
 
   const StockTransferRow({
     required this.item,
     required this.currentStock,
     this.invoiceQty = 0,
     this.extraQty = 0,
+    this.uom = '',
+    this.conversionRate = 1.0,
   });
 
+  /// Effective display unit — row override, else the item master unit.
+  String get displayUom => uom.isNotEmpty ? uom : item.uom;
+
+  /// The editable quantity expressed in the selected unit
+  /// (e.g. base 50 kg shown as 2 when the unit is "25 Kg Bag").
+  double get extraQtyEntered =>
+      conversionRate > 0 ? extraQty / conversionRate : extraQty;
+
   /// Col 3 — current stock plus today's invoiced quantity.
-  int get subtotal => currentStock + invoiceQty;
+  double get subtotal => currentStock + invoiceQty;
 
   /// Col 5 — resulting van stock after the transfer completes.
-  int get grandTotal => subtotal + extraQty;
+  double get grandTotal => subtotal + extraQty;
 
   StockTransferRow copyWith({
     Item? item,
-    int? currentStock,
-    int? invoiceQty,
-    int? extraQty,
+    double? currentStock,
+    double? invoiceQty,
+    double? extraQty,
+    String? uom,
+    double? conversionRate,
   }) {
     return StockTransferRow(
       item: item ?? this.item,
       currentStock: currentStock ?? this.currentStock,
       invoiceQty: invoiceQty ?? this.invoiceQty,
       extraQty: extraQty ?? this.extraQty,
+      uom: uom ?? this.uom,
+      conversionRate: conversionRate ?? this.conversionRate,
     );
   }
 
   @override
-  List<Object?> get props => [item, currentStock, invoiceQty, extraQty];
+  List<Object?> get props =>
+      [item, currentStock, invoiceQty, extraQty, uom, conversionRate];
 }
 
 // --- Events ---
@@ -74,27 +98,65 @@ abstract class StockTransferEvent extends Equatable {
 /// Loads the Issue-to-Van planning grid (warehouse → current location).
 class LoadIssueGrid extends StockTransferEvent {}
 
+/// Loads Issue-to-Van prefilled with order demand in the invoiceQty column.
+///
+/// [demandByItemId] maps item id → total quantity needed (e.g. from shipment
+/// orders Items tab). Merges with live van stock; demand items missing from
+/// stock still appear so they can be transferred.
+class LoadIssueGridWithDemand extends StockTransferEvent {
+  final Map<String, double> demandByItemId;
+  const LoadIssueGridWithDemand(this.demandByItemId);
+
+  @override
+  List<Object?> get props => [demandByItemId];
+}
+
 /// Loads the Stock-Unloading grid (current location → warehouse).
 class LoadUnloadGrid extends StockTransferEvent {}
 
-/// Updates the editable quantity (Col 4 for load; transfer qty for unload) for an existing row.
+/// Updates the editable quantity (Col 4 for load; transfer qty for unload)
+/// for an existing row. [quantity] is expressed in the row's currently
+/// selected unit; the handler converts it to base units.
 class UpdateExtraQty extends StockTransferEvent {
   final String itemId;
-  final int quantity;
+  final double quantity;
   const UpdateExtraQty({required this.itemId, required this.quantity});
 
   @override
   List<Object?> get props => [itemId, quantity];
 }
 
-/// Adds a new item to the grid (not present in Col 1/Col 2) with an initial extra quantity.
-class AddExtraItem extends StockTransferEvent {
-  final Item item;
-  final int quantity;
-  const AddExtraItem({required this.item, required this.quantity});
+/// Switches the unit the row's editable quantity is entered in (multi-UOM).
+class UpdateRowUnit extends StockTransferEvent {
+  final String itemId;
+  final String uom;
+  final double conversionRate;
+  const UpdateRowUnit({
+    required this.itemId,
+    required this.uom,
+    required this.conversionRate,
+  });
 
   @override
-  List<Object?> get props => [item, quantity];
+  List<Object?> get props => [itemId, uom, conversionRate];
+}
+
+/// Adds a new item to the grid (not present in Col 1/Col 2) with an initial
+/// extra quantity, entered in [uom] ([conversionRate] converts to base).
+class AddExtraItem extends StockTransferEvent {
+  final Item item;
+  final double quantity;
+  final String uom;
+  final double conversionRate;
+  const AddExtraItem({
+    required this.item,
+    required this.quantity,
+    this.uom = '',
+    this.conversionRate = 1.0,
+  });
+
+  @override
+  List<Object?> get props => [item, quantity, uom, conversionRate];
 }
 
 /// Drops a row entirely from the grid.
@@ -137,16 +199,16 @@ class StockTransferState extends Equatable {
     this.successMessage,
   });
 
-  /// Quantity that actually transfers for [row], depending on [direction].
-  int transferQtyFor(StockTransferRow row) {
+  /// Quantity that actually transfers for [row] (base units), depending on [direction].
+  double transferQtyFor(StockTransferRow row) {
     return direction == StockTransferDirection.load
         ? row.invoiceQty + row.extraQty
         : row.extraQty;
   }
 
-  /// Sum of [transferQtyFor] across all rows.
-  int get totalTransferQty =>
-      rows.fold(0, (sum, row) => sum + transferQtyFor(row));
+  /// Sum of [transferQtyFor] across all rows (base units).
+  double get totalTransferQty =>
+      rows.fold(0.0, (sum, row) => sum + transferQtyFor(row));
 
   StockTransferState copyWith({
     StockTransferDirection? direction,
@@ -198,8 +260,10 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
        _apiClient = apiClient,
        super(const StockTransferState()) {
     on<LoadIssueGrid>(_onLoadIssueGrid);
+    on<LoadIssueGridWithDemand>(_onLoadIssueGridWithDemand);
     on<LoadUnloadGrid>(_onLoadUnloadGrid);
     on<UpdateExtraQty>(_onUpdateExtraQty);
+    on<UpdateRowUnit>(_onUpdateRowUnit);
     on<AddExtraItem>(_onAddExtraItem);
     on<RemoveRow>(_onRemoveRow);
     on<SubmitTransfer>(_onSubmitTransfer);
@@ -211,6 +275,12 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
   Warehouse? _resolveDefaultWarehouse() {
     final warehouses = _dbService.getWarehouses();
     if (warehouses.isEmpty) return null;
+    final primaryId = _dbService.primaryWarehouseId;
+    if (primaryId != null && primaryId.isNotEmpty) {
+      for (final w in warehouses) {
+        if (w.id == primaryId) return w;
+      }
+    }
     return warehouses.firstWhere(
       (w) => w.isPrimary,
       orElse: () => warehouses.first,
@@ -220,6 +290,41 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
   Future<void> _onLoadIssueGrid(
     LoadIssueGrid event,
     Emitter<StockTransferState> emit,
+  ) async {
+    // Today's invoiced quantities per item, scoped to the current location
+    // (getLocalInvoices() is already session-location scoped).
+    final today = DateTime.now();
+    final todaysInvoices = filterByDateRange(
+      _salesRepository.getLocalInvoices(),
+      (inv) => inv.date,
+      startDate: today,
+      endDate: today,
+    );
+    final invoiceQtyByItem = <String, double>{};
+    for (final inv in todaysInvoices) {
+      for (final line in inv.items) {
+        // Base-unit quantities — invoice lines may be in alternate units.
+        invoiceQtyByItem[line.item.id] =
+            (invoiceQtyByItem[line.item.id] ?? 0) + line.quantityInBase;
+      }
+    }
+    await _loadIssueGridWithQtyMap(emit, invoiceQtyByItem);
+  }
+
+  Future<void> _onLoadIssueGridWithDemand(
+    LoadIssueGridWithDemand event,
+    Emitter<StockTransferState> emit,
+  ) async {
+    // Order demand fills Col 2 (invoiceQty) so transfer qty = demand + extra.
+    final demand = Map<String, double>.from(event.demandByItemId)
+      ..removeWhere((_, qty) => qty <= 0);
+    await _loadIssueGridWithQtyMap(emit, demand);
+  }
+
+  /// Shared Issue-to-Van grid builder: van stock ∪ keys in [qtyByItemId].
+  Future<void> _loadIssueGridWithQtyMap(
+    Emitter<StockTransferState> emit,
+    Map<String, double> qtyByItemId,
   ) async {
     emit(
       state.copyWith(
@@ -241,29 +346,11 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         currentItems = _salesRepository.getItems();
       }
 
-      // Today's invoiced quantities per item, scoped to the current location
-      // (getLocalInvoices() is already session-location scoped).
-      final today = DateTime.now();
-      final todaysInvoices = filterByDateRange(
-        _salesRepository.getLocalInvoices(),
-        (inv) => inv.date,
-        startDate: today,
-        endDate: today,
-      );
-      final invoiceQtyByItem = <String, int>{};
-      for (final inv in todaysInvoices) {
-        for (final line in inv.items) {
-          invoiceQtyByItem[line.item.id] =
-              (invoiceQtyByItem[line.item.id] ?? 0) + line.quantity;
-        }
-      }
-
-      // Union of current-stock items and invoiced items — an item may have
-      // sold out (stock 0, not present in a filtered live response) yet still
-      // need to appear because it was invoiced today.
+      // Union of current-stock items and demand/invoiced items — an item may
+      // have sold out (stock 0) yet still need to appear for the transfer.
       final itemsById = <String, Item>{for (final it in currentItems) it.id: it};
       final cachedItems = _salesRepository.getItems();
-      for (final itemId in invoiceQtyByItem.keys) {
+      for (final itemId in qtyByItemId.keys) {
         itemsById.putIfAbsent(itemId, () {
           return cachedItems.firstWhere(
             (it) => it.id == itemId,
@@ -287,7 +374,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
                 (item) => StockTransferRow(
                   item: item,
                   currentStock: item.stock,
-                  invoiceQty: invoiceQtyByItem[item.id] ?? 0,
+                  invoiceQty: qtyByItemId[item.id] ?? 0,
                 ),
               )
               .toList()
@@ -344,7 +431,8 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     final idx = rows.indexWhere((r) => r.item.id == event.itemId);
     if (idx < 0) return;
 
-    var qty = event.quantity;
+    // Entered in the row's selected unit — convert to base for storage.
+    var qty = event.quantity * rows[idx].conversionRate;
     if (qty < 0) qty = 0;
     if (state.direction == StockTransferDirection.unload) {
       // Unload can never move more than the van's current balance.
@@ -355,23 +443,40 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     emit(state.copyWith(rows: rows, errorMessage: null));
   }
 
+  void _onUpdateRowUnit(UpdateRowUnit event, Emitter<StockTransferState> emit) {
+    final rows = List<StockTransferRow>.from(state.rows);
+    final idx = rows.indexWhere((r) => r.item.id == event.itemId);
+    if (idx < 0) return;
+    rows[idx] = rows[idx].copyWith(
+      uom: event.uom,
+      conversionRate: event.conversionRate <= 0 ? 1.0 : event.conversionRate,
+    );
+    emit(state.copyWith(rows: rows, errorMessage: null));
+  }
+
   void _onAddExtraItem(AddExtraItem event, Emitter<StockTransferState> emit) {
     if (state.direction == StockTransferDirection.unload) {
       // Stock Unloading only operates on items already on the van.
       return;
     }
+    final baseQty = event.quantity * event.conversionRate;
     final rows = List<StockTransferRow>.from(state.rows);
     final idx = rows.indexWhere((r) => r.item.id == event.item.id);
     if (idx >= 0) {
       rows[idx] = rows[idx].copyWith(
-        extraQty: rows[idx].extraQty + event.quantity,
+        extraQty: rows[idx].extraQty + baseQty,
+        uom: event.uom,
+        conversionRate: event.conversionRate <= 0 ? 1.0 : event.conversionRate,
       );
     } else {
       rows.add(
         StockTransferRow(
           item: event.item,
           currentStock: event.item.stock,
-          extraQty: event.quantity,
+          extraQty: baseQty,
+          uom: event.uom,
+          conversionRate:
+              event.conversionRate <= 0 ? 1.0 : event.conversionRate,
         ),
       );
       rows.sort((a, b) => a.item.name.compareTo(b.item.name));
@@ -432,7 +537,11 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
             .map(
               (r) => StockTransferLine(
                 item: r.item,
+                // Base units — the payload and local stock math stay
+                // base-unit; uom/conversionRate ride along for display.
                 quantity: state.transferQtyFor(r),
+                uom: r.displayUom,
+                conversionRate: r.conversionRate,
               ),
             )
             .toList(),

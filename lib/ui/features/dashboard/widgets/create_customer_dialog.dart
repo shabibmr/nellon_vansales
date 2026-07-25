@@ -7,6 +7,7 @@ import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/zoho_api_client.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/permission_dialogs.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/app_text_field.dart';
 import '../../../../ui/core/bloc/gps_capture_bloc.dart';
@@ -133,15 +134,9 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                 'GPS captured: ${state.latitude.toStringAsFixed(4)}, ${state.longitude.toStringAsFixed(4)}',
               );
             } else if (state is GpsCapturePermissionDenied) {
-              showErrorSnackBar(
-                context,
-                'Location permission denied. You can enter coordinates manually.',
-              );
+              showLocationPermissionSettingsDialog(context);
             } else if (state is GpsCaptureServiceDisabled) {
-              showErrorSnackBar(
-                context,
-                'Location services are disabled on this device.',
-              );
+              showEnableLocationServiceDialog(context);
             } else if (state is GpsCaptureFailure) {
               showErrorSnackBar(context, 'Failed to get location: ${state.message}');
             }

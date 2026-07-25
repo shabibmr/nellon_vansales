@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
-import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../bloc/expense_bloc.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
@@ -13,7 +12,11 @@ import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../../domain/models/expense_entry.dart';
 
 class ExpenseEditorPage extends StatefulWidget {
-  const ExpenseEditorPage({super.key});
+  /// When true, the expense is shown read-only (view mode). Expenses cannot
+  /// be edited after creation — only sales orders support edit.
+  final bool readOnly;
+
+  const ExpenseEditorPage({super.key, this.readOnly = false});
 
   @override
   State<ExpenseEditorPage> createState() => _ExpenseEditorPageState();
@@ -28,9 +31,8 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
   static const _categories = [
     'Fuel',
     'Tolls',
-    'Meals',
     'Maintenance',
-    'Miscellaneous',
+    'Parking fee',
   ];
 
   @override
@@ -48,13 +50,6 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
     _amountController.dispose();
     _descriptionController.dispose();
     super.dispose();
-  }
-
-  Future<void> _selectDate(DateTime current) async {
-    final picked = await showThemedDatePicker(context, initialDate: current);
-    if (picked != null && mounted) {
-      context.read<ExpenseBloc>().add(SetEditingExpenseDate(picked));
-    }
   }
 
   void _showImageSourceSheet(bool isDark) {
@@ -141,13 +136,16 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final readOnly = widget.readOnly;
 
     return Scaffold(
       appBar: AppBar(
         title: BlocBuilder<ExpenseBloc, ExpenseState>(
           buildWhen: (p, c) => p.isEditingNew != c.isEditingNew,
-          builder: (_, state) =>
-              Text(state.isEditingNew ? 'New Expense' : 'Edit Expense'),
+          builder: (_, state) {
+            if (readOnly) return const Text('View Expense');
+            return Text(state.isEditingNew ? 'New Expense' : 'Edit Expense');
+          },
         ),
       ),
       body: BlocConsumer<ExpenseBloc, ExpenseState>(
@@ -179,58 +177,48 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                     child: ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        // Date picker
+                        // Expense date (system-set; not editable)
                         Card(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => _selectDate(date),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: AppTheme.infoSky
-                                        .withValues(alpha: 0.1),
-                                    child: const Icon(
-                                      Icons.calendar_today,
-                                      color: AppTheme.infoSky,
-                                    ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: AppTheme.infoSky
+                                      .withValues(alpha: 0.1),
+                                  child: const Icon(
+                                    Icons.calendar_today,
+                                    color: AppTheme.infoSky,
                                   ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'EXPENSE DATE',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark
-                                                ? AppTheme.darkTextSecondary
-                                                : AppTheme.lightTextSecondary,
-                                          ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'EXPENSE DATE',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark
+                                              ? AppTheme.darkTextSecondary
+                                              : AppTheme.lightTextSecondary,
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _dateFormat.format(date),
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _dateFormat.format(date),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                  Icon(
-                                    Icons.keyboard_arrow_right,
-                                    color: isDark
-                                        ? AppTheme.darkTextSecondary
-                                        : AppTheme.lightTextSecondary,
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -239,15 +227,19 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                         // Amount
                         TextFormField(
                           controller: _amountController,
+                          readOnly: readOnly,
+                          enabled: !readOnly,
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
-                          onChanged: (v) {
-                            final amount = double.tryParse(v) ?? 0.0;
-                            context.read<ExpenseBloc>().add(
-                              SetEditingExpenseAmount(amount),
-                            );
-                          },
+                          onChanged: readOnly
+                              ? null
+                              : (v) {
+                                  final amount = double.tryParse(v) ?? 0.0;
+                                  context.read<ExpenseBloc>().add(
+                                    SetEditingExpenseAmount(amount),
+                                  );
+                                },
                           decoration: InputDecoration(
                             labelText: 'Amount ($cs)',
                             prefixIcon: const Icon(
@@ -274,22 +266,28 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                                     DropdownMenuItem(value: c, child: Text(c)),
                               )
                               .toList(),
-                          onChanged: (v) {
-                            if (v != null) {
-                              context.read<ExpenseBloc>().add(
-                                SetEditingExpenseCategory(v),
-                              );
-                            }
-                          },
+                          onChanged: readOnly
+                              ? null
+                              : (v) {
+                                  if (v != null) {
+                                    context.read<ExpenseBloc>().add(
+                                      SetEditingExpenseCategory(v),
+                                    );
+                                  }
+                                },
                         ),
                         const SizedBox(height: 16),
 
                         // Description
                         TextFormField(
                           controller: _descriptionController,
-                          onChanged: (v) => context.read<ExpenseBloc>().add(
-                            SetEditingExpenseDescription(v),
-                          ),
+                          readOnly: readOnly,
+                          enabled: !readOnly,
+                          onChanged: readOnly
+                              ? null
+                              : (v) => context.read<ExpenseBloc>().add(
+                                  SetEditingExpenseDescription(v),
+                                ),
                           decoration: const InputDecoration(
                             labelText: 'Description / Remarks (optional)',
                             prefixIcon: Icon(
@@ -313,6 +311,7 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                           isDark: isDark,
                           imagePath: state.editingReceiptImagePath,
                           imageBytes: state.editingReceiptImageBytes,
+                          readOnly: readOnly,
                           onAttach: () => _showImageSourceSheet(isDark),
                           onRemove: () => context.read<ExpenseBloc>().add(
                             const SetReceiptImage(),
@@ -380,8 +379,9 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed:
-                                (state.editingAmount <= 0 || state.isLoading)
+                            onPressed: readOnly
+                                ? () => Navigator.pop(context)
+                                : (state.editingAmount <= 0 || state.isLoading)
                                 ? null
                                 : () => context.read<ExpenseBloc>().add(
                                     SaveExpense(),
@@ -390,9 +390,9 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
                               backgroundColor: AppTheme.errorRose,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
-                            child: const Text(
-                              'SAVE EXPENSE',
-                              style: TextStyle(color: Colors.white),
+                            child: Text(
+                              readOnly ? 'CLOSE' : 'SAVE EXPENSE',
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                         ),
@@ -431,6 +431,7 @@ class _ReceiptImageCard extends StatelessWidget {
   final bool isDark;
   final String? imagePath;
   final Uint8List? imageBytes;
+  final bool readOnly;
   final VoidCallback onAttach;
   final VoidCallback onRemove;
 
@@ -438,6 +439,7 @@ class _ReceiptImageCard extends StatelessWidget {
     required this.isDark,
     required this.imagePath,
     required this.imageBytes,
+    this.readOnly = false,
     required this.onAttach,
     required this.onRemove,
   });
@@ -455,7 +457,7 @@ class _ReceiptImageCard extends StatelessWidget {
       ),
       child: imagePath == null
           ? InkWell(
-              onTap: onAttach,
+              onTap: readOnly ? null : onAttach,
               borderRadius: BorderRadius.circular(12),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -464,30 +466,34 @@ class _ReceiptImageCard extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    const Icon(
-                      Icons.camera_alt_rounded,
+                    Icon(
+                      readOnly
+                          ? Icons.image_not_supported_outlined
+                          : Icons.camera_alt_rounded,
                       color: AppTheme.primaryIndigo,
                       size: 32,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'ATTACH RECEIPT PHOTO',
+                      readOnly ? 'NO RECEIPT PHOTO' : 'ATTACH RECEIPT PHOTO',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: isDark ? AppTheme.darkText : AppTheme.lightText,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Capture via camera or select from gallery',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: isDark
-                            ? AppTheme.darkTextSecondary
-                            : AppTheme.lightTextSecondary,
+                    if (!readOnly) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Capture via camera or select from gallery',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -516,21 +522,22 @@ class _ReceiptImageCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                  Container(
-                    margin: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 18,
+                  if (!readOnly)
+                    Container(
+                      margin: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
                       ),
-                      onPressed: onRemove,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        onPressed: onRemove,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -3,7 +3,7 @@ import '../utils/money_math.dart';
 
 /// Represents a single categorical expense charge inside an overall expense entry ledger.
 class ExpenseLineItem extends Equatable {
-  /// The user-facing classification category (e.g., Fuel, Tolls, Meals, Maintenance, Miscellaneous).
+  /// The user-facing classification category (e.g., Fuel, Tolls, Maintenance, Parking fee).
   final String category;
 
   /// The cost of this specific item line.

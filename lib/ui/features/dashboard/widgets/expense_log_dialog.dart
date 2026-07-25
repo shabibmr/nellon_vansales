@@ -14,7 +14,7 @@ import '../../../../ui/core/utils/currency.dart';
 
 /// Modal dialog that logs a route trip expense log locally.
 ///
-/// Permits choosing standard categories (Fuel, Tolls, Meals, Maintenance, Miscellaneous),
+/// Permits choosing standard categories (Fuel, Tolls, Maintenance, Parking fee),
 /// inputting cost and remarks, and capturing/attaching receipts via the device camera/gallery.
 class ExpenseLogDialog extends StatefulWidget {
   /// Visual context.
@@ -164,7 +164,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                   initialValue: _category,
                   decoration: const InputDecoration(labelText: 'Category'),
                   items:
-                      ['Fuel', 'Tolls', 'Meals', 'Maintenance', 'Miscellaneous']
+                      ['Fuel', 'Tolls', 'Maintenance', 'Parking fee']
                           .map(
                             (cat) =>
                                 DropdownMenuItem(value: cat, child: Text(cat)),

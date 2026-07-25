@@ -1,0 +1,9 @@
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/images/app_logo.png"
+  remove_alpha_ios: true
+  
+  # Adaptive Icon for Android (removes double border and matches original contrast)
+  adaptive_icon_background: "#F5F5F5"
+  adaptive_icon_foreground: "assets/images/app_logo_foreground.png"

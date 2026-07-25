@@ -9,10 +9,10 @@ class InvoiceLineItem extends Equatable {
   /// The inventory product/item referenced.
   final Item item;
 
-  /// Quantity of items purchased.
-  final int quantity;
+  /// Quantity of items purchased, expressed in the selected unit ([displayUom]).
+  final double quantity;
 
-  /// Invoiced rate per unit item.
+  /// Invoiced rate per selected unit.
   final double rate;
 
   /// Percentage of tax applied (e.g. 5.0).
@@ -21,6 +21,13 @@ class InvoiceLineItem extends Equatable {
   /// Line item discount.
   final double discount;
 
+  /// Unit of measure for this line (defaults to [Item.uom] when empty).
+  final String uom;
+
+  /// Zoho `unit_conversion_id` when [uom] is an alternate unit; empty for
+  /// the item's base unit.
+  final String unitConversionId;
+
   /// Creates a new [InvoiceLineItem].
   const InvoiceLineItem({
     required this.item,
@@ -28,7 +35,16 @@ class InvoiceLineItem extends Equatable {
     required this.rate,
     required this.taxPercentage,
     this.discount = 0.0,
+    this.uom = '',
+    this.unitConversionId = '',
   });
+
+  /// Effective UOM for display/sync — line override, else item master.
+  String get displayUom => uom.isNotEmpty ? uom : item.uom;
+
+  /// The quantity converted into the item's base unit — stock math always
+  /// operates in base units (e.g. 2 × "25 Kg Bag" → 50 kg).
+  double get quantityInBase => quantity * item.conversionRateFor(displayUom);
 
   /// Computes the cost excluding tax.
   double get subTotal => roundMoney(rate * quantity);
@@ -42,10 +58,12 @@ class InvoiceLineItem extends Equatable {
   /// Creates a copy of this [InvoiceLineItem] with replaced values for specific fields.
   InvoiceLineItem copyWith({
     Item? item,
-    int? quantity,
+    double? quantity,
     double? rate,
     double? taxPercentage,
     double? discount,
+    String? uom,
+    String? unitConversionId,
   }) {
     return InvoiceLineItem(
       item: item ?? this.item,
@@ -53,11 +71,14 @@ class InvoiceLineItem extends Equatable {
       rate: rate ?? this.rate,
       taxPercentage: taxPercentage ?? this.taxPercentage,
       discount: discount ?? this.discount,
+      uom: uom ?? this.uom,
+      unitConversionId: unitConversionId ?? this.unitConversionId,
     );
   }
 
   @override
-  List<Object?> get props => [item, quantity, rate, taxPercentage, discount];
+  List<Object?> get props =>
+      [item, quantity, rate, taxPercentage, discount, uom, unitConversionId];
 }
 
 /// Represents a Sales Invoice created during route delivery.

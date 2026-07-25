@@ -3,6 +3,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../core/utils/quantity_format.dart';
 import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Sales Invoice documents.
@@ -116,7 +117,8 @@ class InvoicePdfTemplate {
                         isSubText: true,
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '${invoice.items[i].quantity}',
+                        '${formatQuantity(invoice.items[i].quantity)}'
+                        '${invoice.items[i].displayUom.isNotEmpty ? ' ${invoice.items[i].displayUom}' : ''}',
                       ),
                       SharedPdfTemplate.buildTableCell(
                         '$currencySymbol${invoice.items[i].rate.toStringAsFixed(2)}',

@@ -1,0 +1,15 @@
+{
+  "prepared_from": "zohodocs/inventory/items.yml list_items",
+  "refresh_token_updated": true,
+  "scopes": "ZohoBooks.fullaccess.all ZohoInventory.fullaccess.all",
+  "inventory_v1": {
+    "folder": "inventory_v1/",
+    "error": {
+      "message": "You do not have access as your account is disabled. Please contact your administrator for details.",
+      "code": 6018
+    },
+    "items": 0
+  },
+  "note": "OAuth scopes OK after re-consent. Inventory API still blocked: org/user Inventory product disabled (code 6018). Books v3 items remain usable.",
+  "fetched_at": "2026-07-17T12:45:20.3890740Z"
+}

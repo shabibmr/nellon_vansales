@@ -7,7 +7,6 @@ import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/currency.dart';
-import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/customer_selector_sheet.dart';
 import '../../../../ui/core/widgets/editor_footer.dart';
@@ -20,7 +19,11 @@ import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
 
 class SalesReturnEditorPage extends StatefulWidget {
-  const SalesReturnEditorPage({super.key});
+  /// When true, the return is shown read-only (view mode). Sales returns
+  /// cannot be edited after creation — only sales orders support edit.
+  final bool readOnly;
+
+  const SalesReturnEditorPage({super.key, this.readOnly = false});
 
   @override
   State<SalesReturnEditorPage> createState() => _SalesReturnEditorPageState();
@@ -42,17 +45,6 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
   void dispose() {
     _reasonController.dispose();
     super.dispose();
-  }
-
-  Future<void> _selectReturnDate(DateTime currentDate) async {
-    final picked = await showThemedDatePicker(
-      context,
-      initialDate: currentDate,
-      color: AppTheme.warningAmber,
-    );
-    if (picked != null && mounted) {
-      context.read<SalesReturnBloc>().add(UpdateReturnDate(picked));
-    }
   }
 
   void _showCustomerSelector(BuildContext context) {
@@ -123,15 +115,19 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final readOnly = widget.readOnly;
 
     return Scaffold(
       appBar: AppBar(
         title: BlocBuilder<SalesReturnBloc, SalesReturnState>(
           buildWhen: (previous, current) =>
               previous.isEditingNew != current.isEditingNew,
-          builder: (context, state) => Text(
-            state.isEditingNew ? 'New Sales Return' : 'Edit Sales Return',
-          ),
+          builder: (context, state) {
+            if (readOnly) return const Text('View Sales Return');
+            return Text(
+              state.isEditingNew ? 'New Sales Return' : 'Edit Sales Return',
+            );
+          },
         ),
       ),
       body: SafeArea(
@@ -172,7 +168,7 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                         // Customer Selector Card
                         Card(
                           child: InkWell(
-                            onTap: state.isEditingNew
+                            onTap: (!readOnly && state.isEditingNew)
                                 ? () => _showCustomerSelector(context)
                                 : null,
                             borderRadius: BorderRadius.circular(16),
@@ -227,7 +223,7 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                                       ],
                                     ),
                                   ),
-                                  if (state.isEditingNew)
+                                  if (!readOnly && state.isEditingNew)
                                     Icon(
                                       Icons.keyboard_arrow_right,
                                       color: isDark
@@ -241,58 +237,48 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Date Picker Card
+                        // Return date (system-set; not editable)
                         Card(
-                          child: InkWell(
-                            onTap: () => _selectReturnDate(date),
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: AppTheme.infoSky
-                                        .withValues(alpha: 0.1),
-                                    child: const Icon(
-                                      Icons.calendar_today,
-                                      color: AppTheme.infoSky,
-                                    ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: AppTheme.infoSky
+                                      .withValues(alpha: 0.1),
+                                  child: const Icon(
+                                    Icons.calendar_today,
+                                    color: AppTheme.infoSky,
                                   ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'RETURN DATE',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark
-                                                ? AppTheme.darkTextSecondary
-                                                : AppTheme.lightTextSecondary,
-                                          ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'RETURN DATE',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark
+                                              ? AppTheme.darkTextSecondary
+                                              : AppTheme.lightTextSecondary,
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _dateFormat.format(date),
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _dateFormat.format(date),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                  Icon(
-                                    Icons.keyboard_arrow_right,
-                                    color: isDark
-                                        ? AppTheme.darkTextSecondary
-                                        : AppTheme.lightTextSecondary,
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -309,16 +295,17 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                                 fontSize: 16,
                               ),
                             ),
-                            TextButton.icon(
-                              onPressed: customer == null
-                                  ? null
-                                  : () => _openItemSearch(state.editingItems),
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Add Item'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppTheme.warningAmber,
+                            if (!readOnly)
+                              TextButton.icon(
+                                onPressed: customer == null
+                                    ? null
+                                    : () => _openItemSearch(state.editingItems),
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text('Add Item'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppTheme.warningAmber,
+                                ),
                               ),
-                            ),
                           ],
                         ),
 
@@ -336,27 +323,32 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                                   (line) => LineItemRow(
                                     name: line.invoiceLineItem.item.name,
                                     sku: line.invoiceLineItem.item.sku,
-                                    rate: line.invoiceLineItem.rate,
+                                    rate: line.rate,
                                     taxPercentage: 0,
                                     quantity: line.returnedQuantity,
                                     total: line.total,
+                                    uom: line.displayUom,
                                     accentColor: AppTheme.warningAmber,
                                   ),
                                 )
                                 .toList(),
                             currencySymbol: cs,
-                            onEdit: (index) =>
-                                _editLineItem(state.editingItems[index]),
-                            onRemove: (index) {
-                              context.read<SalesReturnBloc>().add(
-                                RemoveReturnLineItem(
-                                  state
-                                      .editingItems[index]
-                                      .invoiceLineItem
-                                      .item,
-                                ),
-                              );
-                            },
+                            onEdit: readOnly
+                                ? null
+                                : (index) =>
+                                      _editLineItem(state.editingItems[index]),
+                            onRemove: readOnly
+                                ? null
+                                : (index) {
+                                    context.read<SalesReturnBloc>().add(
+                                      RemoveReturnLineItem(
+                                        state
+                                            .editingItems[index]
+                                            .invoiceLineItem
+                                            .item,
+                                      ),
+                                    );
+                                  },
                           ),
                         const SizedBox(height: 20),
 
@@ -364,6 +356,8 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                         TextFormField(
                           controller: _reasonController,
                           maxLines: 2,
+                          readOnly: readOnly,
+                          enabled: !readOnly,
                           decoration: const InputDecoration(
                             labelText: 'Reason for Return',
                             hintText: 'Damaged goods, wrong item, surplus...',
@@ -388,13 +382,14 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                     emphasize: true,
                   ),
                 ],
-                buttonLabel: 'SAVE SALES RETURN',
+                buttonLabel: readOnly ? 'CLOSE' : 'SAVE SALES RETURN',
                 buttonColor: AppTheme.warningAmber,
                 accentColor: AppTheme.warningAmber,
-                onSave:
-                    (customer == null ||
-                        state.editingItems.isEmpty ||
-                        state.isLoading)
+                onSave: readOnly
+                    ? () => Navigator.pop(context)
+                    : (customer == null ||
+                          state.editingItems.isEmpty ||
+                          state.isLoading)
                     ? null
                     : () {
                         context.read<SalesReturnBloc>().add(

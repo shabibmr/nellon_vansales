@@ -1,8 +1,11 @@
 import 'package:equatable/equatable.dart';
 
 /// Reactive line-item calculation state for [LineEditorCubit].
+///
+/// [quantity] and [rate] are expressed in the currently selected unit;
+/// the math is unit-agnostic (subtotal = rate × quantity either way).
 class LineEditorState extends Equatable {
-  final int quantity;
+  final double quantity;
   final double rate;
   final double discount;
   final double taxPercentage;
@@ -24,7 +27,7 @@ class LineEditorState extends Equatable {
   });
 
   LineEditorState copyWith({
-    int? quantity,
+    double? quantity,
     double? rate,
     double? discount,
     double? taxPercentage,

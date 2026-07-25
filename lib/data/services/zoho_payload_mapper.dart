@@ -81,6 +81,10 @@ class ZohoPayloadMapper {
       'due_date',
       'notes',
       'location_id',
+      // Option B: header location is the KGT primary business location;
+      // salesperson_id identifies who made the sale (see ZohoApiClient
+      // _withSalespersonId / _withPrimaryHeaderLocation).
+      'salesperson_id',
     ]) {
       _putIfPresent(out, raw, key);
     }
@@ -90,6 +94,15 @@ class ZohoPayloadMapper {
       'rate',
       'tax_percentage',
       'discount',
+      'unit',
+      // Multi-UOM: quantity/rate/unit are in the selected unit; the id ties
+      // the line to the item's Zoho unit conversion (verified live —
+      // /salesorders echoes it back with base_unit + conversion_rate).
+      // DTOs omit the key for base-unit lines, so it is only sent when set.
+      'unit_conversion_id',
+      // Option B: the van (storage location) lives on line items, never the
+      // header — this is what actually deducts van stock.
+      'location_id',
     ]);
     return out;
   }
@@ -109,6 +122,7 @@ class ZohoPayloadMapper {
       'shipment_date',
       'notes',
       'location_id',
+      'salesperson_id',
     ]) {
       _putIfPresent(out, raw, key);
     }
@@ -118,6 +132,9 @@ class ZohoPayloadMapper {
       'rate',
       'tax_percentage',
       'discount',
+      'unit',
+      'unit_conversion_id', // multi-UOM; omitted for base-unit lines
+      'location_id', // Option B: van lives on line items, not header
     ]);
     return out;
   }
@@ -136,6 +153,8 @@ class ZohoPayloadMapper {
       'date',
       'reference_number',
       'location_id',
+      // Deposit account: the session salesperson's personal cash ledger.
+      'account_id',
     ]) {
       _putIfPresent(out, raw, key);
     }
@@ -159,6 +178,7 @@ class ZohoPayloadMapper {
       'date',
       'location_id',
       'reason',
+      'salesperson_id',
     ]) {
       _putIfPresent(out, raw, key);
     }
@@ -167,6 +187,9 @@ class ZohoPayloadMapper {
       'quantity',
       'rate',
       'invoice_id',
+      'unit',
+      'unit_conversion_id', // multi-UOM; omitted for base-unit lines
+      'location_id', // Option B: van lives on line items, not header
     ]);
     return out;
   }
@@ -240,6 +263,10 @@ class ZohoPayloadMapper {
     if (raw['notes'] != null && (raw['notes'] as String).isNotEmpty) {
       out['description'] = raw['notes'];
     }
+    // Multi-UOM note: transfer quantities are ALWAYS converted to the item's
+    // base unit before reaching the stored payload (`quantity_transfer` is
+    // base-unit), so no unit keys are sent. Revisit if/when transfer orders
+    // go live (`_mockStockTransfers`).
     out['line_items'] = _cleanLineItems(raw['line_items'], const [
       'item_id',
       'name',

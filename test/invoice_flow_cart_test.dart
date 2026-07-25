@@ -1,5 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
+import 'package:van_sales/data/services/document_number_service.dart';
+import 'package:van_sales/data/services/hive_database_service.dart';
+import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
@@ -15,6 +19,25 @@ import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_bloc.dart';
+
+class _FakeDocDb extends HiveDatabaseService {
+  final Map<String, int> _counters = {};
+
+  @override
+  String? get voucherPrefix => 'SHB-';
+
+  @override
+  int? getDocCounter(String tag) => _counters[tag];
+
+  @override
+  Future<void> setDocCounter(String tag, int value) async {
+    _counters[tag] = value;
+  }
+}
+
+class _FakeZohoApi extends ZohoApiClient {
+  _FakeZohoApi() : super(dbService: _FakeDocDb());
+}
 
 class FakeSalesRepository implements SalesRepository {
   final List<SalesInvoice> invoices = [];
@@ -93,7 +116,7 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveItems(List<Item> items) async {}
 
   @override
-  Future<Item> resolveItemUnitConversions(Item item) async => item;
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
   @override
   List<SalesOrder> getLocalOrders() => [];
   @override
@@ -203,6 +226,17 @@ void main() {
   late SalesInvoiceBloc bloc;
 
   setUp(() {
+    final sl = GetIt.instance;
+    if (sl.isRegistered<DocumentNumberService>()) {
+      sl.unregister<DocumentNumberService>();
+    }
+    sl.registerSingleton<DocumentNumberService>(
+      DocumentNumberService(
+        dbService: _FakeDocDb(),
+        apiClient: _FakeZohoApi(),
+      ),
+    );
+
     salesRepo = FakeSalesRepository();
     syncRepo = FakeSyncRepository();
     bloc = SalesInvoiceBloc(
@@ -213,6 +247,10 @@ void main() {
 
   tearDown(() async {
     await bloc.close();
+    final sl = GetIt.instance;
+    if (sl.isRegistered<DocumentNumberService>()) {
+      sl.unregister<DocumentNumberService>();
+    }
   });
 
   test('ClearCart empties editingItems so sheet opens clean', () async {
@@ -309,5 +347,58 @@ void main() {
     final cleared = await bloc.stream.firstWhere((s) => s.errorMessage == null);
     expect(cleared.errorMessage, isNull);
     expect(cleared.successMessage, isNull);
+  });
+
+  test('AddOrUpdateLineItem stores multi-UOM fields on the cart line', () async {
+    final item = _item(id: 'i1', name: 'Rice', stock: 100, rate: 4.875);
+    bloc.add(
+      AddOrUpdateLineItem(
+        item: item,
+        quantity: 2,
+        rate: 121.875,
+        discount: 0,
+        uom: '25 Kg Bag',
+        unitConversionId: 'uc_bag',
+      ),
+    );
+    final state =
+        await bloc.stream.firstWhere((s) => s.editingItems.isNotEmpty);
+    final line = state.editingItems.single;
+    expect(line.uom, '25 Kg Bag');
+    expect(line.unitConversionId, 'uc_bag');
+    expect(line.quantity, 2);
+    expect(line.rate, 121.875);
+  });
+
+  test('StartInvoiceFromOrder copies unitConversionId onto invoice lines',
+      () async {
+    final item = _item(id: 'i1', name: 'Rice', stock: 100, rate: 4.875);
+    final order = SalesOrder(
+      id: 'so1',
+      orderNumber: 'SHB-SO-00001',
+      customerId: _customer.id,
+      customerName: _customer.name,
+      date: DateTime(2026, 1, 1),
+      shipmentDate: DateTime(2026, 1, 2),
+      items: [
+        OrderLineItem(
+          item: item,
+          quantity: 2,
+          rate: 121.875,
+          taxPercentage: 5,
+          uom: '25 Kg Bag',
+          unitConversionId: 'uc_bag',
+        ),
+      ],
+      notes: '',
+    );
+    bloc.add(StartInvoiceFromOrder(order));
+    final state =
+        await bloc.stream.firstWhere((s) => s.editingItems.isNotEmpty);
+    final line = state.editingItems.single;
+    expect(line.unitConversionId, 'uc_bag');
+    expect(line.displayUom, '25 Kg Bag');
+    expect(line.quantity, 2);
+    expect(state.sourceOrderId, 'so1');
   });
 }

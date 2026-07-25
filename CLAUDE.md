@@ -71,11 +71,14 @@ Data models in `data/models/` handle JSON serialization for Hive. Domain models 
 
 `ZohoApiClient` talks to Zoho Books v3 REST API with OAuth 2.0 (access token auto-refresh via Dio interceptor). Credentials (`_clientId`, `_clientSecret`, `_refreshToken`, `_organizationId`) are set in `zoho_api_client.dart` and can be **overridden at runtime** via `updateCredentials()`, which `ServerConfigCubit` calls after loading remote server config. `_isMockMode()` falls back to a mock sandbox only if credentials are still `YOUR_...` placeholders.
 
-**Important gotcha — transactions are mostly mocked right now.** Three flags in `zoho_api_client.dart` decide what actually hits Zoho (defaults shown; runtime-overridable via `updateMockFlags()`, driven by `ServerConfigCubit`/`ServerConfig`):
-- `_mockTransactions = true` → invoices, receipts, returns, and expenses are simulated against a sandbox and **not** pushed live.
+**Live and mock share one path until HTTP.** Public methods always run payload shaping (`ZohoPayloadMapper`, location inject, expense account resolve) and always call `_dio.get/post/put`. A `ZohoMockInterceptor` (registered first; see `lib/data/services/zoho_mock/`) short-circuits selected requests with Zoho-shaped envelopes (`contact` / `invoice` / list keys + `page_context`, etc.). Callers always parse the same response keys as live.
+
+**Important gotcha — transactions are mostly mocked right now.** Three flags in `zoho_api_client.dart` decide which *writes* the mock interceptor claims (defaults shown; runtime-overridable via `updateMockFlags()`, driven by `ServerConfigCubit`/`ServerConfig`):
+- `_mockTransactions = true` → contacts, invoices, receipts, returns, expenses are mocked at the Dio layer (not pushed live).
 - `_mockSalesOrderTransactions = false` → only **sales orders** push live (still requires real credentials).
-- `_mockStockTransfers = true` → stock transfers (Issue-to-Van) are simulated and **not** pushed live.
-- Master-data downloads (customers, items, routes, etc.) always run live regardless of these flags.
+- `_mockStockTransfers = true` → stock transfers (Issue-to-Van) are mocked.
+- Master-data downloads (customers, items, etc.) run live when credentials are real; under placeholder credentials the mock interceptor serves GET fixtures too.
+- `fetchRoutes()` stays app-local (no Zoho route entity).
 
 `SyncWorker` manages the offline queue (`syncPendingItems()`):
 - Listens for network connectivity changes and triggers sync automatically
@@ -146,3 +149,13 @@ Each transaction type has a sync-queue entry (`SyncQueueItem`) and a `ZohoApiCli
 A shared-widget layer was extracted to keep feature code thin — **reuse these before writing per-feature variants**:
 - `lib/ui/core/widgets/` — e.g. `app_text_field`, `item_search_sheet`, `item_line_editor_dialog`, `line_item_list`, `document_list_card`, `editor_footer`, `dialog_scaffolding`, `status_pill`, `empty_state`, `sync_item_card`, `async_search_widget`, `customer_selector_sheet`, `date_range_filter_card`.
 - `lib/ui/core/utils/` — `currency.dart`, `date_picker.dart`, `snackbars.dart`.
+
+### Bluetooth ESC/POS Thermal Printing
+
+Target: **Nigachi NC-MTP500 series** (and any ESC/POS Bluetooth Classic printer).
+
+- **Domain:** `ThermalPrinterRepository`, `PairedPrinter`, `ThermalPaperSize` (`inch4` default, `inch2`)
+- **Data:** `ThermalPrinterService` + `lib/data/services/esc_pos/` ticket builders (`print_bluetooth_thermal` + `esc_pos_utils_plus`)
+- **UI:** `ThermalPrinterCubit` (app-level), **Settings** page (paper size + pair + test print), **Thermal** action on `VoucherPdfActionsWidget`
+- Paper size and preferred printer persist in Hive `master_data_box`
+- A4 PDF Preview/Print/Share path is unchanged

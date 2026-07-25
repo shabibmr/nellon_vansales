@@ -25,7 +25,11 @@ import '../../sales_invoice/bloc/sales_invoice_bloc.dart'
 import '../../sales_invoice/views/sales_invoice_editor_page.dart';
 
 class SalesOrderEditorPage extends StatefulWidget {
-  const SalesOrderEditorPage({super.key});
+  /// When true, opens in view mode. The user can switch to edit via the
+  /// app-bar Edit action (sales orders are the only editable vouchers).
+  final bool readOnly;
+
+  const SalesOrderEditorPage({super.key, this.readOnly = false});
 
   @override
   State<SalesOrderEditorPage> createState() => _SalesOrderEditorPageState();
@@ -36,9 +40,14 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
   late TextEditingController _notesController;
   final HiveDatabaseService _db = sl<HiveDatabaseService>();
 
+  /// Local view-mode flag so the Edit button can unlock the form without
+  /// rebuilding the route.
+  late bool _isViewMode;
+
   @override
   void initState() {
     super.initState();
+    _isViewMode = widget.readOnly;
     final blocState = context.read<SalesOrderBloc>().state;
     _notesController = TextEditingController(text: blocState.editingNotes);
   }
@@ -91,13 +100,13 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
     );
   }
 
-  Future<void> _selectOrderDate(DateTime currentDate) async {
+  Future<void> _selectShipmentDate(DateTime currentDate) async {
     final picked = await showThemedDatePicker(
       context,
       initialDate: currentDate,
     );
     if (picked != null && mounted) {
-      context.read<SalesOrderBloc>().add(UpdateOrderDate(picked));
+      context.read<SalesOrderBloc>().add(UpdateShipmentDate(picked));
     }
   }
 
@@ -129,14 +138,15 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
         .where((item) => !excludedIds.contains(item.id))
         .toList();
 
-    (Item, int, double, double)? result;
+    ItemLineEditorResult? result;
+    Item? pickedItem;
     await ItemSearchSheet.show<void>(
       context,
       items: items,
       title: 'Search Items',
-      emptyMessage: 'No items in van stock',
+      emptyMessage: 'No items available to add',
       onSelected: (item, sheetContext) async {
-        final editorResult = await showDialog<(int, double, double)>(
+        final editorResult = await showDialog<ItemLineEditorResult>(
           context: sheetContext,
           builder: (context) => SharedItemLineEditorDialog(
             item: item,
@@ -144,24 +154,23 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
             title: 'Order Line Item Details',
           ),
         );
-        if (editorResult != null) {
-          final (qty, rate, discount) = editorResult;
-          if (qty > 0) {
-            result = (item, qty, rate, discount);
-            if (sheetContext.mounted) Navigator.pop(sheetContext, null);
-          }
+        if (editorResult != null && editorResult.quantity > 0) {
+          result = editorResult;
+          pickedItem = item;
+          if (sheetContext.mounted) Navigator.pop(sheetContext, null);
         }
       },
     );
 
-    if (result != null && mounted) {
-      final (item, qty, rate, discount) = result!;
+    if (result != null && pickedItem != null && mounted) {
       context.read<SalesOrderBloc>().add(
         AddOrUpdateLineItem(
-          item: item,
-          quantity: qty,
-          rate: rate,
-          discount: discount,
+          item: pickedItem!,
+          quantity: result!.quantity,
+          rate: result!.rate,
+          discount: result!.discount,
+          uom: result!.uom,
+          unitConversionId: result!.unitConversionId,
         ),
       );
     }
@@ -173,7 +182,7 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
     String? editingOrderId,
     List<SalesOrder> orders,
   ) async {
-    int originalQty = 0;
+    double originalBaseQty = 0;
     if (!isEditingNew && editingOrderId != null) {
       final originalOrderIndex = orders.indexWhere(
         (ord) => ord.id == editingOrderId,
@@ -184,32 +193,35 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
           (line) => line.item.id == lineItem.item.id,
         );
         if (originalLineIndex >= 0) {
-          originalQty = originalOrder.items[originalLineIndex].quantity;
+          originalBaseQty =
+              originalOrder.items[originalLineIndex].quantityInBase;
         }
       }
     }
 
-    final result = await showDialog<(int, double, double)>(
+    final result = await showDialog<ItemLineEditorResult>(
       context: context,
       builder: (context) => SharedItemLineEditorDialog(
         item: lineItem.item,
         initialQuantity: lineItem.quantity,
-        originalQuantity: originalQty,
+        originalQuantity: originalBaseQty,
         allowUnlimitedQuantity: true,
         title: 'Order Line Item Details',
         initialRate: lineItem.rate,
         initialDiscount: lineItem.discount,
+        initialUom: lineItem.displayUom,
       ),
     );
 
     if (result != null && mounted) {
-      final (newQty, newRate, newDiscount) = result;
       context.read<SalesOrderBloc>().add(
         AddOrUpdateLineItem(
           item: lineItem.item,
-          quantity: newQty,
-          rate: newRate,
-          discount: newDiscount,
+          quantity: result.quantity,
+          rate: result.rate,
+          discount: result.discount,
+          uom: result.uom,
+          unitConversionId: result.unitConversionId,
         ),
       );
     }
@@ -219,14 +231,28 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final readOnly = _isViewMode;
+
     return Scaffold(
       appBar: AppBar(
         title: BlocBuilder<SalesOrderBloc, SalesOrderState>(
           buildWhen: (previous, current) =>
               previous.isEditingNew != current.isEditingNew,
-          builder: (context, state) =>
-              Text(state.isEditingNew ? 'New Sales Order' : 'Edit Sales Order'),
+          builder: (context, state) {
+            if (readOnly) return const Text('View Sales Order');
+            return Text(
+              state.isEditingNew ? 'New Sales Order' : 'Edit Sales Order',
+            );
+          },
         ),
+        actions: [
+          if (readOnly)
+            IconButton(
+              tooltip: 'Edit',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => setState(() => _isViewMode = false),
+            ),
+        ],
       ),
       body: SafeArea(
         child: BlocConsumer<SalesOrderBloc, SalesOrderState>(
@@ -245,13 +271,16 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
           },
           builder: (context, state) {
             final cs = context.org.currencySymbol;
+            final customer = state.editingCustomer;
+            final date = state.editingDate ?? DateTime.now();
+            final shipmentDate = state.editingShipmentDate ?? date;
             final tempOrder = SalesOrder(
               id: '',
               orderNumber: '',
               customerId: state.editingCustomer?.id ?? '',
               customerName: state.editingCustomer?.name ?? '',
-              date: state.editingDate ?? DateTime.now(),
-              shipmentDate: state.editingDate ?? DateTime.now(),
+              date: date,
+              shipmentDate: shipmentDate,
               items: state.editingItems,
               notes: '',
             );
@@ -260,8 +289,6 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
             final discountTotal = tempOrder.discountTotal;
             final roundOff = tempOrder.roundOff;
             final total = tempOrder.total;
-            final customer = state.editingCustomer;
-            final date = state.editingDate ?? DateTime.now();
 
             return Column(
               children: [
@@ -277,7 +304,7 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                           // Customer Selector Card
                           Card(
                             child: InkWell(
-                              onTap: state.isEditingNew
+                              onTap: (!readOnly && state.isEditingNew)
                                   ? () => _showCustomerSelector(context)
                                   : null,
                               borderRadius: BorderRadius.circular(16),
@@ -333,7 +360,7 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                         ],
                                       ),
                                     ),
-                                    if (state.isEditingNew)
+                                    if (!readOnly && state.isEditingNew)
                                       Icon(
                                         Icons.keyboard_arrow_right,
                                         color: isDark
@@ -347,21 +374,70 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Date Picker Card
+                          // Order date (system-set; not editable)
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    backgroundColor: AppTheme.infoSky
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(
+                                      Icons.calendar_today,
+                                      color: AppTheme.infoSky,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'ORDER DATE',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _dateFormat.format(date),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Expected Shipment Date Picker Card
                           Card(
                             child: InkWell(
-                              onTap: () => _selectOrderDate(date),
+                              onTap: readOnly
+                                  ? null
+                                  : () => _selectShipmentDate(shipmentDate),
                               borderRadius: BorderRadius.circular(16),
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),
                                 child: Row(
                                   children: [
                                     CircleAvatar(
-                                      backgroundColor: AppTheme.infoSky
+                                      backgroundColor: AppTheme.warningAmber
                                           .withValues(alpha: 0.1),
                                       child: const Icon(
-                                        Icons.calendar_today,
-                                        color: AppTheme.infoSky,
+                                        Icons.local_shipping_outlined,
+                                        color: AppTheme.warningAmber,
                                       ),
                                     ),
                                     const SizedBox(width: 16),
@@ -371,7 +447,7 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'ORDER DATE',
+                                            'EXPECTED SHIPPING DATE',
                                             style: TextStyle(
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
@@ -382,7 +458,7 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            _dateFormat.format(date),
+                                            _dateFormat.format(shipmentDate),
                                             style: const TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
@@ -391,12 +467,13 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                         ],
                                       ),
                                     ),
-                                    Icon(
-                                      Icons.keyboard_arrow_right,
-                                      color: isDark
-                                          ? AppTheme.darkTextSecondary
-                                          : AppTheme.lightTextSecondary,
-                                    ),
+                                    if (!readOnly)
+                                      Icon(
+                                        Icons.keyboard_arrow_right,
+                                        color: isDark
+                                            ? AppTheme.darkTextSecondary
+                                            : AppTheme.lightTextSecondary,
+                                      ),
                                   ],
                                 ),
                               ),
@@ -415,16 +492,18 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                   fontSize: 16,
                                 ),
                               ),
-                              TextButton.icon(
-                                onPressed: customer == null
-                                    ? null
-                                    : () => _openItemSearch(state.editingItems),
-                                icon: const Icon(Icons.add, size: 16),
-                                label: const Text('Add Item'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.primaryIndigo,
+                              if (!readOnly)
+                                TextButton.icon(
+                                  onPressed: customer == null
+                                      ? null
+                                      : () =>
+                                            _openItemSearch(state.editingItems),
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add Item'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryIndigo,
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
 
@@ -448,23 +527,28 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                       quantity: line.quantity,
                                       total: line.total,
                                       discount: line.discount,
+                                      uom: line.displayUom,
                                     ),
                                   )
                                   .toList(),
                               currencySymbol: cs,
-                              onEdit: (index) => _editLineItem(
-                                state.editingItems[index],
-                                state.isEditingNew,
-                                state.editingOrderId,
-                                state.orders,
-                              ),
-                              onRemove: (index) {
-                                context.read<SalesOrderBloc>().add(
-                                  RemoveLineItem(
-                                    state.editingItems[index].item,
-                                  ),
-                                );
-                              },
+                              onEdit: readOnly
+                                  ? null
+                                  : (index) => _editLineItem(
+                                      state.editingItems[index],
+                                      state.isEditingNew,
+                                      state.editingOrderId,
+                                      state.orders,
+                                    ),
+                              onRemove: readOnly
+                                  ? null
+                                  : (index) {
+                                      context.read<SalesOrderBloc>().add(
+                                        RemoveLineItem(
+                                          state.editingItems[index].item,
+                                        ),
+                                      );
+                                    },
                             ),
                           const SizedBox(height: 20),
 
@@ -472,6 +556,8 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                           TextFormField(
                             controller: _notesController,
                             maxLines: 2,
+                            readOnly: readOnly,
+                            enabled: !readOnly,
                             decoration: const InputDecoration(
                               labelText: 'Order Notes',
                               hintText: 'Add remarks or special terms...',
@@ -518,12 +604,13 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                       emphasize: true,
                     ),
                   ],
-                  buttonLabel: 'SAVE SALES ORDER',
+                  buttonLabel: readOnly ? 'CLOSE' : 'SAVE SALES ORDER',
                   buttonColor: AppTheme.primaryIndigo,
-                  onSave:
-                      (customer == null ||
-                          state.editingItems.isEmpty ||
-                          state.isLoading)
+                  onSave: readOnly
+                      ? () => Navigator.pop(context)
+                      : (customer == null ||
+                            state.editingItems.isEmpty ||
+                            state.isLoading)
                       ? null
                       : () {
                           context.read<SalesOrderBloc>().add(
@@ -554,6 +641,8 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                             return Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                // Convert is available in view and edit; the
+                                // converted indicator is always shown when done.
                                 _buildConvertAction(context, savedOrder),
                                 const SizedBox(height: 16),
                                 VoucherPdfActionsWidget(
@@ -564,13 +653,12 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                                     customerId: customer?.id ?? '',
                                     customerName: customer?.name ?? '',
                                     date: date,
-                                    shipmentDate:
-                                        state.editingDate?.add(
-                                          const Duration(days: 7),
-                                        ) ??
-                                        DateTime.now(),
+                                    shipmentDate: savedOrder.shipmentDate,
                                     items: state.editingItems,
                                     notes: _notesController.text,
+                                    status: savedOrder.status,
+                                    convertedInvoiceNumber:
+                                        savedOrder.convertedInvoiceNumber,
                                   ),
                                 ),
                               ],

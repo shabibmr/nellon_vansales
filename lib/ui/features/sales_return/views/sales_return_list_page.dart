@@ -152,7 +152,9 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const SalesReturnEditorPage(),
+                                  builder: (_) => const SalesReturnEditorPage(
+                                    readOnly: true,
+                                  ),
                                 ),
                               );
                             },

@@ -8,6 +8,8 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_order_model.dart';
+import '../../../../data/services/document_number_service.dart';
+import '../../../../data/services/injection.dart';
 import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
@@ -56,6 +58,15 @@ class UpdateOrderDate extends SalesOrderEvent {
   List<Object?> get props => [date];
 }
 
+/// Fired to update the expected shipment date under editor.
+class UpdateShipmentDate extends SalesOrderEvent {
+  final DateTime shipmentDate;
+  const UpdateShipmentDate(this.shipmentDate);
+
+  @override
+  List<Object?> get props => [shipmentDate];
+}
+
 /// Fired to update the customer details under editor.
 class UpdateOrderCustomer extends SalesOrderEvent {
   final Customer customer;
@@ -68,18 +79,23 @@ class UpdateOrderCustomer extends SalesOrderEvent {
 /// Fired to update or add line item under active editor.
 class AddOrUpdateLineItem extends SalesOrderEvent {
   final Item item;
-  final int quantity;
+  final double quantity;
   final double? rate;
   final double? discount;
+  final String? uom;
+  final String? unitConversionId;
   const AddOrUpdateLineItem({
     required this.item,
     required this.quantity,
     this.rate,
     this.discount,
+    this.uom,
+    this.unitConversionId,
   });
 
   @override
-  List<Object?> get props => [item, quantity, rate, discount];
+  List<Object?> get props =>
+      [item, quantity, rate, discount, uom, unitConversionId];
 }
 
 /// Fired to drop a specific line item.
@@ -117,6 +133,7 @@ class SalesOrderState extends Equatable {
   // Active Editor Form Fields
   final String? editingOrderId;
   final DateTime? editingDate;
+  final DateTime? editingShipmentDate;
   final Customer? editingCustomer;
   final List<OrderLineItem> editingItems;
   final String editingNotes;
@@ -131,6 +148,7 @@ class SalesOrderState extends Equatable {
     this.successMessage,
     this.editingOrderId,
     this.editingDate,
+    this.editingShipmentDate,
     this.editingCustomer,
     this.editingItems = const [],
     this.editingNotes = '',
@@ -154,6 +172,7 @@ class SalesOrderState extends Equatable {
     String? successMessage,
     String? editingOrderId,
     DateTime? editingDate,
+    DateTime? editingShipmentDate,
     Customer? editingCustomer,
     List<OrderLineItem>? editingItems,
     String? editingNotes,
@@ -168,6 +187,7 @@ class SalesOrderState extends Equatable {
       successMessage: successMessage ?? this.successMessage,
       editingOrderId: editingOrderId ?? this.editingOrderId,
       editingDate: editingDate ?? this.editingDate,
+      editingShipmentDate: editingShipmentDate ?? this.editingShipmentDate,
       editingCustomer: editingCustomer ?? this.editingCustomer,
       editingItems: editingItems ?? this.editingItems,
       editingNotes: editingNotes ?? this.editingNotes,
@@ -185,6 +205,7 @@ class SalesOrderState extends Equatable {
     successMessage,
     editingOrderId,
     editingDate,
+    editingShipmentDate,
     editingCustomer,
     editingItems,
     editingNotes,
@@ -214,6 +235,7 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     on<StartNewOrder>(_onStartNewOrder);
     on<StartEditOrder>(_onStartEditOrder);
     on<UpdateOrderDate>(_onUpdateOrderDate);
+    on<UpdateShipmentDate>(_onUpdateShipmentDate);
     on<UpdateOrderCustomer>(_onUpdateOrderCustomer);
     on<AddOrUpdateLineItem>(_onAddOrUpdateLineItem);
     on<RemoveLineItem>(_onRemoveLineItem);
@@ -221,29 +243,20 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     on<ClearMessages>(_onClearMessages);
   }
 
-  Future<void> _onLoadOrders(
-    LoadOrders event,
-    Emitter<SalesOrderState> emit,
-  ) async {
+  /// Live-first load, scoped to the active date filter: fetch from Zoho and
+  /// render that; the local cache is only a fallback when the fetch fails
+  /// (offline/error), matching the reads-bias the app takes for lists now
+  /// that reps rarely lose signal. Writes are unaffected — still queued.
+  Future<void> _loadOrdersLiveFirst(Emitter<SalesOrderState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
-      final loaded = _salesRepository.getLocalOrders();
+      final loaded = await _salesRepository.fetchRemoteOrders(
+        startDate: state.startDate,
+        endDate: state.endDate,
+      );
       emit(state.copyWith(orders: loaded, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
-    }
-  }
-
-  Future<void> _onRefreshOrdersFromZoho(
-    RefreshOrdersFromZoho event,
-    Emitter<SalesOrderState> emit,
-  ) async {
-    emit(state.copyWith(isLoading: true));
-    try {
-      final loaded = await _salesRepository.fetchRemoteOrders();
-      emit(state.copyWith(orders: loaded, isLoading: false));
-    } catch (e) {
-      // Offline-first: surface the error but keep the cached list intact.
+      // Offline-first fallback: surface the error but keep the cached list intact.
       emit(
         state.copyWith(
           orders: _salesRepository.getLocalOrders(),
@@ -254,6 +267,18 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     }
   }
 
+  Future<void> _onLoadOrders(
+    LoadOrders event,
+    Emitter<SalesOrderState> emit,
+  ) =>
+      _loadOrdersLiveFirst(emit);
+
+  Future<void> _onRefreshOrdersFromZoho(
+    RefreshOrdersFromZoho event,
+    Emitter<SalesOrderState> emit,
+  ) =>
+      _loadOrdersLiveFirst(emit);
+
   void _onSetDateFilter(SetDateFilter event, Emitter<SalesOrderState> emit) {
     emit(state.copyWith(
       startDate: () => event.startDate,
@@ -261,11 +286,16 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     ));
   }
 
-  void _onStartNewOrder(StartNewOrder event, Emitter<SalesOrderState> emit) {
+  void _onStartNewOrder(
+    StartNewOrder event,
+    Emitter<SalesOrderState> emit,
+  ) {
+    final now = DateTime.now();
     emit(
       state.copyWith(
-        editingOrderId: 'temp_so_${DateTime.now().millisecondsSinceEpoch}',
-        editingDate: DateTime.now(),
+        editingOrderId: null,
+        editingDate: now,
+        editingShipmentDate: now,
         editingCustomer: null,
         editingItems: const [],
         editingNotes: '',
@@ -276,28 +306,28 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     );
   }
 
-  void _onStartEditOrder(StartEditOrder event, Emitter<SalesOrderState> emit) {
-    final customers = _salesRepository.getCustomers();
-    final customer = customers.firstWhere(
-      (c) => c.id == event.order.customerId,
-      orElse: () => Customer(
-        id: event.order.customerId,
-        name: event.order.customerName,
-        companyName: '',
-        email: '',
-        phone: '',
-        address: '',
-        outstandingBalance: 0,
-        creditLimit: 999999,
-        routeId: '',
-        sequence: 0,
-      ),
+  void _onStartEditOrder(
+    StartEditOrder event,
+    Emitter<SalesOrderState> emit,
+  ) {
+    final customer = Customer(
+      id: event.order.customerId,
+      name: event.order.customerName,
+      companyName: event.order.customerName,
+      email: '',
+      phone: '',
+      address: '',
+      outstandingBalance: 0,
+      creditLimit: 999999,
+      routeId: '',
+      sequence: 0,
     );
 
     emit(
       state.copyWith(
         editingOrderId: event.order.id,
         editingDate: event.order.date,
+        editingShipmentDate: event.order.shipmentDate,
         editingCustomer: customer,
         editingItems: List.from(event.order.items),
         editingNotes: event.order.notes,
@@ -313,6 +343,13 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
     Emitter<SalesOrderState> emit,
   ) {
     emit(state.copyWith(editingDate: event.date));
+  }
+
+  void _onUpdateShipmentDate(
+    UpdateShipmentDate event,
+    Emitter<SalesOrderState> emit,
+  ) {
+    emit(state.copyWith(editingShipmentDate: event.shipmentDate));
   }
 
   void _onUpdateOrderCustomer(
@@ -331,6 +368,10 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
 
     // Sales Orders are forward-bookings and don't strictly require local van stock validation.
     // However, we still allow adding the line item.
+    final lineUom = (event.uom != null && event.uom!.trim().isNotEmpty)
+        ? event.uom!.trim()
+        : event.item.uom;
+
     if (idx >= 0) {
       if (event.quantity <= 0) {
         items.removeAt(idx);
@@ -339,6 +380,8 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
           quantity: event.quantity,
           rate: event.rate,
           discount: event.discount,
+          uom: lineUom,
+          unitConversionId: event.unitConversionId,
         );
       }
     } else {
@@ -350,6 +393,8 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
             rate: event.rate ?? event.item.rate,
             taxPercentage: event.item.taxPercentage,
             discount: event.discount ?? 0.0,
+            uom: lineUom,
+            unitConversionId: event.unitConversionId ?? '',
           ),
         );
       }
@@ -386,8 +431,9 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
       String orderNum;
       String? existingZohoOrderId;
       if (isNew) {
-        orderNum =
-            'SO-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+        orderNum = await sl<DocumentNumberService>().nextNumber(
+          DocType.salesOrder,
+        );
       } else {
         final originalOrder = state.orders.firstWhere(
           (ord) => ord.id == tempId,
@@ -402,9 +448,8 @@ class SalesOrderBloc extends Bloc<SalesOrderEvent, SalesOrderState> {
         customerId: state.editingCustomer!.id,
         customerName: state.editingCustomer!.name,
         date: state.editingDate ?? DateTime.now(),
-        shipmentDate: (state.editingDate ?? DateTime.now()).add(
-          const Duration(days: 7),
-        ),
+        shipmentDate:
+            state.editingShipmentDate ?? state.editingDate ?? DateTime.now(),
         items: state.editingItems,
         notes: event.notes,
         isPendingSync: true,

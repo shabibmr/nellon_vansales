@@ -164,7 +164,9 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) =>
-                                        const SalesOrderEditorPage(),
+                                        const SalesOrderEditorPage(
+                                          readOnly: true,
+                                        ),
                                   ),
                                 );
                               },

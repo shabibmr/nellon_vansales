@@ -32,11 +32,15 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
     try {
       // 1. Check/request permission
       var status = await Permission.locationWhenInUse.status;
-      if (!status.isGranted) {
+      if (!status.isGranted && !status.isLimited) {
         status = await Permission.locationWhenInUse.request();
       }
-      if (!status.isGranted) {
-        emit(GpsCapturePermissionDenied());
+      if (!status.isGranted && !status.isLimited) {
+        emit(
+          GpsCapturePermissionDenied(
+            permanentlyDenied: status.isPermanentlyDenied,
+          ),
+        );
         return;
       }
 

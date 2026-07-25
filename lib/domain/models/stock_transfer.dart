@@ -16,22 +16,46 @@ class StockTransferLine extends Equatable {
   /// The inventory product/item referenced.
   final Item item;
 
-  /// Quantity of this item actually transferred.
-  final int quantity;
+  /// Quantity of this item actually transferred, in the item's **base unit**
+  /// (the payload and local stock math always operate in base units).
+  final double quantity;
+
+  /// Unit the quantity was entered in (display only; defaults to base unit).
+  final String uom;
+
+  /// Base-unit multiplier of [uom] (1.0 when entered in the base unit).
+  final double conversionRate;
 
   /// Creates a new [StockTransferLine].
-  const StockTransferLine({required this.item, required this.quantity});
+  const StockTransferLine({
+    required this.item,
+    required this.quantity,
+    this.uom = '',
+    this.conversionRate = 1.0,
+  });
+
+  /// The quantity as entered, expressed in [uom]
+  /// (e.g. base 50 kg entered as "2 × 25 Kg Bag" → 2).
+  double get enteredQuantity =>
+      conversionRate > 0 ? quantity / conversionRate : quantity;
 
   /// Creates a copy of this [StockTransferLine] with replaced values for specific fields.
-  StockTransferLine copyWith({Item? item, int? quantity}) {
+  StockTransferLine copyWith({
+    Item? item,
+    double? quantity,
+    String? uom,
+    double? conversionRate,
+  }) {
     return StockTransferLine(
       item: item ?? this.item,
       quantity: quantity ?? this.quantity,
+      uom: uom ?? this.uom,
+      conversionRate: conversionRate ?? this.conversionRate,
     );
   }
 
   @override
-  List<Object?> get props => [item, quantity];
+  List<Object?> get props => [item, quantity, uom, conversionRate];
 }
 
 /// Represents a physical stock transfer between two Zoho Books locations
@@ -86,9 +110,9 @@ class StockTransfer extends Equatable {
     this.locationId,
   });
 
-  /// Computes the total quantity of items moved across all lines.
-  int get totalQuantity =>
-      lines.fold(0, (sum, line) => sum + line.quantity);
+  /// Computes the total quantity of items moved across all lines (base units).
+  double get totalQuantity =>
+      lines.fold(0.0, (sum, line) => sum + line.quantity);
 
   /// Creates a copy of this [StockTransfer] with replaced values for specific fields.
   StockTransfer copyWith({

@@ -43,11 +43,12 @@ abstract class SalesRepository {
 
   /// Resolves an item's multi-UOM conversions on demand.
   ///
-  /// Returns the item unchanged if it already carries conversions or if they
-  /// are cached locally; otherwise fetches `GET /items/{id}` from Zoho, caches
-  /// the result (even when empty), and returns the enriched item. Falls back to
-  /// the base-unit-only item when offline or the fetch fails.
-  Future<Item> resolveItemUnitConversions(Item item);
+  /// Returns the enriched [Item] plus [offlineFallback] = true when a network
+  /// fetch was required but failed (no cache). Callers may show a snackbar in
+  /// that case; the item is still usable in the base unit.
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(
+    Item item,
+  );
 
   /// Gets all sales invoices recorded locally.
   List<SalesInvoice> getLocalInvoices();

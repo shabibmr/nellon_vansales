@@ -18,6 +18,9 @@ abstract class ExpenseEvent extends Equatable {
 
 class LoadExpenses extends ExpenseEvent {}
 
+/// Fired to download expenses from Zoho and merge them into the local cache.
+class RefreshExpensesFromZoho extends ExpenseEvent {}
+
 class SetExpenseDateFilter extends ExpenseEvent {
   final DateTime? startDate;
   final DateTime? endDate;
@@ -192,6 +195,7 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
         endDate: todayDate(),
       )) {
     on<LoadExpenses>(_onLoadExpenses);
+    on<RefreshExpensesFromZoho>(_onRefreshExpensesFromZoho);
     on<SetExpenseDateFilter>(_onSetDateFilter);
     on<StartNewExpense>(_onStartNewExpense);
     on<StartEditExpense>(_onStartEditExpense);
@@ -204,18 +208,38 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     on<ClearExpenseMessages>(_onClearMessages);
   }
 
+  /// Live-first load, scoped to the active date filter: fetch from Zoho and
+  /// render that; the local cache is only a fallback when the fetch fails.
+  Future<void> _loadExpensesLiveFirst(Emitter<ExpenseState> emit) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      final loaded = await _salesRepository.fetchRemoteExpenses(
+        startDate: state.startDate,
+        endDate: state.endDate,
+      );
+      emit(state.copyWith(expenses: loaded, isLoading: false));
+    } catch (e) {
+      emit(
+        state.copyWith(
+          expenses: _salesRepository.getLocalExpenses(),
+          isLoading: false,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
+  }
+
   Future<void> _onLoadExpenses(
     LoadExpenses event,
     Emitter<ExpenseState> emit,
-  ) async {
-    emit(state.copyWith(isLoading: true));
-    try {
-      final loaded = _salesRepository.getLocalExpenses();
-      emit(state.copyWith(expenses: loaded, isLoading: false));
-    } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
-    }
-  }
+  ) =>
+      _loadExpensesLiveFirst(emit);
+
+  Future<void> _onRefreshExpensesFromZoho(
+    RefreshExpensesFromZoho event,
+    Emitter<ExpenseState> emit,
+  ) =>
+      _loadExpensesLiveFirst(emit);
 
   void _onSetDateFilter(
     SetExpenseDateFilter event,

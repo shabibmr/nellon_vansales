@@ -142,7 +142,9 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
-                                      const SalesInvoiceEditorPage(),
+                                      const SalesInvoiceEditorPage(
+                                        readOnly: true,
+                                      ),
                                 ),
                               );
                             },

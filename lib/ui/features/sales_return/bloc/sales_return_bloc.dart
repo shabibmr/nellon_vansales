@@ -9,6 +9,8 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_return_model.dart';
+import '../../../../data/services/document_number_service.dart';
+import '../../../../data/services/injection.dart';
 import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
@@ -20,6 +22,9 @@ abstract class SalesReturnEvent extends Equatable {
 }
 
 class LoadReturns extends SalesReturnEvent {}
+
+/// Fired to download sales returns from Zoho and merge them into the local cache.
+class RefreshReturnsFromZoho extends SalesReturnEvent {}
 
 class SetReturnDateFilter extends SalesReturnEvent {
   final DateTime? startDate;
@@ -58,7 +63,7 @@ class UpdateReturnCustomer extends SalesReturnEvent {
 
 class AddOrUpdateReturnLineItem extends SalesReturnEvent {
   final Item item;
-  final int quantity;
+  final double quantity;
   const AddOrUpdateReturnLineItem({required this.item, required this.quantity});
 
   @override
@@ -194,6 +199,7 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
          endDate: todayDate(),
        )) {
     on<LoadReturns>(_onLoadReturns);
+    on<RefreshReturnsFromZoho>(_onRefreshReturnsFromZoho);
     on<SetReturnDateFilter>(_onSetDateFilter);
     on<StartNewReturn>(_onStartNewReturn);
     on<StartEditReturn>(_onStartEditReturn);
@@ -206,18 +212,38 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
     on<ClearReturnMessages>(_onClearMessages);
   }
 
+  /// Live-first load, scoped to the active date filter: fetch from Zoho and
+  /// render that; the local cache is only a fallback when the fetch fails.
+  Future<void> _loadReturnsLiveFirst(Emitter<SalesReturnState> emit) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      final loaded = await _salesRepository.fetchRemoteReturns(
+        startDate: state.startDate,
+        endDate: state.endDate,
+      );
+      emit(state.copyWith(returns: loaded, isLoading: false));
+    } catch (e) {
+      emit(
+        state.copyWith(
+          returns: _salesRepository.getLocalReturns(),
+          isLoading: false,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
+  }
+
   Future<void> _onLoadReturns(
     LoadReturns event,
     Emitter<SalesReturnState> emit,
-  ) async {
-    emit(state.copyWith(isLoading: true));
-    try {
-      final loaded = _salesRepository.getLocalReturns();
-      emit(state.copyWith(returns: loaded, isLoading: false));
-    } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
-    }
-  }
+  ) =>
+      _loadReturnsLiveFirst(emit);
+
+  Future<void> _onRefreshReturnsFromZoho(
+    RefreshReturnsFromZoho event,
+    Emitter<SalesReturnState> emit,
+  ) =>
+      _loadReturnsLiveFirst(emit);
 
   void _onSetDateFilter(
     SetReturnDateFilter event,
@@ -265,8 +291,15 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
       ),
     );
 
+    // Ensure remote / ledger-loaded returns are present for PDF & lookups.
+    final returns = List<SalesReturn>.from(state.returns);
+    if (!returns.any((r) => r.id == event.salesReturn.id)) {
+      returns.add(event.salesReturn);
+    }
+
     emit(
       state.copyWith(
+        returns: returns,
         editingReturnId: event.salesReturn.id,
         editingDate: event.salesReturn.date,
         editingCustomer: customer,
@@ -369,8 +402,9 @@ class SalesReturnBloc extends Bloc<SalesReturnEvent, SalesReturnState> {
 
       String creditNoteNum;
       if (isNew) {
-        creditNoteNum =
-            'CN-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+        creditNoteNum = await sl<DocumentNumberService>().nextNumber(
+          DocType.creditNote,
+        );
       } else {
         final original = state.returns.firstWhere((r) => r.id == tempId);
         creditNoteNum = original.creditNoteNumber;

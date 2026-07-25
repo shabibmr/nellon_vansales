@@ -12,27 +12,40 @@ class InvoiceLineItemModel extends InvoiceLineItem {
     required super.rate,
     required super.taxPercentage,
     super.discount = 0.0,
+    super.uom = '',
+    super.unitConversionId = '',
   });
 
   /// Factory constructor to parse local/remote JSON maps into an [InvoiceLineItemModel].
   factory InvoiceLineItemModel.fromJson(Map<String, dynamic> json) {
+    final rawDiscount = json['discount_amount'] ?? json['discount'] ?? 0.0;
+    final item = ItemModel.fromJson(json['item'] ?? json);
+    final lineUom = (json['unit'] ?? json['uom'] ?? '').toString();
     return InvoiceLineItemModel(
-      item: ItemModel.fromJson(json['item'] ?? json),
-      quantity: json['quantity'] ?? 1,
+      item: item,
+      quantity: ((json['quantity'] ?? 1) as num).toDouble(),
       rate: (json['rate'] ?? 0.0).toDouble(),
       taxPercentage: (json['tax_percentage'] ?? 0.0).toDouble(),
-      discount: (json['discount'] ?? 0.0).toDouble(),
+      discount: rawDiscount is num
+          ? rawDiscount.toDouble()
+          : (double.tryParse(rawDiscount.toString()) ?? 0.0),
+      uom: lineUom.isNotEmpty ? lineUom : item.uom,
+      unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
     );
   }
 
   /// Converts this [InvoiceLineItemModel] into a serialization compatible JSON map.
   Map<String, dynamic> toJson() {
+    final unit = displayUom;
     return {
       'item_id': item.id,
       'quantity': quantity,
       'rate': rate,
       'tax_percentage': taxPercentage,
       'discount': discount,
+      if (unit.isNotEmpty) 'unit': unit,
+      if (unit.isNotEmpty) 'uom': unit,
+      if (unitConversionId.isNotEmpty) 'unit_conversion_id': unitConversionId,
       'item': ItemModel.fromDomain(item).toJson(),
     };
   }
@@ -45,6 +58,8 @@ class InvoiceLineItemModel extends InvoiceLineItem {
       rate: lineItem.rate,
       taxPercentage: lineItem.taxPercentage,
       discount: lineItem.discount,
+      uom: lineItem.uom.isNotEmpty ? lineItem.uom : lineItem.item.uom,
+      unitConversionId: lineItem.unitConversionId,
     );
   }
 }

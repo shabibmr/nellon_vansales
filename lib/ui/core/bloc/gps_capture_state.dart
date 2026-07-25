@@ -27,7 +27,16 @@ class GpsCaptureSuccess extends GpsCaptureState {
   List<Object?> get props => [latitude, longitude, enrichedCustomer];
 }
 
-class GpsCapturePermissionDenied extends GpsCaptureState {}
+class GpsCapturePermissionDenied extends GpsCaptureState {
+  /// True when the OS will not show the system permission sheet again
+  /// (user must open app settings).
+  final bool permanentlyDenied;
+
+  const GpsCapturePermissionDenied({this.permanentlyDenied = false});
+
+  @override
+  List<Object?> get props => [permanentlyDenied];
+}
 
 class GpsCaptureServiceDisabled extends GpsCaptureState {}
 

@@ -1,9 +1,12 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:van_sales/app.dart';
 import 'package:van_sales/ui/features/auth/views/login_page.dart';
-import 'package:van_sales/ui/features/route/views/route_page.dart';
+import 'package:van_sales/domain/models/phone_auth_event.dart';
 import 'package:van_sales/domain/repositories/auth_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
@@ -34,14 +37,38 @@ class FakeAuthRepository implements AuthRepository {
   User? get currentUser => _currentUser;
 
   @override
-  Future<User?> signIn(String email, String password) async {
-    _currentUser = User(
+  Stream<PhoneAuthEvent> startPhoneVerification(
+    String e164Phone, {
+    int? forceResendingToken,
+  }) {
+    final controller = StreamController<PhoneAuthEvent>();
+    scheduleMicrotask(() {
+      if (!controller.isClosed) {
+        controller.add(
+          const PhoneCodeSent(verificationId: 'vid_mock', resendToken: 1),
+        );
+      }
+    });
+    return controller.stream;
+  }
+
+  @override
+  Future<User?> signInWithSmsCode(String verificationId, String smsCode) async {
+    _currentUser = const User(
       id: 'usr_mock_123',
       name: 'Agent Nellon',
-      email: email,
+      email: '',
+      phone: '+971542891246',
       role: 'agent',
     );
     return _currentUser;
+  }
+
+  @override
+  Future<User?> signInWithPhoneCredential(
+    fb.PhoneAuthCredential credential,
+  ) async {
+    return signInWithSmsCode('auto', '000000');
   }
 
   @override
@@ -108,10 +135,31 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveItems(List<Item> items) async {}
 
   @override
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(
+    Item item,
+  ) async =>
+      (item: item, offlineFallback: false);
+
+  @override
   List<SalesInvoice> getLocalInvoices() => [];
 
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
+
+  @override
+  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+
+  @override
+  Future<List<SalesInvoice>> fetchRemoteInvoices({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
+  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+
+  @override
+  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
 
   @override
   List<SalesOrder> getLocalOrders() => [];
@@ -120,7 +168,10 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalOrder(SalesOrder order) async {}
 
   @override
-  Future<List<SalesOrder>> fetchRemoteOrders() async => [];
+  Future<List<SalesOrder>> fetchRemoteOrders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 
   @override
   Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
@@ -132,16 +183,34 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
 
   @override
+  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
   List<SalesReturn> getLocalReturns() => [];
 
   @override
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
 
   @override
+  Future<List<SalesReturn>> fetchRemoteReturns({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
+
+  @override
   List<ExpenseEntry> getLocalExpenses() => [];
 
   @override
   Future<void> saveLocalExpense(ExpenseEntry expense) async {}
+
+  @override
+  Future<List<ExpenseEntry>> fetchRemoteExpenses({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 
   @override
   CashClosing? getLocalCashClosing() => null;
@@ -173,6 +242,12 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
+
+  @override
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async => [];
 }
 
 void main() {
@@ -188,37 +263,17 @@ void main() {
     });
 
     testWidgets(
-      'Verify complete application login sequence and route picker loading',
+      'Verify phone OTP login surface loads (phone step)',
       (WidgetTester tester) async {
         // 1. Boot the application widget tree
         await tester.pumpWidget(const VanSalesApp());
         await tester.pumpAndSettle();
 
-        // 2. Expect LoginPage to be loaded and visible
+        // 2. Expect LoginPage with phone OTP entry (not email/password)
         expect(find.byType(LoginPage), findsOneWidget);
-
-        // 3. Target form inputs and Sign In button
-        final emailField = find.byType(TextFormField).first;
-        final passwordField = find.byType(TextFormField).at(1);
-        final signInButton = find.byType(ElevatedButton);
-
-        expect(emailField, findsOneWidget);
-        expect(passwordField, findsOneWidget);
-        expect(signInButton, findsOneWidget);
-
-        // 4. Enter agent credentials
-        await tester.enterText(emailField, 'agent@nellon.com');
-        await tester.enterText(passwordField, 'agent_nellon_123');
-        await tester.pumpAndSettle();
-
-        // 5. Trigger form submission
-        await tester.tap(signInButton);
-        // Pump frame updates and allow animations to settle completely
-        await tester.pumpAndSettle(const Duration(seconds: 1));
-
-        // 6. Verify Auth state transitions and redirects client to RouteSelectionPage
-        expect(find.byType(RouteSelectionPage), findsOneWidget);
-        expect(find.text('Downtown Route Sequence A'), findsOneWidget);
+        expect(find.text('SEND CODE'), findsOneWidget);
+        expect(find.byType(TextFormField), findsOneWidget);
+        expect(find.textContaining('Mobile Number'), findsOneWidget);
       },
     );
   });

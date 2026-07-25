@@ -9,6 +9,7 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/quantity_format.dart';
 
 /// Modal dialog for choosing sales invoices containing the selected item,
 /// and entering return quantities allocated against those invoices.
@@ -37,6 +38,38 @@ class _ReturnInvoiceSelectorDialogState
 
   late List<SalesInvoice> _matchingInvoices;
   final Map<String, TextEditingController> _qtyControllers = {};
+
+  /// Per-invoice unit the return quantity is entered in.
+  final Map<String, String> _selectedUoms = {};
+
+  /// The item carrying unit_conversions — prefer the fresh master item; fall
+  /// back to the snapshot embedded in the invoice line.
+  Item _conversionSource(InvoiceLineItem originalLine) =>
+      widget.item.unitConversions.isNotEmpty ? widget.item : originalLine.item;
+
+  /// Unit options for a return against [originalLine]: base unit + alternates.
+  List<String> _unitOptions(InvoiceLineItem originalLine) {
+    final source = _conversionSource(originalLine);
+    return [
+      if (source.uom.trim().isNotEmpty) source.uom.trim(),
+      ...source.unitConversions.map((c) => c.targetUnit),
+    ];
+  }
+
+  /// Max returnable in [selectedUom]: sold base-unit quantity ÷ the selected
+  /// unit's conversion rate.
+  double _maxReturnable(InvoiceLineItem originalLine, String selectedUom) {
+    final source = _conversionSource(originalLine);
+    final rate = source.conversionRateFor(selectedUom);
+    if (rate <= 0) return originalLine.quantityInBase;
+    return originalLine.quantityInBase / rate;
+  }
+
+  int _decimalsFor(InvoiceLineItem originalLine, String selectedUom) =>
+      _conversionSource(originalLine)
+          .conversionFor(selectedUom)
+          ?.quantityDecimalPlaces ??
+      3;
 
   @override
   void initState() {
@@ -67,8 +100,18 @@ class _ReturnInvoiceSelectorDialogState
 
       final initialQty = existingLine?.returnedQuantity ?? 0;
       _qtyControllers[inv.id] = TextEditingController(
-        text: initialQty > 0 ? initialQty.toString() : '',
+        text: initialQty > 0 ? formatQuantity(initialQty) : '',
       );
+
+      // Default unit: the existing return line's unit, else the sold unit.
+      final originalLine = inv.items.firstWhere(
+        (line) => line.item.id == widget.item.id,
+      );
+      final defaultUom = existingLine?.displayUom ?? originalLine.displayUom;
+      final options = _unitOptions(originalLine);
+      _selectedUoms[inv.id] = options.contains(defaultUom)
+          ? defaultUom
+          : (options.isNotEmpty ? options.first : defaultUom);
     }
   }
 
@@ -86,13 +129,16 @@ class _ReturnInvoiceSelectorDialogState
 
       for (final inv in _matchingInvoices) {
         final text = _qtyControllers[inv.id]?.text ?? '';
-        final qty = int.tryParse(text) ?? 0;
+        final qty = double.tryParse(text) ?? 0;
 
         if (qty > 0) {
           // Find original invoice line item
           final originalLine = inv.items.firstWhere(
             (line) => line.item.id == widget.item.id,
           );
+          final selUom = _selectedUoms[inv.id] ?? originalLine.displayUom;
+          final conversion =
+              _conversionSource(originalLine).conversionFor(selUom);
 
           returnedLines.add(
             SalesReturnLineItem(
@@ -100,6 +146,8 @@ class _ReturnInvoiceSelectorDialogState
               returnedQuantity: qty,
               invoiceId: inv.id,
               invoiceNumber: inv.invoiceNumber,
+              uom: selUom,
+              unitConversionId: conversion?.unitConversionId ?? '',
             ),
           );
         }
@@ -197,7 +245,11 @@ class _ReturnInvoiceSelectorDialogState
                       final originalLine = inv.items.firstWhere(
                         (line) => line.item.id == widget.item.id,
                       );
-                      final maxQty = originalLine.quantity;
+                      final unitOptions = _unitOptions(originalLine);
+                      final selUom =
+                          _selectedUoms[inv.id] ?? originalLine.displayUom;
+                      final maxQty = _maxReturnable(originalLine, selUom);
+                      final decimals = _decimalsFor(originalLine, selUom);
 
                       return Card(
                         margin: EdgeInsets.zero,
@@ -243,7 +295,8 @@ class _ReturnInvoiceSelectorDialogState
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Sold: $maxQty units @ $cs${originalLine.rate.toStringAsFixed(2)}',
+                                      'Sold: ${formatQuantity(originalLine.quantity)} ${originalLine.displayUom}'
+                                      ' @ $cs${originalLine.rate.toStringAsFixed(2)}',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -255,14 +308,78 @@ class _ReturnInvoiceSelectorDialogState
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 16),
+                              const SizedBox(width: 12),
+                              // Unit selector — return can be in any of the
+                              // item's units; the qty cap converts from the
+                              // sold quantity.
+                              if (unitOptions.length > 1)
+                                SizedBox(
+                                  width: 110,
+                                  child: DropdownButtonFormField<String>(
+                                    key: ValueKey('ret_uom_${inv.id}_$selUom'),
+                                    initialValue:
+                                        unitOptions.contains(selUom)
+                                            ? selUom
+                                            : null,
+                                    isExpanded: true,
+                                    isDense: true,
+                                    decoration: InputDecoration(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 8,
+                                      ),
+                                      isDense: true,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? AppTheme.darkText
+                                          : AppTheme.lightText,
+                                    ),
+                                    items: unitOptions
+                                        .map(
+                                          (u) => DropdownMenuItem<String>(
+                                            value: u,
+                                            child: Text(
+                                              u,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (u) {
+                                      if (u == null) return;
+                                      setState(
+                                        () => _selectedUoms[inv.id] = u,
+                                      );
+                                      _formKey.currentState?.validate();
+                                    },
+                                  ),
+                                ),
+                              if (unitOptions.length > 1)
+                                const SizedBox(width: 8),
                               SizedBox(
-                                width: 90,
+                                width: 80,
                                 child: TextFormField(
                                   controller: _qtyControllers[inv.id],
-                                  keyboardType: TextInputType.number,
+                                  keyboardType: decimals > 0
+                                      ? const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        )
+                                      : TextInputType.number,
                                   inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
+                                    decimals > 0
+                                        ? FilteringTextInputFormatter.allow(
+                                            RegExp(
+                                              '^\\d*\\.?\\d{0,$decimals}',
+                                            ),
+                                          )
+                                        : FilteringTextInputFormatter
+                                            .digitsOnly,
                                   ],
                                   decoration: InputDecoration(
                                     contentPadding: const EdgeInsets.symmetric(
@@ -278,10 +395,12 @@ class _ReturnInvoiceSelectorDialogState
                                   textAlign: TextAlign.center,
                                   validator: (val) {
                                     if (val == null || val.isEmpty) return null;
-                                    final qty = int.tryParse(val);
+                                    final qty = double.tryParse(val);
                                     if (qty == null) return 'Invalid';
                                     if (qty < 0) return 'Min 0';
-                                    if (qty > maxQty) return 'Max $maxQty';
+                                    if (qty > maxQty) {
+                                      return 'Max ${formatQuantity(maxQty)}';
+                                    }
                                     return null;
                                   },
                                 ),

@@ -14,7 +14,7 @@ class ExpenseLineItemModel extends ExpenseLineItem {
   /// Factory constructor to parse local database JSON maps into an [ExpenseLineItemModel].
   factory ExpenseLineItemModel.fromJson(Map<String, dynamic> json) {
     return ExpenseLineItemModel(
-      category: json['category'] ?? 'Miscellaneous',
+      category: json['category'] ?? 'Parking fee',
       amount: (json['amount'] ?? 0.0).toDouble(),
       description: json['description'] ?? '',
     );
@@ -37,10 +37,10 @@ class ExpenseLineItemModel extends ExpenseLineItem {
         return 'fuel_expense_ac_id';
       case 'Tolls':
         return 'toll_expense_ac_id';
-      case 'Meals':
-        return 'meals_expense_ac_id';
       case 'Maintenance':
         return 'maintenance_expense_ac_id';
+      case 'Parking fee':
+        return 'parking_expense_ac_id';
       default:
         return 'general_expense_ac_id';
     }

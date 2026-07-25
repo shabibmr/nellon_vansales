@@ -5,6 +5,8 @@ import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
+import '../../../../data/services/document_number_service.dart';
+import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
 import 'receipt_allocation_event.dart';
 import 'receipt_allocation_state.dart';
@@ -183,9 +185,12 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
 
     try {
       final tempId = 'temp_pay_${DateTime.now().millisecondsSinceEpoch}';
+      final paymentNum = await sl<DocumentNumberService>().nextNumber(
+        DocType.receipt,
+      );
       final voucher = ReceiptVoucher(
         id: tempId,
-        paymentNumber: 'PAY-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+        paymentNumber: paymentNum,
         customerId: customer.id,
         customerName: customer.name,
         allocations: state.allocations,

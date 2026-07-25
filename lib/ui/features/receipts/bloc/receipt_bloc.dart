@@ -7,6 +7,8 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
+import '../../../../data/services/document_number_service.dart';
+import '../../../../data/services/injection.dart';
 import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
@@ -18,6 +20,9 @@ abstract class ReceiptEvent extends Equatable {
 }
 
 class LoadReceipts extends ReceiptEvent {}
+
+/// Fired to download receipts from Zoho and merge them into the local cache.
+class RefreshReceiptsFromZoho extends ReceiptEvent {}
 
 class SetReceiptDateFilter extends ReceiptEvent {
   final DateTime? startDate;
@@ -196,6 +201,7 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
         endDate: todayDate(),
       )) {
     on<LoadReceipts>(_onLoadReceipts);
+    on<RefreshReceiptsFromZoho>(_onRefreshReceiptsFromZoho);
     on<SetReceiptDateFilter>(_onSetDateFilter);
     on<StartNewReceipt>(_onStartNewReceipt);
     on<StartEditReceipt>(_onStartEditReceipt);
@@ -209,18 +215,38 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
     on<ClearReceiptMessages>(_onClearMessages);
   }
 
+  /// Live-first load, scoped to the active date filter: fetch from Zoho and
+  /// render that; the local cache is only a fallback when the fetch fails.
+  Future<void> _loadReceiptsLiveFirst(Emitter<ReceiptState> emit) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      final loaded = await _salesRepository.fetchRemoteReceipts(
+        startDate: state.startDate,
+        endDate: state.endDate,
+      );
+      emit(state.copyWith(receipts: loaded, isLoading: false));
+    } catch (e) {
+      emit(
+        state.copyWith(
+          receipts: _salesRepository.getLocalReceipts(),
+          isLoading: false,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
+  }
+
   Future<void> _onLoadReceipts(
     LoadReceipts event,
     Emitter<ReceiptState> emit,
-  ) async {
-    emit(state.copyWith(isLoading: true));
-    try {
-      final loaded = _salesRepository.getLocalReceipts();
-      emit(state.copyWith(receipts: loaded, isLoading: false));
-    } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
-    }
-  }
+  ) =>
+      _loadReceiptsLiveFirst(emit);
+
+  Future<void> _onRefreshReceiptsFromZoho(
+    RefreshReceiptsFromZoho event,
+    Emitter<ReceiptState> emit,
+  ) =>
+      _loadReceiptsLiveFirst(emit);
 
   void _onSetDateFilter(
     SetReceiptDateFilter event,
@@ -267,9 +293,15 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
       ),
     );
 
+    // Ensure remote / ledger-loaded receipts are present for PDF & lookups.
+    final receipts = List<ReceiptVoucher>.from(state.receipts);
+    if (!receipts.any((r) => r.id == rec.id)) {
+      receipts.add(rec);
+    }
+
     emit(
       ReceiptState(
-        receipts: state.receipts,
+        receipts: receipts,
         startDate: state.startDate,
         endDate: state.endDate,
         editingId: rec.id,
@@ -401,7 +433,9 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
       String paymentNum;
       String refNum;
       if (state.isEditingNew) {
-        paymentNum = 'PAY-TEMP-${ts.substring(8)}';
+        paymentNum = await sl<DocumentNumberService>().nextNumber(
+          DocType.receipt,
+        );
         refNum = state.editingReferenceNumber.isNotEmpty
             ? state.editingReferenceNumber
             : 'REF-VAN-${ts.substring(10)}';
@@ -410,7 +444,7 @@ class ReceiptBloc extends Bloc<ReceiptEvent, ReceiptState> {
           (r) => r.id == tempId,
           orElse: () => ReceiptVoucher(
             id: tempId,
-            paymentNumber: 'PAY-TEMP-${ts.substring(8)}',
+            paymentNumber: '',
             customerId: '',
             customerName: '',
             allocations: const [],

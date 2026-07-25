@@ -26,14 +26,20 @@ class OpenInvoiceModel extends OpenInvoice {
       return DateTime.tryParse(v.toString()) ?? DateTime.now();
     }
 
+    double parseMoney(dynamic v) {
+      if (v == null) return 0.0;
+      if (v is num) return v.toDouble();
+      return double.tryParse(v.toString()) ?? 0.0;
+    }
+
     return OpenInvoiceModel(
       invoiceId: json['invoice_id'] ?? json['invoiceId'] ?? '',
       invoiceNumber: json['invoice_number'] ?? json['invoiceNumber'] ?? '',
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       date: parseDate(json['date']),
       dueDate: parseDate(json['due_date'] ?? json['dueDate']),
-      total: (json['total'] ?? 0.0).toDouble(),
-      balance: (json['balance'] ?? 0.0).toDouble(),
+      total: parseMoney(json['total']),
+      balance: parseMoney(json['balance']),
       status: json['status'] ?? 'unpaid',
     );
   }

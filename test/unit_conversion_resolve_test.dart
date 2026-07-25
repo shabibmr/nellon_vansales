@@ -24,6 +24,11 @@ class _FakeDb extends HiveDatabaseService {
   ) async {
     uomBox[itemId] = List<UnitConversion>.from(conversions);
   }
+
+  @override
+  Future<void> clearItemUnitConversions() async {
+    uomBox.clear();
+  }
 }
 
 class _FakeApi extends ZohoApiClient {
@@ -90,11 +95,12 @@ void main() {
       targetUnit: '5 KG',
       conversionRate: 5,
     );
-    final resolved =
-        await repo.resolveItemUnitConversions(_item('a', conversions: const [existing]));
+    final resolved = await repo
+        .resolveItemUnitConversions(_item('a', conversions: const [existing]));
 
     expect(api.detailCalls, isEmpty);
-    expect(resolved.unitConversions.single.targetUnit, '5 KG');
+    expect(resolved.offlineFallback, isFalse);
+    expect(resolved.item.unitConversions.single.targetUnit, '5 KG');
   });
 
   test('first selection fetches from Zoho and caches the conversions',
@@ -102,7 +108,8 @@ void main() {
     final resolved = await repo.resolveItemUnitConversions(_item('needs1'));
 
     expect(api.detailCalls, ['needs1']);
-    expect(resolved.unitConversions.single.conversionRate, 25.0);
+    expect(resolved.offlineFallback, isFalse);
+    expect(resolved.item.unitConversions.single.conversionRate, 25.0);
     expect(db.uomBox.containsKey('needs1'), isTrue);
   });
 
@@ -113,7 +120,8 @@ void main() {
 
     // Only the first call hit the API.
     expect(api.detailCalls, ['needs1']);
-    expect(again.unitConversions.single.unitConversionId, 'uc_needs1');
+    expect(again.offlineFallback, isFalse);
+    expect(again.item.unitConversions.single.unitConversionId, 'uc_needs1');
   });
 
   test('item with no conversions caches an empty entry and never refetches',
@@ -121,25 +129,39 @@ void main() {
     final first = await repo.resolveItemUnitConversions(_item('plain'));
     final second = await repo.resolveItemUnitConversions(_item('plain'));
 
-    expect(first.unitConversions, isEmpty);
-    expect(second.unitConversions, isEmpty);
+    expect(first.item.unitConversions, isEmpty);
+    expect(second.item.unitConversions, isEmpty);
     // A present-but-empty entry short-circuits the second fetch.
     expect(api.detailCalls, ['plain']);
     expect(db.uomBox['plain'], isEmpty);
   });
 
-  test('fetch failure falls back to base unit and does NOT cache (retries later)',
+  test('fetch failure falls back to base unit, flags offline, does NOT cache',
       () async {
     api.throwOnFetch = true;
     final resolved = await repo.resolveItemUnitConversions(_item('needs1'));
 
-    expect(resolved.unitConversions, isEmpty);
+    expect(resolved.item.unitConversions, isEmpty);
+    expect(resolved.offlineFallback, isTrue);
     expect(db.uomBox.containsKey('needs1'), isFalse);
 
     // Coming back online, the next selection retries and succeeds.
     api.throwOnFetch = false;
     final retried = await repo.resolveItemUnitConversions(_item('needs1'));
     expect(api.detailCalls, ['needs1', 'needs1']);
-    expect(retried.unitConversions.single.conversionRate, 25.0);
+    expect(retried.offlineFallback, isFalse);
+    expect(retried.item.unitConversions.single.conversionRate, 25.0);
+  });
+
+  test('clearItemUnitConversions forces a re-fetch on next resolve', () async {
+    await repo.resolveItemUnitConversions(_item('needs1'));
+    expect(api.detailCalls, ['needs1']);
+
+    await db.clearItemUnitConversions();
+    expect(db.uomBox, isEmpty);
+
+    final again = await repo.resolveItemUnitConversions(_item('needs1'));
+    expect(api.detailCalls, ['needs1', 'needs1']);
+    expect(again.item.unitConversions.single.conversionRate, 25.0);
   });
 }

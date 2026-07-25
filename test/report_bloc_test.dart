@@ -4,13 +4,11 @@ import 'package:van_sales/ui/features/reports/bloc/report_event.dart';
 
 void main() {
   group('ReportBloc Tests', () {
-    late List<String> localCache;
     late List<String> remoteLive;
     late bool remoteShouldFail;
     late int remoteCallCount;
 
     setUp(() {
-      localCache = ['cached_row_1', 'cached_row_2'];
       remoteLive = ['live_row_1', 'live_row_2', 'live_row_3'];
       remoteShouldFail = false;
       remoteCallCount = 0;
@@ -18,7 +16,6 @@ void main() {
 
     ReportBloc<String> createBloc({Duration? fetchDelay}) {
       return ReportBloc<String>(
-        getLocal: () => localCache,
         fetchRemote: () async {
           if (fetchDelay != null) {
             await Future.delayed(fetchDelay);
@@ -34,12 +31,12 @@ void main() {
       );
     }
 
-    test('Initial state seeds with cached rows and isLoading = true, then refreshes successfully', () async {
+    test('Initial state seeds with no rows and isLoading = true, then refreshes successfully', () async {
       final bloc = createBloc();
 
       // Initial state (before any events finish processing)
       expect(bloc.state.isLoading, true);
-      expect(bloc.state.rows, localCache);
+      expect(bloc.state.rows, isEmpty);
       expect(bloc.state.sortField, 'name');
       expect(bloc.state.sortAscending, true);
       expect(bloc.state.isLiveData, false);
@@ -64,7 +61,7 @@ void main() {
       await bloc.close();
     });
 
-    test('On remote fetch failure, keeps cached rows and sets error message', () async {
+    test('On remote fetch failure, leaves rows empty and sets error message', () async {
       remoteShouldFail = true;
       final bloc = createBloc();
 
@@ -72,8 +69,8 @@ void main() {
       await bloc.stream.firstWhere((state) => !state.isLoading);
 
       expect(bloc.state.isLoading, false);
-      // Keeps cache
-      expect(bloc.state.rows, localCache);
+      // No cache fallback — rows stay empty
+      expect(bloc.state.rows, isEmpty);
       expect(bloc.state.isLiveData, false);
       expect(bloc.state.error, contains('Network failed'));
       expect(remoteCallCount, 1);

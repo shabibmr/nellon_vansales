@@ -13,6 +13,7 @@ import '../cubit/list_filter_cubit.dart';
 import '../bloc/gps_capture_bloc.dart';
 import '../bloc/gps_capture_event.dart';
 import '../bloc/gps_capture_state.dart';
+import '../utils/permission_dialogs.dart';
 
 /// Generic customer-selector bottom sheet shared by all editor flows.
 class CustomerSelectorSheet extends StatelessWidget {
@@ -335,9 +336,9 @@ Future<Customer?> _showGpsCapturePrompt(
           if (state is GpsCaptureSuccess) {
             Navigator.of(dialogCtx).pop(state.enrichedCustomer);
           } else if (state is GpsCapturePermissionDenied) {
-            showSuccessSnackBar(context, 'Location permission denied.');
+            showLocationPermissionSettingsDialog(context);
           } else if (state is GpsCaptureServiceDisabled) {
-            showSuccessSnackBar(context, 'Enable location services to capture GPS.');
+            showEnableLocationServiceDialog(context);
           } else if (state is GpsCaptureFailure) {
             showErrorSnackBar(context, 'Capture failed: ${state.message}');
           }

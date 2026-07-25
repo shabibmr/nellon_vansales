@@ -5,17 +5,23 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
-import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/customer_selector_sheet.dart';
 import '../bloc/receipt_bloc.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/open_invoice.dart';
 
+const _paymentModes = ['Cash', 'Cheque', 'Bank Transfer', 'Card'];
+
 class ReceiptEditorPage extends StatefulWidget {
-  const ReceiptEditorPage({super.key});
+  /// When true, the receipt is shown read-only (view mode). Receipts cannot
+  /// be edited after creation — only sales orders support edit.
+  final bool readOnly;
+
+  const ReceiptEditorPage({super.key, this.readOnly = false});
 
   @override
   State<ReceiptEditorPage> createState() => _ReceiptEditorPageState();
@@ -31,6 +37,10 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
   final Map<String, TextEditingController> _allocationControllers = {};
   final Map<String, FocusNode> _allocationFocusNodes = {};
   String? _lastCustomerId;
+
+  /// When true, allocation field [onChanged] must not dispatch bloc events
+  /// (FIFO auto-allocate syncs controllers without re-entering the bloc).
+  bool _syncingControllers = false;
 
   @override
   void initState() {
@@ -62,28 +72,67 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
     super.dispose();
   }
 
+  List<OpenInvoice> _safeOpenInvoices(String customerId) {
+    try {
+      return _db.getOpenInvoices(customerId: customerId);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  String _normalizedPaymentMode(String mode) =>
+      _paymentModes.contains(mode) ? mode : _paymentModes.first;
+
+  String _allocationTextFor(
+    List<PaymentAllocation> allocations,
+    String invoiceId,
+  ) {
+    for (final a in allocations) {
+      if (a.invoiceId == invoiceId && a.amountApplied > 0) {
+        return a.amountApplied.toStringAsFixed(2);
+      }
+    }
+    return '';
+  }
+
+  PaymentAllocation _allocationFor(
+    List<PaymentAllocation> allocations,
+    OpenInvoice inv,
+  ) {
+    for (final a in allocations) {
+      if (a.invoiceId == inv.invoiceId) return a;
+    }
+    return PaymentAllocation(
+      invoiceId: inv.invoiceId,
+      invoiceNumber: inv.invoiceNumber,
+      amountApplied: 0.0,
+    );
+  }
+
+  void _setControllerText(TextEditingController ctrl, String text) {
+    if (ctrl.text == text) return;
+    _syncingControllers = true;
+    ctrl.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _syncingControllers = false;
+  }
+
   bool _areAllocationsValid(ReceiptState state) {
     if (state.editingCustomer == null) return false;
-    final openInvoices = _db.getOpenInvoices(
-      customerId: state.editingCustomer!.id,
-    );
+    final openInvoices = _safeOpenInvoices(state.editingCustomer!.id);
     double totalAllocated = 0.0;
     for (final alloc in state.editingAllocations) {
       if (alloc.amountApplied < 0) return false;
-      final inv = openInvoices.firstWhere(
-        (i) => i.invoiceId == alloc.invoiceId,
-        orElse: () => OpenInvoice(
-          invoiceId: '',
-          invoiceNumber: '',
-          customerId: '',
-          date: DateTime.now(),
-          dueDate: DateTime.now(),
-          total: 0.0,
-          balance: 0.0,
-          status: '',
-        ),
-      );
-      if (inv.invoiceId.isEmpty || alloc.amountApplied > inv.balance) {
+      OpenInvoice? inv;
+      for (final i in openInvoices) {
+        if (i.invoiceId == alloc.invoiceId) {
+          inv = i;
+          break;
+        }
+      }
+      if (inv == null || alloc.amountApplied > inv.balance) {
         return false;
       }
       totalAllocated += alloc.amountApplied;
@@ -101,6 +150,8 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
     String value,
     List<PaymentAllocation> currentAllocations,
   ) {
+    if (_syncingControllers) return;
+
     final parsed = double.tryParse(value) ?? 0.0;
     final list = List<PaymentAllocation>.from(currentAllocations);
     final index = list.indexWhere((a) => a.invoiceId == invoiceId);
@@ -128,13 +179,6 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
     context.read<ReceiptBloc>().add(UpdateReceiptAllocations(list));
   }
 
-  Future<void> _selectDate(DateTime current) async {
-    final picked = await showThemedDatePicker(context, initialDate: current);
-    if (picked != null && mounted) {
-      context.read<ReceiptBloc>().add(SetEditingReceiptDate(picked));
-    }
-  }
-
   void _showCustomerSelector(BuildContext context, bool isDark) {
     final allCustomers = _db.getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
@@ -147,192 +191,211 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
     );
   }
 
+  void _disposeAllocationControllers() {
+    for (final ctrl in _allocationControllers.values) {
+      ctrl.dispose();
+    }
+    _allocationControllers.clear();
+    for (final node in _allocationFocusNodes.values) {
+      node.dispose();
+    }
+    _allocationFocusNodes.clear();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final readOnly = widget.readOnly;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: BlocBuilder<ReceiptBloc, ReceiptState>(
           buildWhen: (p, c) => p.isEditingNew != c.isEditingNew,
-          builder: (_, state) =>
-              Text(state.isEditingNew ? 'New Receipt' : 'Edit Receipt'),
+          builder: (_, state) {
+            if (readOnly) return const Text('View Receipt');
+            return Text(state.isEditingNew ? 'New Receipt' : 'Edit Receipt');
+          },
         ),
       ),
       body: SafeArea(
         child: BlocConsumer<ReceiptBloc, ReceiptState>(
-        listener: (context, state) {
-          if (state.successMessage != null) {
-            showSuccessSnackBar(context, state.successMessage!);
-            context.read<ReceiptBloc>().add(ClearReceiptMessages());
-            Navigator.pop(context);
-          } else if (state.errorMessage != null) {
-            showErrorSnackBar(context, state.errorMessage!);
-            context.read<ReceiptBloc>().add(ClearReceiptMessages());
-          }
-
-          // Clear allocations controllers if customer changed
-          if (state.editingCustomer?.id != _lastCustomerId) {
-            _lastCustomerId = state.editingCustomer?.id;
-            for (final ctrl in _allocationControllers.values) {
-              ctrl.dispose();
+          listenWhen: (p, c) =>
+              p.successMessage != c.successMessage ||
+              p.errorMessage != c.errorMessage ||
+              p.editingCustomer?.id != c.editingCustomer?.id ||
+              p.editingAmount != c.editingAmount ||
+              p.editingReferenceNumber != c.editingReferenceNumber ||
+              p.editingAllocations != c.editingAllocations,
+          listener: (context, state) {
+            if (state.successMessage != null) {
+              showSuccessSnackBar(context, state.successMessage!);
+              context.read<ReceiptBloc>().add(ClearReceiptMessages());
+              Navigator.pop(context);
+              return;
             }
-            _allocationControllers.clear();
-            for (final node in _allocationFocusNodes.values) {
-              node.dispose();
+            if (state.errorMessage != null) {
+              showErrorSnackBar(context, state.errorMessage!);
+              context.read<ReceiptBloc>().add(ClearReceiptMessages());
             }
-            _allocationFocusNodes.clear();
-          }
 
-          // Sync amount controller
-          final amountText = state.editingAmount > 0
-              ? state.editingAmount.toStringAsFixed(2)
-              : '';
-          if (_amountController.text != amountText &&
-              !_amountFocusNode.hasFocus) {
-            _amountController.text = amountText;
-          }
+            // Clear allocation controllers if customer changed
+            if (state.editingCustomer?.id != _lastCustomerId) {
+              _lastCustomerId = state.editingCustomer?.id;
+              _disposeAllocationControllers();
+            }
 
-          // Sync reference controller
-          if (_referenceController.text != state.editingReferenceNumber &&
-              !_referenceFocusNode.hasFocus) {
-            _referenceController.text = state.editingReferenceNumber;
-          }
+            // Sync amount controller only when unfocused (don't fight typing)
+            final amountText = state.editingAmount > 0
+                ? state.editingAmount.toStringAsFixed(2)
+                : '';
+            if (_amountController.text != amountText &&
+                !_amountFocusNode.hasFocus) {
+              _setControllerText(_amountController, amountText);
+            }
 
-          // Sync allocations controllers
-          if (state.editingCustomer != null) {
-            final openInvoices = _db.getOpenInvoices(
-              customerId: state.editingCustomer!.id,
-            );
-            for (final inv in openInvoices) {
-              final alloc = state.editingAllocations.firstWhere(
-                (a) => a.invoiceId == inv.invoiceId,
-                orElse: () => PaymentAllocation(
-                  invoiceId: inv.invoiceId,
-                  invoiceNumber: inv.invoiceNumber,
-                  amountApplied: 0.0,
-                ),
+            // Sync reference controller
+            if (_referenceController.text != state.editingReferenceNumber &&
+                !_referenceFocusNode.hasFocus) {
+              _setControllerText(
+                _referenceController,
+                state.editingReferenceNumber,
               );
-              final ctrl = _allocationControllers[inv.invoiceId];
-              final hasFocus =
-                  _allocationFocusNodes[inv.invoiceId]?.hasFocus ?? false;
-              final expectedText = alloc.amountApplied > 0
-                  ? alloc.amountApplied.toStringAsFixed(2)
-                  : '';
-              if (ctrl != null) {
-                if (ctrl.text != expectedText && !hasFocus) {
-                  ctrl.text = expectedText;
-                }
-              } else {
-                _allocationControllers[inv.invoiceId] = TextEditingController(
-                  text: expectedText,
+            }
+
+            // Sync allocation controllers (edit mode only, skip focused rows)
+            if (!readOnly && state.editingCustomer != null) {
+              final openInvoices = _safeOpenInvoices(
+                state.editingCustomer!.id,
+              );
+              for (final inv in openInvoices) {
+                final expectedText = _allocationTextFor(
+                  state.editingAllocations,
+                  inv.invoiceId,
                 );
+                final ctrl = _allocationControllers.putIfAbsent(
+                  inv.invoiceId,
+                  () => TextEditingController(text: expectedText),
+                );
+                _allocationFocusNodes.putIfAbsent(
+                  inv.invoiceId,
+                  () => FocusNode(),
+                );
+                final hasFocus =
+                    _allocationFocusNodes[inv.invoiceId]?.hasFocus ?? false;
+                if (ctrl.text != expectedText && !hasFocus) {
+                  _setControllerText(ctrl, expectedText);
+                }
               }
             }
-          }
-        },
-        builder: (context, state) {
-          final date = state.editingDate ?? DateTime.now();
-          final customer = state.editingCustomer;
-          final cs = context.org.currencySymbol;
+          },
+          builder: (context, state) {
+            final date = state.editingDate ?? DateTime.now();
+            final customer = state.editingCustomer;
+            final cs = context.org.currencySymbol;
+            final paymentMode = _normalizedPaymentMode(
+              state.editingPaymentMode,
+            );
 
-          return Column(
-            children: [
-              if (state.isLoading)
-                const LinearProgressIndicator(color: AppTheme.primaryIndigo),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        // Customer selector
-                        Card(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: state.isEditingNew
-                                ? () => _showCustomerSelector(context, isDark)
-                                : null,
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: AppTheme.primaryIndigo
-                                        .withValues(alpha: 0.1),
-                                    child: const Icon(
-                                      Icons.person,
-                                      color: AppTheme.primaryIndigo,
+            return Column(
+              children: [
+                if (state.isLoading)
+                  const LinearProgressIndicator(color: AppTheme.primaryIndigo),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 600),
+                      child: ListView(
+                        padding: const EdgeInsets.all(16),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        children: [
+                          // Customer selector
+                          Card(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: (!readOnly && state.isEditingNew)
+                                  ? () =>
+                                        _showCustomerSelector(context, isDark)
+                                  : null,
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor: AppTheme.primaryIndigo
+                                          .withValues(alpha: 0.1),
+                                      child: const Icon(
+                                        Icons.person,
+                                        color: AppTheme.primaryIndigo,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'CUSTOMER',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark
-                                                ? AppTheme.darkTextSecondary
-                                                : AppTheme.lightTextSecondary,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          customer?.name ?? 'Select Customer',
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        if (customer != null) ...[
-                                          const SizedBox(height: 2),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            customer.companyName,
+                                            'CUSTOMER',
                                             style: TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
                                               color: isDark
                                                   ? AppTheme.darkTextSecondary
                                                   : AppTheme.lightTextSecondary,
                                             ),
                                           ),
-                                          if (customer.outstandingBalance > 0)
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            customer?.name ?? 'Select Customer',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          if (customer != null) ...[
+                                            const SizedBox(height: 2),
                                             Text(
-                                              'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
-                                              style: const TextStyle(
+                                              customer.companyName,
+                                              style: TextStyle(
                                                 fontSize: 12,
-                                                color: AppTheme.errorRose,
-                                                fontWeight: FontWeight.bold,
+                                                color: isDark
+                                                    ? AppTheme.darkTextSecondary
+                                                    : AppTheme
+                                                          .lightTextSecondary,
                                               ),
                                             ),
+                                            if (customer.outstandingBalance > 0)
+                                              Text(
+                                                'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppTheme.errorRose,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                  if (state.isEditingNew)
-                                    Icon(
-                                      Icons.keyboard_arrow_right,
-                                      color: isDark
-                                          ? AppTheme.darkTextSecondary
-                                          : AppTheme.lightTextSecondary,
-                                    ),
-                                ],
+                                    if (!readOnly && state.isEditingNew)
+                                      Icon(
+                                        Icons.keyboard_arrow_right,
+                                        color: isDark
+                                            ? AppTheme.darkTextSecondary
+                                            : AppTheme.lightTextSecondary,
+                                      ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 12),
 
-                        // Date picker
-                        Card(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => _selectDate(date),
+                          // Receipt date (system-set; not editable)
+                          Card(
                             child: Padding(
                               padding: const EdgeInsets.all(16),
                               child: Row(
@@ -372,443 +435,499 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                                       ],
                                     ),
                                   ),
-                                  Icon(
-                                    Icons.keyboard_arrow_right,
-                                    color: isDark
-                                        ? AppTheme.darkTextSecondary
-                                        : AppTheme.lightTextSecondary,
-                                  ),
                                 ],
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
+                          const SizedBox(height: 20),
 
-                        // Amount field
-                        TextFormField(
-                          controller: _amountController,
-                          focusNode: _amountFocusNode,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          onChanged: (v) {
-                            final amount = double.tryParse(v) ?? 0.0;
-                            context.read<ReceiptBloc>().add(
-                              SetEditingAmount(amount),
-                            );
-                          },
-                          decoration: InputDecoration(
-                            labelText: 'Payment Amount ($cs)',
-                            prefixIcon: const Icon(
-                              Icons.currency_rupee,
-                              color: AppTheme.primaryIndigo,
+                          // Amount field — controller owned by State, not recreated
+                          TextFormField(
+                            controller: _amountController,
+                            focusNode: _amountFocusNode,
+                            readOnly: readOnly,
+                            enabled: !readOnly,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            onChanged: readOnly
+                                ? null
+                                : (v) {
+                                    if (_syncingControllers) return;
+                                    final amount = double.tryParse(v) ?? 0.0;
+                                    context.read<ReceiptBloc>().add(
+                                      SetEditingAmount(amount),
+                                    );
+                                  },
+                            decoration: InputDecoration(
+                              labelText: 'Payment Amount ($cs)',
+                              prefixIcon: const Icon(
+                                Icons.currency_rupee,
+                                color: AppTheme.primaryIndigo,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
-                        // Payment mode
-                        DropdownButtonFormField<String>(
-                          initialValue: state.editingPaymentMode,
-                          decoration: const InputDecoration(
-                            labelText: 'Payment Mode',
-                            prefixIcon: Icon(
-                              Icons.payment_outlined,
-                              color: AppTheme.primaryIndigo,
+                          // Payment mode — stable key + clamped value so rebuilds
+                          // never hit DropdownButton's "exactly one item" assert.
+                          DropdownButtonFormField<String>(
+                            key: ValueKey('receipt_payment_mode_$paymentMode'),
+                            initialValue: paymentMode,
+                            decoration: const InputDecoration(
+                              labelText: 'Payment Mode',
+                              prefixIcon: Icon(
+                                Icons.payment_outlined,
+                                color: AppTheme.primaryIndigo,
+                              ),
+                            ),
+                            items: _paymentModes
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(m),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: readOnly
+                                ? null
+                                : (v) {
+                                    if (v != null) {
+                                      context.read<ReceiptBloc>().add(
+                                        SetEditingPaymentMode(v),
+                                      );
+                                    }
+                                  },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Reference number
+                          TextFormField(
+                            controller: _referenceController,
+                            focusNode: _referenceFocusNode,
+                            readOnly: readOnly,
+                            enabled: !readOnly,
+                            onChanged: readOnly
+                                ? null
+                                : (v) {
+                                    if (_syncingControllers) return;
+                                    context.read<ReceiptBloc>().add(
+                                      SetEditingReference(v),
+                                    );
+                                  },
+                            decoration: const InputDecoration(
+                              labelText: 'Reference Number (optional)',
+                              hintText: 'Cheque no., transaction ID...',
+                              prefixIcon: Icon(
+                                Icons.tag,
+                                color: AppTheme.primaryIndigo,
+                              ),
                             ),
                           ),
-                          items: ['Cash', 'Cheque', 'Bank Transfer', 'Card']
-                              .map(
-                                (m) =>
-                                    DropdownMenuItem(value: m, child: Text(m)),
-                              )
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) {
-                              context.read<ReceiptBloc>().add(
-                                SetEditingPaymentMode(v),
-                              );
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 24),
 
-                        // Reference number
-                        TextFormField(
-                          controller: _referenceController,
-                          focusNode: _referenceFocusNode,
-                          onChanged: (v) => context.read<ReceiptBloc>().add(
-                            SetEditingReference(v),
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Reference Number (optional)',
-                            hintText: 'Cheque no., transaction ID...',
-                            prefixIcon: Icon(
-                              Icons.tag,
-                              color: AppTheme.primaryIndigo,
+                          // Allocations — view mode shows saved rows only
+                          if (readOnly &&
+                              state.editingAllocations.isNotEmpty) ...[
+                            Text(
+                              'INVOICE ALLOCATIONS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? AppTheme.darkTextSecondary
+                                    : AppTheme.lightTextSecondary,
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Allocations list
-                        if (customer != null) ...[
-                          Builder(
-                            builder: (context) {
-                              final openInvoices = _db.getOpenInvoices(
-                                customerId: customer.id,
-                              );
-                              if (openInvoices.isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-
-                              final totalAllocated = state.editingAllocations
-                                  .fold(0.0, (sum, a) => sum + a.amountApplied);
-                              final excessAmount =
-                                  state.editingAmount - totalAllocated;
-
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                            const SizedBox(height: 8),
+                            ...state.editingAllocations.map((alloc) {
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        'INVOICE ALLOCATIONS',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark
-                                              ? AppTheme.darkTextSecondary
-                                              : AppTheme.lightTextSecondary,
+                                      Expanded(
+                                        child: Text(
+                                          alloc.invoiceNumber,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
                                         ),
                                       ),
                                       Text(
-                                        'Allocated: $cs${totalAllocated.toStringAsFixed(2)} / $cs${state.editingAmount.toStringAsFixed(2)}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color:
-                                              totalAllocated >
-                                                  state.editingAmount + 0.005
-                                              ? AppTheme.errorRose
-                                              : AppTheme.successEmerald,
+                                        '$cs${alloc.amountApplied.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                          color: AppTheme.successEmerald,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  if (excessAmount > 0.005) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Remaining $cs${excessAmount.toStringAsFixed(2)} will be saved as customer credit/excess payment.',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontStyle: FontStyle.italic,
-                                        color: AppTheme.infoSky,
-                                      ),
-                                    ),
-                                  ],
-                                  if (totalAllocated >
-                                      state.editingAmount + 0.005) ...[
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      'Warning: Total allocated exceeds payment amount!',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.errorRose,
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 8),
-                                  ListView.builder(
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    itemCount: openInvoices.length,
-                                    itemBuilder: (context, index) {
-                                      final inv = openInvoices[index];
-                                      final ctrl = _allocationControllers
-                                          .putIfAbsent(
-                                            inv.invoiceId,
-                                            () => TextEditingController(
-                                              text:
-                                                  state.editingAllocations
-                                                          .firstWhere(
-                                                            (a) =>
-                                                                a.invoiceId ==
-                                                                inv.invoiceId,
-                                                            orElse: () =>
-                                                                const PaymentAllocation(
-                                                                  invoiceId: '',
-                                                                  invoiceNumber:
-                                                                      '',
-                                                                  amountApplied:
-                                                                      0.0,
-                                                                ),
-                                                          )
-                                                          .amountApplied >
-                                                      0
-                                                  ? state.editingAllocations
-                                                        .firstWhere(
-                                                          (a) =>
-                                                              a.invoiceId ==
-                                                              inv.invoiceId,
-                                                        )
-                                                        .amountApplied
-                                                        .toStringAsFixed(2)
-                                                  : '',
-                                            ),
-                                          );
-                                      final focusNode = _allocationFocusNodes
-                                          .putIfAbsent(
-                                            inv.invoiceId,
-                                            () => FocusNode(),
-                                          );
-
-                                      final allocation = state
-                                          .editingAllocations
-                                          .firstWhere(
-                                            (a) => a.invoiceId == inv.invoiceId,
-                                            orElse: () => PaymentAllocation(
-                                              invoiceId: inv.invoiceId,
-                                              invoiceNumber: inv.invoiceNumber,
-                                              amountApplied: 0.0,
-                                            ),
-                                          );
-
-                                      return Card(
-                                        margin: const EdgeInsets.only(
-                                          bottom: 8,
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(12),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      inv.invoiceNumber,
-                                                      style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 14,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      'Date: ${_dateFormat.format(inv.date)}',
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        color: isDark
-                                                            ? AppTheme
-                                                                  .darkTextSecondary
-                                                            : AppTheme
-                                                                  .lightTextSecondary,
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      'Outstanding: $cs${inv.balance.toStringAsFixed(2)}',
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              const SizedBox(width: 16),
-                                              SizedBox(
-                                                width: 120,
-                                                child: TextFormField(
-                                                  controller: ctrl,
-                                                  focusNode: focusNode,
-                                                  keyboardType:
-                                                      const TextInputType.numberWithOptions(
-                                                        decimal: true,
-                                                      ),
-                                                  textAlign: TextAlign.end,
-                                                  decoration: InputDecoration(
-                                                    contentPadding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 10,
-                                                          vertical: 8,
-                                                        ),
-                                                    prefixText: cs,
-                                                    hintText: '0.00',
-                                                    errorText:
-                                                        allocation
-                                                                .amountApplied >
-                                                            inv.balance
-                                                        ? 'Exceeds balance'
-                                                        : null,
-                                                  ),
-                                                  onChanged: (v) {
-                                                    _onAllocationChanged(
-                                                      inv.invoiceId,
-                                                      inv.invoiceNumber,
-                                                      v,
-                                                      state.editingAllocations,
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 24),
-                                ],
+                                ),
                               );
-                            },
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Bottom save button
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(
-                        alpha: isDark ? 0.3 : 0.05,
-                      ),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark
-                          ? const Color(0xFF334155)
-                          : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Amount:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
-                              ),
-                            ),
-                            Text(
-                              '$cs${state.editingAmount.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                                color: AppTheme.successEmerald,
-                              ),
-                            ),
+                            }),
+                            const SizedBox(height: 16),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed:
-                                (customer == null ||
-                                    state.editingAmount <= 0 ||
-                                    state.isLoading ||
-                                    !_areAllocationsValid(state))
-                                ? null
-                                : () => context.read<ReceiptBloc>().add(
-                                    SaveReceipt(),
-                                  ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.successEmerald,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+
+                          // Allocations list (edit mode)
+                          if (!readOnly && customer != null)
+                            _buildEditAllocations(
+                              context,
+                              state: state,
+                              customerId: customer.id,
+                              cs: cs,
+                              isDark: isDark,
                             ),
-                            child: const Text(
-                              'SAVE RECEIPT',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        if (!state.isEditingNew) ...[
-                          const SizedBox(height: 16),
-                          VoucherPdfActionsWidget(
-                            type: VoucherType.paymentReceipt,
-                            voucher: ReceiptVoucher(
-                              id: state.editingId ?? '',
-                              paymentNumber: state.receipts
-                                  .firstWhere(
-                                    (rec) => rec.id == state.editingId,
-                                    orElse: () => ReceiptVoucher(
-                                      id: '',
-                                      paymentNumber: 'RCPT-TEMP',
-                                      customerId: '',
-                                      customerName: '',
-                                      allocations: const [],
-                                      amount: 0,
-                                      paymentMode: 'Cash',
-                                      referenceNumber: '',
-                                      date: DateTime.now(),
-                                    ),
-                                  )
-                                  .paymentNumber,
-                              customerId: customer?.id ?? '',
-                              customerName: customer?.name ?? '',
-                              allocations: state.receipts
-                                  .firstWhere(
-                                    (rec) => rec.id == state.editingId,
-                                    orElse: () => ReceiptVoucher(
-                                      id: '',
-                                      paymentNumber: 'RCPT-TEMP',
-                                      customerId: '',
-                                      customerName: '',
-                                      allocations: const [],
-                                      amount: 0,
-                                      paymentMode: 'Cash',
-                                      referenceNumber: '',
-                                      date: DateTime.now(),
-                                    ),
-                                  )
-                                  .allocations,
-                              amount: state.editingAmount,
-                              paymentMode: state.editingPaymentMode,
-                              referenceNumber: state.editingReferenceNumber,
-                              date: date,
-                            ),
-                          ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+
+                // Bottom save bar — compact when keyboard is open so the form
+                // does not collapse to a blank strip.
+                if (!keyboardOpen || readOnly)
+                  _buildBottomBar(
+                    context,
+                    state: state,
+                    customer: customer,
+                    date: date,
+                    cs: cs,
+                    isDark: isDark,
+                    readOnly: readOnly,
+                    compact: keyboardOpen,
+                  )
+                else
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed:
+                              (customer == null ||
+                                  state.editingAmount <= 0 ||
+                                  state.isLoading ||
+                                  !_areAllocationsValid(state))
+                              ? null
+                              : () => context.read<ReceiptBloc>().add(
+                                  SaveReceipt(),
+                                ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.successEmerald,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: Text(
+                            'SAVE  $cs${state.editingAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
+    );
+  }
+
+  Widget _buildEditAllocations(
+    BuildContext context, {
+    required ReceiptState state,
+    required String customerId,
+    required String cs,
+    required bool isDark,
+  }) {
+    final openInvoices = _safeOpenInvoices(customerId);
+    if (openInvoices.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final totalAllocated = state.editingAllocations.fold(
+      0.0,
+      (sum, a) => sum + a.amountApplied,
+    );
+    final excessAmount = state.editingAmount - totalAllocated;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'INVOICE ALLOCATIONS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isDark
+                    ? AppTheme.darkTextSecondary
+                    : AppTheme.lightTextSecondary,
+              ),
+            ),
+            Flexible(
+              child: Text(
+                'Allocated: $cs${totalAllocated.toStringAsFixed(2)} / $cs${state.editingAmount.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: totalAllocated > state.editingAmount + 0.005
+                      ? AppTheme.errorRose
+                      : AppTheme.successEmerald,
+                ),
+                textAlign: TextAlign.end,
+              ),
+            ),
+          ],
+        ),
+        if (excessAmount > 0.005) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Remaining $cs${excessAmount.toStringAsFixed(2)} will be saved as customer credit/excess payment.',
+            style: const TextStyle(
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+              color: AppTheme.infoSky,
+            ),
+          ),
+        ],
+        if (totalAllocated > state.editingAmount + 0.005) ...[
+          const SizedBox(height: 4),
+          const Text(
+            'Warning: Total allocated exceeds payment amount!',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.errorRose,
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        ...openInvoices.map((inv) {
+          final expectedText = _allocationTextFor(
+            state.editingAllocations,
+            inv.invoiceId,
+          );
+          final ctrl = _allocationControllers.putIfAbsent(
+            inv.invoiceId,
+            () => TextEditingController(text: expectedText),
+          );
+          final focusNode = _allocationFocusNodes.putIfAbsent(
+            inv.invoiceId,
+            () => FocusNode(),
+          );
+          final allocation = _allocationFor(state.editingAllocations, inv);
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          inv.invoiceNumber,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Date: ${_dateFormat.format(inv.date)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
+                          ),
+                        ),
+                        Text(
+                          'Outstanding: $cs${inv.balance.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 120,
+                    child: TextFormField(
+                      controller: ctrl,
+                      focusNode: focusNode,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.end,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        prefixText: cs,
+                        hintText: '0.00',
+                        errorText: allocation.amountApplied > inv.balance
+                            ? 'Exceeds balance'
+                            : null,
+                        errorMaxLines: 1,
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        _onAllocationChanged(
+                          inv.invoiceId,
+                          inv.invoiceNumber,
+                          v,
+                          state.editingAllocations,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildBottomBar(
+    BuildContext context, {
+    required ReceiptState state,
+    required Customer? customer,
+    required DateTime date,
+    required String cs,
+    required bool isDark,
+    required bool readOnly,
+    required bool compact,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(compact ? 12 : 20),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+        border: Border(
+          top: BorderSide(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          ),
+        ),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Amount:',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                  Text(
+                    '$cs${state.editingAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                      color: AppTheme.successEmerald,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: readOnly
+                      ? () => Navigator.pop(context)
+                      : (customer == null ||
+                            state.editingAmount <= 0 ||
+                            state.isLoading ||
+                            !_areAllocationsValid(state))
+                      ? null
+                      : () => context.read<ReceiptBloc>().add(SaveReceipt()),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.successEmerald,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    readOnly ? 'CLOSE' : 'SAVE RECEIPT',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+              if (!state.isEditingNew && !compact) ...[
+                const SizedBox(height: 16),
+                VoucherPdfActionsWidget(
+                  type: VoucherType.paymentReceipt,
+                  voucher: ReceiptVoucher(
+                    id: state.editingId ?? '',
+                    paymentNumber: state.receipts
+                        .firstWhere(
+                          (rec) => rec.id == state.editingId,
+                          orElse: () => ReceiptVoucher(
+                            id: '',
+                            paymentNumber: 'RCPT-TEMP',
+                            customerId: '',
+                            customerName: '',
+                            allocations: const [],
+                            amount: 0,
+                            paymentMode: 'Cash',
+                            referenceNumber: '',
+                            date: DateTime.now(),
+                          ),
+                        )
+                        .paymentNumber,
+                    customerId: customer?.id ?? '',
+                    customerName: customer?.name ?? '',
+                    allocations: state.receipts
+                        .firstWhere(
+                          (rec) => rec.id == state.editingId,
+                          orElse: () => ReceiptVoucher(
+                            id: '',
+                            paymentNumber: 'RCPT-TEMP',
+                            customerId: '',
+                            customerName: '',
+                            allocations: const [],
+                            amount: 0,
+                            paymentMode: 'Cash',
+                            referenceNumber: '',
+                            date: DateTime.now(),
+                          ),
+                        )
+                        .allocations,
+                    amount: state.editingAmount,
+                    paymentMode: state.editingPaymentMode,
+                    referenceNumber: state.editingReferenceNumber,
+                    date: date,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

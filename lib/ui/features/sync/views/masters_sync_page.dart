@@ -11,6 +11,7 @@ import '../../../core/widgets/status_pill.dart';
 import '../../../core/widgets/sync_item_card.dart';
 import '../../route/bloc/route_bloc.dart';
 import '../../auth/bloc/auth_bloc.dart';
+import '../../../core/cubit/organization_cubit.dart';
 import '../bloc/sync_bloc.dart';
 import '../bloc/masters_sync_bloc.dart';
 import '../bloc/masters_sync_event.dart';
@@ -51,6 +52,7 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final ScrollController _scrollController = ScrollController();
+  bool _showConsoleLogs = false;
 
   @override
   void initState() {
@@ -145,6 +147,7 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
       listeners: [
         BlocListener<MastersSyncBloc, MastersSyncState>(
           listenWhen: (prev, curr) =>
+              _showConsoleLogs &&
               prev.consoleLogs.length < curr.consoleLogs.length,
           listener: (context, state) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -158,13 +161,16 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
             });
           },
         ),
-        // Refresh routes after a master type finishes (success path).
+        // Refresh routes / org after a master type finishes (success path).
         BlocListener<MastersSyncBloc, MastersSyncState>(
           listenWhen: (prev, curr) =>
               curr.syncedTypes.length > prev.syncedTypes.length ||
               (prev.bulkInFlight && !curr.bulkInFlight),
           listener: (context, state) {
             context.read<RouteBloc>().add(LoadRoutes());
+            if (state.syncedTypes.contains(MasterType.organization)) {
+              context.read<OrganizationCubit>().refresh();
+            }
           },
         ),
       ],
@@ -223,7 +229,10 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
                   ],
                 ),
               ),
-              _buildConsoleLogs(context, state),
+              Visibility(
+                visible: _showConsoleLogs,
+                child: _buildConsoleLogs(context, state),
+              ),
               _buildBottomBar(context, state.canProceed),
             ],
           );
@@ -276,23 +285,13 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
               ),
               const SizedBox(width: 14),
               const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Master Data',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Reference data only — no invoices or other transactions',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
+                child: Text(
+                  'Master Data',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -332,34 +331,45 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: state.bulkInFlight
-                  ? null
-                  : () => context.read<MastersSyncBloc>().add(SyncAllRequested()),
-              icon: state.bulkInFlight
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.primaryIndigo,
-                      ),
-                    )
-                  : const Icon(Icons.sync_rounded),
-              label: Text(state.bulkInFlight ? 'Syncing all…' : 'Sync All Masters'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: Colors.white,
-                foregroundColor: AppTheme.primaryIndigo,
-                disabledBackgroundColor: Colors.white.withValues(alpha: 0.7),
-                disabledForegroundColor: AppTheme.primaryIndigo,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            // GestureDetector so long-press works even while the button is
+            // disabled during an in-flight bulk sync.
+            child: GestureDetector(
+              onLongPress: () {
+                setState(() => _showConsoleLogs = true);
+              },
+              child: ElevatedButton.icon(
+                onPressed: state.bulkInFlight
+                    ? null
+                    : () => context
+                        .read<MastersSyncBloc>()
+                        .add(SyncAllRequested()),
+                icon: state.bulkInFlight
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.primaryIndigo,
+                        ),
+                      )
+                    : const Icon(Icons.sync_rounded),
+                label: Text(
+                  state.bulkInFlight ? 'Syncing all…' : 'Sync All Masters',
                 ),
-                textStyle: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.primaryIndigo,
+                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.7),
+                  disabledForegroundColor: AppTheme.primaryIndigo,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -573,6 +583,12 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
                 onPressed: hasMasters
                     ? () {
                         context.read<RouteBloc>().add(LoadRoutes());
+                        // Pushed from Dashboard → pop back. Shown as
+                        // SessionGateway body → LoadRoutes rebuilds gateway
+                        // into Dashboard once masters are present.
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
                       }
                     : null,
                 icon: const Icon(Icons.arrow_forward),
@@ -799,7 +815,7 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
     );
   }
 
-  // --- Diagnostic Console ---
+  // --- Diagnostic Console (hidden by default; long-press Sync All Masters) ---
 
   Widget _buildConsoleLogs(BuildContext context, MastersSyncState state) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -824,84 +840,94 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.terminal_rounded,
-                      color: Colors.greenAccent,
-                      size: 16,
+                const Icon(
+                  Icons.terminal_rounded,
+                  color: Colors.greenAccent,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'DIAGNOSTIC LOGS',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
                     ),
-                    SizedBox(width: 8),
-                    Text(
-                      'DIAGNOSTIC LOGS',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
                 if (state.consoleLogs.isNotEmpty)
                   GestureDetector(
                     onTap: () {
                       context.read<MastersSyncBloc>().add(ClearLogsRequested());
                     },
-                    child: const Text(
-                      'CLEAR',
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        'CLEAR',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                        ),
                       ),
                     ),
                   ),
+                GestureDetector(
+                  onTap: () => setState(() => _showConsoleLogs = false),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white70,
+                    size: 18,
+                  ),
+                ),
               ],
             ),
           ),
           Expanded(
-            child: state.consoleLogs.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No logs yet. Start sync to capture diagnostics.',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(8),
-                    itemCount: state.consoleLogs.length,
-                    itemBuilder: (context, index) {
-                      final log = state.consoleLogs[index];
-                      Color textColor = Colors.white70;
-                      if (log.toLowerCase().contains('failed') ||
-                          log.toLowerCase().contains('error')) {
-                        textColor = Colors.redAccent;
-                      } else if (log.toLowerCase().contains('synced') ||
-                          log.toLowerCase().contains('success')) {
-                        textColor = Colors.greenAccent;
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          log,
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                          ),
+            child: SelectionArea(
+              child: state.consoleLogs.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No logs yet. Start sync to capture diagnostics.',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 11,
+                          fontFamily: 'monospace',
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(8),
+                      itemCount: state.consoleLogs.length,
+                      itemBuilder: (context, index) {
+                        final log = state.consoleLogs[index];
+                        Color textColor = Colors.white70;
+                        if (log.toLowerCase().contains('failed') ||
+                            log.toLowerCase().contains('error')) {
+                          textColor = Colors.redAccent;
+                        } else if (log.toLowerCase().contains('synced') ||
+                            log.toLowerCase().contains('success')) {
+                          textColor = Colors.greenAccent;
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            log,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
           ),
         ],
       ),

@@ -10,7 +10,7 @@ export 'line_editor_state.dart';
 /// totals preview panel rebuilds via [BlocBuilder] without any [setState].
 class LineEditorCubit extends Cubit<LineEditorState> {
   LineEditorCubit({
-    required int initialQuantity,
+    required double initialQuantity,
     required double initialRate,
     required double initialDiscount,
     required double taxPercentage,
@@ -22,7 +22,7 @@ class LineEditorCubit extends Cubit<LineEditorState> {
         ));
 
   /// Updates quantity from the parsed field value (0 while the user types).
-  void setQuantity(int quantity) {
+  void setQuantity(double quantity) {
     emit(state.copyWith(quantity: quantity));
   }
 
@@ -34,5 +34,12 @@ class LineEditorCubit extends Cubit<LineEditorState> {
   /// Updates discount from the parsed field value.
   void setDiscount(double discount) {
     emit(state.copyWith(discount: discount));
+  }
+
+  /// Recomputes the rate when the user switches unit: effective rate =
+  /// base rate × the selected unit's conversion rate (Zoho stores no
+  /// per-unit price). The rate stays user-editable afterwards via [setRate].
+  void setUnit({required double baseRate, required double conversionRate}) {
+    emit(state.copyWith(rate: baseRate * conversionRate));
   }
 }

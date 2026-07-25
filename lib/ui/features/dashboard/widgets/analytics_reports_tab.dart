@@ -4,7 +4,9 @@ import '../../../../domain/models/salesperson.dart';
 import '../../../../ui/core/cubit/salesperson_cubit.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../cubit/daily_stats_state.dart';
 import 'van_metric_card.dart';
+import 'sales_trend_chart.dart';
 
 class AnalyticsReportsTab extends StatelessWidget {
   final bool isDark;
@@ -13,7 +15,15 @@ class AnalyticsReportsTab extends StatelessWidget {
   final double todayPayments;
   final double todayExpenses;
   final double todayReturns;
+  final double todayOrdersTotal;
   final int completedDeliveries;
+  final List<DailySalesPoint> last7DaysSales;
+  final VoidCallback onTapSales;
+  final VoidCallback onTapReceipts;
+  final VoidCallback onTapExpenses;
+  final VoidCallback onTapDeliveries;
+  final VoidCallback onTapOrders;
+  final VoidCallback onTapReturns;
 
   const AnalyticsReportsTab({
     super.key,
@@ -23,7 +33,15 @@ class AnalyticsReportsTab extends StatelessWidget {
     required this.todayPayments,
     required this.todayExpenses,
     required this.todayReturns,
+    required this.todayOrdersTotal,
     required this.completedDeliveries,
+    required this.last7DaysSales,
+    required this.onTapSales,
+    required this.onTapReceipts,
+    required this.onTapExpenses,
+    required this.onTapDeliveries,
+    required this.onTapOrders,
+    required this.onTapReturns,
   });
 
   static String _timeGreeting() {
@@ -97,17 +115,19 @@ class AnalyticsReportsTab extends StatelessWidget {
                       color: AppTheme.primaryIndigo,
                       isDark: isDark,
                       isGlass: isGlass,
+                      onTap: onTapSales,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: VanMetricCard(
-                      title: 'Collections',
+                      title: 'Receipts',
                       value: '$cs${todayPayments.toStringAsFixed(2)}',
                       icon: Icons.account_balance_wallet_rounded,
                       color: AppTheme.successEmerald,
                       isDark: isDark,
                       isGlass: isGlass,
+                      onTap: onTapReceipts,
                     ),
                   ),
                 ],
@@ -123,6 +143,7 @@ class AnalyticsReportsTab extends StatelessWidget {
                       color: AppTheme.errorRose,
                       isDark: isDark,
                       isGlass: isGlass,
+                      onTap: onTapExpenses,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -134,83 +155,50 @@ class AnalyticsReportsTab extends StatelessWidget {
                       color: AppTheme.infoSky,
                       isDark: isDark,
                       isGlass: isGlass,
+                      onTap: onTapDeliveries,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              // Sales Returns — full-width card
-              _ReturnsCard(cs: cs, todayReturns: todayReturns, isDark: isDark),
+              Row(
+                children: [
+                  Expanded(
+                    child: VanMetricCard(
+                      title: 'Orders Total',
+                      value: '$cs${todayOrdersTotal.toStringAsFixed(2)}',
+                      icon: Icons.assignment_turned_in_outlined,
+                      color: AppTheme.primaryIndigo,
+                      isDark: isDark,
+                      isGlass: isGlass,
+                      onTap: onTapOrders,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: VanMetricCard(
+                      title: 'Sales Returns',
+                      value: '$cs${todayReturns.toStringAsFixed(2)}',
+                      icon: Icons.assignment_return_outlined,
+                      color: AppTheme.warningAmber,
+                      isDark: isDark,
+                      isGlass: isGlass,
+                      onTap: onTapReturns,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SalesTrendChart(
+                points: last7DaysSales,
+                isDark: isDark,
+                isGlass: isGlass,
+                currencySymbol: cs,
+              ),
               const SizedBox(height: 24),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── Full-width Sales Returns highlight card ────────────────────────────────
-
-class _ReturnsCard extends StatelessWidget {
-  final String cs;
-  final double todayReturns;
-  final bool isDark;
-
-  const _ReturnsCard({
-    required this.cs,
-    required this.todayReturns,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppTheme.warningAmber.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.warningAmber.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.warningAmber.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.assignment_return_outlined,
-              color: AppTheme.warningAmber,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Sales Returns',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: isDark
-                    ? AppTheme.darkTextSecondary
-                    : AppTheme.lightTextSecondary,
-              ),
-            ),
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '$cs${todayReturns.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: AppTheme.warningAmber,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -3,13 +3,16 @@ import 'package:get_it/get_it.dart';
 import 'hive_database_service.dart';
 import 'firebase_auth_service.dart';
 import 'zoho_api_client.dart';
+import 'document_number_service.dart';
 import 'sync_worker.dart';
 import 'voucher_pdf_service.dart';
+import 'thermal_printer_service.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/sync_repository.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../../domain/repositories/salesperson_repository.dart';
 import '../../domain/repositories/voucher_pdf_repository.dart';
+import '../../domain/repositories/thermal_printer_repository.dart';
 import '../repositories/auth_repository_impl.dart';
 import '../repositories/sync_repository_impl.dart';
 import '../repositories/sales_repository_impl.dart';
@@ -39,11 +42,20 @@ Future<void> setupDependencyInjection() async {
     () => ZohoApiClient(dbService: sl<HiveDatabaseService>()),
   );
 
+  // 3½. Duplicate-proof offline document numbering (B5)
+  sl.registerLazySingleton<DocumentNumberService>(
+    () => DocumentNumberService(
+      dbService: sl<HiveDatabaseService>(),
+      apiClient: sl<ZohoApiClient>(),
+    ),
+  );
+
   // 4. Offline Sync Worker
   sl.registerLazySingleton<SyncWorker>(
     () => SyncWorker(
       dbService: sl<HiveDatabaseService>(),
       apiClient: sl<ZohoApiClient>(),
+      numberService: sl<DocumentNumberService>(),
     ),
   );
 
@@ -73,4 +85,13 @@ Future<void> setupDependencyInjection() async {
   // Best-effort cleanup of temp PDFs left behind by a previous session
   // (e.g. app was killed before per-share deletion ran).
   unawaited(voucherPdfService.clearStaleTempFiles());
+
+  // 8. Bluetooth ESC/POS thermal printer (2" / 4" tickets)
+  final thermalPrinterService = ThermalPrinterService(
+    dbService: sl<HiveDatabaseService>(),
+  );
+  sl.registerLazySingleton<ThermalPrinterService>(() => thermalPrinterService);
+  sl.registerLazySingleton<ThermalPrinterRepository>(
+    () => thermalPrinterService,
+  );
 }

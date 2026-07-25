@@ -42,7 +42,7 @@ void main() async {
         'Items': '/items',
         'Customers': '/contacts?contact_type=customer',
         'Salespersons': '/salespersons',
-        'Salesperson Location Mappings': '/cm_salesperson_location',
+        'Salesperson Profiles': '/cm_salesperson_profile',
       };
 
       for (final entry in endpoints.entries) {

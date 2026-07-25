@@ -9,10 +9,10 @@ class OrderLineItem extends Equatable {
   /// The inventory product/item referenced.
   final Item item;
 
-  /// Quantity of items ordered.
-  final int quantity;
+  /// Quantity of items ordered, expressed in the selected unit ([displayUom]).
+  final double quantity;
 
-  /// Ordered rate per unit item.
+  /// Ordered rate per selected unit.
   final double rate;
 
   /// Percentage of tax applied (e.g. 5.0).
@@ -21,6 +21,13 @@ class OrderLineItem extends Equatable {
   /// Line item discount.
   final double discount;
 
+  /// Unit of measure for this line (defaults to [Item.uom] when empty).
+  final String uom;
+
+  /// Zoho `unit_conversion_id` when [uom] is an alternate unit; empty for
+  /// the item's base unit.
+  final String unitConversionId;
+
   /// Creates a new [OrderLineItem].
   const OrderLineItem({
     required this.item,
@@ -28,7 +35,16 @@ class OrderLineItem extends Equatable {
     required this.rate,
     required this.taxPercentage,
     this.discount = 0.0,
+    this.uom = '',
+    this.unitConversionId = '',
   });
+
+  /// Effective UOM for display/sync — line override, else item master.
+  String get displayUom => uom.isNotEmpty ? uom : item.uom;
+
+  /// The quantity converted into the item's base unit — stock math always
+  /// operates in base units (e.g. 2 × "25 Kg Bag" → 50 kg).
+  double get quantityInBase => quantity * item.conversionRateFor(displayUom);
 
   /// Computes the cost excluding tax.
   double get subTotal => roundMoney(rate * quantity);
@@ -42,10 +58,12 @@ class OrderLineItem extends Equatable {
   /// Creates a copy of this [OrderLineItem] with replaced values for specific fields.
   OrderLineItem copyWith({
     Item? item,
-    int? quantity,
+    double? quantity,
     double? rate,
     double? taxPercentage,
     double? discount,
+    String? uom,
+    String? unitConversionId,
   }) {
     return OrderLineItem(
       item: item ?? this.item,
@@ -53,11 +71,14 @@ class OrderLineItem extends Equatable {
       rate: rate ?? this.rate,
       taxPercentage: taxPercentage ?? this.taxPercentage,
       discount: discount ?? this.discount,
+      uom: uom ?? this.uom,
+      unitConversionId: unitConversionId ?? this.unitConversionId,
     );
   }
 
   @override
-  List<Object?> get props => [item, quantity, rate, taxPercentage, discount];
+  List<Object?> get props =>
+      [item, quantity, rate, taxPercentage, discount, uom, unitConversionId];
 }
 
 /// Lifecycle status of a sales order, mirroring Zoho Books.

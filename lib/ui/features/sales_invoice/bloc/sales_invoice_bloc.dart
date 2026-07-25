@@ -10,6 +10,8 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_invoice_model.dart';
+import '../../../../data/services/document_number_service.dart';
+import '../../../../data/services/injection.dart';
 import '../../../core/utils/date_filter.dart';
 
 // --- Events ---
@@ -21,8 +23,11 @@ abstract class SalesInvoiceEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-/// Fired to load local sales invoices.
+/// Fired to load sales invoices (live-first; falls back to local cache).
 class LoadInvoices extends SalesInvoiceEvent {}
+
+/// Fired to download invoices from Zoho and merge them into the local cache.
+class RefreshInvoicesFromZoho extends SalesInvoiceEvent {}
 
 /// Fired to set the active date filter for listing.
 class SetDateFilter extends SalesInvoiceEvent {
@@ -76,18 +81,23 @@ class UpdateInvoiceCustomer extends SalesInvoiceEvent {
 /// Fired to update or add line item under active editor.
 class AddOrUpdateLineItem extends SalesInvoiceEvent {
   final Item item;
-  final int quantity;
+  final double quantity;
   final double? rate;
   final double? discount;
+  final String? uom;
+  final String? unitConversionId;
   const AddOrUpdateLineItem({
     required this.item,
     required this.quantity,
     this.rate,
     this.discount,
+    this.uom,
+    this.unitConversionId,
   });
 
   @override
-  List<Object?> get props => [item, quantity, rate, discount];
+  List<Object?> get props =>
+      [item, quantity, rate, discount, uom, unitConversionId];
 }
 
 /// Fired to drop a specific line item.
@@ -108,6 +118,16 @@ class SaveInvoice extends SalesInvoiceEvent {
   List<Object?> get props => [notes];
 }
 
+/// Batch-converts each open sales order into its own local invoice
+/// (one invoice per order) and enqueues Zoho `convert_so` sync items.
+class ConvertOrdersBatch extends SalesInvoiceEvent {
+  final List<SalesOrder> orders;
+  const ConvertOrdersBatch(this.orders);
+
+  @override
+  List<Object?> get props => [orders];
+}
+
 /// Fired to clear successful/failure notifications from the state.
 class ClearMessages extends SalesInvoiceEvent {}
 
@@ -116,7 +136,7 @@ class ClearMessages extends SalesInvoiceEvent {}
 /// Fired to append a specific quantity of an inventory [Item] to the active checkout cart.
 class AddToCart extends SalesInvoiceEvent {
   final Item item;
-  final int quantity;
+  final double quantity;
   const AddToCart(this.item, this.quantity);
 
   @override
@@ -135,7 +155,7 @@ class RemoveFromCart extends SalesInvoiceEvent {
 /// Fired to overwrite the checkout quantity of a specific item.
 class UpdateCartQuantity extends SalesInvoiceEvent {
   final Item item;
-  final int quantity;
+  final double quantity;
   const UpdateCartQuantity(this.item, this.quantity);
 
   @override
@@ -197,7 +217,7 @@ class SalesInvoiceState extends Equatable {
   });
 
   /// Computes the legacy cart representation on the fly from editingItems.
-  Map<Item, int> get cart => {
+  Map<Item, double> get cart => {
     for (final line in editingItems) line.item: line.quantity,
   };
 
@@ -283,6 +303,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
        )) {
     // List & Editor handlers
     on<LoadInvoices>(_onLoadInvoices);
+    on<RefreshInvoicesFromZoho>(_onRefreshInvoicesFromZoho);
     on<SetDateFilter>(_onSetDateFilter);
     on<StartNewInvoice>(_onStartNewInvoice);
     on<StartEditInvoice>(_onStartEditInvoice);
@@ -292,6 +313,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     on<AddOrUpdateLineItem>(_onAddOrUpdateLineItem);
     on<RemoveLineItem>(_onRemoveLineItem);
     on<SaveInvoice>(_onSaveInvoice);
+    on<ConvertOrdersBatch>(_onConvertOrdersBatch);
     on<ClearMessages>(_onClearMessages);
 
     // Legacy cart flow compatibility handlers
@@ -302,18 +324,38 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     on<CheckoutRequested>(_onCheckoutRequested);
   }
 
+  /// Live-first load, scoped to the active date filter: fetch from Zoho and
+  /// render that; the local cache is only a fallback when the fetch fails.
+  Future<void> _loadInvoicesLiveFirst(Emitter<SalesInvoiceState> emit) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      final loaded = await _salesRepository.fetchRemoteInvoices(
+        startDate: state.startDate,
+        endDate: state.endDate,
+      );
+      emit(state.copyWith(invoices: loaded, isLoading: false));
+    } catch (e) {
+      emit(
+        state.copyWith(
+          invoices: _salesRepository.getLocalInvoices(),
+          isLoading: false,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
+  }
+
   Future<void> _onLoadInvoices(
     LoadInvoices event,
     Emitter<SalesInvoiceState> emit,
-  ) async {
-    emit(state.copyWith(isLoading: true));
-    try {
-      final loaded = _salesRepository.getLocalInvoices();
-      emit(state.copyWith(invoices: loaded, isLoading: false));
-    } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
-    }
-  }
+  ) =>
+      _loadInvoicesLiveFirst(emit);
+
+  Future<void> _onRefreshInvoicesFromZoho(
+    RefreshInvoicesFromZoho event,
+    Emitter<SalesInvoiceState> emit,
+  ) =>
+      _loadInvoicesLiveFirst(emit);
 
   void _onSetDateFilter(SetDateFilter event, Emitter<SalesInvoiceState> emit) {
     emit(state.copyWith(
@@ -362,8 +404,15 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
       ),
     );
 
+    // Ensure remote / ledger-loaded invoices are present for PDF & lookups.
+    final invoices = List<SalesInvoice>.from(state.invoices);
+    if (!invoices.any((inv) => inv.id == event.invoice.id)) {
+      invoices.add(event.invoice);
+    }
+
     emit(
       state.copyWith(
+        invoices: invoices,
         editingInvoiceId: event.invoice.id,
         editingDate: event.invoice.date,
         editingCustomer: customer,
@@ -412,6 +461,8 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
             rate: line.rate,
             taxPercentage: line.taxPercentage,
             discount: line.discount,
+            uom: line.displayUom,
+            unitConversionId: line.unitConversionId,
           ),
         )
         .toList();
@@ -453,7 +504,9 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     final items = List<InvoiceLineItem>.from(state.editingItems);
     final idx = items.indexWhere((line) => line.item.id == event.item.id);
 
-    int originalQty = 0;
+    // All stock math runs in base units: convert the entered quantity via
+    // the selected unit's conversion rate.
+    double originalBaseQty = 0;
     if (!state.isEditingNew && state.editingInvoiceId != null) {
       final originalInvoice = state.invoices.firstWhere(
         (inv) => inv.id == state.editingInvoiceId,
@@ -472,17 +525,23 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
         (line) => line.item.id == event.item.id,
       );
       if (origLineIndex >= 0) {
-        originalQty = originalInvoice.items[origLineIndex].quantity;
+        originalBaseQty = originalInvoice.items[origLineIndex].quantityInBase;
       }
     }
 
-    final allowedStock = event.item.stock + originalQty;
+    final lineUom = (event.uom != null && event.uom!.trim().isNotEmpty)
+        ? event.uom!.trim()
+        : event.item.uom;
+    final requestedBaseQty =
+        event.quantity * event.item.conversionRateFor(lineUom);
+
+    final allowedStock = event.item.stock + originalBaseQty;
     try {
       deductStock(
         itemId: event.item.id,
         itemName: event.item.name,
         available: allowedStock,
-        requested: event.quantity,
+        requested: requestedBaseQty,
       );
     } on InsufficientStockException catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));
@@ -497,6 +556,8 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
           quantity: event.quantity,
           rate: event.rate,
           discount: event.discount,
+          uom: lineUom,
+          unitConversionId: event.unitConversionId,
         );
       }
     } else {
@@ -508,6 +569,8 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
             rate: event.rate ?? event.item.rate,
             taxPercentage: event.item.taxPercentage,
             discount: event.discount ?? 0.0,
+            uom: lineUom,
+            unitConversionId: event.unitConversionId ?? '',
           ),
         );
       }
@@ -546,8 +609,9 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
 
       String invoiceNum;
       if (isNew) {
-        invoiceNum =
-            'INV-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+        invoiceNum = await sl<DocumentNumberService>().nextNumber(
+          DocType.invoice,
+        );
       } else {
         final originalInvoice = state.invoices.firstWhere(
           (inv) => inv.id == tempId,
@@ -632,12 +696,141 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     emit(state.copyWith(clearMessages: true));
   }
 
+  /// Converts each open order in [event.orders] to a local invoice, continuing
+  /// past individual failures (e.g. insufficient stock) and reporting a summary.
+  Future<void> _onConvertOrdersBatch(
+    ConvertOrdersBatch event,
+    Emitter<SalesInvoiceState> emit,
+  ) async {
+    final candidates = event.orders.where((o) => !o.isConverted).toList();
+    if (candidates.isEmpty) {
+      emit(
+        state.copyWith(
+          errorMessage: 'No open orders selected to convert',
+        ),
+      );
+      return;
+    }
+
+    emit(state.copyWith(isLoading: true));
+    var successCount = 0;
+    final failures = <String>[];
+
+    for (var i = 0; i < candidates.length; i++) {
+      final order = candidates[i];
+      try {
+        await _convertSingleOrder(order, batchIndex: i);
+        successCount++;
+      } on InsufficientStockException catch (e) {
+        failures.add('${order.orderNumber}: ${e.toString()}');
+      } catch (e) {
+        failures.add('${order.orderNumber}: $e');
+      }
+    }
+
+    _syncRepository.triggerSync();
+    final updatedInvoices = _salesRepository.getLocalInvoices();
+
+    if (successCount == 0) {
+      emit(
+        state.copyWith(
+          invoices: updatedInvoices,
+          isLoading: false,
+          errorMessage: failures.isEmpty
+              ? 'No orders converted'
+              : 'Convert failed. Load stock first if needed.\n${failures.join('\n')}',
+        ),
+      );
+      return;
+    }
+
+    final summary = failures.isEmpty
+        ? 'Converted $successCount order${successCount == 1 ? '' : 's'} to invoice'
+        : 'Converted $successCount of ${candidates.length}. '
+              'Failures (try Items → Create Stock Transfer first):\n'
+              '${failures.join('\n')}';
+
+    emit(
+      state.copyWith(
+        invoices: updatedInvoices,
+        isLoading: false,
+        successMessage: summary,
+      ),
+    );
+  }
+
+  /// Shared path: create local invoice from [order], mark order invoiced,
+  /// enqueue `convert_so` (mirrors the conversion branch of [SaveInvoice]).
+  Future<void> _convertSingleOrder(
+    SalesOrder order, {
+    int batchIndex = 0,
+  }) async {
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final tempId = 'temp_inv_${stamp}_$batchIndex';
+    final invoiceNum = await sl<DocumentNumberService>().nextNumber(
+      DocType.invoice,
+    );
+
+    final items = order.items
+        .map(
+          (line) => InvoiceLineItem(
+            item: line.item,
+            quantity: line.quantity,
+            rate: line.rate,
+            taxPercentage: line.taxPercentage,
+            discount: line.discount,
+            uom: line.displayUom,
+            unitConversionId: line.unitConversionId,
+          ),
+        )
+        .toList();
+
+    final invoice = SalesInvoice(
+      id: tempId,
+      invoiceNumber: invoiceNum,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      date: DateTime.now(),
+      dueDate: DateTime.now().add(const Duration(days: 7)),
+      items: items,
+      notes: order.notes,
+      isPendingSync: true,
+    );
+
+    await _salesRepository.saveLocalInvoice(invoice);
+
+    final orders = _salesRepository.getLocalOrders();
+    final localOrder = orders.firstWhere(
+      (o) => o.id == order.id,
+      orElse: () => order,
+    );
+    await _salesRepository.saveLocalOrder(
+      localOrder.copyWith(
+        status: SalesOrderStatus.invoiced,
+        convertedInvoiceNumber: invoiceNum,
+      ),
+    );
+
+    final convertItem = SyncQueueItem(
+      id: tempId,
+      type: 'convert_so',
+      payload: {
+        'salesorder_id': localOrder.zohoOrderId ?? localOrder.id,
+        'source_order_id': localOrder.id,
+        'local_invoice_id': invoice.id,
+      },
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+    await _salesRepository.enqueueSyncItem(convertItem);
+  }
+
   // --- Legacy cart compatibility implementations ---
 
   void _onAddToCart(AddToCart event, Emitter<SalesInvoiceState> emit) {
     final items = List<InvoiceLineItem>.from(state.editingItems);
     final idx = items.indexWhere((line) => line.item.id == event.item.id);
-    final existingQty = idx >= 0 ? items[idx].quantity : 0;
+    final existingQty = idx >= 0 ? items[idx].quantity : 0.0;
 
     try {
       deductStock(
@@ -660,6 +853,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
           quantity: event.quantity,
           rate: event.item.rate,
           taxPercentage: event.item.taxPercentage,
+          uom: event.item.uom,
         ),
       );
     }
@@ -705,6 +899,7 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
             quantity: event.quantity,
             rate: event.item.rate,
             taxPercentage: event.item.taxPercentage,
+            uom: event.item.uom,
           ),
         );
       }
@@ -729,10 +924,12 @@ class SalesInvoiceBloc extends Bloc<SalesInvoiceEvent, SalesInvoiceState> {
     emit(state.copyWith(isLoading: true, clearMessages: true));
     try {
       final tempId = 'temp_inv_${DateTime.now().millisecondsSinceEpoch}';
+      final invoiceNum = await sl<DocumentNumberService>().nextNumber(
+        DocType.invoice,
+      );
       final invoice = SalesInvoice(
         id: tempId,
-        invoiceNumber:
-            'INV-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+        invoiceNumber: invoiceNum,
         customerId: event.customer.id,
         customerName: event.customer.name,
         date: DateTime.now(),

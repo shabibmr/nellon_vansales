@@ -5,6 +5,7 @@ import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../domain/models/warehouse.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/utils/quantity_format.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/editor_footer.dart';
 import '../../../../ui/core/widgets/empty_state.dart';
@@ -36,7 +37,8 @@ class _StockUnloadingPageState extends State<StockUnloadingPage> {
   TextEditingController _controllerFor(StockTransferRow row) {
     final existing = _qtyControllers[row.item.id];
     if (existing != null) return existing;
-    final created = TextEditingController(text: row.extraQty.toString());
+    final created =
+        TextEditingController(text: formatQuantity(row.extraQtyEntered));
     _qtyControllers[row.item.id] = created;
     return created;
   }
@@ -45,6 +47,12 @@ class _StockUnloadingPageState extends State<StockUnloadingPage> {
     final warehouses = _db.getWarehouses();
     if (warehouses.isEmpty) {
       return const Warehouse(id: '', name: 'Default Warehouse', address: '');
+    }
+    final primaryId = _db.primaryWarehouseId;
+    if (primaryId != null && primaryId.isNotEmpty) {
+      for (final w in warehouses) {
+        if (w.id == primaryId) return w;
+      }
     }
     return warehouses.firstWhere(
       (w) => w.isPrimary,
@@ -178,7 +186,7 @@ class _StockUnloadingPageState extends State<StockUnloadingPage> {
                   rows: [
                     (
                       label: 'Total Quantity to Unload:',
-                      value: '${state.totalTransferQty}',
+                      value: formatQuantity(state.totalTransferQty),
                       emphasize: true,
                     ),
                   ],
@@ -205,7 +213,7 @@ class _UnloadRow extends StatelessWidget {
   final StockTransferRow row;
   final TextEditingController controller;
   final bool isDark;
-  final ValueChanged<int> onChanged;
+  final ValueChanged<double> onChanged;
 
   const _UnloadRow({
     required this.row,
@@ -240,7 +248,8 @@ class _UnloadRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Van balance: ${row.currentStock}',
+                  'Van balance: ${formatQuantity(row.currentStock)}'
+                  '${row.item.uom.trim().isNotEmpty ? ' ${row.item.uom.trim()}' : ''}',
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark
@@ -255,15 +264,18 @@ class _UnloadRow extends StatelessWidget {
             width: 80,
             child: TextField(
               controller: controller,
-              keyboardType: TextInputType.number,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               textAlign: TextAlign.center,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}')),
+              ],
               decoration: const InputDecoration(
                 labelText: 'Qty',
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(vertical: 8),
               ),
-              onChanged: (val) => onChanged(int.tryParse(val) ?? 0),
+              onChanged: (val) => onChanged(double.tryParse(val) ?? 0),
             ),
           ),
         ],

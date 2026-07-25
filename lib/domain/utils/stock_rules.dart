@@ -2,8 +2,8 @@
 class InsufficientStockException implements Exception {
   final String itemId;
   final String itemName;
-  final int available;
-  final int requested;
+  final double available;
+  final double requested;
 
   const InsufficientStockException({
     required this.itemId,
@@ -14,7 +14,12 @@ class InsufficientStockException implements Exception {
 
   @override
   String toString() =>
-      'Cannot fulfill $requested unit(s) of "$itemName" — only $available available.';
+      'Cannot fulfill ${_fmt(requested)} unit(s) of "$itemName" — only ${_fmt(available)} available.';
+
+  /// Trims trailing zeros so whole numbers read naturally ("1", not "1.0").
+  static String _fmt(double v) => v == v.roundToDouble()
+      ? v.toInt().toString()
+      : v.toString();
 }
 
 /// The single enforced invariant for deducting stock: an item's stock can
@@ -22,11 +27,14 @@ class InsufficientStockException implements Exception {
 /// line item is added or edited) and the persistence layer (before an
 /// invoice is committed), so the two can never disagree and stock can never
 /// be silently floored to zero.
-int deductStock({
+///
+/// Quantities are in the item's base unit (multi-UOM lines are converted to
+/// base units before reaching stock math).
+double deductStock({
   required String itemId,
   required String itemName,
-  required int available,
-  required int requested,
+  required double available,
+  required double requested,
 }) {
   final remaining = available - requested;
   if (remaining < 0) {

@@ -6,9 +6,18 @@ import '../../../domain/models/organization.dart';
 /// Currency symbol, company name, and other org details should be read from here
 /// rather than hardcoded anywhere in the UI.
 class OrganizationCubit extends Cubit<Organization?> {
-  OrganizationCubit(HiveDatabaseService db) : super(db.getOrganization());
+  final HiveDatabaseService _db;
 
-  String get currencySymbol => state?.currencySymbol ?? '₹';
+  OrganizationCubit(HiveDatabaseService db)
+      : _db = db,
+        super(db.getOrganization());
+
+  String get currencySymbol => state?.currencySymbol ?? 'AED';
   String get companyName => state?.name ?? 'Van Sales Pro';
-  String get currencyCode => state?.currencyCode ?? 'INR';
+  String get currencyCode => state?.currencyCode ?? 'AED';
+
+  /// Reloads organization details from Hive (e.g. after masters sync).
+  void refresh() {
+    emit(_db.getOrganization());
+  }
 }

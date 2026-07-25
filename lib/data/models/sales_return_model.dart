@@ -11,6 +11,8 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
     required super.returnedQuantity,
     super.invoiceId,
     super.invoiceNumber,
+    super.uom = '',
+    super.unitConversionId = '',
   });
 
   /// Factory constructor to parse local/remote JSON maps into a [SalesReturnLineItemModel].
@@ -19,20 +21,33 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
       invoiceLineItem: InvoiceLineItemModel.fromJson(
         json['invoiceLineItem'] ?? json,
       ),
-      returnedQuantity: json['returned_quantity'] ?? json['quantity'] ?? 1,
+      returnedQuantity: ((json['returned_quantity'] ?? json['quantity'] ?? 1)
+              as num)
+          .toDouble(),
       invoiceId: json['invoice_id'],
       invoiceNumber: json['invoice_number'],
+      uom: (json['return_uom'] ?? '').toString(),
+      unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
     );
   }
 
   /// Converts this [SalesReturnLineItemModel] into a serialization compatible JSON map.
+  ///
+  /// `quantity`, `rate`, `unit` are expressed in the selected return unit —
+  /// the Zoho credit-note mapper whitelists them directly.
   Map<String, dynamic> toJson() {
+    final unit = displayUom;
     return {
       'item_id': invoiceLineItem.item.id,
       'quantity': returnedQuantity,
-      'rate': invoiceLineItem.rate,
+      'rate': rate,
       'invoice_id': invoiceId,
       'invoice_number': invoiceNumber,
+      if (unit.isNotEmpty) 'unit': unit,
+      // Local-only key so fromJson can distinguish the line's own uom
+      // override from the nested invoice line's unit.
+      if (uom.isNotEmpty) 'return_uom': uom,
+      if (unitConversionId.isNotEmpty) 'unit_conversion_id': unitConversionId,
       'invoiceLineItem': InvoiceLineItemModel.fromDomain(
         invoiceLineItem,
       ).toJson(),
@@ -46,6 +61,8 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
       returnedQuantity: lineItem.returnedQuantity,
       invoiceId: lineItem.invoiceId,
       invoiceNumber: lineItem.invoiceNumber,
+      uom: lineItem.uom,
+      unitConversionId: lineItem.unitConversionId,
     );
   }
 }

@@ -5,6 +5,8 @@ import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_return_model.dart';
+import '../../../../data/services/document_number_service.dart';
+import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
 import 'sales_return_dialog_queries.dart';
 import 'sales_return_dialog_state.dart';
@@ -104,7 +106,7 @@ class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
         returnedLines.add(
           SalesReturnLineItem(
             invoiceLineItem: originalLine,
-            returnedQuantity: qty,
+            returnedQuantity: qty.toDouble(),
             invoiceId: inv.id,
             invoiceNumber: inv.invoiceNumber,
           ),
@@ -112,10 +114,12 @@ class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
       }
 
       final tempId = 'temp_ret_${DateTime.now().millisecondsSinceEpoch}';
+      final creditNoteNum = await sl<DocumentNumberService>().nextNumber(
+        DocType.creditNote,
+      );
       final returnItem = SalesReturn(
         id: tempId,
-        creditNoteNumber:
-            'RET-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+        creditNoteNumber: creditNoteNum,
         customerId: customer.id,
         customerName: customer.name,
         date: DateTime.now(),
