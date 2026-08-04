@@ -58,7 +58,13 @@ void main() {
       cubit.setConfig(null);
 
       expect(cubit.state, isA<ServerConfigInitial>());
-      expect(cubit.state.isMockModeEnabled, isTrue);
+      // Live is the default when nothing is persisted.
+      expect(cubit.state.isMockModeEnabled, isFalse);
+    });
+
+    test('bootstraps live mode by default when hive has no preference', () {
+      expect(cubit.state.isMockModeEnabled, isFalse);
+      expect(apiClient.isMockModeEnabled, isFalse);
     });
 
     test(

@@ -25,7 +25,6 @@ import '../widgets/invoice_flow_sheet.dart';
 import '../widgets/receipt_payment_dialog.dart';
 import '../widgets/sales_return_dialog.dart';
 import '../widgets/cash_closing_dialog.dart';
-import '../../sales_invoice/bloc/sales_invoice_list_bloc.dart';
 import '../../sales_invoice/views/sales_invoice_list_page.dart';
 import '../../sales_invoice/views/sales_invoice_editor_page.dart';
 import '../../sales_order/views/sales_order_list_page.dart';
@@ -56,7 +55,7 @@ import '../../reports/views/customerwise_returns_summary_report_page.dart';
 import '../../ledger/bloc/customer_ledger_bloc.dart';
 import '../../ledger/views/customer_ledger_page.dart';
 import '../../sync/views/masters_sync_page.dart';
-import '../../licensing/widgets/mock_live_switch_tile.dart';
+
 import '../../settings/views/settings_page.dart';
 import '../../profile/views/user_profile_page.dart';
 import '../../../core/extensions/org_context_extension.dart';
@@ -691,7 +690,6 @@ class _DashboardPageView extends StatelessWidget {
                                     );
                                   },
                                 ),
-                                const MockLiveSwitchTile(),
                               ],
                             ),
                           ),
@@ -1096,8 +1094,6 @@ class _DashboardPageView extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: 8),
-                  const MockLiveSwitchTile(),
                 ],
               ),
             ),
