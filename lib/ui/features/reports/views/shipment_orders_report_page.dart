@@ -14,8 +14,9 @@ import '../../../core/widgets/date_range_filter_card.dart';
 import '../../../core/widgets/document_list_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/status_pill.dart';
-import '../../sales_invoice/bloc/sales_invoice_bloc.dart' as inv;
-import '../../sales_order/bloc/sales_order_bloc.dart';
+import '../../sales_invoice/bloc/sales_invoice_list_bloc.dart' as inv;
+import '../../sales_invoice/bloc/sales_invoice_list_event.dart' as inv;
+import '../../sales_invoice/bloc/sales_invoice_list_state.dart' as inv;
 import '../../sales_order/views/sales_order_editor_page.dart';
 import '../../stock_transfer/bloc/stock_transfer_bloc.dart'
     hide ClearMessages;
@@ -73,12 +74,10 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
   }
 
   Future<void> _openOrderView(BuildContext context, SalesOrder order) async {
-    context.read<SalesOrderBloc>().add(StartEditOrder(order));
-    await Navigator.push(
+    await SalesOrderEditorPage.open(
       context,
-      MaterialPageRoute(
-        builder: (_) => const SalesOrderEditorPage(readOnly: true),
-      ),
+      order: order,
+      readOnly: true,
     );
   }
 
@@ -110,7 +109,7 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
-    context.read<inv.SalesInvoiceBloc>().add(inv.ConvertOrdersBatch(selected));
+    context.read<inv.SalesInvoiceListBloc>().add(inv.ConvertOrdersBatch(selected));
   }
 
   void _openStockTransfer(
@@ -137,7 +136,7 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
     final filtered = _filteredOrders();
     final itemRows = aggregateItemsFromOrders(filtered);
 
-    return BlocListener<inv.SalesInvoiceBloc, inv.SalesInvoiceState>(
+    return BlocListener<inv.SalesInvoiceListBloc, inv.SalesInvoiceListState>(
       listenWhen: (prev, curr) =>
           prev.successMessage != curr.successMessage ||
           prev.errorMessage != curr.errorMessage ||
@@ -145,12 +144,12 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
       listener: (context, invState) {
         if (invState.successMessage != null) {
           showSuccessSnackBar(context, invState.successMessage!);
-          context.read<inv.SalesInvoiceBloc>().add(inv.ClearMessages());
+          context.read<inv.SalesInvoiceListBloc>().add(const inv.ClearInvoiceListMessages());
           context.read<ShipmentOrdersCubit>().clearSelection();
           context.read<ReportBloc<SalesOrder>>().add(const RefreshReport());
         } else if (invState.errorMessage != null) {
           showErrorSnackBar(context, invState.errorMessage!);
-          context.read<inv.SalesInvoiceBloc>().add(inv.ClearMessages());
+          context.read<inv.SalesInvoiceListBloc>().add(const inv.ClearInvoiceListMessages());
           context.read<ReportBloc<SalesOrder>>().add(const RefreshReport());
         }
       },
@@ -160,7 +159,7 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
               .read<ShipmentOrdersCubit>()
               .selectedOrders(filtered);
           final converting = context
-              .watch<inv.SalesInvoiceBloc>()
+              .watch<inv.SalesInvoiceListBloc>()
               .state
               .isLoading;
 

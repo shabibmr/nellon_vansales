@@ -573,7 +573,10 @@ class HiveDatabaseService {
     String? Function(T) locationIdOf,
   ) {
     final active = assignedWarehouseId;
-    if (active == null) return items;
+    // List<T>.of, not `items` — the caller may hand us a list that reified as
+    // List<XModel>, and passing it straight through leaks that runtime type to
+    // the UI where `firstWhere(orElse: () => X(...))` then fails to type-check.
+    if (active == null) return List<T>.of(items);
     return items
         .where((i) => locationIdOf(i) == null || locationIdOf(i) == active)
         .toList();
@@ -582,8 +585,10 @@ class HiveDatabaseService {
   /// Retrieves the full, unfiltered list of invoices recorded locally (for internal read-modify-write use).
   List<SalesInvoice> _getAllLocalInvoices() {
     final rawList = _localHistoryBox.get('invoices', defaultValue: []);
+    // Explicit type argument: without it the list reifies as
+    // List<SalesInvoiceModel> and breaks firstWhere(orElse: () => SalesInvoice(…)).
     return (rawList as List)
-        .map(
+        .map<SalesInvoice>(
           (item) => SalesInvoiceModel.fromJson(
             Map<String, dynamic>.from(jsonDecode(item)),
           ),
@@ -679,13 +684,15 @@ class HiveDatabaseService {
   /// Retrieves the full, unfiltered list of sales orders recorded locally (for internal read-modify-write use).
   List<SalesOrder> _getAllLocalOrders() {
     final rawList = _localHistoryBox.get('sales_orders', defaultValue: []);
-    return (rawList as List)
-        .map(
-          (item) => SalesOrderModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item)),
-          ),
-        )
-        .toList();
+    // Always reify as List<SalesOrder> of plain domain instances.
+    // Returning List<SalesOrderModel> (map().toList() inference) breaks
+    // firstWhere(orElse: () => SalesOrder(...)) at runtime.
+    return [
+      for (final item in rawList as List)
+        SalesOrderModel.fromJson(
+          Map<String, dynamic>.from(jsonDecode(item)),
+        ).copyWith(),
+    ];
   }
 
   /// Retrieves list of sales orders recorded locally, scoped to the active session location.
@@ -745,7 +752,7 @@ class HiveDatabaseService {
   List<StockTransfer> _getAllLocalStockTransfers() {
     final rawList = _localHistoryBox.get('stock_transfers', defaultValue: []);
     return (rawList as List)
-        .map(
+        .map<StockTransfer>(
           (item) => StockTransferModel.fromJson(
             Map<String, dynamic>.from(jsonDecode(item)),
           ),
@@ -835,7 +842,7 @@ class HiveDatabaseService {
   List<ReceiptVoucher> _getAllLocalReceipts() {
     final rawList = _localHistoryBox.get('receipts', defaultValue: []);
     return (rawList as List)
-        .map(
+        .map<ReceiptVoucher>(
           (item) => ReceiptVoucherModel.fromJson(
             Map<String, dynamic>.from(jsonDecode(item)),
           ),
@@ -902,7 +909,7 @@ class HiveDatabaseService {
   List<SalesReturn> _getAllLocalReturns() {
     final rawList = _localHistoryBox.get('returns', defaultValue: []);
     return (rawList as List)
-        .map(
+        .map<SalesReturn>(
           (item) => SalesReturnModel.fromJson(
             Map<String, dynamic>.from(jsonDecode(item)),
           ),
@@ -971,7 +978,7 @@ class HiveDatabaseService {
   List<ExpenseEntry> _getAllLocalExpenses() {
     final rawList = _localHistoryBox.get('expenses', defaultValue: []);
     return (rawList as List)
-        .map(
+        .map<ExpenseEntry>(
           (item) => ExpenseEntryModel.fromJson(
             Map<String, dynamic>.from(jsonDecode(item)),
           ),

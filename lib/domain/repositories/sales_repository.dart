@@ -78,6 +78,11 @@ abstract class SalesRepository {
   /// Logs a new sales order locally and caches it.
   Future<void> saveLocalOrder(SalesOrder order);
 
+  /// Enqueues a create (`sales_order`) or update (`update_sales_order`) sync
+  /// item for [order]. Call after [saveLocalOrder]. Mapping to the queue
+  /// payload lives in the data layer so UI/BLoCs stay on domain types.
+  Future<void> enqueueSalesOrder(SalesOrder order, {required bool isUpdate});
+
   /// Downloads sales orders from Zoho Books, merges them into the local cache,
   /// and returns the resulting local list. Omitting the date range pulls
   /// unfiltered (all salesperson history); passing one scopes the Zoho query.

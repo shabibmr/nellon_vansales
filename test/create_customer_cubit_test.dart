@@ -34,6 +34,12 @@ class FakeSalesRepository implements SalesRepository {
     queue.add(item);
   }
 
+  @override
+  Future<void> enqueueSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {}
+
   // Stub other methods
   @override
   Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}

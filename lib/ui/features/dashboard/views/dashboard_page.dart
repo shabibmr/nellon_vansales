@@ -8,9 +8,11 @@ import '../../../../domain/models/item.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../sync/bloc/sync_bloc.dart';
-import '../../expenses/bloc/expense_bloc.dart';
+import '../../expenses/bloc/expense_list_bloc.dart';
+import '../../expenses/bloc/expense_list_event.dart';
 import '../../expenses/views/expense_list_page.dart';
-import '../../receipts/bloc/receipt_bloc.dart';
+import '../../receipts/bloc/receipt_list_bloc.dart';
+import '../../receipts/bloc/receipt_list_event.dart';
 import '../../receipts/views/receipt_list_page.dart';
 import '../widgets/route_sequence_tab.dart';
 import '../widgets/analytics_reports_tab.dart';
@@ -23,13 +25,13 @@ import '../widgets/invoice_flow_sheet.dart';
 import '../widgets/receipt_payment_dialog.dart';
 import '../widgets/sales_return_dialog.dart';
 import '../widgets/cash_closing_dialog.dart';
-import '../../sales_invoice/bloc/sales_invoice_bloc.dart';
+import '../../sales_invoice/bloc/sales_invoice_list_bloc.dart';
 import '../../sales_invoice/views/sales_invoice_list_page.dart';
 import '../../sales_invoice/views/sales_invoice_editor_page.dart';
 import '../../sales_order/views/sales_order_list_page.dart';
-import '../../sales_order/bloc/sales_order_bloc.dart';
 import '../../sales_order/views/sales_order_editor_page.dart';
-import '../../sales_return/bloc/sales_return_bloc.dart';
+import '../../sales_return/bloc/sales_return_list_bloc.dart';
+import '../../sales_return/bloc/sales_return_list_event.dart';
 import '../../sales_return/views/sales_return_list_page.dart';
 import '../../sales_return/views/sales_return_editor_page.dart';
 import '../../expenses/views/expense_editor_page.dart';
@@ -161,13 +163,9 @@ class _DashboardPageView extends StatelessWidget {
   }
 
   void _launchSalesOrderFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer) {
-    final bloc = context.read<SalesOrderBloc>();
-    bloc.add(StartNewOrder());
-    bloc.add(UpdateOrderCustomer(customer));
-
-    Navigator.push(
+    SalesOrderEditorPage.open(
       context,
-      MaterialPageRoute(builder: (context) => const SalesOrderEditorPage()),
+      prefillCustomer: customer,
     ).then((_) {
       statsCubit.refresh();
     });
@@ -393,7 +391,7 @@ class _DashboardPageView extends StatelessWidget {
 
   void _showSalesReturnListPage(BuildContext context, DailyStatsCubit statsCubit) {
     if (_blockIfOrdersOnly(context)) return;
-    context.read<SalesReturnBloc>().add(LoadReturns());
+    context.read<SalesReturnListBloc>().add(const LoadReturns());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const SalesReturnListPage()),
@@ -401,7 +399,7 @@ class _DashboardPageView extends StatelessWidget {
   }
 
   void _showExpenseListPage(BuildContext context, DailyStatsCubit statsCubit) {
-    context.read<ExpenseBloc>().add(LoadExpenses());
+    context.read<ExpenseListBloc>().add(const LoadExpenses());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ExpenseListPage()),
@@ -409,7 +407,7 @@ class _DashboardPageView extends StatelessWidget {
   }
 
   void _showReceiptListPage(BuildContext context, DailyStatsCubit statsCubit) {
-    context.read<ReceiptBloc>().add(LoadReceipts());
+    context.read<ReceiptListBloc>().add(const LoadReceipts());
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ReceiptListPage()),
@@ -436,44 +434,24 @@ class _DashboardPageView extends StatelessWidget {
 
   void _createNewInvoice(BuildContext context, DailyStatsCubit statsCubit) {
     if (_blockIfOrdersOnly(context)) return;
-    context.read<SalesInvoiceBloc>().add(StartNewInvoice());
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SalesInvoiceEditorPage()),
-    ).then((_) => statsCubit.refresh());
+    SalesInvoiceEditorPage.open(context).then((_) => statsCubit.refresh());
   }
 
   void _createNewOrder(BuildContext context, DailyStatsCubit statsCubit) {
-    context.read<SalesOrderBloc>().add(StartNewOrder());
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SalesOrderEditorPage()),
-    ).then((_) => statsCubit.refresh());
+    SalesOrderEditorPage.open(context).then((_) => statsCubit.refresh());
   }
 
   void _createNewExpense(BuildContext context, DailyStatsCubit statsCubit) {
-    context.read<ExpenseBloc>().add(StartNewExpense());
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ExpenseEditorPage()),
-    ).then((_) => statsCubit.refresh());
+    ExpenseEditorPage.open(context).then((_) => statsCubit.refresh());
   }
 
   void _createNewReceipt(BuildContext context, DailyStatsCubit statsCubit) {
-    context.read<ReceiptBloc>().add(StartNewReceipt());
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ReceiptEditorPage()),
-    ).then((_) => statsCubit.refresh());
+    ReceiptEditorPage.open(context).then((_) => statsCubit.refresh());
   }
 
   void _createNewReturn(BuildContext context, DailyStatsCubit statsCubit) {
     if (_blockIfOrdersOnly(context)) return;
-    context.read<SalesReturnBloc>().add(StartNewReturn());
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SalesReturnEditorPage()),
-    ).then((_) => statsCubit.refresh());
+    SalesReturnEditorPage.open(context).then((_) => statsCubit.refresh());
   }
 
   void _showCustomerLedgerPage(BuildContext context) {

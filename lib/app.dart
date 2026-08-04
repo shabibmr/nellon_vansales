@@ -13,11 +13,12 @@ import 'domain/repositories/sales_repository.dart';
 import 'ui/features/auth/bloc/auth_bloc.dart';
 import 'ui/features/sync/bloc/sync_bloc.dart';
 import 'ui/features/route/bloc/route_bloc.dart';
-import 'ui/features/sales_invoice/bloc/sales_invoice_bloc.dart';
-import 'ui/features/sales_order/bloc/sales_order_bloc.dart';
-import 'ui/features/expenses/bloc/expense_bloc.dart';
-import 'ui/features/receipts/bloc/receipt_bloc.dart';
-import 'ui/features/sales_return/bloc/sales_return_bloc.dart';
+import 'ui/features/sales_invoice/bloc/sales_invoice_list_bloc.dart';
+import 'ui/features/sales_order/bloc/sales_order_list_bloc.dart';
+import 'ui/features/expenses/bloc/expense_list_bloc.dart';
+import 'ui/features/receipts/bloc/receipt_list_bloc.dart';
+import 'ui/features/sales_return/bloc/sales_return_list_bloc.dart';
+
 import 'ui/features/stock_transfer/bloc/stock_transfer_bloc.dart';
 import 'ui/features/ledger/bloc/customer_ledger_bloc.dart';
 import 'ui/core/cubit/organization_cubit.dart';
@@ -92,34 +93,30 @@ class VanSalesApp extends StatelessWidget {
                 RouteBloc(salesRepository: context.read<SalesRepository>())
                   ..add(LoadRoutes()),
           ),
-          BlocProvider<SalesInvoiceBloc>(
-            create: (context) => SalesInvoiceBloc(
+          BlocProvider<SalesInvoiceListBloc>(
+            create: (context) => SalesInvoiceListBloc(
               salesRepository: context.read<SalesRepository>(),
               syncRepository: context.read<SyncRepository>(),
             ),
           ),
-          BlocProvider<SalesOrderBloc>(
-            create: (context) => SalesOrderBloc(
+          BlocProvider<SalesOrderListBloc>(
+            create: (context) => SalesOrderListBloc(
               salesRepository: context.read<SalesRepository>(),
-              syncRepository: context.read<SyncRepository>(),
             ),
           ),
-          BlocProvider<ExpenseBloc>(
-            create: (context) => ExpenseBloc(
+          BlocProvider<ExpenseListBloc>(
+            create: (context) => ExpenseListBloc(
               salesRepository: context.read<SalesRepository>(),
-              syncRepository: context.read<SyncRepository>(),
             ),
           ),
-          BlocProvider<ReceiptBloc>(
-            create: (context) => ReceiptBloc(
+          BlocProvider<ReceiptListBloc>(
+            create: (context) => ReceiptListBloc(
               salesRepository: context.read<SalesRepository>(),
-              syncRepository: context.read<SyncRepository>(),
             ),
           ),
-          BlocProvider<SalesReturnBloc>(
-            create: (context) => SalesReturnBloc(
+          BlocProvider<SalesReturnListBloc>(
+            create: (context) => SalesReturnListBloc(
               salesRepository: context.read<SalesRepository>(),
-              syncRepository: context.read<SyncRepository>(),
             ),
           ),
           BlocProvider<StockTransferBloc>(

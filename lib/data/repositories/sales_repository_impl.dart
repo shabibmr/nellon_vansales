@@ -166,6 +166,29 @@ class SalesRepositoryImpl implements SalesRepository {
       _dbService.saveLocalOrder(order);
 
   @override
+  Future<void> enqueueSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {
+    final payload = SalesOrderModel.fromDomain(order).toJson();
+    if (isUpdate) {
+      final zohoId = order.zohoOrderId;
+      if (zohoId != null && zohoId.isNotEmpty) {
+        payload['salesorder_id'] = zohoId;
+      }
+    }
+    await _dbService.enqueueSyncItem(
+      SyncQueueItem(
+        id: order.id,
+        type: isUpdate ? 'update_sales_order' : 'sales_order',
+        payload: payload,
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
   Future<List<SalesOrder>> fetchRemoteOrders({
     DateTime? startDate,
     DateTime? endDate,
@@ -174,7 +197,7 @@ class SalesRepositoryImpl implements SalesRepository {
       startDate: startDate,
       endDate: endDate,
     );
-    final orders = raw.map((json) => SalesOrderModel.fromJson(json)).toList();
+    final orders = raw.map(_orderFromZoho).toList();
     await _dbService.saveRemoteOrders(orders);
     return _dbService.getLocalOrders();
   }
@@ -183,8 +206,21 @@ class SalesRepositoryImpl implements SalesRepository {
   Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async {
     final json = await _apiClient.fetchSalesOrder(zohoOrderId);
     if (json.isEmpty) return null;
-    return SalesOrderModel.fromJson(json);
+    return _orderFromZoho(json);
   }
+
+  /// Parses a Zoho `salesorder` envelope, stamping `zoho_order_id` from
+  /// `salesorder_id`. Zoho never sends the former, so without this every
+  /// downloaded order looks unsynced and an edit would be pushed as a *create*
+  /// instead of `PUT /salesorders/{id}` (see SalesOrderEditorBloc save path). The
+  /// stamp is done here, not in [SalesOrderModel.fromJson], because that
+  /// factory also reads back local records whose `salesorder_id` is a
+  /// `temp_so_…` id that Zoho has never seen.
+  SalesOrder _orderFromZoho(Map<String, dynamic> json) =>
+      SalesOrderModel.fromJson({
+        ...json,
+        'zoho_order_id': json['salesorder_id'],
+      });
 
   @override
   List<ReceiptVoucher> getLocalReceipts() =>

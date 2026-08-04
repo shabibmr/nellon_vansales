@@ -9,8 +9,11 @@ class DailyStatsCubit extends Cubit<DailyStatsState> {
     refresh();
   }
 
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _isSameDay(DateTime a, DateTime b) {
+    final locA = a.toLocal();
+    final locB = b.toLocal();
+    return locA.year == locB.year && locA.month == locB.month && locA.day == locB.day;
+  }
 
   void refresh() {
     try {

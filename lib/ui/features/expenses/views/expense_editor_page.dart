@@ -1,546 +1,134 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
-import '../../../../ui/core/theme/app_theme.dart';
-import '../../../../ui/core/extensions/org_context_extension.dart';
-import '../../../../ui/core/utils/snackbars.dart';
-import '../bloc/expense_bloc.dart';
-import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
-import '../../../../domain/repositories/voucher_pdf_repository.dart';
+
 import '../../../../domain/models/expense_entry.dart';
+import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sync_repository.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/snackbars.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../bloc/expense_editor_bloc.dart';
+import '../bloc/expense_editor_event.dart';
+import '../bloc/expense_editor_state.dart';
+import '../widgets/expense_editor_form.dart';
 
 class ExpenseEditorPage extends StatefulWidget {
-  /// When true, the expense is shown read-only (view mode). Expenses cannot
-  /// be edited after creation — only sales orders support edit.
+  /// When true, opens in view mode.
   final bool readOnly;
 
   const ExpenseEditorPage({super.key, this.readOnly = false});
+
+  /// Opens the editor with a route-scoped [ExpenseEditorBloc].
+  static Future<T?> open<T>(
+    BuildContext context, {
+    ExpenseEntry? expense,
+    bool readOnly = false,
+  }) {
+    final salesRepo = context.read<SalesRepository>();
+    final syncRepo = context.read<SyncRepository>();
+
+    return Navigator.push<T>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider(
+          create: (_) {
+            final bloc = ExpenseEditorBloc(
+              salesRepository: salesRepo,
+              syncRepository: syncRepo,
+            );
+            if (expense != null) {
+              bloc.add(OpenExpenseEntry(expense));
+            } else {
+              bloc.add(const StartNewExpense());
+            }
+            return bloc;
+          },
+          child: ExpenseEditorPage(readOnly: readOnly),
+        ),
+      ),
+    );
+  }
 
   @override
   State<ExpenseEditorPage> createState() => _ExpenseEditorPageState();
 }
 
 class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
-  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
-  final ImagePicker _picker = ImagePicker();
-  late TextEditingController _amountController;
-  late TextEditingController _descriptionController;
-
-  static const _categories = [
-    'Fuel',
-    'Tolls',
-    'Maintenance',
-    'Parking fee',
-  ];
+  late bool _isViewMode;
 
   @override
   void initState() {
     super.initState();
-    final s = context.read<ExpenseBloc>().state;
-    _amountController = TextEditingController(
-      text: s.editingAmount > 0 ? s.editingAmount.toStringAsFixed(2) : '',
-    );
-    _descriptionController = TextEditingController(text: s.editingDescription);
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
-  }
-
-  void _showImageSourceSheet(bool isDark) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark
-          ? AppTheme.darkBackground
-          : AppTheme.lightBackground,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.grey[700] : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Attach Receipt',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: const Icon(
-                  Icons.camera_alt_rounded,
-                  color: AppTheme.primaryIndigo,
-                ),
-                title: const Text('Take Photo'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  final image = await _picker.pickImage(
-                    source: ImageSource.camera,
-                    imageQuality: 75,
-                  );
-                  if (image != null && mounted) {
-                    final bytes = await image.readAsBytes();
-                    if (mounted) {
-                      context.read<ExpenseBloc>().add(
-                        SetReceiptImage(path: image.path, bytes: bytes),
-                      );
-                    }
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_library_rounded,
-                  color: AppTheme.primaryIndigo,
-                ),
-                title: const Text('Choose from Gallery'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  final image = await _picker.pickImage(
-                    source: ImageSource.gallery,
-                    imageQuality: 75,
-                  );
-                  if (image != null && mounted) {
-                    final bytes = await image.readAsBytes();
-                    if (mounted) {
-                      context.read<ExpenseBloc>().add(
-                        SetReceiptImage(path: image.path, bytes: bytes),
-                      );
-                    }
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
-    );
+    _isViewMode = widget.readOnly;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final readOnly = widget.readOnly;
-
     return Scaffold(
       appBar: AppBar(
-        title: BlocBuilder<ExpenseBloc, ExpenseState>(
-          buildWhen: (p, c) => p.isEditingNew != c.isEditingNew,
-          builder: (_, state) {
+        title: BlocBuilder<ExpenseEditorBloc, ExpenseEditorState>(
+          buildWhen: (previous, current) =>
+              previous.isEditingNew != current.isEditingNew,
+          builder: (context, state) {
+            final readOnly = _isViewMode;
             if (readOnly) return const Text('View Expense');
-            return Text(state.isEditingNew ? 'New Expense' : 'Edit Expense');
+            return Text(
+              state.isEditingNew ? 'New Expense' : 'Edit Expense',
+            );
           },
         ),
       ),
-      body: BlocConsumer<ExpenseBloc, ExpenseState>(
-        listenWhen: (p, c) =>
-            p.successMessage != c.successMessage ||
-            p.errorMessage != c.errorMessage,
-        listener: (context, state) {
-          if (state.successMessage != null) {
-            showSuccessSnackBar(context, state.successMessage!);
-            context.read<ExpenseBloc>().add(ClearExpenseMessages());
-            Navigator.pop(context);
-          } else if (state.errorMessage != null) {
-            showErrorSnackBar(context, state.errorMessage!);
-            context.read<ExpenseBloc>().add(ClearExpenseMessages());
-          }
-        },
-        builder: (context, state) {
-          final date = state.editingDate ?? DateTime.now();
-          final cs = context.org.currencySymbol;
+      body: SafeArea(
+        child: BlocConsumer<ExpenseEditorBloc, ExpenseEditorState>(
+          listenWhen: (previous, current) =>
+              previous.successMessage != current.successMessage ||
+              previous.errorMessage != current.errorMessage,
+          listener: (context, state) {
+            if (state.successMessage != null) {
+              showSuccessSnackBar(context, state.successMessage!);
+              context
+                  .read<ExpenseEditorBloc>()
+                  .add(const ClearExpenseEditorMessages());
+              Navigator.pop(context);
+            } else if (state.errorMessage != null) {
+              showErrorSnackBar(context, state.errorMessage!);
+              context
+                  .read<ExpenseEditorBloc>()
+                  .add(const ClearExpenseEditorMessages());
+            }
+          },
+          builder: (context, state) {
+            final readOnly = _isViewMode;
 
-          return Column(
-            children: [
-              if (state.isLoading)
-                const LinearProgressIndicator(color: AppTheme.primaryIndigo),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        // Expense date (system-set; not editable)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: AppTheme.infoSky
-                                      .withValues(alpha: 0.1),
-                                  child: const Icon(
-                                    Icons.calendar_today,
-                                    color: AppTheme.infoSky,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'EXPENSE DATE',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark
-                                              ? AppTheme.darkTextSecondary
-                                              : AppTheme.lightTextSecondary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _dateFormat.format(date),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Amount
-                        TextFormField(
-                          controller: _amountController,
-                          readOnly: readOnly,
-                          enabled: !readOnly,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          onChanged: readOnly
-                              ? null
-                              : (v) {
-                                  final amount = double.tryParse(v) ?? 0.0;
-                                  context.read<ExpenseBloc>().add(
-                                    SetEditingExpenseAmount(amount),
-                                  );
-                                },
-                          decoration: InputDecoration(
-                            labelText: 'Amount ($cs)',
-                            prefixIcon: const Icon(
-                              Icons.currency_rupee,
-                              color: AppTheme.primaryIndigo,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Category
-                        DropdownButtonFormField<String>(
-                          initialValue: state.editingCategory,
-                          decoration: const InputDecoration(
-                            labelText: 'Category',
-                            prefixIcon: Icon(
-                              Icons.category_outlined,
-                              color: AppTheme.primaryIndigo,
-                            ),
-                          ),
-                          items: _categories
-                              .map(
-                                (c) =>
-                                    DropdownMenuItem(value: c, child: Text(c)),
-                              )
-                              .toList(),
-                          onChanged: readOnly
-                              ? null
-                              : (v) {
-                                  if (v != null) {
-                                    context.read<ExpenseBloc>().add(
-                                      SetEditingExpenseCategory(v),
-                                    );
-                                  }
-                                },
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Description
-                        TextFormField(
-                          controller: _descriptionController,
-                          readOnly: readOnly,
-                          enabled: !readOnly,
-                          onChanged: readOnly
-                              ? null
-                              : (v) => context.read<ExpenseBloc>().add(
-                                  SetEditingExpenseDescription(v),
-                                ),
-                          decoration: const InputDecoration(
-                            labelText: 'Description / Remarks (optional)',
-                            prefixIcon: Icon(
-                              Icons.notes_outlined,
-                              color: AppTheme.primaryIndigo,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Receipt image
-                        const Text(
-                          'Receipt Photo',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _ReceiptImageCard(
-                          isDark: isDark,
-                          imagePath: state.editingReceiptImagePath,
-                          imageBytes: state.editingReceiptImageBytes,
-                          readOnly: readOnly,
-                          onAttach: () => _showImageSourceSheet(isDark),
-                          onRemove: () => context.read<ExpenseBloc>().add(
-                            const SetReceiptImage(),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
+            if (state.isEditorLoading) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.errorRose,
                 ),
-              ),
-
-              // Bottom amount + save
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(
-                        alpha: isDark ? 0.3 : 0.05,
-                      ),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark
-                          ? const Color(0xFF334155)
-                          : const Color(0xFFE2E8F0),
-                    ),
-                  ),
+              );
+            }
+            if (state.editorError != null) {
+              return EmptyState(
+                icon: Icons.cloud_off,
+                title: "Couldn't load this expense entry",
+                message: state.editorError,
+                action: FilledButton.icon(
+                  onPressed: () => context
+                      .read<ExpenseEditorBloc>()
+                      .add(const RetryLoadExpenseEntry()),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('RETRY'),
                 ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Amount:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
-                              ),
-                            ),
-                            Text(
-                              '$cs${state.editingAmount.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                                color: AppTheme.errorRose,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: readOnly
-                                ? () => Navigator.pop(context)
-                                : (state.editingAmount <= 0 || state.isLoading)
-                                ? null
-                                : () => context.read<ExpenseBloc>().add(
-                                    SaveExpense(),
-                                  ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.errorRose,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            child: Text(
-                              readOnly ? 'CLOSE' : 'SAVE EXPENSE',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        if (!state.isEditingNew) ...[
-                          const SizedBox(height: 16),
-                          VoucherPdfActionsWidget(
-                            type: VoucherType.expenseVoucher,
-                            voucher: ExpenseEntry(
-                              id: state.editingId ?? '',
-                              date: state.editingDate ?? DateTime.now(),
-                              lines: [
-                                ExpenseLineItem(
-                                  category: state.editingCategory,
-                                  amount: state.editingAmount,
-                                  description: state.editingDescription,
-                                ),
-                              ],
-                              receiptImagePath: state.editingReceiptImagePath,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+              );
+            }
 
-class _ReceiptImageCard extends StatelessWidget {
-  final bool isDark;
-  final String? imagePath;
-  final Uint8List? imageBytes;
-  final bool readOnly;
-  final VoidCallback onAttach;
-  final VoidCallback onRemove;
-
-  const _ReceiptImageCard({
-    required this.isDark,
-    required this.imagePath,
-    required this.imageBytes,
-    this.readOnly = false,
-    required this.onAttach,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkBackground : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+            return ExpenseEditorForm(
+              state: state,
+              readOnly: readOnly,
+            );
+          },
         ),
       ),
-      child: imagePath == null
-          ? InkWell(
-              onTap: readOnly ? null : onAttach,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 24,
-                  horizontal: 16,
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      readOnly
-                          ? Icons.image_not_supported_outlined
-                          : Icons.camera_alt_rounded,
-                      color: AppTheme.primaryIndigo,
-                      size: 32,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      readOnly ? 'NO RECEIPT PHOTO' : 'ATTACH RECEIPT PHOTO',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                      ),
-                    ),
-                    if (!readOnly) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Capture via camera or select from gallery',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isDark
-                              ? AppTheme.darkTextSecondary
-                              : AppTheme.lightTextSecondary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            )
-          : ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  imageBytes != null
-                      ? Image.memory(
-                          imageBytes!,
-                          height: 160,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          height: 80,
-                          color: isDark
-                              ? AppTheme.darkSurface
-                              : AppTheme.lightSurface,
-                          child: const Center(
-                            child: Icon(
-                              Icons.image_outlined,
-                              color: AppTheme.primaryIndigo,
-                            ),
-                          ),
-                        ),
-                  if (!readOnly)
-                    Container(
-                      margin: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                        onPressed: onRemove,
-                      ),
-                    ),
-                ],
-              ),
-            ),
     );
   }
 }

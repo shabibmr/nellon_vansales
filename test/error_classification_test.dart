@@ -66,4 +66,47 @@ void main() {
       );
     });
   });
+
+  group('humanizeSyncErrorMessage', () {
+    test('extracts Zoho message from verbose body= exception', () {
+      const raw =
+          '[Needs Attention] Exception: Zoho Books Sales Order Sync Failed: '
+          'status=400 body={"code":400030,"message":"The location youre trying '
+          'to associate with this transaction is inactive. Select an active '
+          'location or mark this location as active to associate it."} '
+          'error=DioException [bad response]: This exception was thrown because '
+          'the response has a status code of 400';
+      expect(
+        humanizeSyncErrorMessage(raw),
+        'The location youre trying to associate with this transaction is '
+        'inactive. Select an active location or mark this location as active '
+        'to associate it.',
+      );
+    });
+
+    test('strips category tag from already-friendly message', () {
+      expect(
+        humanizeSyncErrorMessage(
+          '[Needs Attention] The location is inactive.',
+        ),
+        'The location is inactive.',
+      );
+    });
+
+    test('reads message from DioException response body', () {
+      final error = DioException(
+        requestOptions: RequestOptions(path: '/salesorders'),
+        type: DioExceptionType.badResponse,
+        response: Response(
+          requestOptions: RequestOptions(path: '/salesorders'),
+          statusCode: 400,
+          data: {
+            'code': 400030,
+            'message': 'The location is inactive.',
+          },
+        ),
+      );
+      expect(humanizeSyncError(error), 'The location is inactive.');
+    });
+  });
 }

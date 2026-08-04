@@ -272,9 +272,12 @@ class SyncWorker {
             }
 
             final category = classifySyncError(e);
+            // Prefer Zoho's response `message` over Dio's multi-line dump so
+            // the Upload Queue tab stays readable.
+            final friendly = humanizeSyncError(e);
             AppLogger.error(
               'Sync',
-              'Sync error on item ${item.id} ($category): $e',
+              'Sync error on item ${item.id} ($category): $friendly | raw: $e',
             );
             // Mark failed and cache error logs, tagging the message with the
             // error category so the Sync Queue UI can distinguish "retryable"
@@ -285,7 +288,7 @@ class SyncWorker {
             await _dbService.updateSyncItem(
               item.copyWith(
                 status: SyncStatus.failed,
-                errorMessage: '$tag $e',
+                errorMessage: '$tag $friendly',
                 // Anchor exponential backoff to this attempt, not the item's
                 // original creation time.
                 timestamp: DateTime.now(),

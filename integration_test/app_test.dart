@@ -228,6 +228,12 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> enqueueSyncItem(SyncQueueItem item) async {}
 
   @override
+  Future<void> enqueueSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {}
+
+  @override
   List<SyncQueueItem> getSyncQueue() => [];
 
   @override

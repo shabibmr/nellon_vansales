@@ -46,6 +46,12 @@ class FakeSalesRepository implements SalesRepository {
   }
 
   @override
+  Future<void> enqueueSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {}
+
+  @override
   Future<void> updateCustomerGps(
     String customerId,
     double latitude,

@@ -118,15 +118,14 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   late final TextEditingController _quantityController;
   late final TextEditingController _rateController;
   late final TextEditingController _discountController;
-  late final TextEditingController _uomController;
   final _formKey = GlobalKey<FormState>();
 
-  /// Whether the item carries Zoho unit conversions — drives dropdown vs the
-  /// legacy free-text UOM field.
-  bool get _hasUnitOptions => widget.item.unitConversions.isNotEmpty;
+  /// Whether the item offers more than the base unit — drives whether the unit
+  /// dropdown is interactive and how wide its column is.
+  bool get _hasUnitOptions => _unitOptions.length > 1;
 
-  /// Currently selected unit when [_hasUnitOptions]; otherwise mirrors the
-  /// free-text controller.
+  /// Currently selected unit. Always one of [_unitOptions], or '' when the item
+  /// has no known unit at all.
   late String _selectedUom;
 
   /// Base-unit multiplier of the selected unit (1.0 for the base unit).
@@ -138,8 +137,7 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   int get _quantityDecimals =>
       widget.item.conversionFor(_currentUom)?.quantityDecimalPlaces ?? 3;
 
-  String get _currentUom =>
-      _hasUnitOptions ? _selectedUom : _uomController.text.trim();
+  String get _currentUom => _selectedUom;
 
   /// Max stock available for this line, in the item's base unit.
   double get _maxAllowedBaseStock =>
@@ -159,15 +157,14 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     );
     final fromLine = widget.initialUom?.trim() ?? '';
     final fromItem = widget.item.uom.trim();
-    final initialUom = fromLine.isNotEmpty
-        ? fromLine
-        : (fromItem.isNotEmpty ? fromItem : '');
-    // Guard against a stale line uom that no longer matches any known unit.
-    _selectedUom = _hasUnitOptions && !_unitOptions.contains(initialUom)
-        ? fromItem
-        : initialUom;
-    _uomController = TextEditingController(text: initialUom);
-    _uomController.addListener(_onUomChanged);
+    final initialUom = fromLine.isNotEmpty ? fromLine : fromItem;
+    // Guard against a stale line uom that no longer matches any known unit —
+    // fall back to the base unit (first option) so the dropdown always shows a
+    // real selection. Stays '' only for an item with no known unit at all.
+    final options = _unitOptions;
+    _selectedUom = options.contains(initialUom)
+        ? initialUom
+        : (options.isNotEmpty ? options.first : '');
     _rateController = TextEditingController(
       text: (widget.initialRate ?? widget.item.rateFor(_currentUom))
           .toStringAsFixed(2),
@@ -182,11 +179,6 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
         if (widget.item.uom.trim().isNotEmpty) widget.item.uom.trim(),
         ...widget.item.unitConversions.map((c) => c.targetUnit),
       ];
-
-  void _onUomChanged() {
-    // Rebuild so quantity suffixText tracks the live UOM value.
-    if (mounted) setState(() {});
-  }
 
   /// Handles a dropdown unit switch: auto-fills the rate for the new unit
   /// (base rate × conversion rate — still editable afterwards) and refreshes
@@ -205,11 +197,9 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
 
   @override
   void dispose() {
-    _uomController.removeListener(_onUomChanged);
     _quantityController.dispose();
     _rateController.dispose();
     _discountController.dispose();
-    _uomController.dispose();
     super.dispose();
   }
 
@@ -282,36 +272,28 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     );
   }
 
-  /// UOM field. When the item has Zoho unit conversions this is a dropdown
-  /// (base unit + alternates) that re-prices the line on change; otherwise it
-  /// stays a free-text field so staff can fill blanks when Zoho unit data is
-  /// missing.
+  /// UOM field — always a dropdown of the item's real Zoho units (base unit
+  /// first, then every conversion target), so a line can never carry a unit
+  /// Zoho doesn't know. Switching re-prices the line. With only the base unit
+  /// there is nothing to pick, so the dropdown renders disabled; the same
+  /// applies to the rare item Zoho gave no unit at all.
   Widget _buildUomField() {
-    if (_hasUnitOptions) {
-      return DropdownButtonFormField<String>(
-        key: ValueKey('uom_$_selectedUom'),
-        initialValue: _unitOptions.contains(_selectedUom) ? _selectedUom : null,
-        isExpanded: true,
-        decoration: _denseDecoration(labelText: 'Unit', hintText: 'Unit'),
-        items: _unitOptions
-            .map(
-              (u) => DropdownMenuItem<String>(
-                value: u,
-                child: Text(u, overflow: TextOverflow.ellipsis),
-              ),
-            )
-            .toList(),
-        onChanged: _onUnitSelected,
-      );
-    }
-    final master = widget.item.uom.trim();
-    return TextFormField(
-      controller: _uomController,
-      textCapitalization: TextCapitalization.none,
-      decoration: _denseDecoration(
-        labelText: 'UOM',
-        hintText: master.isNotEmpty ? master : 'e.g. pcs, kg, box',
-      ),
+    final options = _unitOptions;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('uom_$_selectedUom'),
+      initialValue: options.contains(_selectedUom) ? _selectedUom : null,
+      isExpanded: true,
+      decoration: _denseDecoration(labelText: 'Unit', hintText: 'Unit'),
+      hint: const Text('—'),
+      items: options
+          .map(
+            (u) => DropdownMenuItem<String>(
+              value: u,
+              child: Text(u, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: _hasUnitOptions ? _onUnitSelected : null,
     );
   }
 

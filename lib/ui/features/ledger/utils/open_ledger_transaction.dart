@@ -6,11 +6,8 @@ import '../../../../domain/models/customer_ledger.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
-import '../../receipts/bloc/receipt_bloc.dart';
 import '../../receipts/views/receipt_editor_page.dart';
-import '../../sales_invoice/bloc/sales_invoice_bloc.dart';
 import '../../sales_invoice/views/sales_invoice_editor_page.dart';
-import '../../sales_return/bloc/sales_return_bloc.dart';
 import '../../sales_return/views/sales_return_editor_page.dart';
 
 /// Opens the document for a ledger transaction line in view mode.
@@ -84,12 +81,10 @@ Future<void> openLedgerTransaction(
           showErrorSnackBar(context, 'Invoice not found.');
           return;
         }
-        context.read<SalesInvoiceBloc>().add(StartEditInvoice(invoice));
-        await Navigator.push(
+        await SalesInvoiceEditorPage.open(
           context,
-          MaterialPageRoute(
-            builder: (_) => const SalesInvoiceEditorPage(readOnly: true),
-          ),
+          invoice: invoice,
+          readOnly: true,
         );
         break;
 
@@ -101,12 +96,10 @@ Future<void> openLedgerTransaction(
           showErrorSnackBar(context, 'Payment receipt not found.');
           return;
         }
-        context.read<ReceiptBloc>().add(StartEditReceipt(receipt));
-        await Navigator.push(
+        await ReceiptEditorPage.open(
           context,
-          MaterialPageRoute(
-            builder: (_) => const ReceiptEditorPage(readOnly: true),
-          ),
+          receipt: receipt,
+          readOnly: true,
         );
         break;
 
@@ -118,12 +111,10 @@ Future<void> openLedgerTransaction(
           showErrorSnackBar(context, 'Credit note not found.');
           return;
         }
-        context.read<SalesReturnBloc>().add(StartEditReturn(salesReturn));
-        await Navigator.push(
+        await SalesReturnEditorPage.open(
           context,
-          MaterialPageRoute(
-            builder: (_) => const SalesReturnEditorPage(readOnly: true),
-          ),
+          salesReturn: salesReturn,
+          readOnly: true,
         );
         break;
     }

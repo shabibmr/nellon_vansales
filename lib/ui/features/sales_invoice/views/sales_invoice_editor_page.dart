@@ -1,45 +1,81 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
-import '../../../../domain/models/sales_invoice.dart';
-import '../../../../domain/models/item.dart';
-import '../../../../data/services/hive_database_service.dart';
+
+import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/injection.dart';
-import '../../../../ui/core/theme/app_theme.dart';
-import '../../../../ui/core/extensions/org_context_extension.dart';
-import '../../../../ui/core/utils/currency.dart';
-import '../../../../ui/core/utils/snackbars.dart';
-import '../../../../ui/core/widgets/customer_selector_sheet.dart';
-import '../../../../ui/core/widgets/editor_footer.dart';
-import '../../../../ui/core/widgets/empty_state.dart';
-import '../../../../ui/core/widgets/item_line_editor_dialog.dart';
-import '../../../../ui/core/widgets/item_search_sheet.dart';
-import '../../../../ui/core/widgets/line_item_list.dart';
-import '../bloc/sales_invoice_bloc.dart';
-import '../../dashboard/widgets/create_customer_dialog.dart';
-import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
-import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/sales_invoice.dart';
+import '../../../../domain/models/sales_order.dart';
+import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sync_repository.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/snackbars.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../bloc/sales_invoice_editor_bloc.dart';
+import '../bloc/sales_invoice_editor_event.dart';
+import '../bloc/sales_invoice_editor_state.dart';
+import '../widgets/sales_invoice_editor_form.dart';
 
 class SalesInvoiceEditorPage extends StatefulWidget {
-  /// When true, the invoice is shown read-only (view mode). Invoices cannot
-  /// be edited after creation — only sales orders support edit.
+  /// When true, opens in view mode.
   final bool readOnly;
 
   const SalesInvoiceEditorPage({super.key, this.readOnly = false});
+
+  /// Opens the editor with a route-scoped [SalesInvoiceEditorBloc].
+  ///
+  /// - [invoice] null & [fromOrder] null → new invoice; optional [prefillCustomer]
+  /// - [invoice] set → open existing
+  /// - [fromOrder] set → prefill from sales order conversion
+  static Future<T?> open<T>(
+    BuildContext context, {
+    SalesInvoice? invoice,
+    SalesOrder? fromOrder,
+    Customer? prefillCustomer,
+    bool readOnly = false,
+  }) {
+    final salesRepo = context.read<SalesRepository>();
+    final syncRepo = context.read<SyncRepository>();
+    final docNumbers = sl<DocumentNumberService>();
+
+    return Navigator.push<T>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider(
+          create: (_) {
+            final bloc = SalesInvoiceEditorBloc(
+              salesRepository: salesRepo,
+              syncRepository: syncRepo,
+              documentNumberService: docNumbers,
+            );
+            if (invoice != null) {
+              bloc.add(OpenSalesInvoice(invoice));
+            } else if (fromOrder != null) {
+              bloc.add(StartInvoiceFromOrder(fromOrder));
+            } else {
+              bloc.add(StartNewInvoice(customer: prefillCustomer));
+            }
+            return bloc;
+          },
+          child: SalesInvoiceEditorPage(readOnly: readOnly),
+        ),
+      ),
+    );
+  }
 
   @override
   State<SalesInvoiceEditorPage> createState() => _SalesInvoiceEditorPageState();
 }
 
 class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
-  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
   late TextEditingController _notesController;
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
+  late bool _isViewMode;
 
   @override
   void initState() {
     super.initState();
-    final blocState = context.read<SalesInvoiceBloc>().state;
+    _isViewMode = widget.readOnly;
+    final blocState = context.read<SalesInvoiceEditorBloc>().state;
     _notesController = TextEditingController(text: blocState.editingNotes);
   }
 
@@ -49,130 +85,15 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
     super.dispose();
   }
 
-  void _showCustomerSelector(BuildContext context) {
-    final allCustomers = _db.getCustomers()
-      ..sort((a, b) => a.name.compareTo(b.name));
-    CustomerSelectorSheet.show(
-      context,
-      customers: allCustomers,
-      onSelected: (customer) {
-        context.read<SalesInvoiceBloc>().add(UpdateInvoiceCustomer(customer));
-      },
-      showCreateOption: true,
-      createOptionSubtitle: 'Add a new customer and use it for this invoice',
-      onCreateTap: () async {
-        final bloc = context.read<SalesInvoiceBloc>();
-        final created = await CreateCustomerDialog.show(context);
-        if (created != null) {
-          bloc.add(UpdateInvoiceCustomer(created));
-        }
-      },
-    );
-  }
-
-  Future<void> _openItemSearch(List<InvoiceLineItem> editingItems) async {
-    final excludedIds = editingItems.map((line) => line.item.id).toList();
-    final items = _db
-        .getItems()
-        .where((item) => !excludedIds.contains(item.id))
-        .toList();
-
-    ItemLineEditorResult? result;
-    Item? pickedItem;
-    await ItemSearchSheet.show<void>(
-      context,
-      items: items,
-      title: 'Search Van Inventory',
-      emptyMessage: 'No items in van stock',
-      onSelected: (item, sheetContext) async {
-        final editorResult = await showDialog<ItemLineEditorResult>(
-          context: sheetContext,
-          builder: (context) => SharedItemLineEditorDialog(item: item),
-        );
-        if (editorResult != null && editorResult.quantity > 0) {
-          result = editorResult;
-          pickedItem = item;
-          if (sheetContext.mounted) Navigator.pop(sheetContext, null);
-        }
-      },
-    );
-
-    if (result != null && pickedItem != null && mounted) {
-      context.read<SalesInvoiceBloc>().add(
-        AddOrUpdateLineItem(
-          item: pickedItem!,
-          quantity: result!.quantity,
-          rate: result!.rate,
-          discount: result!.discount,
-          uom: result!.uom,
-          unitConversionId: result!.unitConversionId,
-        ),
-      );
-    }
-  }
-
-  Future<void> _editLineItem(
-    InvoiceLineItem lineItem,
-    bool isEditingNew,
-    String? editingInvoiceId,
-    List<SalesInvoice> invoices,
-  ) async {
-    // Base-unit quantity already billed on the original invoice — widens the
-    // stock cap when re-editing an existing line.
-    double originalBaseQty = 0;
-    if (!isEditingNew && editingInvoiceId != null) {
-      final originalInvoiceIndex = invoices.indexWhere(
-        (inv) => inv.id == editingInvoiceId,
-      );
-      if (originalInvoiceIndex >= 0) {
-        final originalInvoice = invoices[originalInvoiceIndex];
-        final originalLineIndex = originalInvoice.items.indexWhere(
-          (line) => line.item.id == lineItem.item.id,
-        );
-        if (originalLineIndex >= 0) {
-          originalBaseQty =
-              originalInvoice.items[originalLineIndex].quantityInBase;
-        }
-      }
-    }
-
-    final result = await showDialog<ItemLineEditorResult>(
-      context: context,
-      builder: (context) => SharedItemLineEditorDialog(
-        item: lineItem.item,
-        initialQuantity: lineItem.quantity,
-        originalQuantity: originalBaseQty,
-        initialRate: lineItem.rate,
-        initialDiscount: lineItem.discount,
-        initialUom: lineItem.displayUom,
-      ),
-    );
-
-    if (result != null && mounted) {
-      context.read<SalesInvoiceBloc>().add(
-        AddOrUpdateLineItem(
-          item: lineItem.item,
-          quantity: result.quantity,
-          rate: result.rate,
-          discount: result.discount,
-          uom: result.uom,
-          unitConversionId: result.unitConversionId,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final readOnly = widget.readOnly;
-
     return Scaffold(
       appBar: AppBar(
-        title: BlocBuilder<SalesInvoiceBloc, SalesInvoiceState>(
+        title: BlocBuilder<SalesInvoiceEditorBloc, SalesInvoiceEditorState>(
           buildWhen: (previous, current) =>
               previous.isEditingNew != current.isEditingNew,
           builder: (context, state) {
+            final readOnly = _isViewMode;
             if (readOnly) return const Text('View Sales Invoice');
             return Text(
               state.isEditingNew ? 'New Sales Invoice' : 'Edit Sales Invoice',
@@ -181,341 +102,57 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
         ),
       ),
       body: SafeArea(
-        child: BlocConsumer<SalesInvoiceBloc, SalesInvoiceState>(
+        child: BlocConsumer<SalesInvoiceEditorBloc, SalesInvoiceEditorState>(
           listenWhen: (previous, current) =>
               previous.successMessage != current.successMessage ||
-              previous.errorMessage != current.errorMessage,
+              previous.errorMessage != current.errorMessage ||
+              previous.editingNotes != current.editingNotes,
           listener: (context, state) {
-            if (state.successMessage == 'Invoice saved successfully') {
+            if (_notesController.text != state.editingNotes) {
+              _notesController.text = state.editingNotes;
+            }
+            if (state.successMessage != null) {
               showSuccessSnackBar(context, state.successMessage!);
-              context.read<SalesInvoiceBloc>().add(ClearMessages());
+              context
+                  .read<SalesInvoiceEditorBloc>()
+                  .add(const ClearSalesInvoiceEditorMessages());
               Navigator.pop(context);
             } else if (state.errorMessage != null) {
               showErrorSnackBar(context, state.errorMessage!);
-              context.read<SalesInvoiceBloc>().add(ClearMessages());
+              context
+                  .read<SalesInvoiceEditorBloc>()
+                  .add(const ClearSalesInvoiceEditorMessages());
             }
           },
           builder: (context, state) {
-            final cs = context.org.currencySymbol;
-            final tempInvoice = SalesInvoice(
-              id: '',
-              invoiceNumber: '',
-              customerId: state.editingCustomer?.id ?? '',
-              customerName: state.editingCustomer?.name ?? '',
-              date: state.editingDate ?? DateTime.now(),
-              dueDate: state.editingDate ?? DateTime.now(),
-              items: state.editingItems,
-              notes: '',
-            );
-            final subtotal = tempInvoice.subTotal;
-            final vat = tempInvoice.taxTotal;
-            final discountTotal = tempInvoice.discountTotal;
-            final roundOff = tempInvoice.roundOff;
-            final total = tempInvoice.total;
-            final customer = state.editingCustomer;
-            final date = state.editingDate ?? DateTime.now();
+            final readOnly = _isViewMode;
 
-            return Column(
-              children: [
-                if (state.isLoading)
-                  const LinearProgressIndicator(color: AppTheme.primaryIndigo),
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 600),
-                      child: ListView(
-                        padding: const EdgeInsets.all(16.0),
-                        children: [
-                          // Customer Selector Card
-                          Card(
-                            child: InkWell(
-                              onTap: (!readOnly && state.isEditingNew)
-                                  ? () => _showCustomerSelector(context)
-                                  : null,
-                              borderRadius: BorderRadius.circular(16),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      backgroundColor: AppTheme.primaryIndigo
-                                          .withValues(alpha: 0.1),
-                                      child: const Icon(
-                                        Icons.person,
-                                        color: AppTheme.primaryIndigo,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'CUSTOMER',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark
-                                                  ? AppTheme.darkTextSecondary
-                                                  : AppTheme.lightTextSecondary,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            customer?.name ?? 'Select Customer',
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          if (customer != null) ...[
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              customer.companyName,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: isDark
-                                                    ? AppTheme.darkTextSecondary
-                                                    : AppTheme
-                                                          .lightTextSecondary,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    if (!readOnly && state.isEditingNew)
-                                      Icon(
-                                        Icons.keyboard_arrow_right,
-                                        color: isDark
-                                            ? AppTheme.darkTextSecondary
-                                            : AppTheme.lightTextSecondary,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Invoice date (system-set; not editable)
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: AppTheme.infoSky
-                                        .withValues(alpha: 0.1),
-                                    child: const Icon(
-                                      Icons.calendar_today,
-                                      color: AppTheme.infoSky,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'INVOICE DATE',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark
-                                                ? AppTheme.darkTextSecondary
-                                                : AppTheme.lightTextSecondary,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _dateFormat.format(date),
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Line Items Header
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Line Items',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              if (!readOnly)
-                                TextButton.icon(
-                                  onPressed: customer == null
-                                      ? null
-                                      : () =>
-                                            _openItemSearch(state.editingItems),
-                                  icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Add Item'),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: AppTheme.primaryIndigo,
-                                  ),
-                                ),
-                            ],
-                          ),
-
-                          if (state.editingItems.isEmpty)
-                            EmptyStateCard(
-                              icon: Icons.shopping_cart_outlined,
-                              message: customer == null
-                                  ? 'Select customer to add items'
-                                  : 'No items added yet',
-                            )
-                          else
-                            LineItemList(
-                              items: state.editingItems
-                                  .map(
-                                    (line) => LineItemRow(
-                                      name: line.item.name,
-                                      sku: line.item.sku,
-                                      rate: line.rate,
-                                      taxPercentage: line.taxPercentage,
-                                      quantity: line.quantity,
-                                      total: line.total,
-                                      discount: line.discount,
-                                      uom: line.displayUom,
-                                    ),
-                                  )
-                                  .toList(),
-                              currencySymbol: cs,
-                              onEdit: readOnly
-                                  ? null
-                                  : (index) => _editLineItem(
-                                      state.editingItems[index],
-                                      state.isEditingNew,
-                                      state.editingInvoiceId,
-                                      state.invoices,
-                                    ),
-                              onRemove: readOnly
-                                  ? null
-                                  : (index) {
-                                      context.read<SalesInvoiceBloc>().add(
-                                        RemoveLineItem(
-                                          state.editingItems[index].item,
-                                        ),
-                                      );
-                                    },
-                            ),
-                          const SizedBox(height: 20),
-
-                          // Notes Field
-                          TextFormField(
-                            controller: _notesController,
-                            maxLines: 2,
-                            readOnly: readOnly,
-                            enabled: !readOnly,
-                            decoration: const InputDecoration(
-                              labelText: 'Invoice Notes',
-                              hintText: 'Add remarks or special terms...',
-                              prefixIcon: Icon(
-                                Icons.notes,
-                                color: AppTheme.primaryIndigo,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 30),
-                        ],
-                      ),
-                    ),
-                  ),
+            if (state.isEditorLoading) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.primaryIndigo,
                 ),
-
-                EditorFooter(
-                  rows: [
-                    (
-                      label: 'Subtotal:',
-                      value: formatCurrency(subtotal, cs),
-                      emphasize: false,
-                    ),
-                    if (discountTotal > 0)
-                      (
-                        label: 'Discount Total:',
-                        value: formatCurrency(discountTotal, cs),
-                        emphasize: false,
-                      ),
-                    (
-                      label: 'VAT (Tax):',
-                      value: formatCurrency(vat, cs),
-                      emphasize: false,
-                    ),
-                    if (roundOff != 0)
-                      (
-                        label: 'Round Off:',
-                        value: formatCurrency(roundOff, cs),
-                        emphasize: false,
-                      ),
-                    (
-                      label: 'Total Amount:',
-                      value: formatCurrency(total, cs),
-                      emphasize: true,
-                    ),
-                  ],
-                  buttonLabel: readOnly ? 'CLOSE' : 'SAVE SALES INVOICE',
-                  buttonColor: AppTheme.primaryIndigo,
-                  onSave: readOnly
-                      ? () => Navigator.pop(context)
-                      : (customer == null ||
-                            state.editingItems.isEmpty ||
-                            state.isLoading)
-                      ? null
-                      : () {
-                          context.read<SalesInvoiceBloc>().add(
-                            SaveInvoice(notes: _notesController.text),
-                          );
-                        },
-                  trailing: !state.isEditingNew
-                      ? VoucherPdfActionsWidget(
-                          type: VoucherType.salesInvoice,
-                          voucher: SalesInvoice(
-                            id: state.editingInvoiceId ?? '',
-                            invoiceNumber: state.invoices
-                                .firstWhere(
-                                  (inv) => inv.id == state.editingInvoiceId,
-                                  orElse: () => SalesInvoice(
-                                    id: '',
-                                    invoiceNumber: 'INV-TEMP',
-                                    customerId: '',
-                                    customerName: '',
-                                    date: DateTime.now(),
-                                    dueDate: DateTime.now(),
-                                    items: const [],
-                                    notes: '',
-                                  ),
-                                )
-                                .invoiceNumber,
-                            customerId: customer?.id ?? '',
-                            customerName: customer?.name ?? '',
-                            date: date,
-                            dueDate:
-                                state.editingDate?.add(
-                                  const Duration(days: 30),
-                                ) ??
-                                DateTime.now(),
-                            items: state.editingItems,
-                            notes: _notesController.text,
-                          ),
-                        )
-                      : null,
+              );
+            }
+            if (state.editorError != null) {
+              return EmptyState(
+                icon: Icons.cloud_off,
+                title: "Couldn't load this sales invoice",
+                message: state.editorError,
+                action: FilledButton.icon(
+                  onPressed: () => context
+                      .read<SalesInvoiceEditorBloc>()
+                      .add(const RetryLoadSalesInvoice()),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('RETRY'),
                 ),
-              ],
+              );
+            }
+
+            return SalesInvoiceEditorForm(
+              state: state,
+              readOnly: readOnly,
+              notesController: _notesController,
             );
           },
         ),

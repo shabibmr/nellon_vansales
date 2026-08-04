@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'app_logger.dart';
+import 'error_classification.dart';
 import 'hive_database_service.dart';
 import 'zoho_mock/zoho_mock_catalog.dart';
 import 'zoho_mock/zoho_mock_interceptor.dart';
@@ -522,17 +523,53 @@ class ZohoApiClient {
     salesOrderJson = _withVanLineItemLocations(
       _withSalespersonId(_withPrimaryHeaderLocation(salesOrderJson)),
     );
+    final payload = ZohoPayloadMapper.zohoSalesOrderPayload(salesOrderJson);
+    // Debug: log exact outbound body so 400s can be matched to Zoho's message.
+    AppLogger.debug(
+      'ZohoApi',
+      'POST /salesorders payload: ${jsonEncode(payload)}',
+    );
     try {
       final response = await _dio.post(
         '/salesorders',
-        data: ZohoPayloadMapper.zohoSalesOrderPayload(salesOrderJson),
+        data: payload,
         queryParameters: const {'ignore_auto_number_generation': true},
+      );
+      AppLogger.debug(
+        'ZohoApi',
+        'POST /salesorders response ${response.statusCode}: '
+        '${jsonEncode(response.data)}',
       );
       if (response.statusCode == 201 || response.statusCode == 200) {
         return response.data['salesorder']['salesorder_id'] as String;
       }
-      throw Exception('HTTP ${response.statusCode}');
+      throw Exception(
+        'HTTP ${response.statusCode} body=${jsonEncode(response.data)}',
+      );
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      final bodyStr = body is String
+          ? body
+          : (body != null ? jsonEncode(body) : 'null');
+      final zohoMessage = zohoMessageFromResponseData(body);
+      AppLogger.error(
+        'ZohoApi',
+        'POST /salesorders failed status=${e.response?.statusCode} '
+        'response=$bodyStr payload=${jsonEncode(payload)}',
+      );
+      // Surface Zoho's message for the queue UI; keep status/body in the
+      // exception tail so humanizeSyncError can still parse older shapes.
+      throw Exception(
+        zohoMessage != null && zohoMessage.isNotEmpty
+            ? 'Zoho Books Sales Order Sync Failed: $zohoMessage'
+            : 'Zoho Books Sales Order Sync Failed: '
+                'status=${e.response?.statusCode} body=$bodyStr',
+      );
     } catch (e) {
+      AppLogger.error(
+        'ZohoApi',
+        'POST /salesorders failed: $e payload=${jsonEncode(payload)}',
+      );
       throw Exception('Zoho Books Sales Order Sync Failed: $e');
     }
   }

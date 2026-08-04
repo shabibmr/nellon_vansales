@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import '../../../../ui/core/theme/app_theme.dart';
+
+import '../../../../domain/models/sales_order.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/currency.dart';
 import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/date_range_filter_card.dart';
 import '../../../../ui/core/widgets/document_list_card.dart';
 import '../../../../ui/core/widgets/empty_state.dart';
-import '../bloc/sales_order_bloc.dart';
+import '../bloc/sales_order_list_bloc.dart';
+import '../bloc/sales_order_list_event.dart';
+import '../bloc/sales_order_list_state.dart';
 import 'sales_order_editor_page.dart';
 
 class SalesOrderListPage extends StatefulWidget {
@@ -25,7 +29,7 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
   @override
   void initState() {
     super.initState();
-    context.read<SalesOrderBloc>().add(LoadOrders());
+    context.read<SalesOrderListBloc>().add(const LoadSalesOrders());
   }
 
   Future<void> _selectDate(bool isStart, DateTime? current) async {
@@ -34,21 +38,51 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
       initialDate: current ?? DateTime.now(),
     );
     if (picked != null && picked != current && mounted) {
-      final bloc = context.read<SalesOrderBloc>();
+      final bloc = context.read<SalesOrderListBloc>();
       if (isStart) {
-        bloc.add(SetDateFilter(startDate: picked, endDate: bloc.state.endDate));
+        bloc.add(
+          SetSalesOrderDateFilter(
+            startDate: picked,
+            endDate: bloc.state.endDate,
+          ),
+        );
       } else {
         bloc.add(
-          SetDateFilter(startDate: bloc.state.startDate, endDate: picked),
+          SetSalesOrderDateFilter(
+            startDate: bloc.state.startDate,
+            endDate: picked,
+          ),
         );
       }
     }
   }
 
   void _clearFilters() {
-    context.read<SalesOrderBloc>().add(
-      const SetDateFilter(startDate: null, endDate: null),
+    context.read<SalesOrderListBloc>().add(
+      const SetSalesOrderDateFilter(startDate: null, endDate: null),
     );
+  }
+
+  Future<void> _openEditor({
+    required bool readOnly,
+    SalesOrder? order,
+  }) async {
+    await SalesOrderEditorPage.open(
+      context,
+      order: order,
+      readOnly: readOnly,
+    );
+    if (mounted) {
+      context.read<SalesOrderListBloc>().add(const LoadSalesOrders());
+    }
+  }
+
+  /// Dispatches a refresh and waits until the list is no longer loading so
+  /// [RefreshIndicator] does not dismiss while the fetch is still in flight.
+  Future<void> _awaitRefresh() async {
+    final bloc = context.read<SalesOrderListBloc>();
+    bloc.add(const RefreshSalesOrders());
+    await bloc.stream.firstWhere((s) => !s.isLoading);
   }
 
   @override
@@ -62,139 +96,129 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
           IconButton(
             tooltip: 'Sync Orders from Zoho',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () =>
-                context.read<SalesOrderBloc>().add(RefreshOrdersFromZoho()),
+            onPressed: () => context
+                .read<SalesOrderListBloc>()
+                .add(const RefreshSalesOrders()),
           ),
         ],
       ),
       body: SafeArea(
-        child: BlocConsumer<SalesOrderBloc, SalesOrderState>(
-        listener: (context, state) {
-          if (state.errorMessage != null) {
-            showErrorSnackBar(context, state.errorMessage!);
-            context.read<SalesOrderBloc>().add(ClearMessages());
-          }
-          if (state.successMessage != null) {
-            showSuccessSnackBar(context, state.successMessage!);
-            context.read<SalesOrderBloc>().add(ClearMessages());
-          }
-        },
-        builder: (context, state) {
-          final hasFilter = state.startDate != null || state.endDate != null;
-          final list = state.filteredOrders;
+        child: BlocConsumer<SalesOrderListBloc, SalesOrderListState>(
+          listenWhen: (previous, current) =>
+              previous.errorMessage != current.errorMessage ||
+              previous.successMessage != current.successMessage,
+          listener: (context, state) {
+            if (state.errorMessage != null) {
+              showErrorSnackBar(context, state.errorMessage!);
+              context
+                  .read<SalesOrderListBloc>()
+                  .add(const ClearSalesOrderListMessages());
+            }
+            if (state.successMessage != null) {
+              showSuccessSnackBar(context, state.successMessage!);
+              context
+                  .read<SalesOrderListBloc>()
+                  .add(const ClearSalesOrderListMessages());
+            }
+          },
+          builder: (context, state) {
+            final hasFilter = state.startDate != null || state.endDate != null;
+            final list = state.filteredOrders;
 
-          return Column(
-            children: [
-              DateRangeFilterCard(
-                startDate: state.startDate,
-                endDate: state.endDate,
-                onStartTap: () => _selectDate(true, state.startDate),
-                onEndTap: () => _selectDate(false, state.endDate),
-                onClear: _clearFilters,
-              ),
-
-              if (state.isLoading)
-                const Expanded(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryIndigo,
+            return Column(
+              children: [
+                DateRangeFilterCard(
+                  startDate: state.startDate,
+                  endDate: state.endDate,
+                  onStartTap: () => _selectDate(true, state.startDate),
+                  onEndTap: () => _selectDate(false, state.endDate),
+                  onClear: _clearFilters,
+                ),
+                if (state.isLoading)
+                  const Expanded(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppTheme.primaryIndigo,
+                      ),
                     ),
-                  ),
-                )
-              else if (list.isEmpty)
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () async => context.read<SalesOrderBloc>().add(
-                      RefreshOrdersFromZoho(),
-                    ),
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: [
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.6,
-                          child: EmptyState(
-                            icon: Icons.assignment_outlined,
-                            title: 'No orders found',
-                            message: hasFilter
-                                ? 'Try expanding your date range filters.'
-                                : 'Click "+" below to generate your first sales order.',
+                  )
+                else if (list.isEmpty)
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _awaitRefresh,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.sizeOf(context).height * 0.6,
+                            child: EmptyState(
+                              icon: Icons.assignment_outlined,
+                              title: 'No orders found',
+                              message: hasFilter
+                                  ? 'Try expanding your date range filters.'
+                                  : 'Click "+" below to generate your first sales order.',
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 600),
-                      child: RefreshIndicator(
-                        onRefresh: () async => context
-                            .read<SalesOrderBloc>()
-                            .add(RefreshOrdersFromZoho()),
-                        child: ListView.separated(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.only(
-                            left: 16.0,
-                            right: 16.0,
-                            bottom: 80.0,
-                            top: 8.0,
+                  )
+                else
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 600),
+                        child: RefreshIndicator(
+                          onRefresh: _awaitRefresh,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.only(
+                              left: 16.0,
+                              right: 16.0,
+                              bottom: 80.0,
+                              top: 8.0,
+                            ),
+                            itemCount: list.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final order = list[index];
+                              return DocumentListCard(
+                                key: ValueKey(order.id),
+                                docNumber: order.orderNumber,
+                                customerName: order.customerName,
+                                date: _dateFormat.format(order.date),
+                                total: formatCurrency(order.total, cs),
+                                // Remote list headers often omit line_items —
+                                // only show a count when lines are known.
+                                itemCount: order.items.isEmpty
+                                    ? null
+                                    : order.items.length,
+                                isPendingSync: order.isPendingSync,
+                                extraBadgeLabel: order.isConverted
+                                    ? 'Converted'
+                                    : null,
+                                onTap: () => _openEditor(
+                                  order: order,
+                                  readOnly: true,
+                                ),
+                              );
+                            },
                           ),
-                          itemCount: list.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final order = list[index];
-                            return DocumentListCard(
-                              docNumber: order.orderNumber,
-                              customerName: order.customerName,
-                              date: _dateFormat.format(order.date),
-                              total: formatCurrency(order.total, cs),
-                              itemCount: order.items.length,
-                              isPendingSync: order.isPendingSync,
-                              extraBadgeLabel: order.isConverted
-                                  ? 'Converted'
-                                  : null,
-                              onTap: () {
-                                context.read<SalesOrderBloc>().add(
-                                  StartEditOrder(order),
-                                );
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const SalesOrderEditorPage(
-                                          readOnly: true,
-                                        ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          );
-        },
-      ),
+              ],
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create New Sales Order',
         backgroundColor: AppTheme.primaryIndigo,
         foregroundColor: Colors.white,
-        onPressed: () {
-          context.read<SalesOrderBloc>().add(StartNewOrder());
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const SalesOrderEditorPage(),
-            ),
-          );
-        },
+        onPressed: () => _openEditor(readOnly: false, order: null),
         child: const Icon(Icons.add),
       ),
     );

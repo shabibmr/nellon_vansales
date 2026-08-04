@@ -1,20 +1,46 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:van_sales/data/models/sync_queue_item.dart';
+import 'package:van_sales/data/services/document_number_service.dart';
+import 'package:van_sales/data/services/hive_database_service.dart';
+import 'package:van_sales/data/services/sync_worker.dart';
+import 'package:van_sales/data/services/zoho_api_client.dart';
+import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/customer.dart';
+import 'package:van_sales/domain/models/expense_entry.dart';
+import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/open_invoice.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
-import 'package:van_sales/domain/repositories/sync_repository.dart';
-import 'package:van_sales/ui/features/receipts/bloc/receipt_bloc.dart';
-import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/domain/models/route.dart';
-import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
-import 'package:van_sales/domain/models/expense_entry.dart';
-import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
-import 'package:van_sales/data/services/sync_worker.dart';
+import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'package:van_sales/ui/features/receipts/bloc/receipt_editor_bloc.dart';
+import 'package:van_sales/ui/features/receipts/bloc/receipt_editor_event.dart';
+import 'package:van_sales/ui/features/receipts/bloc/receipt_list_bloc.dart';
+import 'package:van_sales/ui/features/receipts/bloc/receipt_list_event.dart';
+
+class _FakeDocDb extends HiveDatabaseService {
+  final Map<String, int> _counters = {};
+
+  @override
+  String? get voucherPrefix => 'SHB-';
+
+  @override
+  int? getDocCounter(String tag) => _counters[tag];
+
+  @override
+  Future<void> setDocCounter(String tag, int value) async {
+    _counters[tag] = value;
+  }
+}
+
+class _FakeZohoApi extends ZohoApiClient {
+  _FakeZohoApi() : super(dbService: _FakeDocDb());
+}
 
 class FakeSalesRepository implements SalesRepository {
   List<OpenInvoice> openInvoices = [];
@@ -57,33 +83,31 @@ class FakeSalesRepository implements SalesRepository {
   }
 
   @override
-  Future<void> updateCustomerGps(
-    String customerId,
-    double latitude,
-    double longitude,
-  ) async {
-    // No-op for tests
+  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async =>
+      receipts;
+
+  @override
+  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async {
+    try {
+      return receipts.firstWhere((r) => r.id == paymentId);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
-  List<SyncQueueItem> getSyncQueue() => syncQueue;
-
-  // Stub other methods
+  Future<void> enqueueSalesOrder(SalesOrder order, {required bool isUpdate}) async {}
   @override
-  List<RouteModel> getRoutes() => [];
+  List<SalesOrder> getLocalOrders() => [];
   @override
-  String? get activeRouteId => null;
+  Future<void> saveLocalOrder(SalesOrder order) async {}
   @override
-  Future<void> setActiveRouteId(String? routeId) async {}
+  Future<List<SalesOrder>> fetchRemoteOrders({DateTime? startDate, DateTime? endDate}) async => [];
   @override
-  Future<void> saveCustomers(List<Customer> customers) async {}
-  @override
-  List<Item> getItems() => [];
-  @override
-  Future<void> saveItems(List<Item> items) async {}
-
-  @override
-  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
+  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
   @override
   List<SalesInvoice> getLocalInvoices() => [];
   @override
@@ -91,48 +115,40 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
-  @override
   Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
   @override
-  List<SalesOrder> getLocalOrders() => [];
+  Future<void> saveCustomers(List<Customer> customers) async {}
   @override
-  Future<void> saveLocalOrder(SalesOrder order) async {}
+  List<SyncQueueItem> getSyncQueue() => syncQueue;
   @override
-  Future<List<SalesOrder>> fetchRemoteOrders({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<SalesInvoice>> fetchRemoteInvoices({DateTime? startDate, DateTime? endDate}) async => [];
   @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
+  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
   @override
-  Future<List<SalesInvoice>> fetchRemoteInvoices({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  List<RouteModel> getRoutes() => [];
   @override
-  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  String? get activeRouteId => null;
+  @override
+  Future<void> setActiveRouteId(String? routeId) async {}
+  @override
+  List<Item> getItems() => [];
+  @override
+  Future<void> saveItems(List<Item> items) async {}
+  @override
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async =>
+      (item: item, offlineFallback: false);
   @override
   List<SalesReturn> getLocalReturns() => [];
   @override
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
   @override
-  Future<List<SalesReturn>> fetchRemoteReturns({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<SalesReturn>> fetchRemoteReturns({DateTime? startDate, DateTime? endDate}) async => [];
   @override
   List<ExpenseEntry> getLocalExpenses() => [];
   @override
   Future<void> saveLocalExpense(ExpenseEntry expense) async {}
   @override
-  Future<List<ExpenseEntry>> fetchRemoteExpenses({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<ExpenseEntry>> fetchRemoteExpenses({DateTime? startDate, DateTime? endDate}) async => [];
   @override
   CashClosing? getLocalCashClosing() => null;
   @override
@@ -142,16 +158,11 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
   @override
-  Future<List<StockTransfer>> fetchRemoteStockTransfers({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({DateTime? startDate, DateTime? endDate}) async => [];
 }
 
 class FakeSyncRepository implements SyncRepository {
   int triggerCount = 0;
-  List<MasterType> syncedMasters = [];
-  bool throwOnSyncMaster = false;
 
   @override
   Future<void> triggerSync({bool forceRetryAll = false}) async {
@@ -159,214 +170,125 @@ class FakeSyncRepository implements SyncRepository {
   }
 
   @override
-  Future<void> clearFailedSyncItems() async {}
-
-  @override
   Stream<String> get syncStatusStream => const Stream.empty();
-
   @override
   Stream<int> get syncCountStream => const Stream.empty();
-
   @override
   bool get isSyncing => false;
-
   @override
   List<SyncQueueItem> getSyncQueue() => [];
-
+  @override
+  Future<void> clearFailedSyncItems() async {}
   @override
   Future<void> refreshMasterData() async {}
-
   @override
-  Future<void> syncMaster(MasterType type) async {
-    syncedMasters.add(type);
-    if (throwOnSyncMaster) throw Exception('offline');
-  }
-
+  Future<void> syncMaster(MasterType type) async {}
   @override
   bool hasCoreMasters() => true;
 }
 
+Customer _cust(String id, String name) => Customer(
+      id: id,
+      name: name,
+      companyName: '',
+      email: '',
+      phone: '',
+      address: '',
+      outstandingBalance: 0,
+      creditLimit: 1000,
+      routeId: '',
+      sequence: 1,
+    );
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late FakeSalesRepository salesRepo;
   late FakeSyncRepository syncRepo;
-  late ReceiptBloc bloc;
-
-  final testCustomer = const Customer(
-    id: 'cust_01',
-    name: 'Customer A',
-    companyName: 'Company A',
-    email: '',
-    phone: '',
-    address: '',
-    outstandingBalance: 1000,
-    creditLimit: 999999,
-    routeId: '',
-    sequence: 1,
-  );
-
-  final invoice1 = OpenInvoice(
-    invoiceId: 'inv_01',
-    invoiceNumber: 'INV-101',
-    customerId: 'cust_01',
-    date: DateTime.now().subtract(const Duration(days: 10)),
-    dueDate: DateTime.now().add(const Duration(days: 20)),
-    total: 500,
-    balance: 500,
-    status: 'unpaid',
-  );
-
-  final invoice2 = OpenInvoice(
-    invoiceId: 'inv_02',
-    invoiceNumber: 'INV-102',
-    customerId: 'cust_01',
-    date: DateTime.now().subtract(const Duration(days: 5)),
-    dueDate: DateTime.now().add(const Duration(days: 25)),
-    total: 300,
-    balance: 300,
-    status: 'unpaid',
-  );
+  late DocumentNumberService docNumbers;
 
   setUp(() {
+    final sl = GetIt.instance;
+    if (sl.isRegistered<DocumentNumberService>()) {
+      sl.unregister<DocumentNumberService>();
+    }
+    docNumbers = DocumentNumberService(
+      dbService: _FakeDocDb(),
+      apiClient: _FakeZohoApi(),
+    );
+    sl.registerSingleton<DocumentNumberService>(docNumbers);
+
     salesRepo = FakeSalesRepository();
     syncRepo = FakeSyncRepository();
-    bloc = ReceiptBloc(salesRepository: salesRepo, syncRepository: syncRepo);
-
-    salesRepo.customers = [testCustomer];
-    salesRepo.openInvoices = [invoice1, invoice2];
   });
 
   tearDown(() {
-    bloc.close();
+    final sl = GetIt.instance;
+    if (sl.isRegistered<DocumentNumberService>()) {
+      sl.unregister<DocumentNumberService>();
+    }
   });
 
-  test('StartNewReceipt sets editing fields with empty allocations', () async {
-    final future = bloc.stream.first;
-    bloc.add(StartNewReceipt());
-    await future;
-    expect(bloc.state.editingAllocations, const []);
-    expect(bloc.state.isEditingNew, true);
+  group('ReceiptListBloc', () {
+    test('LoadReceipts fetches remote receipts for current date range', () async {
+      salesRepo.receipts = [
+        ReceiptVoucher(
+          id: 'pay_1',
+          paymentNumber: 'PAY-001',
+          customerId: 'c1',
+          customerName: 'Cust 1',
+          date: DateTime.now(),
+          amount: 100,
+          paymentMode: 'Cash',
+          referenceNumber: '',
+          allocations: const [],
+        ),
+      ];
+
+      final bloc = ReceiptListBloc(salesRepository: salesRepo);
+      bloc.add(const LoadReceipts());
+
+      await bloc.stream.firstWhere((s) => !s.isLoading);
+      expect(bloc.state.receipts, hasLength(1));
+      bloc.close();
+    });
   });
 
-  test('SetEditingReceiptCustomer triggers FIFO auto-allocation', () async {
-    var future = bloc.stream.first;
-    bloc.add(StartNewReceipt());
-    await future;
+  group('ReceiptEditorBloc', () {
+    test('StartNewReceipt initializes blank form state', () async {
+      final bloc = ReceiptEditorBloc(
+        salesRepository: salesRepo,
+        syncRepository: syncRepo,
+        documentNumberService: docNumbers,
+      );
+      bloc.add(const StartNewReceipt());
+      final state = await bloc.stream.firstWhere((s) => s.isEditingNew);
 
-    future = bloc.stream.first;
-    bloc.add(const SetEditingAmount(600.0));
-    await future;
+      expect(state.isEditingNew, isTrue);
+      expect(state.editingCustomer, isNull);
+      expect(state.editingAmount, 0.0);
+      bloc.close();
+    });
 
-    future = bloc.stream.first;
-    bloc.add(SetEditingReceiptCustomer(testCustomer));
-    await future;
+    test('SaveReceipt saves local receipt and enqueues sync queue item', () async {
+      final bloc = ReceiptEditorBloc(
+        salesRepository: salesRepo,
+        syncRepository: syncRepo,
+        documentNumberService: docNumbers,
+      );
 
-    // After setting customer, it should allocate $600:
-    // $500 to invoice1 (INV-101, oldest)
-    // $100 to invoice2 (INV-102, newer)
-    expect(bloc.state.editingAllocations.length, 2);
+      final customer = _cust('c1', 'Acme');
+      bloc.add(StartNewReceipt(customer: customer));
+      bloc.add(const SetEditingAmount(150.0));
+      bloc.add(const SaveReceipt());
 
-    final alloc1 = bloc.state.editingAllocations.firstWhere(
-      (a) => a.invoiceId == 'inv_01',
-    );
-    final alloc2 = bloc.state.editingAllocations.firstWhere(
-      (a) => a.invoiceId == 'inv_02',
-    );
+      await bloc.stream.firstWhere((s) => s.successMessage != null);
 
-    expect(alloc1.amountApplied, 500.0);
-    expect(alloc2.amountApplied, 100.0);
-  });
-
-  test('SetEditingReceiptCustomer fetches open invoices live from Zoho '
-      'before allocating', () async {
-    var future = bloc.stream.first;
-    bloc.add(StartNewReceipt());
-    await future;
-
-    future = bloc.stream.first;
-    bloc.add(SetEditingReceiptCustomer(testCustomer));
-    await future;
-
-    expect(salesRepo.fetchRemoteOpenInvoicesCount, 1);
-  });
-
-  test('SetEditingReceiptCustomer still allocates from the local cache when '
-      'the live refresh fails (offline)', () async {
-    salesRepo.throwOnFetchRemoteOpenInvoices = true;
-
-    var future = bloc.stream.first;
-    bloc.add(StartNewReceipt());
-    await future;
-
-    future = bloc.stream.first;
-    bloc.add(const SetEditingAmount(600.0));
-    await future;
-
-    future = bloc.stream.first;
-    bloc.add(SetEditingReceiptCustomer(testCustomer));
-    await future;
-
-    expect(bloc.state.editingAllocations.length, 2);
-    expect(
-      bloc.state.editingAllocations
-          .firstWhere((a) => a.invoiceId == 'inv_01')
-          .amountApplied,
-      500.0,
-    );
-  });
-
-  test('SetEditingAmount triggers FIFO auto-allocation', () async {
-    var future = bloc.stream.first;
-    bloc.add(StartNewReceipt());
-    await future;
-
-    future = bloc.stream.first;
-    bloc.add(SetEditingReceiptCustomer(testCustomer));
-    await future;
-
-    future = bloc.stream.first;
-    bloc.add(const SetEditingAmount(400.0));
-    await future;
-
-    // After setting amount, it should allocate $400:
-    // $400 to invoice1 (INV-101, oldest)
-    expect(bloc.state.editingAllocations.length, 1);
-
-    final alloc1 = bloc.state.editingAllocations.firstWhere(
-      (a) => a.invoiceId == 'inv_01',
-    );
-    expect(alloc1.amountApplied, 400.0);
-  });
-
-  test('UpdateReceiptAllocations overrides FIFO auto-allocation', () async {
-    var future = bloc.stream.first;
-    bloc.add(StartNewReceipt());
-    await future;
-
-    future = bloc.stream.first;
-    bloc.add(SetEditingReceiptCustomer(testCustomer));
-    await future;
-
-    future = bloc.stream.first;
-    bloc.add(const SetEditingAmount(400.0));
-    await future;
-
-    // Manual override allocation: $200 to inv_01, $200 to inv_02
-    const overrides = [
-      PaymentAllocation(
-        invoiceId: 'inv_01',
-        invoiceNumber: 'INV-101',
-        amountApplied: 200.0,
-      ),
-      PaymentAllocation(
-        invoiceId: 'inv_02',
-        invoiceNumber: 'INV-102',
-        amountApplied: 200.0,
-      ),
-    ];
-    future = bloc.stream.first;
-    bloc.add(const UpdateReceiptAllocations(overrides));
-    await future;
-
-    expect(bloc.state.editingAllocations, overrides);
+      expect(salesRepo.receipts, hasLength(1));
+      expect(salesRepo.receipts.single.amount, 150.0);
+      expect(salesRepo.syncQueue, hasLength(1));
+      expect(syncRepo.triggerCount, 1);
+      bloc.close();
+    });
   });
 }

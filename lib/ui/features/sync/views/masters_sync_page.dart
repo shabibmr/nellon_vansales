@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/sync_queue_item.dart';
+import '../../../../data/services/error_classification.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
@@ -753,9 +754,10 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
     final rawError = syncItem.errorMessage;
     final isRetryable = rawError?.startsWith('[Retryable]') ?? false;
     final isNeedsAttention = rawError?.startsWith('[Needs Attention]') ?? false;
-    final displayError = rawError
-        ?.replaceFirst('[Retryable] ', '')
-        .replaceFirst('[Needs Attention] ', '');
+    // Prefer Zoho `message` (and strip Dio boilerplate) for already-queued
+    // verbose errors as well as newly stored friendly ones.
+    final displayError =
+        rawError == null ? null : humanizeSyncErrorMessage(rawError);
 
     final subtitleWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -796,7 +798,7 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
           const SizedBox(height: 4),
           Text(
             displayError,
-            maxLines: 2,
+            maxLines: 4,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 11, color: AppTheme.errorRose),
           ),
@@ -812,6 +814,34 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
       accentColor: AppTheme.primaryIndigo,
       trailing: const SizedBox.shrink(),
       hasError: syncItem.status == SyncStatus.failed,
+      onTap: syncItem.status == SyncStatus.failed && displayError != null
+          ? () => _showQueueErrorDialog(
+                context,
+                title:
+                    '${syncItem.type.toUpperCase().replaceAll('_', ' ')} #$shortId',
+                message: displayError,
+              )
+          : null,
+    );
+  }
+
+  void _showQueueErrorDialog(
+    BuildContext context, {
+    required String title,
+    required String message,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(child: Text(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
