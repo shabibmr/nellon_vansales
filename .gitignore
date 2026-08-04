@@ -50,6 +50,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+*.apk
+*.aab
 
 # Kotlin Gradle Plugin caches
 .kotlin/

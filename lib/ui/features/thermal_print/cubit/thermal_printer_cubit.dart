@@ -38,13 +38,28 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       ),
     );
     try {
-      final permission = await _repo.isBluetoothPermissionGranted();
-      final btOn = await _repo.isBluetoothOn();
-      final connected = await _repo.isConnected;
+      final permission = await _repo
+          .isBluetoothPermissionGranted()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+
+      bool btOn = false;
+      bool connected = false;
       List<PairedPrinter> bonded = const [];
-      if (permission && btOn) {
-        bonded = await _repo.getBondedDevices();
+
+      if (permission) {
+        btOn = await _repo
+            .isBluetoothOn()
+            .timeout(const Duration(seconds: 3), onTimeout: () => false);
+        if (btOn) {
+          connected = await _repo
+              .isConnected
+              .timeout(const Duration(seconds: 3), onTimeout: () => false);
+          bonded = await _repo
+              .getBondedDevices()
+              .timeout(const Duration(seconds: 3), onTimeout: () => const []);
+        }
       }
+
       emit(
         state.copyWith(
           isLoading: false,
@@ -79,7 +94,8 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       ),
     );
     try {
-      final granted = await _requestBluetoothPermission();
+      final granted = await _requestBluetoothPermission()
+          .timeout(const Duration(seconds: 10), onTimeout: () => false);
       emit(
         state.copyWith(
           isLoading: false,

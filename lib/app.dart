@@ -25,6 +25,7 @@ import 'ui/core/cubit/salesperson_cubit.dart';
 import 'domain/repositories/salesperson_repository.dart';
 import 'data/services/hive_database_service.dart';
 import 'data/services/zoho_api_client.dart';
+import 'ui/core/widgets/app_splash_screen.dart';
 import 'ui/features/auth/views/login_page.dart';
 import 'ui/features/route/views/route_page.dart';
 import 'ui/features/dashboard/views/dashboard_page.dart';
@@ -194,7 +195,7 @@ class VanSalesApp extends StatelessWidget {
 /// A stateful gateway that decides which initial page the user should see.
 ///
 /// Gates the application based on:
-/// - **Authentication State**: If unauthenticated or loading, routes to [LoginPage] or a loading spinner.
+/// - **Authentication State**: Shows splash screen while verifying session; routes to [LoginPage] when unauthenticated.
 /// - **Core Master Data Status**: If authenticated but has no core masters in the local cache, redirects to [MastersSyncPage].
 /// - **Route Selection**: If the user hasn't selected an active sales route, forces redirect to [RouteSelectionPage].
 /// - **Dashboard**: When auth, masters, and active route are fully verified, drops into the [DashboardPage].
@@ -218,12 +219,8 @@ class SessionGateway extends StatelessWidget {
               child: BlocBuilder<RouteBloc, RouteState>(
                 builder: (context, routeState) {
                   if (routeState.isLoading) {
-                    return const Scaffold(
-                      body: Center(
-                        child: CircularProgressIndicator(
-                          color: AppTheme.primaryIndigo,
-                        ),
-                      ),
+                    return const AppSplashScreen(
+                      statusText: 'Loading active route…',
                     );
                   }
                   final hasMasters = context
@@ -236,11 +233,9 @@ class SessionGateway extends StatelessWidget {
                 },
               ),
             );
-          } else if (authState is AuthLoading) {
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryIndigo),
-              ),
+          } else if (authState is AuthInitial) {
+            return const AppSplashScreen(
+              statusText: 'Verifying session…',
             );
           }
           return const LoginPage();

@@ -167,11 +167,9 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           if (!state.permissionGranted)
                             OutlinedButton.icon(
-                              onPressed: state.isLoading
-                                  ? null
-                                  : () => context
-                                      .read<ThermalPrinterCubit>()
-                                      .requestPermission(),
+                              onPressed: () => context
+                                  .read<ThermalPrinterCubit>()
+                                  .requestPermission(),
                               icon: const Icon(Icons.security, size: 18),
                               label: const Text('Allow Bluetooth'),
                             ),
