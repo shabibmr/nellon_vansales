@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.nellon.vansales.van_sales"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

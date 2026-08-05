@@ -26,6 +26,6 @@ tasks.register<Delete>("clean") {
 subprojects {
     project.plugins.withId("com.android.library") {
         val android = project.extensions.getByName("android") as com.android.build.api.dsl.LibraryExtension
-        android.compileSdk = 34
+        android.compileSdk = 37
     }
 }

@@ -6,4 +6,4 @@ flutter_launcher_icons:
   
   # Adaptive Icon for Android (removes double border and matches original contrast)
   adaptive_icon_background: "#F5F5F5"
-  adaptive_icon_foreground: "assets/images/app_logo_foreground.png"
+  adaptive_icon_foreground: "assets/images/app_logo.png"
