@@ -1,0 +1,21 @@
+{
+  "@@locale": "en",
+  "appTitle": "Nellon Van Sales",
+  "@appTitle": {
+    "description": "Application title string"
+  },
+  "dashboardTitle": "Dashboard",
+  "operationsTitle": "Operations",
+  "reportsTitle": "Reports",
+  "customersAndRoutes": "Customers & Routes",
+  "loginWelcome": "Welcome to Van Sales",
+  "enterPhoneNumber": "Enter phone number to receive OTP",
+  "phoneNumberLabel": "Phone Number",
+  "sendOtpButton": "SEND VERIFICATION CODE",
+  "verifyOtpButton": "VERIFY & LOGIN",
+  "syncStatusSynced": "Synced",
+  "syncStatusSyncing": "Syncing",
+  "syncStatusPending": "Pending",
+  "offlineBannerMessage": "Offline — showing cached data",
+  "somethingWentWrong": "Something went wrong. Please try again."
+}

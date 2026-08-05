@@ -48,6 +48,29 @@ class RetryLoadSalesInvoice extends SalesInvoiceEditorEvent {
   const RetryLoadSalesInvoice();
 }
 
+/// Re-fetches a synced invoice from Zoho and updates the form if it changed.
+///
+/// [forceDirty] is true when the page detected controller-only edits (notes)
+/// that are not yet mirrored into [SalesInvoiceEditorState.isFormDirty].
+class RefreshSalesInvoiceFromZoho extends SalesInvoiceEditorEvent {
+  final bool forceDirty;
+
+  const RefreshSalesInvoiceFromZoho({this.forceDirty = false});
+
+  @override
+  List<Object?> get props => [forceDirty];
+}
+
+/// Mirrors notes text from the editor field into BLoC state (dirty tracking).
+class UpdateInvoiceNotes extends SalesInvoiceEditorEvent {
+  final String notes;
+
+  const UpdateInvoiceNotes(this.notes);
+
+  @override
+  List<Object?> get props => [notes];
+}
+
 /// Updates the date under editor.
 class UpdateInvoiceDate extends SalesInvoiceEditorEvent {
   final DateTime date;

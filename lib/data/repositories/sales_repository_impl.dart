@@ -1,6 +1,8 @@
 import '../../domain/models/route.dart';
 import '../../domain/models/customer.dart';
+import '../../domain/models/customer_ledger.dart';
 import '../../domain/models/item.dart';
+import '../../domain/models/organization.dart';
 import '../../domain/models/sales_invoice.dart';
 import '../../domain/models/receipt_voucher.dart';
 import '../../domain/models/sales_return.dart';
@@ -10,10 +12,12 @@ import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
 import '../../domain/models/stock_transfer.dart';
 import '../../domain/models/unit_conversion.dart';
+import '../../domain/models/warehouse.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../models/sync_queue_item.dart';
 import '../models/unit_conversion_model.dart';
 import '../services/app_logger.dart';
+import '../models/item_model.dart';
 import '../models/sales_order_model.dart';
 import '../models/sales_invoice_model.dart';
 import '../models/receipt_voucher_model.dart';
@@ -112,14 +116,34 @@ class SalesRepositoryImpl implements SalesRepository {
       _dbService.saveLocalInvoice(invoice);
 
   @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async {
+  Future<SalesInvoice?> fetchInvoiceById(
+    String invoiceId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async {
     if (invoiceId.isEmpty) return null;
+    SalesInvoice? local;
     for (final inv in _dbService.getLocalInvoices()) {
-      if (inv.id == invoiceId) return inv;
+      if (inv.id == invoiceId) {
+        local = inv;
+        break;
+      }
     }
-    final json = await _apiClient.fetchInvoiceDetail(invoiceId);
-    if (json.isEmpty) return null;
-    return SalesInvoiceModel.fromJson(json);
+    if (!forceRemote && local != null) return local;
+
+    try {
+      final json = await _apiClient.fetchInvoiceDetail(invoiceId);
+      if (json.isEmpty) {
+        if (allowOfflineFallback && local != null) return local;
+        return null;
+      }
+      final remote = SalesInvoiceModel.fromJson(json);
+      await _dbService.saveRemoteInvoices([remote]);
+      return remote;
+    } catch (_) {
+      if (allowOfflineFallback && local != null) return local;
+      rethrow;
+    }
   }
 
   @override
@@ -137,25 +161,96 @@ class SalesRepositoryImpl implements SalesRepository {
   }
 
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async {
+  Future<ReceiptVoucher?> fetchReceiptById(
+    String paymentId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async {
     if (paymentId.isEmpty) return null;
+    ReceiptVoucher? local;
     for (final rec in _dbService.getLocalReceipts()) {
-      if (rec.id == paymentId) return rec;
+      if (rec.id == paymentId) {
+        local = rec;
+        break;
+      }
     }
-    final json = await _apiClient.fetchReceiptDetail(paymentId);
-    if (json.isEmpty) return null;
-    return ReceiptVoucherModel.fromJson(json);
+    if (!forceRemote && local != null) return local;
+
+    try {
+      final json = await _apiClient.fetchReceiptDetail(paymentId);
+      if (json.isEmpty) {
+        if (allowOfflineFallback && local != null) return local;
+        return null;
+      }
+      final remote = ReceiptVoucherModel.fromJson(json);
+      await _dbService.saveRemoteReceipts([remote]);
+      return remote;
+    } catch (_) {
+      if (allowOfflineFallback && local != null) return local;
+      rethrow;
+    }
   }
 
   @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async {
+  Future<SalesReturn?> fetchSalesReturnById(
+    String creditNoteId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async {
     if (creditNoteId.isEmpty) return null;
+    SalesReturn? local;
     for (final ret in _dbService.getLocalReturns()) {
-      if (ret.id == creditNoteId) return ret;
+      if (ret.id == creditNoteId) {
+        local = ret;
+        break;
+      }
     }
-    final json = await _apiClient.fetchSalesReturnDetail(creditNoteId);
-    if (json.isEmpty) return null;
-    return SalesReturnModel.fromJson(json);
+    if (!forceRemote && local != null) return local;
+
+    try {
+      final json = await _apiClient.fetchSalesReturnDetail(creditNoteId);
+      if (json.isEmpty) {
+        if (allowOfflineFallback && local != null) return local;
+        return null;
+      }
+      final remote = SalesReturnModel.fromJson(json);
+      await _dbService.saveRemoteReturns([remote]);
+      return remote;
+    } catch (_) {
+      if (allowOfflineFallback && local != null) return local;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<ExpenseEntry?> fetchExpenseById(
+    String expenseId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async {
+    if (expenseId.isEmpty) return null;
+    ExpenseEntry? local;
+    for (final exp in _dbService.getLocalExpenses()) {
+      if (exp.id == expenseId) {
+        local = exp;
+        break;
+      }
+    }
+    if (!forceRemote && local != null) return local;
+
+    try {
+      final json = await _apiClient.fetchExpenseDetail(expenseId);
+      if (json.isEmpty) {
+        if (allowOfflineFallback && local != null) return local;
+        return null;
+      }
+      final remote = ExpenseEntryModel.fromZohoJson(json);
+      await _dbService.saveRemoteExpenses([remote]);
+      return remote;
+    } catch (_) {
+      if (allowOfflineFallback && local != null) return local;
+      rethrow;
+    }
   }
 
   @override
@@ -203,10 +298,30 @@ class SalesRepositoryImpl implements SalesRepository {
   }
 
   @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async {
-    final json = await _apiClient.fetchSalesOrder(zohoOrderId);
-    if (json.isEmpty) return null;
-    return _orderFromZoho(json);
+  Future<SalesOrder?> fetchRemoteOrder(
+    String zohoOrderId, {
+    bool allowOfflineFallback = false,
+  }) async {
+    SalesOrder? local;
+    for (final o in _dbService.getLocalOrders()) {
+      if (o.id == zohoOrderId || o.zohoOrderId == zohoOrderId) {
+        local = o;
+        break;
+      }
+    }
+    try {
+      final json = await _apiClient.fetchSalesOrder(zohoOrderId);
+      if (json.isEmpty) {
+        if (allowOfflineFallback) return local;
+        return null;
+      }
+      final order = _orderFromZoho(json);
+      await _dbService.saveRemoteOrders([order]);
+      return order;
+    } catch (_) {
+      if (allowOfflineFallback && local != null) return local;
+      rethrow;
+    }
   }
 
   /// Parses a Zoho `salesorder` envelope, stamping `zoho_order_id` from
@@ -300,7 +415,7 @@ class SalesRepositoryImpl implements SalesRepository {
       endDate: endDate,
     );
     final remote =
-        raw.map((json) => ExpenseEntryModel.fromJson(json)).toList();
+        raw.map((json) => ExpenseEntryModel.fromZohoJson(json)).toList();
     await _dbService.saveRemoteExpenses(remote);
     // Zoho scopes via paid_through_account_id; local cache is only
     // location-filtered and can still hold other salesmen's rows from older
@@ -376,5 +491,67 @@ class SalesRepositoryImpl implements SalesRepository {
     final transfers = raw.map((json) => StockTransferModel.fromJson(json)).toList();
     await _dbService.saveRemoteStockTransfers(transfers);
     return _dbService.getLocalStockTransfers();
+  }
+
+  @override
+  Customer? getCustomerById(String id) => _dbService.getCustomerById(id);
+
+  @override
+  Organization? getOrganization() => _dbService.getOrganization();
+
+  @override
+  String? get assignedWarehouseId => _dbService.assignedWarehouseId;
+
+  @override
+  String? get primaryWarehouseId => _dbService.primaryWarehouseId;
+
+  @override
+  List<Warehouse> getWarehouses() => _dbService.getWarehouses();
+
+  @override
+  bool hasPendingCashClosingForToday() =>
+      _dbService.hasPendingCashClosingForToday();
+
+  @override
+  Future<List<Item>> fetchRemoteItems({String? locationId}) async {
+    final target = locationId ?? _dbService.assignedWarehouseId ?? '';
+    final raw = await _apiClient.fetchItems(target);
+    return raw.map((json) => ItemModel.fromJson(json)).toList();
+  }
+
+  @override
+  Future<void> pushCustomerGpsRemote(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) async {
+    await _apiClient.updateCustomerGps(customerId, latitude, longitude);
+  }
+
+  @override
+  Future<CustomerLedger> fetchCustomerLedger(
+    String customerId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final raw = await _apiClient.fetchCustomerStatement(
+      customerId,
+      startDate: startDate,
+      endDate: endDate,
+    );
+
+    final rawWithName = Map<String, dynamic>.from(raw);
+    if ((rawWithName['contact_name'] as String? ?? '').isEmpty ||
+        rawWithName['contact_name'] == 'Demo Customer') {
+      final customer = _dbService
+          .getCustomers()
+          .where((c) => c.id == customerId)
+          .firstOrNull;
+      if (customer != null) {
+        rawWithName['contact_name'] = customer.name;
+      }
+    }
+
+    return CustomerLedger.fromJson(rawWithName, customerId);
   }
 }

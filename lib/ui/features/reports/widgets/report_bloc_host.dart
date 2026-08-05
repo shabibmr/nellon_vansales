@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/snackbars.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_state.dart';
@@ -28,7 +29,7 @@ class ReportBlocHost<T> extends StatelessWidget {
         listenWhen: (prev, curr) =>
             curr.error != null && prev.error != curr.error,
         listener: (context, state) {
-          showErrorSnackBar(context, '$errorPrefix: ${state.error}');
+          showErrorSnackBar(context, '$errorPrefix: ${userFacingMessage(state.error)}');
         },
         child: BlocBuilder<ReportBloc<T>, ReportState<T>>(builder: builder),
       ),

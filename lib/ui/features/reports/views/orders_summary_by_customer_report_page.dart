@@ -1,108 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/models/sales_order_model.dart';
-import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
+import 'package:get_it/get_it.dart';
+
 import '../../../../domain/models/sales_order.dart';
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/date_filter.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/orders_summary_by_customer_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
-import '../bloc/report_state.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
 
-/// Aggregated row for a single customer across the filtered orders.
-class _CustomerOrderRow {
-  final String customerId;
-  final String customerName;
-  int orderCount = 0;
-  double totalValue = 0.0;
-
-  _CustomerOrderRow({required this.customerId, required this.customerName});
-}
-
-enum _SortField { name, count, value }
-
 /// Full-screen orders-by-customer summary.
 ///
-/// Fetches every sales order live from Zoho Books and aggregates them by
-/// customer, showing order count and total value per customer. Supports
-/// date-range filtering and column sorting.
+/// Fetches sales orders via [ReportRepository] and aggregates them by
+/// customer using [OrdersSummaryByCustomerAggregator], showing order count
+/// and total value per customer. Supports date-range filtering and column sorting.
 class OrdersSummaryByCustomerReportPage extends StatelessWidget {
   const OrdersSummaryByCustomerReportPage({super.key});
 
-  List<_CustomerOrderRow> _buildReport(ReportState<SalesOrder> state) {
-    final map = <String, _CustomerOrderRow>{};
-
-    final filtered = filterByDateRange(
-      state.rows,
-      (order) => order.date,
-      startDate: state.startDate,
-      endDate: state.endDate,
-    );
-    for (final order in filtered) {
-      final row = map.putIfAbsent(
-        order.customerId,
-        () => _CustomerOrderRow(
-          customerId: order.customerId,
-          customerName: order.customerName,
-        ),
-      );
-      row.orderCount++;
-      row.totalValue += order.total;
-    }
-
-    final rows = map.values.toList();
-    final sortField = state.sortField as _SortField? ?? _SortField.value;
-    final sortAscending = state.sortAscending;
-
-    rows.sort((a, b) {
-      int cmp;
-      switch (sortField) {
-        case _SortField.name:
-          cmp = a.customerName.compareTo(b.customerName);
-          break;
-        case _SortField.count:
-          cmp = a.orderCount.compareTo(b.orderCount);
-          break;
-        case _SortField.value:
-          cmp = a.totalValue.compareTo(b.totalValue);
-          break;
-      }
-      return sortAscending ? cmp : -cmp;
-    });
-    return rows;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final sl = GetIt.instance;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
 
     return ReportBlocHost<SalesOrder>(
       create: (_) => ReportBloc<SalesOrder>(
-        fetchRemote: () async {
-          final raw = await sl<ZohoApiClient>().fetchSalesOrders();
-          return raw.map((json) => SalesOrderModel.fromJson(json)).toList();
-        },
-        initialSortField: _SortField.value,
+        fetchRemote: () => sl<ReportRepository>().fetchSalesOrders(),
+        initialSortField: OrdersSummaryByCustomerSortField.value,
         initialSortAscending: false,
       ),
       builder: (context, state) {
-        final rows = _buildReport(state);
+        final rows = OrdersSummaryByCustomerAggregator.aggregate(
+          orders: state.rows,
+          startDate: state.startDate,
+          endDate: state.endDate,
+          sortField:
+              state.sortField as OrdersSummaryByCustomerSortField? ??
+              OrdersSummaryByCustomerSortField.value,
+          sortAscending: state.sortAscending,
+        );
         final totalOrders = rows.fold(0, (sum, r) => sum + r.orderCount);
         final totalValue = rows.fold(0.0, (sum, r) => sum + r.totalValue);
 
-        return SortableReportScaffold<_CustomerOrderRow, _SortField>(
+        return SortableReportScaffold<
+          OrdersSummaryByCustomerRow,
+          OrdersSummaryByCustomerSortField
+        >(
           title: 'Orders Summary by Customer',
           isLoading: state.isLoading,
           onRefresh: () =>
               context.read<ReportBloc<SalesOrder>>().add(const RefreshReport()),
           rows: rows,
-          sortField: state.sortField as _SortField? ?? _SortField.value,
+          sortField:
+              state.sortField as OrdersSummaryByCustomerSortField? ??
+              OrdersSummaryByCustomerSortField.value,
           sortAscending: state.sortAscending,
           onSort: (field) =>
               context.read<ReportBloc<SalesOrder>>().add(SetSort(field)),
@@ -137,11 +92,19 @@ class OrdersSummaryByCustomerReportPage extends StatelessWidget {
             ReportColumn(
               label: 'CUSTOMER',
               flex: 5,
-              field: _SortField.name,
+              field: OrdersSummaryByCustomerSortField.name,
               alignEnd: false,
             ),
-            ReportColumn(label: 'ORDERS', flex: 2, field: _SortField.count),
-            ReportColumn(label: 'VALUE', flex: 3, field: _SortField.value),
+            ReportColumn(
+              label: 'ORDERS',
+              flex: 2,
+              field: OrdersSummaryByCustomerSortField.count,
+            ),
+            ReportColumn(
+              label: 'VALUE',
+              flex: 3,
+              field: OrdersSummaryByCustomerSortField.value,
+            ),
           ],
           exportHeaders: const ['Customer', 'Orders', 'Value'],
           exportRow: (row) => [

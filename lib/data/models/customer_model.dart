@@ -83,25 +83,24 @@ class CustomerModel extends Customer {
     final (lat, lng) = _extractGps(json);
 
     return CustomerModel(
-      id: json['contact_id'] ?? json['id'] ?? '',
-      name: json['contact_name'] ?? json['name'] ?? '',
-      companyName: json['company_name'] ?? json['companyName'] ?? '',
-      email: json['email'] ?? '',
-      phone: json['phone'] ?? '',
-      address: json['address'] ?? json['billing_address']?['address'] ?? '',
+      id: ((json['contact_id'] ?? json['id']) as String?) ?? '',
+      name: ((json['contact_name'] ?? json['name']) as String?) ?? '',
+      companyName: ((json['company_name'] ?? json['companyName']) as String?) ?? '',
+      email: (json['email'] as String?) ?? '',
+      phone: (json['phone'] as String?) ?? '',
+      address: ((json['address'] ?? (json['billing_address'] as Map?)?['address']) as String?) ?? '',
       outstandingBalance:
-          (json['outstanding_receivable_amount'] ??
+          ((json['outstanding_receivable_amount'] ??
                   json['outstanding_balance'] ??
-                  json['outstandingBalance'] ??
-                  0.0)
-              .toDouble(),
-      creditLimit: (json['credit_limit'] ?? json['creditLimit'] ?? 0.0)
-          .toDouble(),
-      routeId: json['route_id'] ?? json['routeId'] ?? '',
-      sequence: json['sequence'] ?? 0,
+                  json['outstandingBalance']) as num?)
+              ?.toDouble() ?? 0.0,
+      creditLimit: ((json['credit_limit'] ?? json['creditLimit']) as num?)
+          ?.toDouble() ?? 0.0,
+      routeId: ((json['route_id'] ?? json['routeId']) as String?) ?? '',
+      sequence: (json['sequence'] as num?)?.toInt() ?? 0,
       latitude: lat,
       longitude: lng,
-      isPendingSync: json['isPendingSync'] ?? false,
+      isPendingSync: (json['isPendingSync'] as bool?) ?? false,
     );
   }
 

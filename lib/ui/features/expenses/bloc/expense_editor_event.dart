@@ -31,6 +31,11 @@ class RetryLoadExpenseEntry extends ExpenseEditorEvent {
   const RetryLoadExpenseEntry();
 }
 
+/// Re-fetches a synced expense from Zoho and updates the form if it changed.
+class RefreshExpenseEntryFromZoho extends ExpenseEditorEvent {
+  const RefreshExpenseEntryFromZoho();
+}
+
 /// Updates expense date.
 class SetEditingExpenseDate extends ExpenseEditorEvent {
   final DateTime date;

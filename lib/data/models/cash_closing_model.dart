@@ -20,18 +20,17 @@ class CashClosingModel extends CashClosing {
   /// Factory constructor to parse local database JSON maps into a [CashClosingModel].
   factory CashClosingModel.fromJson(Map<String, dynamic> json) {
     return CashClosingModel(
-      id: json['id'] ?? '',
+      id: (json['id'] as String?) ?? '',
       date: json['date'] != null
-          ? DateTime.parse(json['date'])
+          ? DateTime.parse(json['date'] as String)
           : DateTime.now(),
-      openingBalance: (json['openingBalance'] ?? 0.0).toDouble(),
-      totalSalesInvoices: (json['totalSalesInvoices'] ?? 0.0).toDouble(),
-      totalReceiptsCollected: (json['totalReceiptsCollected'] ?? 0.0)
-          .toDouble(),
-      totalExpenses: (json['totalExpenses'] ?? 0.0).toDouble(),
-      closingBalance: (json['closingBalance'] ?? 0.0).toDouble(),
-      notes: json['notes'] ?? '',
-      isPendingSync: json['isPendingSync'] ?? false,
+      openingBalance: (json['openingBalance'] as num?)?.toDouble() ?? 0.0,
+      totalSalesInvoices: (json['totalSalesInvoices'] as num?)?.toDouble() ?? 0.0,
+      totalReceiptsCollected: (json['totalReceiptsCollected'] as num?)?.toDouble() ?? 0.0,
+      totalExpenses: (json['totalExpenses'] as num?)?.toDouble() ?? 0.0,
+      closingBalance: (json['closingBalance'] as num?)?.toDouble() ?? 0.0,
+      notes: (json['notes'] as String?) ?? '',
+      isPendingSync: (json['isPendingSync'] as bool?) ?? false,
     );
   }
 

@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/services/injection.dart';
-import '../../../../data/services/sync_worker.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/permission_dialogs.dart';
@@ -41,13 +40,13 @@ class CreateCustomerDialog extends StatefulWidget {
           BlocProvider<GpsCaptureBloc>(
             create: (_) => GpsCaptureBloc(
               salesRepository: sl<SalesRepository>(),
-              zohoApiClient: sl<ZohoApiClient>(),
-              syncWorker: sl<SyncWorker>(),
+              syncRepository: sl<SyncRepository>(),
             ),
           ),
           BlocProvider<CreateCustomerCubit>(
             create: (_) => CreateCustomerCubit(
               salesRepository: sl<SalesRepository>(),
+              syncRepository: sl<SyncRepository>(),
             ),
           ),
         ],
@@ -87,12 +86,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
 
-    final salesRepo = sl<SalesRepository>();
     final routeBloc = context.read<RouteBloc>();
-    final activeRouteId =
-        routeBloc.state.activeRouteId ??
-        salesRepo.activeRouteId ??
-        'route_default';
+    final activeRouteId = routeBloc.state.activeRouteId;
 
     final name = _nameController.text.trim();
     final company = _companyController.text.trim();
@@ -146,7 +141,6 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
           listener: (context, state) {
             if (state is CreateCustomerSuccess) {
               context.read<RouteBloc>().add(LoadRoutes());
-              sl<SyncWorker>().syncPendingItems();
               Navigator.of(context).pop(state.customer);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(

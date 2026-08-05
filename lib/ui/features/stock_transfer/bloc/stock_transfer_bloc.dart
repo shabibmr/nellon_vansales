@@ -1,4 +1,6 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../domain/models/item.dart';
@@ -7,11 +9,9 @@ import '../../../../domain/models/warehouse.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/models/item_model.dart';
 import '../../../../data/models/stock_transfer_model.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../core/utils/date_filter.dart';
+import '../../../core/utils/error_mapper.dart';
 
 // --- Row model ---
 
@@ -185,6 +185,8 @@ class ClearMessages extends StockTransferEvent {}
 class StockTransferState extends Equatable {
   final StockTransferDirection direction;
   final List<StockTransferRow> rows;
+  final Warehouse defaultWarehouse;
+  final Warehouse currentLocation;
   final bool isLoading;
   final bool isLiveData;
   final String? errorMessage;
@@ -193,6 +195,8 @@ class StockTransferState extends Equatable {
   const StockTransferState({
     this.direction = StockTransferDirection.load,
     this.rows = const [],
+    this.defaultWarehouse = const Warehouse(id: '', name: 'Default Warehouse', address: ''),
+    this.currentLocation = const Warehouse(id: '', name: 'Current Location', address: ''),
     this.isLoading = false,
     this.isLiveData = false,
     this.errorMessage,
@@ -213,6 +217,8 @@ class StockTransferState extends Equatable {
   StockTransferState copyWith({
     StockTransferDirection? direction,
     List<StockTransferRow>? rows,
+    Warehouse? defaultWarehouse,
+    Warehouse? currentLocation,
     bool? isLoading,
     bool? isLiveData,
     String? errorMessage,
@@ -221,6 +227,8 @@ class StockTransferState extends Equatable {
     return StockTransferState(
       direction: direction ?? this.direction,
       rows: rows ?? this.rows,
+      defaultWarehouse: defaultWarehouse ?? this.defaultWarehouse,
+      currentLocation: currentLocation ?? this.currentLocation,
       isLoading: isLoading ?? this.isLoading,
       isLiveData: isLiveData ?? this.isLiveData,
       errorMessage: errorMessage,
@@ -232,6 +240,8 @@ class StockTransferState extends Equatable {
   List<Object?> get props => [
     direction,
     rows,
+    defaultWarehouse,
+    currentLocation,
     isLoading,
     isLiveData,
     errorMessage,
@@ -246,18 +256,12 @@ class StockTransferState extends Equatable {
 class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
   final SalesRepository _salesRepository;
   final SyncRepository _syncRepository;
-  final HiveDatabaseService _dbService;
-  final ZohoApiClient _apiClient;
 
   StockTransferBloc({
     required SalesRepository salesRepository,
     required SyncRepository syncRepository,
-    required HiveDatabaseService dbService,
-    required ZohoApiClient apiClient,
   }) : _salesRepository = salesRepository,
        _syncRepository = syncRepository,
-       _dbService = dbService,
-       _apiClient = apiClient,
        super(const StockTransferState()) {
     on<LoadIssueGrid>(_onLoadIssueGrid);
     on<LoadIssueGridWithDemand>(_onLoadIssueGridWithDemand);
@@ -272,10 +276,12 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
 
   /// Resolves the organization's default (primary) warehouse location, falling
   /// back to the first known warehouse if none is flagged primary.
-  Warehouse? _resolveDefaultWarehouse() {
-    final warehouses = _dbService.getWarehouses();
-    if (warehouses.isEmpty) return null;
-    final primaryId = _dbService.primaryWarehouseId;
+  Warehouse _resolveDefaultWarehouse() {
+    final warehouses = _salesRepository.getWarehouses();
+    if (warehouses.isEmpty) {
+      return const Warehouse(id: '', name: 'Default Warehouse', address: '');
+    }
+    final primaryId = _salesRepository.primaryWarehouseId;
     if (primaryId != null && primaryId.isNotEmpty) {
       for (final w in warehouses) {
         if (w.id == primaryId) return w;
@@ -284,6 +290,16 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     return warehouses.firstWhere(
       (w) => w.isPrimary,
       orElse: () => warehouses.first,
+    );
+  }
+
+  Warehouse _resolveCurrentLocation() {
+    final id = _salesRepository.assignedWarehouseId;
+    final warehouses = _salesRepository.getWarehouses();
+    return warehouses.firstWhere(
+      (w) => w.id == id,
+      orElse: () =>
+          Warehouse(id: id ?? '', name: 'Current Location', address: ''),
     );
   }
 
@@ -335,12 +351,13 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
       ),
     );
     try {
-      final locationId = _dbService.assignedWarehouseId ?? '';
+      final locationId = _salesRepository.assignedWarehouseId ?? '';
       List<Item> currentItems;
       var live = false;
       try {
-        final raw = await _apiClient.fetchItems(locationId);
-        currentItems = raw.map<Item>((j) => ItemModel.fromJson(j)).toList();
+        currentItems = await _salesRepository.fetchRemoteItems(
+          locationId: locationId,
+        );
         live = true;
       } catch (_) {
         currentItems = _salesRepository.getItems();
@@ -380,9 +397,20 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
               .toList()
             ..sort((a, b) => a.item.name.compareTo(b.item.name));
 
-      emit(state.copyWith(rows: rows, isLoading: false, isLiveData: live));
+      final defaultWarehouse = _resolveDefaultWarehouse();
+      final currentLocation = _resolveCurrentLocation();
+
+      emit(
+        state.copyWith(
+          rows: rows,
+          defaultWarehouse: defaultWarehouse,
+          currentLocation: currentLocation,
+          isLoading: false,
+          isLiveData: live,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+      emit(state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)));
     }
   }
 
@@ -415,11 +443,20 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
           )
           .toList();
 
+      final defaultWarehouse = _resolveDefaultWarehouse();
+      final currentLocation = _resolveCurrentLocation();
+
       emit(
-        state.copyWith(rows: rows, isLoading: false, isLiveData: true),
+        state.copyWith(
+          rows: rows,
+          defaultWarehouse: defaultWarehouse,
+          currentLocation: currentLocation,
+          isLoading: false,
+          isLiveData: true,
+        ),
       );
     } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+      emit(state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)));
     }
   }
 
@@ -507,7 +544,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     }
 
     final defaultWarehouse = _resolveDefaultWarehouse();
-    final currentLocationId = _dbService.assignedWarehouseId;
+    final currentLocationId = _salesRepository.assignedWarehouseId;
     if (defaultWarehouse == null || currentLocationId == null) {
       emit(
         state.copyWith(
@@ -560,7 +597,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
       );
       await _salesRepository.enqueueSyncItem(syncItem);
 
-      _syncRepository.triggerSync();
+      unawaited(_syncRepository.triggerSync());
 
       emit(
         state.copyWith(
@@ -571,7 +608,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         ),
       );
     } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+      emit(state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)));
     }
   }
 

@@ -11,12 +11,14 @@ import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/sync_repository.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../../domain/repositories/salesperson_repository.dart';
+import '../../domain/repositories/report_repository.dart';
 import '../../domain/repositories/voucher_pdf_repository.dart';
 import '../../domain/repositories/thermal_printer_repository.dart';
 import '../repositories/auth_repository_impl.dart';
 import '../repositories/sync_repository_impl.dart';
 import '../repositories/sales_repository_impl.dart';
 import '../repositories/salesperson_repository_impl.dart';
+import '../repositories/report_repository_impl.dart';
 import 'local_storage_service.dart';
 import 'device_info_service.dart';
 import 'license_service.dart';
@@ -71,6 +73,9 @@ Future<void> setupDependencyInjection() async {
   );
   sl.registerLazySingleton<SalespersonRepository>(
     () => SalespersonRepositoryImpl(dbService: sl(), apiClient: sl()),
+  );
+  sl.registerLazySingleton<ReportRepository>(
+    () => ReportRepositoryImpl(apiClient: sl(), dbService: sl()),
   );
 
   // 6. Licensing & Device Services

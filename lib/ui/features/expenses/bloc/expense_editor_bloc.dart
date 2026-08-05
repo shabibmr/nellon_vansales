@@ -1,4 +1,6 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/models/expense_entry_model.dart';
@@ -7,6 +9,7 @@ import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
+import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'expense_editor_event.dart';
 import 'expense_editor_state.dart';
 
@@ -25,6 +28,7 @@ class ExpenseEditorBloc
     on<StartNewExpense>(_onStartNewExpense);
     on<OpenExpenseEntry>(_onOpenExpenseEntry);
     on<RetryLoadExpenseEntry>(_onRetryLoadExpenseEntry);
+    on<RefreshExpenseEntryFromZoho>(_onRefreshExpenseEntryFromZoho);
     on<SetEditingExpenseDate>(_onSetEditingDate);
     on<SetEditingExpenseAmount>(_onSetEditingAmount);
     on<SetEditingExpenseCategory>(_onSetEditingCategory);
@@ -91,38 +95,134 @@ class ExpenseEditorBloc
     await _loadEditingExpenseFromZoho(expenseId, emit);
   }
 
-  Future<void> _loadEditingExpenseFromZoho(
-    String expenseId,
+  Future<void> _onRefreshExpenseEntryFromZoho(
+    RefreshExpenseEntryFromZoho event,
     Emitter<ExpenseEditorState> emit,
   ) async {
+    final expenseId = state.editingId ?? state.editingExpense?.id;
+    if (expenseId == null ||
+        expenseId.isEmpty ||
+        _isLocalExpenseId(expenseId) ||
+        state.isEditorLoading ||
+        state.isRefreshing ||
+        state.editingExpense == null) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        isRefreshing: true,
+        clearEditorError: true,
+        clearMessages: true,
+      ),
+    );
+    await _loadEditingExpenseFromZoho(expenseId, emit, isRefresh: true);
+  }
+
+  Future<void> _loadEditingExpenseFromZoho(
+    String expenseId,
+    Emitter<ExpenseEditorState> emit, {
+    bool isRefresh = false,
+  }) async {
+    final previous = isRefresh ? state.editingExpense : null;
+    final wasDirty = isRefresh && state.isFormDirty;
+
+    ExpenseEntry? fetched;
     try {
-      ExpenseEntry? fetched;
-      for (final e in _salesRepository.getLocalExpenses()) {
-        if (e.id == expenseId) {
-          fetched = e;
-          break;
-        }
-      }
-      fetched ??= (await _salesRepository.fetchRemoteExpenses())
-          .cast<ExpenseEntry?>()
-          .firstWhere((e) => e?.id == expenseId, orElse: () => null);
-      if (fetched == null) {
+      fetched = await _salesRepository.fetchExpenseById(
+        expenseId,
+        forceRemote: true,
+        allowOfflineFallback: false,
+      );
+    } catch (e) {
+      if (isRefresh) {
         emit(
           state.copyWith(
-            isEditorLoading: false,
-            editorError: 'This expense entry was not found in Zoho Books.',
+            isRefreshing: false,
+            errorMessage: humanizeSyncError(e),
           ),
         );
         return;
       }
-      emit(_openedFrom(fetched));
-    } catch (e) {
+      try {
+        fetched = await _salesRepository.fetchExpenseById(
+          expenseId,
+          forceRemote: false,
+        );
+      } catch (_) {
+        fetched = null;
+      }
+      if (fetched != null) {
+        emit(
+          _openedFrom(fetched).copyWith(
+            infoMessage: 'Showing offline copy',
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           isEditorLoading: false,
+          isRefreshing: false,
           editorError: humanizeSyncError(e),
         ),
       );
+      return;
+    }
+
+    if (fetched == null) {
+      if (!isRefresh) {
+        ExpenseEntry? local;
+        try {
+          local = await _salesRepository.fetchExpenseById(
+            expenseId,
+            forceRemote: false,
+          );
+        } catch (_) {
+          local = null;
+        }
+        if (local != null) {
+          emit(
+            _openedFrom(local).copyWith(
+              infoMessage: 'Not found in Zoho — showing local copy',
+            ),
+          );
+          return;
+        }
+      }
+      if (isRefresh && previous != null) {
+        emit(
+          state.copyWith(
+            isRefreshing: false,
+            errorMessage: 'This expense entry was not found in Zoho Books.',
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            isEditorLoading: false,
+            isRefreshing: false,
+            editorError: 'This expense entry was not found in Zoho Books.',
+          ),
+        );
+      }
+      return;
+    }
+
+    final opened = _openedFrom(fetched);
+    if (isRefresh) {
+      final contentUnchanged = previous != null &&
+          VoucherContentFingerprint.expense(previous) ==
+              VoucherContentFingerprint.expense(fetched);
+      emit(
+        opened.copyWith(
+          isRefreshing: false,
+          infoMessage: (wasDirty || !contentUnchanged)
+              ? 'Updated from Zoho Books'
+              : 'Already up to date',
+        ),
+      );
+    } else {
+      emit(opened);
     }
   }
 
@@ -227,7 +327,7 @@ class ExpenseEditorBloc
       );
       await _salesRepository.enqueueSyncItem(syncItem);
 
-      _syncRepository.triggerSync();
+      unawaited(_syncRepository.triggerSync());
 
       emit(
         state.copyWith(

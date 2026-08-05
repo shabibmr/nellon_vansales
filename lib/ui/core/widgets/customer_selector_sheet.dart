@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/sync_repository.dart';
 import '../../../data/services/injection.dart';
-import '../../../data/services/sync_worker.dart';
-import '../../../data/services/zoho_api_client.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
@@ -70,8 +69,7 @@ class CustomerSelectorSheet extends StatelessWidget {
           BlocProvider<GpsCaptureBloc>(
             create: (_) => GpsCaptureBloc(
               salesRepository: sl<SalesRepository>(),
-              zohoApiClient: sl<ZohoApiClient>(),
-              syncWorker: sl<SyncWorker>(),
+              syncRepository: sl<SyncRepository>(),
             ),
           ),
         ],

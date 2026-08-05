@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/document_number_service.dart';
-import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
@@ -35,7 +34,7 @@ class InvoiceFlowSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = sl<HiveDatabaseService>().getItems();
+    final items = context.read<SalesRepository>().getItems();
 
     return BlocProvider<SalesInvoiceEditorBloc>(
       create: (ctx) => SalesInvoiceEditorBloc(
@@ -107,7 +106,7 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
       setState(() => _resolvingItemId = item.id);
       try {
         final result =
-            await sl<SalesRepository>().resolveItemUnitConversions(item);
+            await context.read<SalesRepository>().resolveItemUnitConversions(item);
         resolved = result.item;
         offlineFallback = result.offlineFallback;
       } finally {
@@ -128,7 +127,7 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
         setState(() => _resolvingItemId = item.id);
         try {
           final result =
-              await sl<SalesRepository>().resolveItemUnitConversions(resolved);
+              await context.read<SalesRepository>().resolveItemUnitConversions(resolved);
           resolved = result.item;
           offlineFallback = result.offlineFallback;
         } finally {

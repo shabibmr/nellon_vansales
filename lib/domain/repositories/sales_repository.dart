@@ -1,6 +1,8 @@
 import '../models/route.dart';
 import '../models/customer.dart';
+import '../models/customer_ledger.dart';
 import '../models/item.dart';
+import '../models/organization.dart';
 import '../models/sales_invoice.dart';
 import '../models/receipt_voucher.dart';
 import '../models/sales_return.dart';
@@ -9,6 +11,7 @@ import '../models/cash_closing.dart';
 import '../models/open_invoice.dart';
 import '../models/sales_order.dart';
 import '../models/stock_transfer.dart';
+import '../models/warehouse.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract managing local van sales data access and session tracking.
@@ -56,8 +59,19 @@ abstract class SalesRepository {
   /// Logs a new sales invoice locally and pushes it to local database cache.
   Future<void> saveLocalInvoice(SalesInvoice invoice);
 
-  /// Loads a single invoice by id: local cache first, then Zoho Books.
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId);
+  /// Loads a single invoice by id.
+  ///
+  /// By default uses local cache first, then Zoho. When [forceRemote] is true,
+  /// prefers Zoho (and updates the local cache on success).
+  ///
+  /// [allowOfflineFallback] (default true): if the remote call fails or returns
+  /// empty and a local copy exists, return the local copy. Explicit refresh
+  /// should pass `false` so network failures surface to the user.
+  Future<SalesInvoice?> fetchInvoiceById(
+    String invoiceId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  });
 
   /// Downloads invoices from Zoho Books, merges them into the local cache,
   /// and returns the resulting local list.
@@ -66,11 +80,32 @@ abstract class SalesRepository {
     DateTime? endDate,
   });
 
-  /// Loads a single receipt/payment by id: local cache first, then Zoho Books.
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId);
+  /// Loads a single receipt/payment by id.
+  ///
+  /// See [fetchInvoiceById] for [forceRemote] / [allowOfflineFallback] semantics.
+  Future<ReceiptVoucher?> fetchReceiptById(
+    String paymentId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  });
 
-  /// Loads a single sales return (credit note) by id: local cache first, then Zoho.
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId);
+  /// Loads a single sales return (credit note) by id.
+  ///
+  /// See [fetchInvoiceById] for [forceRemote] / [allowOfflineFallback] semantics.
+  Future<SalesReturn?> fetchSalesReturnById(
+    String creditNoteId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  });
+
+  /// Loads a single expense by id.
+  ///
+  /// See [fetchInvoiceById] for [forceRemote] / [allowOfflineFallback] semantics.
+  Future<ExpenseEntry?> fetchExpenseById(
+    String expenseId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  });
 
   /// Gets all sales orders recorded locally.
   List<SalesOrder> getLocalOrders();
@@ -92,7 +127,13 @@ abstract class SalesRepository {
   });
 
   /// Reads a single sales order from Zoho Books by its permanent `zohoOrderId`.
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId);
+  ///
+  /// When [allowOfflineFallback] is true and the remote call fails, returns the
+  /// matching local order if present.
+  Future<SalesOrder?> fetchRemoteOrder(
+    String zohoOrderId, {
+    bool allowOfflineFallback = false,
+  });
 
   /// Gets all receipt vouchers collected locally.
   List<ReceiptVoucher> getLocalReceipts();
@@ -168,4 +209,40 @@ abstract class SalesRepository {
     DateTime? startDate,
     DateTime? endDate,
   });
+
+  /// Fetches full ledger statement for a customer over an optional date range.
+  Future<CustomerLedger> fetchCustomerLedger(
+    String customerId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+
+  /// Indexed customer lookup (local cache).
+  Customer? getCustomerById(String id);
+
+  /// Cached organization details for PDF / currency context.
+  Organization? getOrganization();
+
+  /// Van / session warehouse id assigned to the active salesperson.
+  String? get assignedWarehouseId;
+
+  /// Organization primary warehouse id (e.g. main store).
+  String? get primaryWarehouseId;
+
+  /// Cached warehouse master list.
+  List<Warehouse> getWarehouses();
+
+  /// True when today's sales activity still needs cash closing.
+  bool hasPendingCashClosingForToday();
+
+  /// Live item stock from Zoho for [locationId] (defaults to assigned warehouse).
+  Future<List<Item>> fetchRemoteItems({String? locationId});
+
+  /// Best-effort remote GPS push for an existing Zoho contact. Throws on failure
+  /// so callers can fall back to the offline queue.
+  Future<void> pushCustomerGpsRemote(
+    String customerId,
+    double latitude,
+    double longitude,
+  );
 }

@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../domain/models/route.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/repositories/sales_repository.dart';
+import '../../../core/utils/error_mapper.dart';
 
 // --- Events ---
 
@@ -134,7 +135,7 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
         ),
       );
     } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+      emit(state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)));
     }
   }
 
@@ -158,7 +159,7 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
         ),
       );
     } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+      emit(state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)));
     }
   }
 

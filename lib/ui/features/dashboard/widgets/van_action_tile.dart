@@ -92,8 +92,15 @@ class VanActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tile = isGrid ? _buildGridCard() : _buildListTile();
-    if (enabled) return tile;
-    return Opacity(opacity: 0.45, child: tile);
+    final labeled = Semantics(
+      button: true,
+      enabled: enabled,
+      label: title,
+      hint: subtitle,
+      child: tile,
+    );
+    if (enabled) return labeled;
+    return Opacity(opacity: 0.45, child: labeled);
   }
 
   // ── List layout ──────────────────────────────────────────────────────────

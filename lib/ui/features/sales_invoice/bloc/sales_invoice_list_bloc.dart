@@ -1,9 +1,10 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
@@ -11,6 +12,7 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/stock_rules.dart';
 import '../../../core/utils/date_filter.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'sales_invoice_list_event.dart';
 import 'sales_invoice_list_state.dart';
 
@@ -19,6 +21,7 @@ class SalesInvoiceListBloc
     extends Bloc<SalesInvoiceListEvent, SalesInvoiceListState> {
   final SalesRepository _salesRepository;
   final SyncRepository _syncRepository;
+  final DocumentNumberService _documentNumberService;
 
   /// Bumped on every remote list request; stale completions must not emit.
   int _fetchGeneration = 0;
@@ -26,8 +29,10 @@ class SalesInvoiceListBloc
   SalesInvoiceListBloc({
     required SalesRepository salesRepository,
     required SyncRepository syncRepository,
+    required DocumentNumberService documentNumberService,
   }) : _salesRepository = salesRepository,
        _syncRepository = syncRepository,
+       _documentNumberService = documentNumberService,
        super(
          SalesInvoiceListState(
            startDate: todayDate(),
@@ -141,13 +146,13 @@ class SalesInvoiceListBloc
         await _convertSingleOrder(order, batchIndex: i);
         successCount++;
       } on InsufficientStockException catch (e) {
-        failures.add('${order.orderNumber}: ${e.toString()}');
+        failures.add('${order.orderNumber}: ${userFacingMessage(e)}');
       } catch (e) {
         failures.add('${order.orderNumber}: $e');
       }
     }
 
-    _syncRepository.triggerSync();
+    unawaited(_syncRepository.triggerSync());
     final updatedInvoices = _salesRepository.getLocalInvoices();
 
     if (successCount == 0) {
@@ -184,7 +189,7 @@ class SalesInvoiceListBloc
   }) async {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final tempId = 'temp_inv_${stamp}_$batchIndex';
-    final invoiceNum = await sl<DocumentNumberService>().nextNumber(
+    final invoiceNum = await _documentNumberService.nextNumber(
       DocType.invoice,
     );
 

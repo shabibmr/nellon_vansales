@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer_ledger.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/utils/error_mapper.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../receipts/views/receipt_editor_page.dart';
 import '../../sales_invoice/views/sales_invoice_editor_page.dart';
@@ -121,7 +121,10 @@ Future<void> openLedgerTransaction(
   } catch (e) {
     dismissLoading();
     if (context.mounted) {
-      showErrorSnackBar(context, 'Failed to open transaction: $e');
+      showErrorSnackBar(
+        context,
+        'Failed to open transaction: ${userFacingMessage(e)}',
+      );
     }
   }
 }

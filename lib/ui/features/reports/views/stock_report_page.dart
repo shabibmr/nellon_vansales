@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/models/item_model.dart';
-import '../../../../data/services/hive_database_service.dart';
+
 import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/item.dart';
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/currency.dart';
 import '../../../core/cubit/list_filter_cubit.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/stock_report_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../bloc/report_state.dart';
 import '../widgets/report_bloc_host.dart';
-
-enum _SortField { name, rate, stock }
 
 /// Full-screen van stock report page.
 ///
@@ -32,12 +30,8 @@ class StockReportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportBlocHost<Item>(
       create: (_) => ReportBloc<Item>(
-        fetchRemote: () async {
-          final locationId = sl<HiveDatabaseService>().assignedWarehouseId;
-          final raw = await sl<ZohoApiClient>().fetchItems(locationId ?? '');
-          return raw.map<Item>((j) => ItemModel.fromJson(j)).toList();
-        },
-        initialSortField: _SortField.name,
+        fetchRemote: () => sl<ReportRepository>().fetchItems(),
+        initialSortField: StockReportSortField.name,
         initialSortAscending: true,
       ),
       builder: (context, state) => _StockReportBody(state: state),
@@ -58,18 +52,12 @@ class _StockReportBodyState extends State<_StockReportBody> {
   late final ListFilterCubit<Item> _filterCubit;
   final _searchController = TextEditingController();
 
-  static bool _matches(Item item, String query) {
-    final q = query.toLowerCase();
-    return item.name.toLowerCase().contains(q) ||
-        item.sku.toLowerCase().contains(q);
-  }
-
   @override
   void initState() {
     super.initState();
     _filterCubit = ListFilterCubit<Item>(
       initialItems: widget.state.rows,
-      filterPredicate: _matches,
+      filterPredicate: StockReportAggregator.matches,
     );
   }
 
@@ -93,26 +81,24 @@ class _StockReportBodyState extends State<_StockReportBody> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
     final reportState = widget.state;
-    final sortField = reportState.sortField as _SortField? ?? _SortField.name;
+    final sortField =
+        reportState.sortField as StockReportSortField? ??
+        StockReportSortField.name;
     final sortAscending = reportState.sortAscending;
 
     return BlocProvider<ListFilterCubit<Item>>.value(
       value: _filterCubit,
       child: BlocBuilder<ListFilterCubit<Item>, ListFilterState<Item>>(
         builder: (context, filterState) {
-          final items = [...filterState.filteredItems]
-            ..sort((a, b) {
-              final cmp = switch (sortField) {
-                _SortField.name => a.name.compareTo(b.name),
-                _SortField.rate => a.rate.compareTo(b.rate),
-                _SortField.stock => a.stock.compareTo(b.stock),
-              };
-              return sortAscending ? cmp : -cmp;
-            });
+          final items = StockReportAggregator.aggregate(
+            items: filterState.filteredItems,
+            sortField: sortField,
+            sortAscending: sortAscending,
+          );
 
           final hasQuery = filterState.query.trim().isNotEmpty;
 
-          return SortableReportScaffold<Item, _SortField>(
+          return SortableReportScaffold<Item, StockReportSortField>(
             title: 'Stock Report',
             isLoading: reportState.isLoading,
             onRefresh: () =>
@@ -125,7 +111,9 @@ class _StockReportBodyState extends State<_StockReportBody> {
               if (bloc.state.sortField == field) {
                 bloc.add(SetSort(field));
               } else {
-                bloc.add(SetSort(field, ascending: field == _SortField.name));
+                bloc.add(
+                  SetSort(field, ascending: field == StockReportSortField.name),
+                );
               }
             },
             emptyIcon: Icons.inventory_2_outlined,
@@ -204,11 +192,19 @@ class _StockReportBodyState extends State<_StockReportBody> {
               ReportColumn(
                 label: 'ITEM',
                 flex: 5,
-                field: _SortField.name,
+                field: StockReportSortField.name,
                 alignEnd: false,
               ),
-              ReportColumn(label: 'RATE', flex: 3, field: _SortField.rate),
-              ReportColumn(label: 'STOCK', flex: 2, field: _SortField.stock),
+              ReportColumn(
+                label: 'RATE',
+                flex: 3,
+                field: StockReportSortField.rate,
+              ),
+              ReportColumn(
+                label: 'STOCK',
+                flex: 2,
+                field: StockReportSortField.stock,
+              ),
             ],
             exportHeaders: const ['Item', 'Rate', 'Stock'],
             exportRow: (item) => [

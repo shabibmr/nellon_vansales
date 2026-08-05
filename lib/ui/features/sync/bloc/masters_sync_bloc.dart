@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../domain/repositories/sync_repository.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'masters_sync_event.dart';
 import 'masters_sync_state.dart';
 
@@ -70,7 +71,7 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
     } catch (e) {
       if (isClosed) return;
       final newLastError = Map<MasterType, String?>.from(state.lastError)
-        ..[type] = e.toString().replaceAll('Exception: ', '');
+        ..[type] = userFacingMessage(e);
       final newInFlight = Set<MasterType>.from(state.inFlight)..remove(type);
       emit(state.copyWith(
         lastError: newLastError,
@@ -111,7 +112,7 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
         } catch (e) {
           if (isClosed) return;
           final newLastError = Map<MasterType, String?>.from(state.lastError)
-            ..[type] = e.toString().replaceAll('Exception: ', '');
+            ..[type] = userFacingMessage(e);
           emit(state.copyWith(lastError: newLastError));
         } finally {
           if (!isClosed) {
@@ -144,7 +145,7 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
     } catch (e) {
       if (isClosed) return;
       emit(state.copyWith(
-        bulkSyncStatus: 'Sync failed: $e',
+        bulkSyncStatus: 'Sync failed: ${userFacingMessage(e)}',
         bulkSyncSuccess: false,
         bulkInFlight: false,
         hasCoreMasters: syncRepository.hasCoreMasters(),

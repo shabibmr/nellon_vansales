@@ -10,6 +10,8 @@ import '../utils/currency.dart';
 import '../utils/quantity_format.dart';
 import '../cubit/line_editor_cubit.dart';
 import 'dialog_scaffolding.dart';
+import '../../features/dashboard/widgets/item_line_editor_totals.dart';
+import '../../features/dashboard/widgets/item_line_uom_selector.dart';
 
 /// Content width at/above which fields and totals use a single horizontal row.
 const double _kWideLayoutMinWidth = 400;
@@ -279,21 +281,12 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   /// applies to the rare item Zoho gave no unit at all.
   Widget _buildUomField() {
     final options = _unitOptions;
-    return DropdownButtonFormField<String>(
-      key: ValueKey('uom_$_selectedUom'),
-      initialValue: options.contains(_selectedUom) ? _selectedUom : null,
-      isExpanded: true,
-      decoration: _denseDecoration(labelText: 'Unit', hintText: 'Unit'),
-      hint: const Text('—'),
-      items: options
-          .map(
-            (u) => DropdownMenuItem<String>(
-              value: u,
-              child: Text(u, overflow: TextOverflow.ellipsis),
-            ),
-          )
-          .toList(),
+    return ItemLineUomSelector(
+      selectedUom: _selectedUom,
+      unitOptions: options,
+      hasUnitOptions: _hasUnitOptions,
       onChanged: _hasUnitOptions ? _onUnitSelected : null,
+      decoration: _denseDecoration(labelText: 'Unit', hintText: 'Unit'),
     );
   }
 
@@ -514,67 +507,12 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     required String currencySymbol,
     required LineEditorState state,
   }) {
-    final cells = [
-      _TotalCell(
-        label: 'Subtotal',
-        value: formatCurrency(state.subtotal, currencySymbol),
-      ),
-      _TotalCell(
-        label: 'Discount',
-        value: formatCurrency(state.discount, currencySymbol),
-        valueColor: AppTheme.errorRose,
-      ),
-      _TotalCell(
-        label: 'VAT (${widget.item.taxPercentage}%)',
-        value: formatCurrency(state.taxAmount, currencySymbol),
-      ),
-      _TotalCell(
-        label: 'Total',
-        value: formatCurrency(state.total, currencySymbol),
-        bold: true,
-        valueColor: AppTheme.primaryIndigo,
-      ),
-    ];
-
-    final grid = wide
-        ? Row(
-            children: [
-              for (var i = 0; i < cells.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                Expanded(child: cells[i]),
-              ],
-            ],
-          )
-        : Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(child: cells[0]),
-                  const SizedBox(width: 8),
-                  Expanded(child: cells[1]),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: cells[2]),
-                  const SizedBox(width: 8),
-                  Expanded(child: cells[3]),
-                ],
-              ),
-            ],
-          );
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: grid,
+    return ItemLineEditorTotals(
+      wide: wide,
+      isDark: isDark,
+      currencySymbol: currencySymbol,
+      taxPercentage: widget.item.taxPercentage,
+      state: state,
     );
   }
 
@@ -582,7 +520,8 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
-    final media = MediaQuery.of(context);
+    final size = MediaQuery.sizeOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
     final displayStock = widget.allowUnlimitedQuantity
         ? widget.item.stock
         : _maxAllowedBaseStock;
@@ -591,10 +530,10 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     const verticalInset = 12.0;
     final maxDialogWidth = math.min(
       560.0,
-      media.size.width - (horizontalInset * 2),
+      size.width - (horizontalInset * 2),
     );
-    final maxDialogHeight = media.size.height -
-        media.viewInsets.vertical -
+    final maxDialogHeight = size.height -
+        viewInsets.vertical -
         (verticalInset * 2);
 
     return Dialog(
@@ -668,49 +607,4 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   }
 }
 
-class _TotalCell extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? valueColor;
-  final bool bold;
 
-  const _TotalCell({
-    required this.label,
-    required this.value,
-    this.valueColor,
-    this.bold = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: isDark
-                ? AppTheme.darkTextSecondary
-                : AppTheme.lightTextSecondary,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: bold ? 13 : 12,
-            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-            color: valueColor,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
-    );
-  }
-}

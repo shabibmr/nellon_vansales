@@ -1,4 +1,6 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/models/sales_return_model.dart';
@@ -10,6 +12,7 @@ import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
+import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'sales_return_editor_event.dart';
 import 'sales_return_editor_state.dart';
 
@@ -31,6 +34,8 @@ class SalesReturnEditorBloc
     on<StartNewReturn>(_onStartNewReturn);
     on<OpenSalesReturn>(_onOpenSalesReturn);
     on<RetryLoadSalesReturn>(_onRetryLoadSalesReturn);
+    on<RefreshSalesReturnFromZoho>(_onRefreshSalesReturnFromZoho);
+    on<UpdateReturnReason>(_onUpdateReturnReason);
     on<UpdateReturnDate>(_onUpdateReturnDate);
     on<UpdateReturnCustomer>(_onUpdateReturnCustomer);
     on<AddOrUpdateReturnLineItem>(_onAddOrUpdateLineItem);
@@ -100,29 +105,147 @@ class SalesReturnEditorBloc
     await _loadEditingReturnFromZoho(returnId, emit);
   }
 
-  Future<void> _loadEditingReturnFromZoho(
-    String returnId,
+  Future<void> _onRefreshSalesReturnFromZoho(
+    RefreshSalesReturnFromZoho event,
     Emitter<SalesReturnEditorState> emit,
   ) async {
+    final returnId = state.editingReturnId ?? state.editingReturn?.id;
+    if (returnId == null ||
+        returnId.isEmpty ||
+        _isLocalReturnId(returnId) ||
+        state.isEditorLoading ||
+        state.isRefreshing ||
+        state.editingReturn == null) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        isRefreshing: true,
+        clearEditorError: true,
+        clearMessages: true,
+      ),
+    );
+    await _loadEditingReturnFromZoho(
+      returnId,
+      emit,
+      isRefresh: true,
+      forceDirty: event.forceDirty,
+    );
+  }
+
+  void _onUpdateReturnReason(
+    UpdateReturnReason event,
+    Emitter<SalesReturnEditorState> emit,
+  ) {
+    emit(state.copyWith(editingReason: event.reason));
+  }
+
+  Future<void> _loadEditingReturnFromZoho(
+    String returnId,
+    Emitter<SalesReturnEditorState> emit, {
+    bool isRefresh = false,
+    bool forceDirty = false,
+  }) async {
+    final previous = isRefresh ? state.editingReturn : null;
+    final wasDirty = isRefresh && (state.isFormDirty || forceDirty);
+
+    SalesReturn? fetched;
     try {
-      final fetched = await _salesRepository.fetchSalesReturnById(returnId);
-      if (fetched == null) {
+      fetched = await _salesRepository.fetchSalesReturnById(
+        returnId,
+        forceRemote: true,
+        allowOfflineFallback: false,
+      );
+    } catch (e) {
+      if (isRefresh) {
         emit(
           state.copyWith(
-            isEditorLoading: false,
-            editorError: 'This sales return was not found in Zoho Books.',
+            isRefreshing: false,
+            errorMessage: humanizeSyncError(e),
           ),
         );
         return;
       }
-      emit(_openedFrom(fetched));
-    } catch (e) {
+      try {
+        fetched = await _salesRepository.fetchSalesReturnById(
+          returnId,
+          forceRemote: false,
+        );
+      } catch (_) {
+        fetched = null;
+      }
+      if (fetched != null) {
+        emit(
+          _openedFrom(fetched).copyWith(
+            infoMessage: 'Showing offline copy',
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           isEditorLoading: false,
+          isRefreshing: false,
           editorError: humanizeSyncError(e),
         ),
       );
+      return;
+    }
+
+    if (fetched == null) {
+      if (!isRefresh) {
+        SalesReturn? local;
+        try {
+          local = await _salesRepository.fetchSalesReturnById(
+            returnId,
+            forceRemote: false,
+          );
+        } catch (_) {
+          local = null;
+        }
+        if (local != null) {
+          emit(
+            _openedFrom(local).copyWith(
+              infoMessage: 'Not found in Zoho — showing local copy',
+            ),
+          );
+          return;
+        }
+      }
+      if (isRefresh && previous != null) {
+        emit(
+          state.copyWith(
+            isRefreshing: false,
+            errorMessage: 'This sales return was not found in Zoho Books.',
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            isEditorLoading: false,
+            isRefreshing: false,
+            editorError: 'This sales return was not found in Zoho Books.',
+          ),
+        );
+      }
+      return;
+    }
+
+    final opened = _openedFrom(fetched);
+    if (isRefresh) {
+      final contentUnchanged = previous != null &&
+          VoucherContentFingerprint.salesReturn(previous) ==
+              VoucherContentFingerprint.salesReturn(fetched);
+      emit(
+        opened.copyWith(
+          isRefreshing: false,
+          infoMessage: (wasDirty || !contentUnchanged)
+              ? 'Updated from Zoho Books'
+              : 'Already up to date',
+        ),
+      );
+    } else {
+      emit(opened);
     }
   }
 
@@ -289,7 +412,7 @@ class SalesReturnEditorBloc
       );
       await _salesRepository.enqueueSyncItem(syncItem);
 
-      _syncRepository.triggerSync();
+      unawaited(_syncRepository.triggerSync());
 
       emit(
         state.copyWith(

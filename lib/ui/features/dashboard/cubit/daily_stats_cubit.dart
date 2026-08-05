@@ -1,29 +1,32 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/hive_database_service.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import 'daily_stats_state.dart';
 
 class DailyStatsCubit extends Cubit<DailyStatsState> {
-  final HiveDatabaseService dbService;
+  final SalesRepository salesRepository;
 
-  DailyStatsCubit({required this.dbService}) : super(const DailyStatsState()) {
+  DailyStatsCubit({required this.salesRepository})
+      : super(const DailyStatsState()) {
     refresh();
   }
 
   bool _isSameDay(DateTime a, DateTime b) {
     final locA = a.toLocal();
     final locB = b.toLocal();
-    return locA.year == locB.year && locA.month == locB.month && locA.day == locB.day;
+    return locA.year == locB.year &&
+        locA.month == locB.month &&
+        locA.day == locB.day;
   }
 
   void refresh() {
     try {
       final now = DateTime.now();
 
-      final allInvoices = dbService.getLocalInvoices();
-      final allReceipts = dbService.getLocalReceipts();
-      final allExpenses = dbService.getLocalExpenses();
-      final allReturns = dbService.getLocalReturns();
-      final allOrders = dbService.getLocalOrders();
+      final allInvoices = salesRepository.getLocalInvoices();
+      final allReceipts = salesRepository.getLocalReceipts();
+      final allExpenses = salesRepository.getLocalExpenses();
+      final allReturns = salesRepository.getLocalReturns();
+      final allOrders = salesRepository.getLocalOrders();
 
       final todaysInvoices =
           allInvoices.where((inv) => _isSameDay(inv.date, now)).toList();
@@ -58,15 +61,17 @@ class DailyStatsCubit extends Cubit<DailyStatsState> {
         return DailySalesPoint(date: day, total: total);
       });
 
-      emit(DailyStatsState(
-        todaySales: todaySales,
-        todayPayments: todayPayments,
-        todayExpenses: todayExpenses,
-        todayReturns: todayReturns,
-        todayOrdersTotal: todayOrdersTotal,
-        completedDeliveries: completedDeliveries,
-        last7DaysSales: last7DaysSales,
-      ));
+      emit(
+        DailyStatsState(
+          todaySales: todaySales,
+          todayPayments: todayPayments,
+          todayExpenses: todayExpenses,
+          todayReturns: todayReturns,
+          todayOrdersTotal: todayOrdersTotal,
+          completedDeliveries: completedDeliveries,
+          last7DaysSales: last7DaysSales,
+        ),
+      );
     } catch (_) {
       // Don't crash dashboard; keep last stats or zeros
     }

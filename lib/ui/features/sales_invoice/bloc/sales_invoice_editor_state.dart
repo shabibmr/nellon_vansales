@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
+import '../../../../domain/utils/voucher_content_fingerprint.dart';
 
 /// Form-only state for creating/viewing a single sales invoice.
 class SalesInvoiceEditorState extends Equatable {
@@ -19,11 +20,17 @@ class SalesInvoiceEditorState extends Equatable {
   final SalesOrder? sourceOrder;
 
   final bool isEditorLoading;
+
+  /// Soft in-place refresh (form stays visible).
+  final bool isRefreshing;
   final bool isSaving;
   final String? editorError;
 
   final String? errorMessage;
   final String? successMessage;
+
+  /// Non-blocking toast (refresh result / offline open); does not pop the route.
+  final String? infoMessage;
 
   const SalesInvoiceEditorState({
     this.editingInvoiceId,
@@ -36,11 +43,38 @@ class SalesInvoiceEditorState extends Equatable {
     this.sourceOrderId,
     this.sourceOrder,
     this.isEditorLoading = false,
+    this.isRefreshing = false,
     this.isSaving = false,
     this.editorError,
     this.errorMessage,
     this.successMessage,
+    this.infoMessage,
   });
+
+  /// True when a loaded, synced voucher can be refreshed from Zoho.
+  bool get canRefreshFromZoho {
+    if (isEditingNew || editorError != null) return false;
+    final inv = editingInvoice;
+    if (inv == null || inv.isPendingSync) return false;
+    final id = editingInvoiceId ?? inv.id;
+    if (id.isEmpty || id.startsWith('temp_inv_')) return false;
+    return true;
+  }
+
+  /// True when form fields differ from the last loaded [editingInvoice] snapshot.
+  bool get isFormDirty {
+    final inv = editingInvoice;
+    if (inv == null) return false;
+    final formFp = VoucherContentFingerprint.salesInvoiceForm(
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      customerId: editingCustomer?.id ?? '',
+      date: editingDate ?? inv.date,
+      notes: editingNotes,
+      items: editingItems,
+    );
+    return formFp != VoucherContentFingerprint.salesInvoice(inv);
+  }
 
   SalesInvoiceEditorState copyWith({
     String? editingInvoiceId,
@@ -53,10 +87,12 @@ class SalesInvoiceEditorState extends Equatable {
     String? sourceOrderId,
     SalesOrder? sourceOrder,
     bool? isEditorLoading,
+    bool? isRefreshing,
     bool? isSaving,
     String? editorError,
     String? errorMessage,
     String? successMessage,
+    String? infoMessage,
     bool clearMessages = false,
     bool clearEditingCustomer = false,
     bool clearEditingInvoiceId = false,
@@ -82,11 +118,13 @@ class SalesInvoiceEditorState extends Equatable {
           clearSource ? null : (sourceOrderId ?? this.sourceOrderId),
       sourceOrder: clearSource ? null : (sourceOrder ?? this.sourceOrder),
       isEditorLoading: isEditorLoading ?? this.isEditorLoading,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
       isSaving: isSaving ?? this.isSaving,
       editorError: clearEditorError ? null : (editorError ?? this.editorError),
       errorMessage: clearMessages ? null : (errorMessage ?? this.errorMessage),
       successMessage:
           clearMessages ? null : (successMessage ?? this.successMessage),
+      infoMessage: clearMessages ? null : (infoMessage ?? this.infoMessage),
     );
   }
 
@@ -102,9 +140,11 @@ class SalesInvoiceEditorState extends Equatable {
     sourceOrderId,
     sourceOrder,
     isEditorLoading,
+    isRefreshing,
     isSaving,
     editorError,
     errorMessage,
     successMessage,
+    infoMessage,
   ];
 }

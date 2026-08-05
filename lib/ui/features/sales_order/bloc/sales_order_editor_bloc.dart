@@ -9,6 +9,7 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
+import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'sales_order_editor_event.dart';
 import 'sales_order_editor_state.dart';
 
@@ -30,6 +31,8 @@ class SalesOrderEditorBloc
     on<StartNewSalesOrder>(_onStartNewSalesOrder);
     on<OpenSalesOrder>(_onOpenSalesOrder);
     on<RetryLoadSalesOrder>(_onRetryLoadSalesOrder);
+    on<RefreshSalesOrderFromZoho>(_onRefreshSalesOrderFromZoho);
+    on<UpdateOrderNotes>(_onUpdateOrderNotes);
     on<UpdateOrderShipmentDate>(_onUpdateShipmentDate);
     on<UpdateOrderCustomer>(_onUpdateOrderCustomer);
     on<AddOrUpdateOrderLine>(_onAddOrUpdateLineItem);
@@ -90,43 +93,160 @@ class SalesOrderEditorBloc
         isSaving: false,
       ),
     );
-    await _loadEditingOrderFromZoho(event.order.id, emit);
+    final remoteId = event.order.zohoOrderId ?? event.order.id;
+    await _loadEditingOrderFromZoho(remoteId, emit);
   }
 
   Future<void> _onRetryLoadSalesOrder(
     RetryLoadSalesOrder event,
     Emitter<SalesOrderEditorState> emit,
   ) async {
-    final orderId = state.editingOrderId;
+    final orderId = _remoteOrderIdForLoad();
     if (orderId == null || orderId.isEmpty) return;
     emit(state.copyWith(isEditorLoading: true, clearEditorError: true));
     await _loadEditingOrderFromZoho(orderId, emit);
   }
 
+  Future<void> _onRefreshSalesOrderFromZoho(
+    RefreshSalesOrderFromZoho event,
+    Emitter<SalesOrderEditorState> emit,
+  ) async {
+    final orderId = _remoteOrderIdForLoad();
+    if (orderId == null ||
+        orderId.isEmpty ||
+        _isLocalOrderId(orderId) ||
+        state.isEditorLoading ||
+        state.isRefreshing ||
+        state.editingOrder == null) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        isRefreshing: true,
+        clearEditorError: true,
+        clearMessages: true,
+      ),
+    );
+    await _loadEditingOrderFromZoho(
+      orderId,
+      emit,
+      isRefresh: true,
+      forceDirty: event.forceDirty,
+    );
+  }
+
+  void _onUpdateOrderNotes(
+    UpdateOrderNotes event,
+    Emitter<SalesOrderEditorState> emit,
+  ) {
+    emit(state.copyWith(editingNotes: event.notes));
+  }
+
+  String? _remoteOrderIdForLoad() {
+    final zohoId = state.editingOrder?.zohoOrderId;
+    if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+    return state.editingOrderId;
+  }
+
+  /// Local-only resolve (no network) for offline open fallback.
+  SalesOrder? _localOrderById(String orderId) {
+    for (final o in _salesRepository.getLocalOrders()) {
+      if (o.id == orderId || o.zohoOrderId == orderId) return o;
+    }
+    return null;
+  }
+
   /// Reads `GET /salesorders/{id}`. On failure keeps a blank form + [editorError].
   Future<void> _loadEditingOrderFromZoho(
     String orderId,
-    Emitter<SalesOrderEditorState> emit,
-  ) async {
+    Emitter<SalesOrderEditorState> emit, {
+    bool isRefresh = false,
+    bool forceDirty = false,
+  }) async {
+    final previous = isRefresh ? state.editingOrder : null;
+    final wasDirty = isRefresh && (state.isFormDirty || forceDirty);
+
+    SalesOrder? fetched;
     try {
-      final fetched = await _salesRepository.fetchRemoteOrder(orderId);
-      if (fetched == null) {
+      fetched = await _salesRepository.fetchRemoteOrder(
+        orderId,
+        allowOfflineFallback: false,
+      );
+    } catch (e) {
+      if (isRefresh) {
         emit(
           state.copyWith(
-            isEditorLoading: false,
-            editorError: 'This sales order was not found in Zoho Books.',
+            isRefreshing: false,
+            errorMessage: humanizeSyncError(e),
           ),
         );
         return;
       }
-      emit(_openedFrom(fetched));
-    } catch (e) {
+      final local = _localOrderById(orderId);
+      if (local != null) {
+        emit(
+          _openedFrom(local).copyWith(
+            infoMessage: 'Showing offline copy',
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           isEditorLoading: false,
+          isRefreshing: false,
           editorError: humanizeSyncError(e),
         ),
       );
+      return;
+    }
+
+    if (fetched == null) {
+      if (!isRefresh) {
+        final local = _localOrderById(orderId);
+        if (local != null) {
+          emit(
+            _openedFrom(local).copyWith(
+              infoMessage: 'Not found in Zoho — showing local copy',
+            ),
+          );
+          return;
+        }
+      }
+      if (isRefresh && previous != null) {
+        emit(
+          state.copyWith(
+            isRefreshing: false,
+            errorMessage: 'This sales order was not found in Zoho Books.',
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            isEditorLoading: false,
+            isRefreshing: false,
+            editorError: 'This sales order was not found in Zoho Books.',
+          ),
+        );
+      }
+      return;
+    }
+
+    final opened = _openedFrom(fetched);
+    if (isRefresh) {
+      final contentUnchanged = previous != null &&
+          VoucherContentFingerprint.salesOrder(previous) ==
+              VoucherContentFingerprint.salesOrder(fetched);
+      emit(
+        opened.copyWith(
+          isRefreshing: false,
+          infoMessage: (wasDirty || !contentUnchanged)
+              ? 'Updated from Zoho Books'
+              : 'Already up to date',
+        ),
+      );
+    } else {
+      emit(opened);
     }
   }
 

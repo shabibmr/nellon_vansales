@@ -3,21 +3,19 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/services/sync_worker.dart';
-import '../../../../data/services/zoho_api_client.dart';
+import '../utils/error_mapper.dart';
 import 'gps_capture_event.dart';
 import 'gps_capture_state.dart';
 
 class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
   final SalesRepository salesRepository;
-  final ZohoApiClient zohoApiClient;
-  final SyncWorker syncWorker;
+  final SyncRepository syncRepository;
 
   GpsCaptureBloc({
     required this.salesRepository,
-    required this.zohoApiClient,
-    required this.syncWorker,
+    required this.syncRepository,
   }) : super(GpsCaptureIdle()) {
     on<GpsCaptureRequested>(_onGpsCaptureRequested);
   }
@@ -52,8 +50,10 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
 
       // 3. Get current location (12 seconds timeout)
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 12),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 12),
+        ),
       );
 
       final lat = pos.latitude;
@@ -69,14 +69,14 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
         // A. Update local cache immediately
         await salesRepository.updateCustomerGps(customer.id, lat, lng);
 
-        // B. Immediate Zoho update (best effort). Falls back to queue if it fails or if temp_ id.
+        // B. Immediate remote update (best effort). Falls back to queue if it fails or if temp_ id.
         bool remoteUpdated = false;
         if (customer.id.isNotEmpty && !customer.id.startsWith('temp_')) {
           try {
-            await zohoApiClient.updateCustomerGps(customer.id, lat, lng);
+            await salesRepository.pushCustomerGpsRemote(customer.id, lat, lng);
             remoteUpdated = true;
           } catch (_) {
-            // Zoho failure is swallowed, fall back to sync queue
+            // Remote failure is swallowed, fall back to sync queue
           }
         }
 
@@ -94,7 +94,7 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
             timestamp: DateTime.now(),
           );
           await salesRepository.enqueueSyncItem(queueItem);
-          syncWorker.syncPendingItems();
+          unawaited(syncRepository.triggerSync());
         }
 
         final enrichedCustomer = customer.copyWith(latitude: lat, longitude: lng);
@@ -108,7 +108,7 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
         emit(GpsCaptureSuccess(latitude: lat, longitude: lng));
       }
     } catch (e) {
-      emit(GpsCaptureFailure(e.toString()));
+      emit(GpsCaptureFailure(userFacingMessage(e)));
     }
   }
 }

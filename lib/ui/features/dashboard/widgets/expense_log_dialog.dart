@@ -1,16 +1,17 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../../domain/models/expense_entry.dart';
-import '../../../../data/models/expense_entry_model.dart';
-import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/sync_worker.dart';
+import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/error_mapper.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/utils/currency.dart';
+import '../cubit/expense_log_cubit.dart';
+import '../cubit/expense_log_state.dart';
 
 /// Modal dialog that logs a route trip expense log locally.
 ///
@@ -30,6 +31,27 @@ class ExpenseLogDialog extends StatefulWidget {
     required this.onExpenseLogged,
   });
 
+  /// Presents the dialog provided with [ExpenseLogCubit].
+  static Future<void> show(
+    BuildContext context, {
+    required bool isDark,
+    required VoidCallback onExpenseLogged,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => BlocProvider<ExpenseLogCubit>(
+        create: (_) => ExpenseLogCubit(
+          salesRepository: sl<SalesRepository>(),
+          syncRepository: sl<SyncRepository>(),
+        ),
+        child: ExpenseLogDialog(
+          isDark: isDark,
+          onExpenseLogged: onExpenseLogged,
+        ),
+      ),
+    );
+  }
+
   @override
   State<ExpenseLogDialog> createState() => _ExpenseLogDialogState();
 }
@@ -41,7 +63,6 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
   String? _localImagePath;
   Uint8List? _imageBytes;
   final ImagePicker _picker = ImagePicker();
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
 
   @override
   void dispose() {
@@ -102,7 +123,10 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                     }
                   } catch (e) {
                     if (!mounted) return;
-                    showErrorSnackBar(context, 'Camera Access Error: $e');
+                    showErrorSnackBar(
+                      context,
+                      'Camera access error: ${userFacingMessage(e)}',
+                    );
                   }
                 },
               ),
@@ -129,7 +153,10 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
                     }
                   } catch (e) {
                     if (!mounted) return;
-                    showErrorSnackBar(context, 'Gallery Access Error: $e');
+                    showErrorSnackBar(
+                      context,
+                      'Gallery access error: ${userFacingMessage(e)}',
+                    );
                   }
                 },
               ),
@@ -144,198 +171,203 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
-    return AlertDialog(
-      title: const Text('Log Van Expense'),
-      content: StatefulBuilder(
-        builder: (context, setDialogState) {
-          return SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Expense Amount ($cs)',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items:
-                      ['Fuel', 'Tolls', 'Maintenance', 'Parking fee']
-                          .map(
-                            (cat) =>
-                                DropdownMenuItem(value: cat, child: Text(cat)),
-                          )
-                          .toList(),
-                  onChanged: (val) {
-                    setDialogState(() {
-                      _category = val ?? 'Fuel';
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description / Remarks',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Visual image attachment card
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: widget.isDark
-                        ? AppTheme.darkBackground
-                        : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: widget.isDark
-                          ? const Color(0xFF334155)
-                          : const Color(0xFFCBD5E1),
-                      width: 1,
-                    ),
-                  ),
-                  child: _localImagePath == null
-                      ? InkWell(
-                          onTap: () => _pickImageSource(setDialogState),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 20,
-                              horizontal: 16,
-                            ),
-                            child: Column(
-                              children: [
-                                const Icon(
-                                  Icons.camera_alt_rounded,
-                                  color: AppTheme.primaryIndigo,
-                                  size: 32,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'ATTACH RECEIPT PHOTO',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: widget.isDark
-                                        ? AppTheme.darkText
-                                        : AppTheme.lightText,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Capture via camera or select from gallery',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: widget.isDark
-                                        ? AppTheme.darkTextSecondary
-                                        : AppTheme.lightTextSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Stack(
-                            alignment: Alignment.topRight,
-                            children: [
-                              _imageBytes != null
-                                  ? Image.memory(
-                                      _imageBytes!,
-                                      height: 140,
-                                      width: double.infinity,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Container(),
-                              Container(
-                                margin: const EdgeInsets.all(8),
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                  onPressed: () {
-                                    setDialogState(() {
-                                      _localImagePath = null;
-                                      _imageBytes = null;
-                                    });
-                                  },
-                                ),
+    return BlocListener<ExpenseLogCubit, ExpenseLogState>(
+      listener: (context, state) {
+        if (state is ExpenseLogSuccess) {
+          Navigator.pop(context);
+          final amount = state.expense.lines.isNotEmpty
+              ? state.expense.lines.first.amount
+              : 0.0;
+          showSuccessSnackBar(
+            context,
+            'Van expense for ${formatCurrency(amount, cs)} queued offline!',
+          );
+          widget.onExpenseLogged();
+        } else if (state is ExpenseLogFailure) {
+          showErrorSnackBar(context, state.message);
+        }
+      },
+      child: BlocBuilder<ExpenseLogCubit, ExpenseLogState>(
+        builder: (context, state) {
+          final isSubmitting = state is ExpenseLogSubmitting;
+
+          return AlertDialog(
+            title: const Text('Log Van Expense'),
+            content: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: _amountController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Expense Amount ($cs)',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _category,
+                        decoration:
+                            const InputDecoration(labelText: 'Category'),
+                        items: ['Fuel', 'Tolls', 'Maintenance', 'Parking fee']
+                            .map(
+                              (cat) => DropdownMenuItem(
+                                value: cat,
+                                child: Text(cat),
                               ),
-                            ],
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            _category = val ?? 'Fuel';
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _descController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description / Remarks',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Visual image attachment card
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: widget.isDark
+                              ? AppTheme.darkBackground
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: widget.isDark
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFCBD5E1),
+                            width: 1,
                           ),
                         ),
-                ),
-              ],
+                        child: _localImagePath == null
+                            ? InkWell(
+                                onTap: () => _pickImageSource(setDialogState),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 20,
+                                    horizontal: 16,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      const Icon(
+                                        Icons.camera_alt_rounded,
+                                        color: AppTheme.primaryIndigo,
+                                        size: 32,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'ATTACH RECEIPT PHOTO',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: widget.isDark
+                                              ? AppTheme.darkText
+                                              : AppTheme.lightText,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Capture via camera or select from gallery',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: widget.isDark
+                                              ? AppTheme.darkTextSecondary
+                                              : AppTheme.lightTextSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Stack(
+                                  alignment: Alignment.topRight,
+                                  children: [
+                                    _imageBytes != null
+                                        ? Image.memory(
+                                            _imageBytes!,
+                                            height: 140,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Container(),
+                                    Container(
+                                      margin: const EdgeInsets.all(8),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.close,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            _localImagePath = null;
+                                            _imageBytes = null;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () {
+                        final amount =
+                            double.tryParse(_amountController.text.trim()) ??
+                                0.0;
+                        final desc = _descController.text.trim();
+                        if (amount <= 0) return;
+
+                        context.read<ExpenseLogCubit>().submitExpense(
+                              amount: amount,
+                              category: _category,
+                              description: desc,
+                              receiptImagePath: _localImagePath,
+                            );
+                      },
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('SUBMIT CLAIM'),
+              ),
+            ],
           );
         },
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('CANCEL'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            final amount =
-                double.tryParse(_amountController.text.trim()) ?? 0.0;
-            final desc = _descController.text.trim();
-            if (amount <= 0) return;
-
-            final tempId = 'temp_exp_${DateTime.now().millisecondsSinceEpoch}';
-            final expense = ExpenseEntry(
-              id: tempId,
-              date: DateTime.now(),
-              lines: [
-                ExpenseLineItem(
-                  category: _category,
-                  amount: amount,
-                  description: desc,
-                ),
-              ],
-              receiptImagePath: _localImagePath,
-              isPendingSync: true,
-            );
-
-            // Save local
-            await _db.saveLocalExpense(expense);
-
-            // Enqueue sync
-            final syncItem = SyncQueueItem(
-              id: tempId,
-              type: 'expense',
-              payload: ExpenseEntryModel.fromDomain(expense).toJson(),
-              status: SyncStatus.pending,
-              timestamp: DateTime.now(),
-            );
-            await _db.enqueueSyncItem(syncItem);
-
-            if (!context.mounted) return;
-
-            sl<SyncWorker>().syncPendingItems();
-
-            Navigator.pop(context);
-            showSuccessSnackBar(
-              context,
-              'Van expense for ${formatCurrency(amount, cs)} queued offline!',
-            );
-            widget.onExpenseLogged();
-          },
-          child: const Text('SUBMIT CLAIM'),
-        ),
-      ],
     );
   }
 }

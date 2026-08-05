@@ -11,6 +11,7 @@ import '../../../../domain/repositories/salesperson_repository.dart';
 import '../../../../domain/utils/phone_normalizer.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/injection.dart';
+import '../../../core/utils/error_mapper.dart';
 
 // --- Events ---
 
@@ -161,6 +162,7 @@ class AuthFailure extends AuthState {
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   final SalespersonRepository _salespersonRepository;
+  final DocumentNumberService _documentNumberService;
 
   static const _msgNotRegistered = 'Not registered — contact admin.';
   static const _msgDisabled = 'Login disabled — contact admin.';
@@ -180,8 +182,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc({
     required AuthRepository authRepository,
     required SalespersonRepository salespersonRepository,
+    DocumentNumberService? documentNumberService,
   })  : _authRepository = authRepository,
         _salespersonRepository = salespersonRepository,
+        _documentNumberService = documentNumberService ?? sl<DocumentNumberService>(),
         super(AuthInitial()) {
     on<AppStarted>(_onAppStarted);
     on<PhoneSubmitted>(_onPhoneSubmitted);
@@ -215,10 +219,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _tearDownSession() async {
     try {
       await _authRepository.signOut();
-    } catch (_) {}
+    } catch (_) {
+      // Safe swallow: ignore sign-out errors during session teardown
+    }
     try {
       await _salespersonRepository.clearCurrentSalesperson();
-    } catch (_) {}
+    } catch (_) {
+      // Safe swallow: ignore storage clear errors during session teardown
+    }
   }
 
   void _resetPendingOtpState() {
@@ -260,7 +268,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _seedNumberingCounters() async {
     try {
-      await sl<DocumentNumberService>().seedCounters();
+      await _documentNumberService.seedCounters();
     } catch (_) {
       // Numbering seed failures never block the session; nextNumber()
       // falls back to persisted counters.
@@ -410,7 +418,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } on fb.FirebaseAuthException catch (e) {
       emit(AuthFailure(_friendlyPhoneAuthMessage(e)));
     } catch (e) {
-      emit(AuthFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(AuthFailure(userFacingMessage(e)));
     }
   }
 

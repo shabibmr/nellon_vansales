@@ -33,6 +33,9 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
   Salesperson? get currentSalesperson => _dbService.getCurrentSalesperson();
 
   @override
+  bool get isOrdersOnlyMode => _dbService.ordersOnlyMode;
+
+  @override
   Future<void> clearCurrentSalesperson() =>
       _dbService.clearCurrentSalesperson();
 

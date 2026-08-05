@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/utils/date_filter.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'report_event.dart';
 import 'report_state.dart';
 
@@ -52,7 +53,7 @@ class ReportBloc<T> extends Bloc<ReportEvent, ReportState<T>> {
       emit(state.copyWith(
         isLoading: false,
         isLiveData: false,
-        error: () => e.toString(),
+        error: () => userFacingMessage(e),
       ));
     } finally {
       _isFetching = false;

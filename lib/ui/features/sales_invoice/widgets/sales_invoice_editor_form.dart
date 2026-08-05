@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/repositories/sales_repository.dart';
@@ -53,8 +51,7 @@ class SalesInvoiceEditorForm extends StatelessWidget {
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final db = sl<HiveDatabaseService>();
-    final allCustomers = db.getCustomers()
+    final allCustomers = context.read<SalesRepository>().getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,
@@ -78,9 +75,9 @@ class SalesInvoiceEditorForm extends StatelessWidget {
     BuildContext context,
     List<InvoiceLineItem> editingItems,
   ) async {
-    final db = sl<HiveDatabaseService>();
     final excludedIds = editingItems.map((line) => line.item.id).toList();
-    final items = db
+    final items = context
+        .read<SalesRepository>()
         .getItems()
         .where((item) => !excludedIds.contains(item.id))
         .toList();
@@ -124,7 +121,8 @@ class SalesInvoiceEditorForm extends StatelessWidget {
 
   Future<Item> _resolveUnits(BuildContext context, Item item) async {
     if (item.unitConversions.isNotEmpty) return item;
-    final result = await sl<SalesRepository>().resolveItemUnitConversions(item);
+    final result =
+        await context.read<SalesRepository>().resolveItemUnitConversions(item);
     if (result.offlineFallback && context.mounted) {
       showErrorSnackBar(
         context,
@@ -246,6 +244,11 @@ class SalesInvoiceEditorForm extends StatelessWidget {
                   SalesInvoiceNotesField(
                     controller: notesController,
                     readOnly: readOnly,
+                    onChanged: readOnly
+                        ? null
+                        : (value) => context
+                            .read<SalesInvoiceEditorBloc>()
+                            .add(UpdateInvoiceNotes(value)),
                   ),
                   const SizedBox(height: 30),
                 ],

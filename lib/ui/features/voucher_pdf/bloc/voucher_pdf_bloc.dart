@@ -1,22 +1,23 @@
 import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdf/pdf.dart';
-import '../../../../data/services/hive_database_service.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'voucher_pdf_event.dart';
 import 'voucher_pdf_state.dart';
 
 /// Central BLoC orchestrating document serialization and platform action integrations.
 class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
   final VoucherPdfRepository pdfService;
-  final HiveDatabaseService dbService;
+  final SalesRepository salesRepository;
 
-  VoucherPdfBloc({required this.pdfService, required this.dbService})
+  VoucherPdfBloc({required this.pdfService, required this.salesRepository})
     : super(VoucherPdfInitial()) {
     on<GenerateVoucherPdfPreviewRequested>(_onPreviewRequested);
     on<PrintVoucherPdfRequested>(_onPrintRequested);
@@ -42,7 +43,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
   Customer? _getCustomer(VoucherType type, dynamic voucher) {
     final customerId = _customerIdFor(type, voucher);
     if (customerId == null) return null;
-    return dbService.getCustomerById(customerId);
+    return salesRepository.getCustomerById(customerId);
   }
 
   /// Builds PDF bytes asynchronously.
@@ -51,7 +52,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     dynamic voucher, {
     PdfPageFormat pageFormat = PdfPageFormat.a4,
   }) async {
-    final org = dbService.getOrganization();
+    final org = salesRepository.getOrganization();
     if (org == null) {
       throw Exception('Organization data not loaded — please sync first');
     }
@@ -80,7 +81,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
       emit(VoucherPdfReady(pdfBytes: bytes, filename: filename));
     } catch (e) {
       emit(
-        VoucherPdfFailure('Failed to generate PDF preview: ${e.toString()}'),
+        VoucherPdfFailure('Failed to generate PDF preview: ${userFacingMessage(e)}'),
       );
     }
   }
@@ -107,7 +108,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     } catch (e) {
       emit(
         VoucherPdfFailure(
-          'Failed to compile or print document: ${e.toString()}',
+          'Failed to compile or print document: ${userFacingMessage(e)}',
         ),
       );
     }
@@ -132,7 +133,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
       }
       emit(const VoucherPdfActionSuccess('Document shared successfully'));
     } catch (e) {
-      emit(VoucherPdfFailure('Sharing failed: ${e.toString()}'));
+      emit(VoucherPdfFailure('Sharing failed: ${userFacingMessage(e)}'));
     }
   }
 
@@ -159,7 +160,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
       }
       emit(const VoucherPdfActionSuccess('Email composition active'));
     } catch (e) {
-      emit(VoucherPdfFailure('Email draft failed: ${e.toString()}'));
+      emit(VoucherPdfFailure('Email draft failed: ${userFacingMessage(e)}'));
     }
   }
 
@@ -185,7 +186,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
       }
       emit(const VoucherPdfActionSuccess('WhatsApp sharing active'));
     } catch (e) {
-      emit(VoucherPdfFailure('WhatsApp share failed: ${e.toString()}'));
+      emit(VoucherPdfFailure('WhatsApp share failed: ${userFacingMessage(e)}'));
     }
   }
 

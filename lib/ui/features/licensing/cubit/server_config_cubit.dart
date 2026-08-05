@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/server_config.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'server_config_state.dart';
 
 /// Cubit managing app-wide server integration settings.
@@ -22,6 +23,9 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
            isMockModeEnabled: _bootstrapMockMode(dbService, apiClient),
          ),
        );
+
+  /// Whether active client credentials are placeholders.
+  bool get usesPlaceholderCredentials => _apiClient.usesPlaceholderCredentials;
 
   static bool _bootstrapMockMode(
     HiveDatabaseService dbService,
@@ -80,7 +84,7 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
     } catch (e) {
       emit(
         ServerConfigError(
-          'Failed to inject server configuration credentials: $e',
+          'Failed to inject server configuration credentials: ${userFacingMessage(e)}',
           isMockModeEnabled: _apiClient.isMockModeEnabled,
         ),
       );

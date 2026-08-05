@@ -17,10 +17,10 @@ class ExpenseAccountModel extends ExpenseAccount {
   /// Mappes Zoho ledger fields (`account_id`, `account_name`, `account_code`) with fallback defaults.
   factory ExpenseAccountModel.fromJson(Map<String, dynamic> json) {
     return ExpenseAccountModel(
-      id: json['account_id'] ?? json['id'] ?? '',
-      name: json['account_name'] ?? json['name'] ?? '',
-      accountCode: json['account_code'] ?? json['accountCode'] ?? '',
-      category: json['category'] ?? json['account_name'] ?? '',
+      id: ((json['account_id'] ?? json['id']) as String?) ?? '',
+      name: ((json['account_name'] ?? json['name']) as String?) ?? '',
+      accountCode: ((json['account_code'] ?? json['accountCode']) as String?) ?? '',
+      category: ((json['category'] ?? json['account_name']) as String?) ?? '',
     );
   }
 

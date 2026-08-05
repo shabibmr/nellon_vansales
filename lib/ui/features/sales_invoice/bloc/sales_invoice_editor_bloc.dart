@@ -1,4 +1,6 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/models/sales_invoice_model.dart';
@@ -11,6 +13,8 @@ import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/stock_rules.dart';
+import '../../../../domain/utils/voucher_content_fingerprint.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'sales_invoice_editor_event.dart';
 import 'sales_invoice_editor_state.dart';
 
@@ -33,6 +37,8 @@ class SalesInvoiceEditorBloc
     on<OpenSalesInvoice>(_onOpenSalesInvoice);
     on<StartInvoiceFromOrder>(_onStartInvoiceFromOrder);
     on<RetryLoadSalesInvoice>(_onRetryLoadSalesInvoice);
+    on<RefreshSalesInvoiceFromZoho>(_onRefreshSalesInvoiceFromZoho);
+    on<UpdateInvoiceNotes>(_onUpdateInvoiceNotes);
     on<UpdateInvoiceDate>(_onUpdateInvoiceDate);
     on<UpdateInvoiceCustomer>(_onUpdateInvoiceCustomer);
     on<AddOrUpdateLineItem>(_onAddOrUpdateLineItem);
@@ -103,29 +109,148 @@ class SalesInvoiceEditorBloc
     await _loadEditingInvoiceFromZoho(invoiceId, emit);
   }
 
-  Future<void> _loadEditingInvoiceFromZoho(
-    String invoiceId,
+  Future<void> _onRefreshSalesInvoiceFromZoho(
+    RefreshSalesInvoiceFromZoho event,
     Emitter<SalesInvoiceEditorState> emit,
   ) async {
+    final invoiceId = state.editingInvoiceId ?? state.editingInvoice?.id;
+    if (invoiceId == null ||
+        invoiceId.isEmpty ||
+        _isLocalInvoiceId(invoiceId) ||
+        state.isEditorLoading ||
+        state.isRefreshing ||
+        state.editingInvoice == null) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        isRefreshing: true,
+        clearEditorError: true,
+        clearMessages: true,
+      ),
+    );
+    await _loadEditingInvoiceFromZoho(
+      invoiceId,
+      emit,
+      isRefresh: true,
+      forceDirty: event.forceDirty,
+    );
+  }
+
+  void _onUpdateInvoiceNotes(
+    UpdateInvoiceNotes event,
+    Emitter<SalesInvoiceEditorState> emit,
+  ) {
+    emit(state.copyWith(editingNotes: event.notes));
+  }
+
+  Future<void> _loadEditingInvoiceFromZoho(
+    String invoiceId,
+    Emitter<SalesInvoiceEditorState> emit, {
+    bool isRefresh = false,
+    bool forceDirty = false,
+  }) async {
+    final previous = isRefresh ? state.editingInvoice : null;
+    final wasDirty = isRefresh && (state.isFormDirty || forceDirty);
+
+    // Prefer remote; on open/retry fall back to local with a soft notice.
+    SalesInvoice? fetched;
     try {
-      final fetched = await _salesRepository.fetchInvoiceById(invoiceId);
-      if (fetched == null) {
+      fetched = await _salesRepository.fetchInvoiceById(
+        invoiceId,
+        forceRemote: true,
+        allowOfflineFallback: false,
+      );
+    } catch (e) {
+      if (isRefresh) {
         emit(
           state.copyWith(
-            isEditorLoading: false,
-            editorError: 'This sales invoice was not found in Zoho Books.',
+            isRefreshing: false,
+            errorMessage: humanizeSyncError(e),
           ),
         );
         return;
       }
-      emit(_openedFrom(fetched));
-    } catch (e) {
+      try {
+        fetched = await _salesRepository.fetchInvoiceById(
+          invoiceId,
+          forceRemote: false,
+        );
+      } catch (_) {
+        fetched = null;
+      }
+      if (fetched != null) {
+        emit(
+          _openedFrom(fetched).copyWith(
+            infoMessage: 'Showing offline copy',
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           isEditorLoading: false,
+          isRefreshing: false,
           editorError: humanizeSyncError(e),
         ),
       );
+      return;
+    }
+
+    if (fetched == null) {
+      if (!isRefresh) {
+        SalesInvoice? local;
+        try {
+          local = await _salesRepository.fetchInvoiceById(
+            invoiceId,
+            forceRemote: false,
+          );
+        } catch (_) {
+          local = null;
+        }
+        if (local != null) {
+          emit(
+            _openedFrom(local).copyWith(
+              infoMessage: 'Not found in Zoho — showing local copy',
+            ),
+          );
+          return;
+        }
+      }
+      if (isRefresh && previous != null) {
+        emit(
+          state.copyWith(
+            isRefreshing: false,
+            errorMessage: 'This sales invoice was not found in Zoho Books.',
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            isEditorLoading: false,
+            isRefreshing: false,
+            editorError: 'This sales invoice was not found in Zoho Books.',
+          ),
+        );
+      }
+      return;
+    }
+
+    final opened = _openedFrom(fetched);
+    if (isRefresh) {
+      final contentUnchanged = previous != null &&
+          VoucherContentFingerprint.salesInvoice(previous) ==
+              VoucherContentFingerprint.salesInvoice(fetched);
+      emit(
+        opened.copyWith(
+          isRefreshing: false,
+          infoMessage: (wasDirty || !contentUnchanged)
+              ? 'Updated from Zoho Books'
+              : 'Already up to date',
+        ),
+      );
+    } else {
+      emit(opened);
     }
   }
 
@@ -251,7 +376,7 @@ class SalesInvoiceEditorBloc
         requested: requestedBaseQty,
       );
     } on InsufficientStockException catch (e) {
-      emit(state.copyWith(errorMessage: e.toString()));
+      emit(state.copyWith(errorMessage: userFacingMessage(e)));
       return;
     }
 
@@ -384,7 +509,7 @@ class SalesInvoiceEditorBloc
         await _salesRepository.enqueueSyncItem(syncItem);
       }
 
-      _syncRepository.triggerSync();
+      unawaited(_syncRepository.triggerSync());
 
       emit(
         state.copyWith(

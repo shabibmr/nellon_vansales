@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../../../domain/models/cash_closing.dart';
-import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/sync_worker.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/utils/snackbars.dart';
+import '../cubit/cash_closing_cubit.dart';
+import '../cubit/cash_closing_state.dart';
 
-/// Modal dialog for filing the daily end-of-trip [CashClosing] reconciliation.
+/// Modal dialog for filing the daily end-of-trip cash closing reconciliation.
 ///
 /// Prompts the agent to count and input their physical cash in hand and compiles a detailed
 /// breakdown of opening cash, sales, payments, and expenses to flag surpluses or shortages.
@@ -33,6 +35,31 @@ class CashClosingDialog extends StatefulWidget {
     required this.onSessionReconciled,
   });
 
+  /// Presents the dialog provided with [CashClosingCubit].
+  static Future<void> show(
+    BuildContext context, {
+    required double todaySales,
+    required double todayPayments,
+    required double todayExpenses,
+    required VoidCallback onSessionReconciled,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => BlocProvider<CashClosingCubit>(
+        create: (_) => CashClosingCubit(
+          salesRepository: sl<SalesRepository>(),
+          syncRepository: sl<SyncRepository>(),
+        ),
+        child: CashClosingDialog(
+          todaySales: todaySales,
+          todayPayments: todayPayments,
+          todayExpenses: todayExpenses,
+          onSessionReconciled: onSessionReconciled,
+        ),
+      ),
+    );
+  }
+
   @override
   State<CashClosingDialog> createState() => _CashClosingDialogState();
 }
@@ -40,7 +67,6 @@ class CashClosingDialog extends StatefulWidget {
 class _CashClosingDialogState extends State<CashClosingDialog> {
   final _physicalCashController = TextEditingController();
   final _notesController = TextEditingController();
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
 
   @override
   void dispose() {
@@ -56,127 +82,130 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
     final expectedClosing =
         openingBalance + widget.todayPayments - widget.todayExpenses;
 
-    return AlertDialog(
-      title: const Text('Daily Cash Closing'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'End of Session Reconciliation. Summarizes today\'s transactions.',
-              style: TextStyle(fontSize: 12),
-            ),
-            const Divider(height: 24, color: Color(0xFF334155)),
-            Text('Morning Cash Float: $cs${openingBalance.toStringAsFixed(2)}'),
-            Text(
-              'Total Invoiced Sales: $cs${widget.todaySales.toStringAsFixed(2)}',
-            ),
-            Text(
-              'Total Cash Collected: $cs${widget.todayPayments.toStringAsFixed(2)}',
-            ),
-            Text(
-              'Total Claimed Expenses: $cs${widget.todayExpenses.toStringAsFixed(2)}',
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Expected Cash In Hand: $cs${expectedClosing.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppTheme.primaryIndigo,
+    return BlocListener<CashClosingCubit, CashClosingState>(
+      listener: (context, state) {
+        if (state is CashClosingSuccess) {
+          Navigator.pop(context);
+
+          final closing = state.closing;
+          final difference = closing.reportedDifference;
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Session Reconciled'),
+              content: Text(
+                difference == 0
+                    ? 'Session closed successfully with zero cash discrepancy!'
+                    : 'Session closed. Cash discrepancy detected: ${difference > 0 ? "+" : ""}$cs${difference.toStringAsFixed(2)}. Discrepancy is logged for Zoho reconciliation.',
               ),
-            ),
-            const Divider(height: 24, color: Color(0xFF334155)),
-            TextFormField(
-              controller: _physicalCashController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Physical Cash Counted ($cs)',
-                hintText: 'Enter physical cash in hand',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _notesController,
-              decoration: const InputDecoration(
-                labelText: 'Remarks / Discrepancy Notes',
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('CANCEL'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            final counted =
-                double.tryParse(_physicalCashController.text.trim()) ?? 0.0;
-            final notes = _notesController.text.trim();
-
-            final closing = CashClosing(
-              id: 'closing_${DateTime.now().millisecondsSinceEpoch}',
-              date: DateTime.now(),
-              openingBalance: openingBalance,
-              totalSalesInvoices: widget.todaySales,
-              totalReceiptsCollected: widget.todayPayments,
-              totalExpenses: widget.todayExpenses,
-              closingBalance: counted,
-              notes: notes,
-              isPendingSync: true,
-            );
-
-            await _db.saveLocalCashClosing(closing);
-
-            // Generate sync packet
-            final syncItem = SyncQueueItem(
-              id: closing.id,
-              type:
-                  'expense', // Map closing as custom expense sheet or sync separately
-              payload: {
-                'amount': closing.reportedDifference.abs(),
-                'category': 'Miscellaneous',
-                'description':
-                    'Daily Cash Closing: counted: $counted, expected: $expectedClosing. Difference: ${closing.reportedDifference.toStringAsFixed(2)}. Notes: $notes',
-                'date': closing.date.toIso8601String().split('T')[0],
-                'isPendingSync': true,
-              },
-              status: SyncStatus.pending,
-              timestamp: DateTime.now(),
-            );
-            await _db.enqueueSyncItem(syncItem);
-
-            if (!context.mounted) return;
-
-            sl<SyncWorker>().syncPendingItems();
-
-            Navigator.pop(context);
-
-            final difference = closing.reportedDifference;
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Session Reconciled'),
-                content: Text(
-                  difference == 0
-                      ? 'Session closed successfully with zero cash discrepancy!'
-                      : 'Session closed. Cash discrepancy detected: ${difference > 0 ? "+" : ""}$cs${difference.toStringAsFixed(2)}. Discrepancy is logged for Zoho reconciliation.',
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
                 ),
-                actions: [
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('OK'),
+              ],
+            ),
+          );
+          widget.onSessionReconciled();
+        } else if (state is CashClosingFailure) {
+          showErrorSnackBar(context, state.message);
+        }
+      },
+      child: BlocBuilder<CashClosingCubit, CashClosingState>(
+        builder: (context, state) {
+          final isSubmitting = state is CashClosingSubmitting;
+
+          return AlertDialog(
+            title: const Text('Daily Cash Closing'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'End of Session Reconciliation. Summarizes today\'s transactions.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  const Divider(height: 24, color: Color(0xFF334155)),
+                  Text(
+                    'Morning Cash Float: $cs${openingBalance.toStringAsFixed(2)}',
+                  ),
+                  Text(
+                    'Total Invoiced Sales: $cs${widget.todaySales.toStringAsFixed(2)}',
+                  ),
+                  Text(
+                    'Total Cash Collected: $cs${widget.todayPayments.toStringAsFixed(2)}',
+                  ),
+                  Text(
+                    'Total Claimed Expenses: $cs${widget.todayExpenses.toStringAsFixed(2)}',
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Expected Cash In Hand: $cs${expectedClosing.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryIndigo,
+                    ),
+                  ),
+                  const Divider(height: 24, color: Color(0xFF334155)),
+                  TextFormField(
+                    controller: _physicalCashController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Physical Cash Counted ($cs)',
+                      hintText: 'Enter physical cash in hand',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Remarks / Discrepancy Notes',
+                    ),
                   ),
                 ],
               ),
-            );
-            widget.onSessionReconciled();
-          },
-          child: const Text('SUBMIT RECONCILIATION'),
-        ),
-      ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () {
+                        final counted =
+                            double.tryParse(
+                                  _physicalCashController.text.trim(),
+                                ) ??
+                                0.0;
+                        final notes = _notesController.text.trim();
+
+                        context.read<CashClosingCubit>().submitCashClosing(
+                              todaySales: widget.todaySales,
+                              todayPayments: widget.todayPayments,
+                              todayExpenses: widget.todayExpenses,
+                              physicalCashCounted: counted,
+                              notes: notes,
+                              openingBalance: openingBalance,
+                            );
+                      },
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('SUBMIT RECONCILIATION'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

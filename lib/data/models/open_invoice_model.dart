@@ -33,14 +33,14 @@ class OpenInvoiceModel extends OpenInvoice {
     }
 
     return OpenInvoiceModel(
-      invoiceId: json['invoice_id'] ?? json['invoiceId'] ?? '',
-      invoiceNumber: json['invoice_number'] ?? json['invoiceNumber'] ?? '',
-      customerId: json['customer_id'] ?? json['customerId'] ?? '',
+      invoiceId: ((json['invoice_id'] ?? json['invoiceId']) as String?) ?? '',
+      invoiceNumber: ((json['invoice_number'] ?? json['invoiceNumber']) as String?) ?? '',
+      customerId: ((json['customer_id'] ?? json['customerId']) as String?) ?? '',
       date: parseDate(json['date']),
       dueDate: parseDate(json['due_date'] ?? json['dueDate']),
       total: parseMoney(json['total']),
       balance: parseMoney(json['balance']),
-      status: json['status'] ?? 'unpaid',
+      status: (json['status'] as String?) ?? 'unpaid',
     );
   }
 

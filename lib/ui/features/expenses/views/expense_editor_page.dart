@@ -6,7 +6,9 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
+import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/voucher_refresh_action.dart';
 import '../bloc/expense_editor_bloc.dart';
 import '../bloc/expense_editor_event.dart';
 import '../bloc/expense_editor_state.dart';
@@ -77,12 +79,27 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
             );
           },
         ),
+        actions: [
+          BlocBuilder<ExpenseEditorBloc, ExpenseEditorState>(
+            buildWhen: (p, c) =>
+                p.canRefreshFromZoho != c.canRefreshFromZoho ||
+                p.isRefreshing != c.isRefreshing,
+            builder: (context, state) {
+              return VoucherRefreshAction(
+                visible: state.canRefreshFromZoho,
+                isLoading: state.isRefreshing,
+                onPressed: () => _onRefreshPressed(context),
+              );
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: BlocConsumer<ExpenseEditorBloc, ExpenseEditorState>(
           listenWhen: (previous, current) =>
               previous.successMessage != current.successMessage ||
-              previous.errorMessage != current.errorMessage,
+              previous.errorMessage != current.errorMessage ||
+              previous.infoMessage != current.infoMessage,
           listener: (context, state) {
             if (state.successMessage != null) {
               showSuccessSnackBar(context, state.successMessage!);
@@ -95,10 +112,15 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
               context
                   .read<ExpenseEditorBloc>()
                   .add(const ClearExpenseEditorMessages());
+            } else if (state.infoMessage != null) {
+              showInfoSnackBar(context, state.infoMessage!);
+              context
+                  .read<ExpenseEditorBloc>()
+                  .add(const ClearExpenseEditorMessages());
             }
           },
           builder: (context, state) {
-            final readOnly = _isViewMode;
+            final readOnly = _isViewMode || state.isRefreshing;
 
             if (state.isEditorLoading) {
               return const Center(
@@ -130,5 +152,14 @@ class _ExpenseEditorPageState extends State<ExpenseEditorPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _onRefreshPressed(BuildContext context) async {
+    final bloc = context.read<ExpenseEditorBloc>();
+    if (bloc.state.isFormDirty) {
+      final ok = await confirmDiscardEditsForRefresh(context);
+      if (!ok || !context.mounted) return;
+    }
+    bloc.add(const RefreshExpenseEntryFromZoho());
   }
 }

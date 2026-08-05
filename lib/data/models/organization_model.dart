@@ -19,15 +19,14 @@ class OrganizationModel extends Organization {
   /// Mappes keys (`organization_id`, `currency_code`, `currency_symbol`, `fiscal_year_start_month`) correctly.
   factory OrganizationModel.fromJson(Map<String, dynamic> json) {
     return OrganizationModel(
-      id: json['organization_id'] ?? json['id'] ?? '',
-      name: json['name'] ?? '',
-      currencyCode: json['currency_code'] ?? json['currencyCode'] ?? '',
-      currencySymbol: json['currency_symbol'] ?? json['currencySymbol'] ?? '',
-      fiscalYearStartMonth:
-          json['fiscal_year_start_month'] ??
-          json['fiscalYearStartMonth'] ??
+      id: ((json['organization_id'] ?? json['id']) as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      currencyCode: ((json['currency_code'] ?? json['currencyCode']) as String?) ?? '',
+      currencySymbol: ((json['currency_symbol'] ?? json['currencySymbol']) as String?) ?? '',
+      fiscalYearStartMonth: ((json['fiscal_year_start_month'] ??
+              json['fiscalYearStartMonth']) as String?) ??
           'january',
-      timeZone: json['time_zone'] ?? json['timeZone'] ?? '',
+      timeZone: ((json['time_zone'] ?? json['timeZone']) as String?) ?? '',
     );
   }
 

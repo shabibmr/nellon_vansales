@@ -119,6 +119,7 @@ class LineItemList extends StatelessWidget {
                   if (onRemove != null) ...[
                     const SizedBox(width: 8),
                     IconButton(
+                      tooltip: 'Remove line item',
                       icon: const Icon(
                         Icons.delete_outline,
                         color: AppTheme.errorRose,
@@ -126,7 +127,10 @@ class LineItemList extends StatelessWidget {
                       ),
                       onPressed: () => onRemove!(index),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
                     ),
                   ] else if (!editable)
                     const SizedBox(width: 4),

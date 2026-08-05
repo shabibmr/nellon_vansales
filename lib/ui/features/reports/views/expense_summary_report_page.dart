@@ -1,97 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/models/expense_entry_model.dart';
 import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/expense_entry.dart';
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/date_filter.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/expense_summary_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
-import '../bloc/report_state.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
 
-/// Aggregated row for a single expense category across the filtered period.
-class _CategoryRow {
-  final String category;
-  int entryCount = 0;
-  double totalAmount = 0.0;
-
-  _CategoryRow({required this.category});
-}
-
-enum _SortField { category, count, amount }
-
 /// Full-screen expense summary, grouped by ledger category.
 ///
-/// Fetches every expense (with itemized lines) live from Zoho Books and
-/// aggregates them by category, showing entry count and total amount per
-/// category. Supports date-range filtering and column sorting. The local
-/// expense cache is painted instantly on open while the live fetch is in
-/// flight.
+/// Fetches every expense (with itemized lines) and aggregates them by category,
+/// showing entry count and total amount per category. Supports date-range
+/// filtering and column sorting.
 class ExpenseSummaryReportPage extends StatelessWidget {
   const ExpenseSummaryReportPage({super.key});
-
-  static Map<String, dynamic> _normalizeExpenseJson(Map<String, dynamic> json) {
-    final lineItems = (json['line_items'] as List?) ?? const [];
-    return {
-      ...json,
-      'lines': lineItems
-          .whereType<Map>()
-          .map(
-            (l) => {
-              'category': l['account_name'] ?? 'Miscellaneous',
-              'amount': l['amount'] ?? 0.0,
-              'description': l['description'] ?? '',
-            },
-          )
-          .toList(),
-    };
-  }
-
-  List<_CategoryRow> _buildReport(ReportState<ExpenseEntry> state) {
-    final map = <String, _CategoryRow>{};
-
-    final filtered = filterByDateRange(
-      state.rows,
-      (entry) => entry.date,
-      startDate: state.startDate,
-      endDate: state.endDate,
-    );
-    for (final entry in filtered) {
-      for (final line in entry.lines) {
-        final row = map.putIfAbsent(
-          line.category,
-          () => _CategoryRow(category: line.category),
-        );
-        row.entryCount++;
-        row.totalAmount += line.amount;
-      }
-    }
-
-    final rows = map.values.toList();
-    final sortField = state.sortField as _SortField? ?? _SortField.amount;
-
-    rows.sort((a, b) {
-      int cmp;
-      switch (sortField) {
-        case _SortField.category:
-          cmp = a.category.compareTo(b.category);
-          break;
-        case _SortField.count:
-          cmp = a.entryCount.compareTo(b.entryCount);
-          break;
-        case _SortField.amount:
-          cmp = a.totalAmount.compareTo(b.totalAmount);
-          break;
-      }
-      return state.sortAscending ? cmp : -cmp;
-    });
-    return rows;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,31 +26,31 @@ class ExpenseSummaryReportPage extends StatelessWidget {
 
     return ReportBlocHost<ExpenseEntry>(
       create: (_) => ReportBloc<ExpenseEntry>(
-        fetchRemote: () async {
-          final raw = await sl<ZohoApiClient>().fetchExpenses();
-          return raw
-              .map(
-                (json) =>
-                    ExpenseEntryModel.fromJson(_normalizeExpenseJson(json)),
-              )
-              .toList();
-        },
-        initialSortField: _SortField.amount,
+        fetchRemote: () => sl<ReportRepository>().fetchExpenses(),
+        initialSortField: ExpenseSummarySortField.amount,
         initialSortAscending: false,
       ),
       builder: (context, state) {
-        final rows = _buildReport(state);
+        final sortField = state.sortField as ExpenseSummarySortField? ??
+            ExpenseSummarySortField.amount;
+        final rows = ExpenseSummaryAggregator.aggregate(
+          expenses: state.rows,
+          startDate: state.startDate,
+          endDate: state.endDate,
+          sortField: sortField,
+          sortAscending: state.sortAscending,
+        );
         final totalCount = rows.fold(0, (sum, r) => sum + r.entryCount);
         final totalAmount = rows.fold(0.0, (sum, r) => sum + r.totalAmount);
 
-        return SortableReportScaffold<_CategoryRow, _SortField>(
+        return SortableReportScaffold<ExpenseSummaryCategoryRow, ExpenseSummarySortField>(
           title: 'Expense Summary',
           isLoading: state.isLoading,
           onRefresh: () => context.read<ReportBloc<ExpenseEntry>>().add(
             const RefreshReport(),
           ),
           rows: rows,
-          sortField: state.sortField as _SortField? ?? _SortField.amount,
+          sortField: sortField,
           sortAscending: state.sortAscending,
           onSort: (field) =>
               context.read<ReportBloc<ExpenseEntry>>().add(SetSort(field)),
@@ -158,11 +85,19 @@ class ExpenseSummaryReportPage extends StatelessWidget {
             ReportColumn(
               label: 'CATEGORY',
               flex: 5,
-              field: _SortField.category,
+              field: ExpenseSummarySortField.category,
               alignEnd: false,
             ),
-            ReportColumn(label: 'ENTRIES', flex: 2, field: _SortField.count),
-            ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
+            ReportColumn(
+              label: 'ENTRIES',
+              flex: 2,
+              field: ExpenseSummarySortField.count,
+            ),
+            ReportColumn(
+              label: 'AMOUNT',
+              flex: 3,
+              field: ExpenseSummarySortField.amount,
+            ),
           ],
           exportHeaders: const ['Category', 'Entries', 'Amount'],
           exportRow: (row) => [
@@ -242,3 +177,4 @@ class ExpenseSummaryReportPage extends StatelessWidget {
     );
   }
 }
+

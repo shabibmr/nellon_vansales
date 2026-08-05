@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/sales_return.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
@@ -50,8 +49,7 @@ class SalesReturnEditorForm extends StatelessWidget {
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final db = sl<HiveDatabaseService>();
-    final allCustomers = db.getCustomers()
+    final allCustomers = context.read<SalesRepository>().getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,
@@ -185,6 +183,11 @@ class SalesReturnEditorForm extends StatelessWidget {
                   SalesReturnNotesField(
                     controller: reasonController,
                     readOnly: readOnly,
+                    onChanged: readOnly
+                        ? null
+                        : (value) => context
+                            .read<SalesReturnEditorBloc>()
+                            .add(UpdateReturnReason(value)),
                   ),
                   const SizedBox(height: 30),
                 ],

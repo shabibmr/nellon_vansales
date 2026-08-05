@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../data/services/report_export_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/error_mapper.dart';
 import 'date_range_filter_card.dart';
 
 /// A single tap-to-sort column header for [SortableReportScaffold].
@@ -124,7 +125,7 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
+        SnackBar(content: Text('Export failed: ${userFacingMessage(e)}')),
       );
     }
   }

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
@@ -37,7 +35,6 @@ class ReceiptEditorForm extends StatefulWidget {
 }
 
 class _ReceiptEditorFormState extends State<ReceiptEditorForm> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
   late TextEditingController _amountController;
   late TextEditingController _referenceController;
 
@@ -76,7 +73,7 @@ class _ReceiptEditorFormState extends State<ReceiptEditorForm> {
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final allCustomers = _db.getCustomers()
+    final allCustomers = context.read<SalesRepository>().getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,

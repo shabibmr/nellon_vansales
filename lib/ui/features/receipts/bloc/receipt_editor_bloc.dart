@@ -1,4 +1,6 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/models/receipt_voucher_model.dart';
@@ -10,6 +12,7 @@ import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
+import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'receipt_editor_event.dart';
 import 'receipt_editor_state.dart';
 
@@ -31,6 +34,7 @@ class ReceiptEditorBloc
     on<StartNewReceipt>(_onStartNewReceipt);
     on<OpenReceiptVoucher>(_onOpenReceiptVoucher);
     on<RetryLoadReceiptVoucher>(_onRetryLoadReceiptVoucher);
+    on<RefreshReceiptVoucherFromZoho>(_onRefreshReceiptVoucherFromZoho);
     on<SetEditingReceiptCustomer>(_onSetCustomer);
     on<SetEditingAmount>(_onSetAmount);
     on<SetEditingPaymentMode>(_onSetPaymentMode);
@@ -102,29 +106,134 @@ class ReceiptEditorBloc
     await _loadEditingReceiptFromZoho(receiptId, emit);
   }
 
-  Future<void> _loadEditingReceiptFromZoho(
-    String receiptId,
+  Future<void> _onRefreshReceiptVoucherFromZoho(
+    RefreshReceiptVoucherFromZoho event,
     Emitter<ReceiptEditorState> emit,
   ) async {
+    final receiptId = state.editingId ?? state.editingReceipt?.id;
+    if (receiptId == null ||
+        receiptId.isEmpty ||
+        _isLocalReceiptId(receiptId) ||
+        state.isEditorLoading ||
+        state.isRefreshing ||
+        state.editingReceipt == null) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        isRefreshing: true,
+        clearEditorError: true,
+        clearMessages: true,
+      ),
+    );
+    await _loadEditingReceiptFromZoho(receiptId, emit, isRefresh: true);
+  }
+
+  Future<void> _loadEditingReceiptFromZoho(
+    String receiptId,
+    Emitter<ReceiptEditorState> emit, {
+    bool isRefresh = false,
+  }) async {
+    final previous = isRefresh ? state.editingReceipt : null;
+    final wasDirty = isRefresh && state.isFormDirty;
+
+    ReceiptVoucher? fetched;
     try {
-      final fetched = await _salesRepository.fetchReceiptById(receiptId);
-      if (fetched == null) {
+      fetched = await _salesRepository.fetchReceiptById(
+        receiptId,
+        forceRemote: true,
+        allowOfflineFallback: false,
+      );
+    } catch (e) {
+      if (isRefresh) {
         emit(
           state.copyWith(
-            isEditorLoading: false,
-            editorError: 'This receipt voucher was not found in Zoho Books.',
+            isRefreshing: false,
+            errorMessage: humanizeSyncError(e),
           ),
         );
         return;
       }
-      emit(_openedFrom(fetched));
-    } catch (e) {
+      try {
+        fetched = await _salesRepository.fetchReceiptById(
+          receiptId,
+          forceRemote: false,
+        );
+      } catch (_) {
+        fetched = null;
+      }
+      if (fetched != null) {
+        emit(
+          _openedFrom(fetched).copyWith(
+            infoMessage: 'Showing offline copy',
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           isEditorLoading: false,
+          isRefreshing: false,
           editorError: humanizeSyncError(e),
         ),
       );
+      return;
+    }
+
+    if (fetched == null) {
+      if (!isRefresh) {
+        ReceiptVoucher? local;
+        try {
+          local = await _salesRepository.fetchReceiptById(
+            receiptId,
+            forceRemote: false,
+          );
+        } catch (_) {
+          local = null;
+        }
+        if (local != null) {
+          emit(
+            _openedFrom(local).copyWith(
+              infoMessage: 'Not found in Zoho — showing local copy',
+            ),
+          );
+          return;
+        }
+      }
+      if (isRefresh && previous != null) {
+        emit(
+          state.copyWith(
+            isRefreshing: false,
+            errorMessage: 'This receipt voucher was not found in Zoho Books.',
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            isEditorLoading: false,
+            isRefreshing: false,
+            editorError: 'This receipt voucher was not found in Zoho Books.',
+          ),
+        );
+      }
+      return;
+    }
+
+    final opened = _openedFrom(fetched);
+    if (isRefresh) {
+      final contentUnchanged = previous != null &&
+          VoucherContentFingerprint.receipt(previous) ==
+              VoucherContentFingerprint.receipt(fetched);
+      emit(
+        opened.copyWith(
+          isRefreshing: false,
+          infoMessage: (wasDirty || !contentUnchanged)
+              ? 'Updated from Zoho Books'
+              : 'Already up to date',
+        ),
+      );
+    } else {
+      emit(opened);
     }
   }
 
@@ -174,7 +283,9 @@ class ReceiptEditorBloc
       await _salesRepository.fetchRemoteOpenInvoices(
         customerId: event.customer.id,
       );
-    } catch (_) {}
+    } catch (_) {
+      // Safe swallow: fallback to cached local open invoices when offline
+    }
 
     final allocations = _autoAllocate(event.customer.id, state.editingAmount);
     emit(
@@ -331,7 +442,7 @@ class ReceiptEditorBloc
       );
       await _salesRepository.enqueueSyncItem(syncItem);
 
-      _syncRepository.triggerSync();
+      unawaited(_syncRepository.triggerSync());
 
       emit(
         state.copyWith(

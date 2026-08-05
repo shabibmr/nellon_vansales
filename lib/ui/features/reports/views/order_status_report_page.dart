@@ -1,33 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import '../../../../data/models/sales_order_model.dart';
+
 import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/sales_order.dart';
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/widgets/document_list_card.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/order_status_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
 
-enum _SortField { date, total }
-
-/// Which bucket of sales orders an [OrderStatusReportPage] shows.
-///
-/// [readyOrPending] backs both the "Orders Ready" and "Pending Orders" tiles:
-/// `SalesOrder` has no fulfillment-progress field beyond `status`/
-/// `shipmentDate`, so there is nothing in the data model today that
-/// distinguishes "ready to ship" from "not yet prepared" — both tiles
-/// intentionally show the same open-and-not-delayed bucket.
-enum OrderStatusFilter { readyOrPending, invoiced, delayed }
+export '../aggregators/order_status_aggregator.dart'
+    show OrderStatusFilter, OrderStatusSortField;
 
 /// Full-screen list of sales orders filtered by lifecycle status.
 ///
-/// Fetches every sales order live from Zoho Books and filters to one of
-/// three buckets: open orders not yet delayed, orders already converted to
-/// an invoice, or open orders whose shipment date has passed.
+/// Fetches every sales order via [ReportRepository] and filters/sorts them using
+/// [OrderStatusAggregator] into one of three buckets: open orders not yet delayed,
+/// orders already converted to an invoice, or open orders whose shipment date has passed.
 class OrderStatusReportPage extends StatelessWidget {
   final OrderStatusFilter filter;
   final String title;
@@ -38,25 +31,6 @@ class OrderStatusReportPage extends StatelessWidget {
     required this.title,
   });
 
-  bool _matches(SalesOrder order) {
-    final today = DateTime.now();
-    final shipDay = DateTime(
-      order.shipmentDate.year,
-      order.shipmentDate.month,
-      order.shipmentDate.day,
-    );
-    final todayDay = DateTime(today.year, today.month, today.day);
-
-    switch (filter) {
-      case OrderStatusFilter.invoiced:
-        return order.isConverted;
-      case OrderStatusFilter.delayed:
-        return !order.isConverted && shipDay.isBefore(todayDay);
-      case OrderStatusFilter.readyOrPending:
-        return !order.isConverted && !shipDay.isBefore(todayDay);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
@@ -64,27 +38,23 @@ class OrderStatusReportPage extends StatelessWidget {
 
     return ReportBlocHost<SalesOrder>(
       create: (_) => ReportBloc<SalesOrder>(
-        fetchRemote: () async {
-          final raw = await sl<ZohoApiClient>().fetchSalesOrders();
-          return raw.map((json) => SalesOrderModel.fromJson(json)).toList();
-        },
-        initialSortField: _SortField.date,
+        fetchRemote: () => sl<ReportRepository>().fetchSalesOrders(),
+        initialSortField: OrderStatusSortField.date,
         initialSortAscending: false,
       ),
       builder: (context, state) {
-        final sortField = state.sortField as _SortField? ?? _SortField.date;
+        final sortField =
+            state.sortField as OrderStatusSortField? ?? OrderStatusSortField.date;
         final sortAscending = state.sortAscending;
 
-        final orders = state.rows.where(_matches).toList()
-          ..sort((a, b) {
-            final cmp = switch (sortField) {
-              _SortField.date => a.shipmentDate.compareTo(b.shipmentDate),
-              _SortField.total => a.total.compareTo(b.total),
-            };
-            return sortAscending ? cmp : -cmp;
-          });
+        final orders = OrderStatusAggregator.aggregate(
+          orders: state.rows,
+          filter: filter,
+          sortField: sortField,
+          sortAscending: sortAscending,
+        );
 
-        return SortableReportScaffold<SalesOrder, _SortField>(
+        return SortableReportScaffold<SalesOrder, OrderStatusSortField>(
           title: title,
           isLoading: state.isLoading,
           onRefresh: () =>
@@ -101,10 +71,14 @@ class OrderStatusReportPage extends StatelessWidget {
             ReportColumn(
               label: 'ORDER / SHIP DATE',
               flex: 5,
-              field: _SortField.date,
+              field: OrderStatusSortField.date,
               alignEnd: false,
             ),
-            ReportColumn(label: 'TOTAL', flex: 3, field: _SortField.total),
+            ReportColumn(
+              label: 'TOTAL',
+              flex: 3,
+              field: OrderStatusSortField.total,
+            ),
           ],
           exportHeaders: const [
             'Order Number',

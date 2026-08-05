@@ -1,116 +1,74 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
-import '../../../../data/models/customer_model.dart';
-import '../../../../data/models/open_invoice_model.dart';
-import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
-import '../../../../domain/models/open_invoice.dart';
-import '../../../../ui/core/theme/app_theme.dart';
+
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
-import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/theme/app_theme.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/aging_receivables_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../bloc/report_state.dart';
+import '../widgets/report_bloc_host.dart';
 
-/// Aging bucket boundaries (in days outstanding since invoice date).
-enum _Bucket { d0_15, d15_30, d30_60, d60plus }
-
-extension _BucketLabel on _Bucket {
-  String get label {
-    switch (this) {
-      case _Bucket.d0_15:
-        return '0-15';
-      case _Bucket.d15_30:
-        return '15-30';
-      case _Bucket.d30_60:
-        return '30-60';
-      case _Bucket.d60plus:
-        return '>60';
-    }
-  }
-
+extension _AgingBucketColor on AgingBucket {
   Color get color {
     switch (this) {
-      case _Bucket.d0_15:
+      case AgingBucket.d0_15:
         return AppTheme.successEmerald;
-      case _Bucket.d15_30:
+      case AgingBucket.d15_30:
         return AppTheme.infoSky;
-      case _Bucket.d30_60:
+      case AgingBucket.d30_60:
         return AppTheme.warningAmber;
-      case _Bucket.d60plus:
+      case AgingBucket.d60plus:
         return AppTheme.errorRose;
     }
   }
-}
-
-/// Per-customer aggregation of outstanding balances split into aging buckets.
-class _AgingRow {
-  final String customerId;
-  final String customerName;
-  final Map<_Bucket, double> buckets = {
-    _Bucket.d0_15: 0.0,
-    _Bucket.d15_30: 0.0,
-    _Bucket.d30_60: 0.0,
-    _Bucket.d60plus: 0.0,
-  };
-
-  _AgingRow({required this.customerId, required this.customerName});
-
-  double amount(_Bucket b) => buckets[b] ?? 0.0;
-
-  double get total => buckets.values.fold(0.0, (sum, v) => sum + v);
-}
-
-enum _SortField { name, total }
-
-/// Typed payload for the aging report to fetch both invoices and customer names.
-class AgingReportData {
-  final List<OpenInvoice> invoices;
-  final Map<String, String> customerNames;
-
-  const AgingReportData({required this.invoices, required this.customerNames});
 }
 
 /// Agewise Customer Receivables (AR Aging) report.
 ///
 /// Splits each customer's outstanding invoice balances into 0-15, 15-30, 30-60
 /// and >60 day buckets based on the number of days elapsed since the invoice
-/// date, computed as of today. Fetches open invoices and customer names live
-/// from Zoho Books; the cached Hive snapshot is painted instantly on open
-/// while the live fetch is in flight, and kept on screen if that fetch fails.
+/// date, computed as of today. Fetches open invoices and customer names via
+/// [ReportRepository] and delegates row aggregation and sorting to [AgingReceivablesAggregator].
 class AgingReceivablesReportPage extends StatelessWidget {
   const AgingReceivablesReportPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider<ReportBloc<AgingReportData>>(
+    final sl = GetIt.instance;
+
+    return ReportBlocHost<AgingReportData>(
       create: (_) => ReportBloc<AgingReportData>(
         fetchRemote: () async {
-          final rawInvoices = await sl<ZohoApiClient>().fetchOpenInvoices();
-          final rawCustomers = await sl<ZohoApiClient>().fetchCustomers();
-          final invoices = rawInvoices
-              .map((json) => OpenInvoiceModel.fromJson(json))
-              .toList();
+          final repository = sl<ReportRepository>();
+          final invoices = await repository.fetchOpenInvoices();
+          final customers = await repository.fetchCustomers();
           final customerNames = {
-            for (final customer in rawCustomers.map(CustomerModel.fromJson))
-              customer.id: customer.name,
+            for (final customer in customers) customer.id: customer.name,
           };
           return [
-            AgingReportData(invoices: invoices, customerNames: customerNames),
+            AgingReportData(
+              invoices: invoices,
+              customerNames: customerNames,
+            ),
           ];
         },
-        initialSortField: _SortField.total,
+        initialSortField: AgingSortField.total,
         initialSortAscending: false,
       ),
-      child: const _AgingReceivablesReportView(),
+      builder: (context, state) => _AgingReceivablesReportView(state: state),
     );
   }
 }
 
 class _AgingReceivablesReportView extends StatefulWidget {
-  const _AgingReceivablesReportView();
+  final ReportState<AgingReportData> state;
+
+  const _AgingReceivablesReportView({required this.state});
 
   @override
   State<_AgingReceivablesReportView> createState() =>
@@ -128,75 +86,15 @@ class _AgingReceivablesReportViewState
     super.dispose();
   }
 
-  /// Buckets every outstanding invoice by age and aggregates per customer.
-  List<_AgingRow> _buildReport(ReportState<AgingReportData> state) {
+  List<AgingRow> _buildReport(ReportState<AgingReportData> state) {
     if (state.rows.isEmpty) return [];
     final data = state.rows.first;
-    final openInvoices = data.invoices;
-    final customerNames = data.customerNames;
-
-    final today = DateTime.now();
-    final todayDay = DateTime(today.year, today.month, today.day);
-    final map = <String, _AgingRow>{};
-
-    for (final inv in openInvoices) {
-      if (inv.balance <= 0) continue;
-
-      final invDay = DateTime(inv.date.year, inv.date.month, inv.date.day);
-      final days = todayDay.difference(invDay).inDays;
-
-      final _Bucket bucket;
-      if (days <= 15) {
-        bucket = _Bucket.d0_15;
-      } else if (days <= 30) {
-        bucket = _Bucket.d15_30;
-      } else if (days <= 60) {
-        bucket = _Bucket.d30_60;
-      } else {
-        bucket = _Bucket.d60plus;
-      }
-
-      final row = map.putIfAbsent(
-        inv.customerId,
-        () => _AgingRow(
-          customerId: inv.customerId,
-          customerName: customerNames[inv.customerId] ?? inv.customerId,
-        ),
-      );
-      row.buckets[bucket] = row.amount(bucket) + inv.balance;
-    }
-
-    final rows = map.values.toList();
-    final sortField = state.sortField as _SortField? ?? _SortField.total;
-    final sortAscending = state.sortAscending;
-
-    rows.sort((a, b) {
-      int cmp;
-      switch (sortField) {
-        case _SortField.name:
-          cmp = a.customerName.toLowerCase().compareTo(
-            b.customerName.toLowerCase(),
-          );
-          break;
-        case _SortField.total:
-          cmp = a.total.compareTo(b.total);
-          break;
-      }
-      return sortAscending ? cmp : -cmp;
-    });
-    return rows;
-  }
-
-  List<_AgingRow> _filterRows(List<_AgingRow> rows) {
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return rows;
-    return rows
-        .where(
-          (r) =>
-              r.customerName.toLowerCase().contains(q) ||
-              r.customerId.toLowerCase().contains(q),
-        )
-        .toList();
+    return AgingReceivablesAggregator.aggregate(
+      openInvoices: data.invoices,
+      customerNames: data.customerNames,
+      sortField: state.sortField as AgingSortField? ?? AgingSortField.total,
+      sortAscending: state.sortAscending,
+    );
   }
 
   @override
@@ -205,251 +103,235 @@ class _AgingReceivablesReportViewState
     final cs = context.org.currencySymbol;
     final DateFormat dateFmt = DateFormat('dd MMM yyyy');
 
-    return BlocListener<
-      ReportBloc<AgingReportData>,
-      ReportState<AgingReportData>
-    >(
-      listenWhen: (prev, curr) =>
-          curr.error != null && prev.error != curr.error,
-      listener: (context, state) {
-        showErrorSnackBar(
-          context,
-          'Could not load report from Zoho: ${state.error}',
-        );
+    final state = widget.state;
+    final allRows = _buildReport(state);
+    final rows = AgingReceivablesAggregator.filter(allRows, _query);
+    final hasQuery = _query.trim().isNotEmpty;
+
+    final bucketTotals = {
+      for (final b in AgingBucket.values)
+        b: rows.fold(0.0, (sum, r) => sum + r.amount(b)),
+    };
+    final grandTotal = rows.fold(0.0, (sum, r) => sum + r.total);
+
+    return SortableReportScaffold<AgingRow, AgingSortField>(
+      title: 'Agewise Receivables',
+      isLoading: state.isLoading,
+      onRefresh: () => context.read<ReportBloc<AgingReportData>>().add(
+        const RefreshReport(),
+      ),
+      rows: rows,
+      sortField: state.sortField as AgingSortField? ?? AgingSortField.total,
+      sortAscending: state.sortAscending,
+      onSort: (field) {
+        final bloc = context.read<ReportBloc<AgingReportData>>();
+        if (bloc.state.sortField == field) {
+          bloc.add(SetSort(field));
+        } else {
+          bloc.add(SetSort(field, ascending: field == AgingSortField.name));
+        }
       },
-      child: BlocBuilder<ReportBloc<AgingReportData>, ReportState<AgingReportData>>(
-        builder: (context, state) {
-          final allRows = _buildReport(state);
-          final rows = _filterRows(allRows);
-          final hasQuery = _query.trim().isNotEmpty;
-
-          final bucketTotals = {
-            for (final b in _Bucket.values)
-              b: rows.fold(0.0, (sum, r) => sum + r.amount(b)),
-          };
-          final grandTotal = rows.fold(0.0, (sum, r) => sum + r.total);
-
-          return SortableReportScaffold<_AgingRow, _SortField>(
-            title: 'Agewise Receivables',
-            isLoading: state.isLoading,
-            onRefresh: () => context.read<ReportBloc<AgingReportData>>().add(
-              const RefreshReport(),
+      emptyIcon: Icons.account_balance_wallet_outlined,
+      emptyTitle: hasQuery
+          ? 'No matching customers'
+          : 'No outstanding receivables',
+      emptyMessage: hasQuery
+          ? 'No customers match "${_query.trim()}".\n'
+                'Try a different name.'
+          : 'Sync open invoices from the Masters page to populate this report.',
+      banner: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
             ),
-            rows: rows,
-            sortField: state.sortField as _SortField? ?? _SortField.total,
-            sortAscending: state.sortAscending,
-            onSort: (field) {
-              final bloc = context.read<ReportBloc<AgingReportData>>();
-              if (bloc.state.sortField == field) {
-                bloc.add(SetSort(field));
-              } else {
-                bloc.add(SetSort(field, ascending: field == _SortField.name));
-              }
-            },
-            emptyIcon: Icons.account_balance_wallet_outlined,
-            emptyTitle: hasQuery
-                ? 'No matching customers'
-                : 'No outstanding receivables',
-            emptyMessage: hasQuery
-                ? 'No customers match "${_query.trim()}".\n'
-                      'Try a different name.'
-                : 'Sync open invoices from the Masters page to populate this report.',
-            banner: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryIndigo.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppTheme.primaryIndigo.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryIndigo.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppTheme.primaryIndigo.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Row(
+                const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: AppTheme.primaryIndigo,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.account_balance_wallet_rounded,
-                        color: AppTheme.primaryIndigo,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              hasQuery
-                                  ? 'Filtered Receivable'
-                                  : 'Total Receivable',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? AppTheme.darkTextSecondary
-                                    : AppTheme.lightTextSecondary,
-                              ),
-                            ),
-                            Text(
-                              'As of ${dateFmt.format(DateTime.now())}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isDark
-                                    ? const Color(0xFF475569)
-                                    : const Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ],
+                      Text(
+                        hasQuery
+                            ? 'Filtered Receivable'
+                            : 'Total Receivable',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
                         ),
                       ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          '$cs${grandTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.primaryIndigo,
-                          ),
+                      Text(
+                        'As of ${dateFmt.format(DateTime.now())}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? const Color(0xFF475569)
+                              : const Color(0xFF94A3B8),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _searchController,
-                  onChanged: (value) => setState(() => _query = value),
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search customers by name…',
-                    isDense: true,
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '$cs${grandTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
                       color: AppTheme.primaryIndigo,
-                    ),
-                    suffixIcon: hasQuery
-                        ? IconButton(
-                            tooltip: 'Clear search',
-                            icon: Icon(
-                              Icons.cancel,
-                              size: 20,
-                              color: isDark
-                                  ? AppTheme.darkTextSecondary
-                                  : AppTheme.lightTextSecondary,
-                            ),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _query = '');
-                            },
-                          )
-                        : null,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
               ],
             ),
-            summaryChips: [
-              for (final b in _Bucket.values)
-                ReportSummaryChip(
-                  label: '${b.label} days',
-                  value: '$cs${bucketTotals[b]!.toStringAsFixed(0)}',
-                  color: b.color,
-                ),
-            ],
-            columns: const [
-              ReportColumn(
-                label: 'CUSTOMER',
-                flex: 5,
-                field: _SortField.name,
-                alignEnd: false,
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _query = value),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search customers by name…',
+              isDense: true,
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: AppTheme.primaryIndigo,
               ),
-              ReportColumn(
-                label: 'TOTAL DUE',
-                flex: 3,
-                field: _SortField.total,
+              suffixIcon: hasQuery
+                  ? IconButton(
+                      tooltip: 'Clear search',
+                      icon: Icon(
+                        Icons.cancel,
+                        size: 20,
+                        color: isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.lightTextSecondary,
+                      ),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
               ),
-            ],
-            exportHeaders: [
-              'Customer',
-              for (final b in _Bucket.values) '${b.label} days',
-              'Total Due',
-            ],
-            exportRow: (row) => [
-              row.customerName,
-              for (final b in _Bucket.values) row.amount(b).toStringAsFixed(2),
-              row.total.toStringAsFixed(2),
-            ],
-            itemBuilder: (context, row) {
-              return Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              row.customerName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$cs${row.total.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 15,
-                              color: AppTheme.primaryIndigo,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          for (final b in _Bucket.values) ...[
-                            Expanded(
-                              child: _BucketCell(
-                                label: b.label,
-                                value: row.amount(b) > 0
-                                    ? '$cs${row.amount(b).toStringAsFixed(0)}'
-                                    : '—',
-                                color: b.color,
-                                active: row.amount(b) > 0,
-                                isDark: isDark,
-                              ),
-                            ),
-                            if (b != _Bucket.values.last)
-                              const SizedBox(width: 6),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
       ),
+      summaryChips: [
+        for (final b in AgingBucket.values)
+          ReportSummaryChip(
+            label: '${b.label} days',
+            value: '$cs${bucketTotals[b]!.toStringAsFixed(0)}',
+            color: b.color,
+          ),
+      ],
+      columns: const [
+        ReportColumn(
+          label: 'CUSTOMER',
+          flex: 5,
+          field: AgingSortField.name,
+          alignEnd: false,
+        ),
+        ReportColumn(
+          label: 'TOTAL DUE',
+          flex: 3,
+          field: AgingSortField.total,
+        ),
+      ],
+      exportHeaders: [
+        'Customer',
+        for (final b in AgingBucket.values) '${b.label} days',
+        'Total Due',
+      ],
+      exportRow: (row) => [
+        row.customerName,
+        for (final b in AgingBucket.values) row.amount(b).toStringAsFixed(2),
+        row.total.toStringAsFixed(2),
+      ],
+      itemBuilder: (context, row) {
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        row.customerName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$cs${row.total.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                        color: AppTheme.primaryIndigo,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    for (final b in AgingBucket.values) ...[
+                      Expanded(
+                        child: _BucketCell(
+                          label: b.label,
+                          value: row.amount(b) > 0
+                              ? '$cs${row.amount(b).toStringAsFixed(0)}'
+                              : '—',
+                          color: b.color,
+                          active: row.amount(b) > 0,
+                          isDark: isDark,
+                        ),
+                      ),
+                      if (b != AgingBucket.values.last)
+                        const SizedBox(width: 6),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

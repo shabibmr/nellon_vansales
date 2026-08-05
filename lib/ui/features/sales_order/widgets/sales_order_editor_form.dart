@@ -255,6 +255,11 @@ class SalesOrderEditorForm extends StatelessWidget {
                   SalesOrderNotesField(
                     controller: notesController,
                     readOnly: readOnly,
+                    onChanged: readOnly
+                        ? null
+                        : (value) => context
+                            .read<SalesOrderEditorBloc>()
+                            .add(UpdateOrderNotes(value)),
                   ),
                   const SizedBox(height: 30),
                 ],

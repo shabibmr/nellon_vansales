@@ -36,6 +36,11 @@ class RetryLoadReceiptVoucher extends ReceiptEditorEvent {
   const RetryLoadReceiptVoucher();
 }
 
+/// Re-fetches a synced receipt from Zoho and updates the form if it changed.
+class RefreshReceiptVoucherFromZoho extends ReceiptEditorEvent {
+  const RefreshReceiptVoucherFromZoho();
+}
+
 /// Updates the customer under editor.
 class SetEditingReceiptCustomer extends ReceiptEditorEvent {
   final Customer customer;

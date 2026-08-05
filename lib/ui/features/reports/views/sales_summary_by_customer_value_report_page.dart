@@ -1,109 +1,64 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/models/sales_invoice_model.dart';
-import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
+import 'package:get_it/get_it.dart';
+
 import '../../../../domain/models/sales_invoice.dart';
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/date_filter.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/sales_summary_by_customer_value_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
-import '../bloc/report_state.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
 
-/// Aggregated row for a single customer across the filtered invoices.
-class _CustomerRow {
-  final String customerId;
-  final String customerName;
-  int invoiceCount = 0;
-  double totalValue = 0.0;
-
-  _CustomerRow({required this.customerId, required this.customerName});
-}
-
-enum _SortField { name, count, value }
-
 /// Full-screen sales-by-customer (value) summary.
 ///
-/// Fetches every invoice live from Zoho Books and aggregates them by
-/// customer, showing invoice count and total value per customer. Supports
-/// date-range filtering and column sorting.
+/// Fetches sales invoices via [ReportRepository] and aggregates them by
+/// customer using [SalesSummaryByCustomerValueAggregator], showing invoice count
+/// and total value per customer. Supports date-range filtering and column sorting.
 class SalesSummaryByCustomerValueReportPage extends StatelessWidget {
   const SalesSummaryByCustomerValueReportPage({super.key});
 
-  List<_CustomerRow> _buildReport(ReportState<SalesInvoice> state) {
-    final map = <String, _CustomerRow>{};
-
-    final filtered = filterByDateRange(
-      state.rows,
-      (inv) => inv.date,
-      startDate: state.startDate,
-      endDate: state.endDate,
-    );
-    for (final inv in filtered) {
-      final row = map.putIfAbsent(
-        inv.customerId,
-        () => _CustomerRow(
-          customerId: inv.customerId,
-          customerName: inv.customerName,
-        ),
-      );
-      row.invoiceCount++;
-      row.totalValue += inv.total;
-    }
-
-    final rows = map.values.toList();
-    final sortField = state.sortField as _SortField? ?? _SortField.value;
-    final sortAscending = state.sortAscending;
-
-    rows.sort((a, b) {
-      int cmp;
-      switch (sortField) {
-        case _SortField.name:
-          cmp = a.customerName.compareTo(b.customerName);
-          break;
-        case _SortField.count:
-          cmp = a.invoiceCount.compareTo(b.invoiceCount);
-          break;
-        case _SortField.value:
-          cmp = a.totalValue.compareTo(b.totalValue);
-          break;
-      }
-      return sortAscending ? cmp : -cmp;
-    });
-    return rows;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final sl = GetIt.instance;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
 
     return ReportBlocHost<SalesInvoice>(
       create: (_) => ReportBloc<SalesInvoice>(
-        fetchRemote: () async {
-          final raw = await sl<ZohoApiClient>().fetchInvoices();
-          return raw.map((json) => SalesInvoiceModel.fromJson(json)).toList();
-        },
-        initialSortField: _SortField.value,
+        fetchRemote: () => sl<ReportRepository>().fetchInvoices(),
+        initialSortField: SalesSummaryByCustomerValueSortField.value,
         initialSortAscending: false,
       ),
       builder: (context, state) {
-        final rows = _buildReport(state);
+        final rows = SalesSummaryByCustomerValueAggregator.aggregate(
+          invoices: state.rows,
+          startDate: state.startDate,
+          endDate: state.endDate,
+          sortField:
+              state.sortField as SalesSummaryByCustomerValueSortField? ??
+              SalesSummaryByCustomerValueSortField.value,
+          sortAscending: state.sortAscending,
+        );
         final totalInvoices = rows.fold(0, (sum, r) => sum + r.invoiceCount);
         final totalValue = rows.fold(0.0, (sum, r) => sum + r.totalValue);
 
-        return SortableReportScaffold<_CustomerRow, _SortField>(
+        return SortableReportScaffold<
+          SalesSummaryByCustomerValueRow,
+          SalesSummaryByCustomerValueSortField
+        >(
           title: 'Sales Summary by Customer',
           isLoading: state.isLoading,
           onRefresh: () => context.read<ReportBloc<SalesInvoice>>().add(
             const RefreshReport(),
           ),
           rows: rows,
-          sortField: state.sortField as _SortField? ?? _SortField.value,
+          sortField:
+              state.sortField as SalesSummaryByCustomerValueSortField? ??
+              SalesSummaryByCustomerValueSortField.value,
           sortAscending: state.sortAscending,
           onSort: (field) =>
               context.read<ReportBloc<SalesInvoice>>().add(SetSort(field)),
@@ -138,11 +93,19 @@ class SalesSummaryByCustomerValueReportPage extends StatelessWidget {
             ReportColumn(
               label: 'CUSTOMER',
               flex: 5,
-              field: _SortField.name,
+              field: SalesSummaryByCustomerValueSortField.name,
               alignEnd: false,
             ),
-            ReportColumn(label: 'INVOICES', flex: 2, field: _SortField.count),
-            ReportColumn(label: 'VALUE', flex: 3, field: _SortField.value),
+            ReportColumn(
+              label: 'INVOICES',
+              flex: 2,
+              field: SalesSummaryByCustomerValueSortField.count,
+            ),
+            ReportColumn(
+              label: 'VALUE',
+              flex: 3,
+              field: SalesSummaryByCustomerValueSortField.value,
+            ),
           ],
           exportHeaders: const ['Customer', 'Invoices', 'Value'],
           exportRow: (row) => [

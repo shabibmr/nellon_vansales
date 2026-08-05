@@ -1,91 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../core/utils/quantity_format.dart';
-import '../../../../data/models/sales_return_model.dart';
 import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/sales_return.dart';
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/date_filter.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/itemwise_returns_summary_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
-import '../bloc/report_state.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
 
-/// Aggregated row for a single item across all filtered sales returns.
-class _ItemReturnRow {
-  final String itemId;
-  final String itemName;
-  final String sku;
-  double totalQty = 0;
-  double totalRefunded = 0.0;
-
-  _ItemReturnRow({
-    required this.itemId,
-    required this.itemName,
-    required this.sku,
-  });
-}
-
-enum _SortField { name, qty, amount }
-
 /// Full-screen itemwise sales-returns summary.
 ///
-/// Fetches every sales return (credit note, with line items) live from
-/// Zoho Books and aggregates them by item, showing quantity returned and
-/// total refunded. Supports date-range filtering and column sorting.
+/// Fetches every sales return (credit note, with line items) via [ReportRepository]
+/// and aggregates them by item using [ItemwiseReturnsSummaryAggregator], showing
+/// quantity returned and total refunded. Supports date-range filtering and column sorting.
 class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
   const ItemwiseReturnsSummaryReportPage({super.key});
-
-  List<_ItemReturnRow> _buildReport(ReportState<SalesReturn> state) {
-    final map = <String, _ItemReturnRow>{};
-
-    final filtered = filterByDateRange(
-      state.rows,
-      (ret) => ret.date,
-      startDate: state.startDate,
-      endDate: state.endDate,
-    );
-    for (final ret in filtered) {
-      for (final line in ret.items) {
-        final item = line.invoiceLineItem.item;
-        final row = map.putIfAbsent(
-          item.id,
-          () => _ItemReturnRow(
-            itemId: item.id,
-            itemName: item.name,
-            sku: item.sku,
-          ),
-        );
-        row.totalQty += line.returnedQuantityInBase;
-        row.totalRefunded += line.total;
-      }
-    }
-
-    final rows = map.values.toList();
-    final sortField = state.sortField as _SortField? ?? _SortField.amount;
-    final sortAscending = state.sortAscending;
-
-    rows.sort((a, b) {
-      int cmp;
-      switch (sortField) {
-        case _SortField.name:
-          cmp = a.itemName.compareTo(b.itemName);
-          break;
-        case _SortField.qty:
-          cmp = a.totalQty.compareTo(b.totalQty);
-          break;
-        case _SortField.amount:
-          cmp = a.totalRefunded.compareTo(b.totalRefunded);
-          break;
-      }
-      return sortAscending ? cmp : -cmp;
-    });
-    return rows;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,26 +28,35 @@ class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
 
     return ReportBlocHost<SalesReturn>(
       create: (_) => ReportBloc<SalesReturn>(
-        fetchRemote: () async {
-          final raw = await sl<ZohoApiClient>().fetchSalesReturns();
-          return raw.map((json) => SalesReturnModel.fromJson(json)).toList();
-        },
-        initialSortField: _SortField.amount,
+        fetchRemote: () => sl<ReportRepository>().fetchSalesReturns(),
+        initialSortField: ItemwiseReturnsSummarySortField.amount,
         initialSortAscending: false,
       ),
       builder: (context, state) {
-        final rows = _buildReport(state);
+        final sortField =
+            state.sortField as ItemwiseReturnsSummarySortField? ??
+            ItemwiseReturnsSummarySortField.amount;
+        final rows = ItemwiseReturnsSummaryAggregator.aggregate(
+          returns: state.rows,
+          startDate: state.startDate,
+          endDate: state.endDate,
+          sortField: sortField,
+          sortAscending: state.sortAscending,
+        );
         final totalQty = rows.fold(0.0, (sum, r) => sum + r.totalQty);
         final totalRefunded = rows.fold(0.0, (sum, r) => sum + r.totalRefunded);
 
-        return SortableReportScaffold<_ItemReturnRow, _SortField>(
+        return SortableReportScaffold<
+          ItemwiseReturnsSummaryRow,
+          ItemwiseReturnsSummarySortField
+        >(
           title: 'Itemwise Returns Summary',
           isLoading: state.isLoading,
           onRefresh: () => context.read<ReportBloc<SalesReturn>>().add(
             const RefreshReport(),
           ),
           rows: rows,
-          sortField: state.sortField as _SortField? ?? _SortField.amount,
+          sortField: sortField,
           sortAscending: state.sortAscending,
           onSort: (field) =>
               context.read<ReportBloc<SalesReturn>>().add(SetSort(field)),
@@ -148,11 +91,19 @@ class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
             ReportColumn(
               label: 'ITEM',
               flex: 5,
-              field: _SortField.name,
+              field: ItemwiseReturnsSummarySortField.name,
               alignEnd: false,
             ),
-            ReportColumn(label: 'QTY', flex: 2, field: _SortField.qty),
-            ReportColumn(label: 'REFUNDED', flex: 3, field: _SortField.amount),
+            ReportColumn(
+              label: 'QTY',
+              flex: 2,
+              field: ItemwiseReturnsSummarySortField.qty,
+            ),
+            ReportColumn(
+              label: 'REFUNDED',
+              flex: 3,
+              field: ItemwiseReturnsSummarySortField.amount,
+            ),
           ],
           exportHeaders: const ['Item', 'SKU', 'Qty', 'Refunded'],
           exportRow: (row) => [

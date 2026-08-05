@@ -1,149 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/models/expense_entry_model.dart';
-import '../../../../data/models/receipt_voucher_model.dart';
-import '../../../../data/models/sales_invoice_model.dart';
-import '../../../../data/models/sales_return_model.dart';
-import '../../../../data/services/hive_database_service.dart';
+
 import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_return.dart';
+import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/date_filter.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../aggregators/transactions_summary_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
-import '../bloc/report_state.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
 
-/// Aggregated row for a single transaction type across the filtered period.
-class _TypeRow {
-  final String type;
-  final IconData icon;
-  final Color color;
-  int count = 0;
-  double totalAmount = 0.0;
-
-  _TypeRow({required this.type, required this.icon, required this.color});
-}
-
-enum _SortField { type, count, amount }
-
-/// Typed payload for the transactions summary report.
-class TransactionsReportData {
-  final List<SalesInvoice> invoices;
-  final List<ReceiptVoucher> receipts;
-  final List<ExpenseEntry> expenses;
-  final List<SalesReturn> returns;
-
-  const TransactionsReportData({
-    required this.invoices,
-    required this.receipts,
-    required this.expenses,
-    required this.returns,
-  });
-}
-
 /// Full-screen "Aggregate of All" transactions summary.
 ///
-/// Fetches invoices, receipts, expenses, and sales returns live from Zoho in
-/// parallel and rolls each up into one row per transaction type within the
-/// selected date range. The local cache is painted instantly on open while
-/// the live fetch is in flight.
+/// Fetches invoices, receipts, expenses, and sales returns live from Zoho via
+/// [ReportRepository] in parallel and rolls each up into one row per transaction
+/// type within the selected date range. Delegated to [TransactionsSummaryAggregator].
 class TransactionsSummaryReportPage extends StatelessWidget {
   const TransactionsSummaryReportPage({super.key});
 
-  static Map<String, dynamic> _normalizeExpenseJson(Map<String, dynamic> json) {
-    final lineItems = (json['line_items'] as List?) ?? const [];
-    return {
-      ...json,
-      'lines': lineItems
-          .whereType<Map>()
-          .map(
-            (l) => {
-              'category': l['account_name'] ?? 'Miscellaneous',
-              'amount': l['amount'] ?? 0.0,
-              'description': l['description'] ?? '',
-            },
-          )
-          .toList(),
-    };
-  }
-
-  List<_TypeRow> _buildReport(ReportState<TransactionsReportData> state) {
-    if (state.rows.isEmpty) return [];
-    final data = state.rows.first;
-
-    final invoiceRow = _TypeRow(
-      type: 'Invoices',
-      icon: Icons.receipt_long_rounded,
-      color: AppTheme.primaryIndigo,
-    );
-    final receiptRow = _TypeRow(
-      type: 'Receipts',
-      icon: Icons.account_balance_wallet_rounded,
-      color: AppTheme.successEmerald,
-    );
-    final expenseRow = _TypeRow(
-      type: 'Expenses',
-      icon: Icons.local_gas_station_rounded,
-      color: AppTheme.errorRose,
-    );
-    final returnRow = _TypeRow(
-      type: 'Sales Returns',
-      icon: Icons.assignment_return_rounded,
-      color: AppTheme.warningAmber,
-    );
-
-    List<X> inRange<X>(List<X> items, DateTime Function(X) dateOf) =>
-        filterByDateRange(
-          items,
-          dateOf,
-          startDate: state.startDate,
-          endDate: state.endDate,
-        );
-
-    for (final inv in inRange(data.invoices, (i) => i.date)) {
-      invoiceRow.count++;
-      invoiceRow.totalAmount += inv.total;
+  static (IconData, Color) _getRowStyle(String type) {
+    switch (type) {
+      case 'Invoices':
+        return (Icons.receipt_long_rounded, AppTheme.primaryIndigo);
+      case 'Receipts':
+        return (Icons.account_balance_wallet_rounded, AppTheme.successEmerald);
+      case 'Expenses':
+        return (Icons.local_gas_station_rounded, AppTheme.errorRose);
+      case 'Sales Returns':
+      default:
+        return (Icons.assignment_return_rounded, AppTheme.warningAmber);
     }
-    for (final rcpt in inRange(data.receipts, (r) => r.date)) {
-      receiptRow.count++;
-      receiptRow.totalAmount += rcpt.amount;
-    }
-    for (final exp in inRange(data.expenses, (e) => e.date)) {
-      expenseRow.count++;
-      expenseRow.totalAmount += exp.amount;
-    }
-    for (final ret in inRange(data.returns, (r) => r.date)) {
-      returnRow.count++;
-      returnRow.totalAmount += ret.total;
-    }
-
-    final rows = [invoiceRow, receiptRow, expenseRow, returnRow];
-    final sortField = state.sortField as _SortField? ?? _SortField.amount;
-
-    rows.sort((a, b) {
-      int cmp;
-      switch (sortField) {
-        case _SortField.type:
-          cmp = a.type.compareTo(b.type);
-          break;
-        case _SortField.count:
-          cmp = a.count.compareTo(b.count);
-          break;
-        case _SortField.amount:
-          cmp = a.totalAmount.compareTo(b.totalAmount);
-          break;
-      }
-      return state.sortAscending ? cmp : -cmp;
-    });
-    return rows;
   }
 
   @override
@@ -154,76 +46,62 @@ class TransactionsSummaryReportPage extends StatelessWidget {
     return ReportBlocHost<TransactionsReportData>(
       create: (_) => ReportBloc<TransactionsReportData>(
         fetchRemote: () async {
-          final salesperson = sl<HiveDatabaseService>().getCurrentSalesperson();
-          final salespersonId = salesperson?.id;
-          final locationId = salesperson?.locationId;
-
+          final repo = sl<ReportRepository>();
           final results = await Future.wait([
-            sl<ZohoApiClient>().fetchInvoices(),
-            sl<ZohoApiClient>().fetchReceipts(),
-            sl<ZohoApiClient>().fetchExpenses(),
-            sl<ZohoApiClient>().fetchSalesReturns(),
+            repo.fetchInvoices(),
+            repo.fetchReceipts(),
+            repo.fetchExpenses(),
+            repo.fetchSalesReturns(),
           ]);
-
-          final invoices = (results[0])
-              .where((j) {
-                if (salespersonId == null || salespersonId.isEmpty) return true;
-                final spId = j['salesperson_id']?.toString();
-                return spId == salespersonId;
-              })
-              .map((j) => SalesInvoiceModel.fromJson(j))
-              .toList();
-
-          final receipts = (results[1])
-              .map((j) => ReceiptVoucherModel.fromJson(j))
-              .where((r) {
-                if (locationId == null || locationId.isEmpty) return true;
-                return r.locationId == locationId;
-              })
-              .toList();
-
-          final expenses = (results[2])
-              .map((j) => ExpenseEntryModel.fromJson(_normalizeExpenseJson(j)))
-              .where((e) {
-                if (locationId == null || locationId.isEmpty) return true;
-                return e.locationId == locationId;
-              })
-              .toList();
-
-          final returns = (results[3])
-              .where((j) {
-                if (salespersonId == null || salespersonId.isEmpty) return true;
-                final spId = j['salesperson_id']?.toString();
-                return spId == salespersonId;
-              })
-              .map((j) => SalesReturnModel.fromJson(j))
-              .toList();
 
           return [
             TransactionsReportData(
-              invoices: invoices,
-              receipts: receipts,
-              expenses: expenses,
-              returns: returns,
+              invoices: results[0] as List<SalesInvoice>,
+              receipts: results[1] as List<ReceiptVoucher>,
+              expenses: results[2] as List<ExpenseEntry>,
+              returns: results[3] as List<SalesReturn>,
             ),
           ];
         },
-        initialSortField: _SortField.amount,
+        initialSortField: TransactionsSummarySortField.amount,
         initialSortAscending: false,
       ),
       builder: (context, state) {
-        final rows = _buildReport(state);
+        final data = state.rows.isNotEmpty
+            ? state.rows.first
+            : const TransactionsReportData(
+                invoices: [],
+                receipts: [],
+                expenses: [],
+                returns: [],
+              );
+
+        final sortField =
+            state.sortField as TransactionsSummarySortField? ??
+            TransactionsSummarySortField.amount;
+
+        final rows = TransactionsSummaryAggregator.aggregate(
+          data: data,
+          startDate: state.startDate,
+          endDate: state.endDate,
+          sortField: sortField,
+          sortAscending: state.sortAscending,
+        );
+
         final totalCount = rows.fold(0, (sum, r) => sum + r.count);
         final totalAmount = rows.fold(0.0, (sum, r) => sum + r.totalAmount);
 
-        return SortableReportScaffold<_TypeRow, _SortField>(
+        return SortableReportScaffold<
+          TransactionsSummaryRow,
+          TransactionsSummarySortField
+        >(
           title: 'Transactions Summary',
           isLoading: state.isLoading,
           onRefresh: () => context
               .read<ReportBloc<TransactionsReportData>>()
               .add(const RefreshReport()),
           rows: rows,
-          sortField: state.sortField as _SortField? ?? _SortField.amount,
+          sortField: sortField,
           sortAscending: state.sortAscending,
           onSort: (field) => context
               .read<ReportBloc<TransactionsReportData>>()
@@ -256,11 +134,19 @@ class TransactionsSummaryReportPage extends StatelessWidget {
             ReportColumn(
               label: 'TYPE',
               flex: 5,
-              field: _SortField.type,
+              field: TransactionsSummarySortField.type,
               alignEnd: false,
             ),
-            ReportColumn(label: 'COUNT', flex: 2, field: _SortField.count),
-            ReportColumn(label: 'AMOUNT', flex: 3, field: _SortField.amount),
+            ReportColumn(
+              label: 'COUNT',
+              flex: 2,
+              field: TransactionsSummarySortField.count,
+            ),
+            ReportColumn(
+              label: 'AMOUNT',
+              flex: 3,
+              field: TransactionsSummarySortField.amount,
+            ),
           ],
           exportHeaders: const ['Type', 'Count', 'Amount'],
           exportRow: (row) => [
@@ -269,6 +155,7 @@ class TransactionsSummaryReportPage extends StatelessWidget {
             row.totalAmount.toStringAsFixed(2),
           ],
           itemBuilder: (context, row) {
+            final (icon, color) = _getRowStyle(row.type);
             return Card(
               margin: EdgeInsets.zero,
               child: Padding(
@@ -278,10 +165,10 @@ class TransactionsSummaryReportPage extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: row.color.withValues(alpha: 0.1),
+                        color: color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(row.icon, color: row.color, size: 18),
+                      child: Icon(icon, color: color, size: 18),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -315,7 +202,7 @@ class TransactionsSummaryReportPage extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
-                          color: row.color,
+                          color: color,
                         ),
                       ),
                     ),

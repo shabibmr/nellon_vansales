@@ -24,6 +24,9 @@ import 'ui/features/ledger/bloc/customer_ledger_bloc.dart';
 import 'ui/core/cubit/organization_cubit.dart';
 import 'ui/core/cubit/salesperson_cubit.dart';
 import 'domain/repositories/salesperson_repository.dart';
+import 'domain/repositories/report_repository.dart';
+import 'domain/repositories/voucher_pdf_repository.dart';
+import 'data/services/document_number_service.dart';
 import 'data/services/hive_database_service.dart';
 import 'data/services/zoho_api_client.dart';
 import 'ui/core/widgets/app_splash_screen.dart';
@@ -67,6 +70,12 @@ class VanSalesApp extends StatelessWidget {
         RepositoryProvider<SalespersonRepository>(
           create: (context) => sl<SalespersonRepository>(),
         ),
+        RepositoryProvider<ReportRepository>(
+          create: (context) => sl<ReportRepository>(),
+        ),
+        RepositoryProvider<VoucherPdfRepository>(
+          create: (context) => sl<VoucherPdfRepository>(),
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -97,6 +106,7 @@ class VanSalesApp extends StatelessWidget {
             create: (context) => SalesInvoiceListBloc(
               salesRepository: context.read<SalesRepository>(),
               syncRepository: context.read<SyncRepository>(),
+              documentNumberService: sl<DocumentNumberService>(),
             ),
           ),
           BlocProvider<SalesOrderListBloc>(
@@ -123,14 +133,11 @@ class VanSalesApp extends StatelessWidget {
             create: (context) => StockTransferBloc(
               salesRepository: context.read<SalesRepository>(),
               syncRepository: context.read<SyncRepository>(),
-              dbService: sl<HiveDatabaseService>(),
-              apiClient: sl<ZohoApiClient>(),
             ),
           ),
           BlocProvider<CustomerLedgerBloc>(
             create: (context) => CustomerLedgerBloc(
               salesRepository: context.read<SalesRepository>(),
-              apiClient: sl<ZohoApiClient>(),
             ),
           ),
           BlocProvider<LicenseCubit>(

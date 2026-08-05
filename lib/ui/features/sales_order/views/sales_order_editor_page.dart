@@ -9,7 +9,9 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
+import '../../../../ui/core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../../ui/core/widgets/empty_state.dart';
+import '../../../../ui/core/widgets/voucher_refresh_action.dart';
 import '../bloc/sales_order_editor_bloc.dart';
 import '../bloc/sales_order_editor_event.dart';
 import '../bloc/sales_order_editor_state.dart';
@@ -103,6 +105,18 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
         ),
         actions: [
           BlocBuilder<SalesOrderEditorBloc, SalesOrderEditorState>(
+            buildWhen: (p, c) =>
+                p.canRefreshFromZoho != c.canRefreshFromZoho ||
+                p.isRefreshing != c.isRefreshing,
+            builder: (context, state) {
+              return VoucherRefreshAction(
+                visible: state.canRefreshFromZoho,
+                isLoading: state.isRefreshing,
+                onPressed: () => _onRefreshPressed(context),
+              );
+            },
+          ),
+          BlocBuilder<SalesOrderEditorBloc, SalesOrderEditorState>(
             buildWhen: (p, c) => p.isConverted != c.isConverted,
             builder: (context, state) {
               if (!_isViewMode || state.isConverted) {
@@ -122,6 +136,7 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
           listenWhen: (previous, current) =>
               previous.successMessage != current.successMessage ||
               previous.errorMessage != current.errorMessage ||
+              previous.infoMessage != current.infoMessage ||
               previous.editingNotes != current.editingNotes,
           listener: (context, state) {
             if (_notesController.text != state.editingNotes) {
@@ -138,10 +153,16 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
               context
                   .read<SalesOrderEditorBloc>()
                   .add(const ClearSalesOrderEditorMessages());
+            } else if (state.infoMessage != null) {
+              showInfoSnackBar(context, state.infoMessage!);
+              context
+                  .read<SalesOrderEditorBloc>()
+                  .add(const ClearSalesOrderEditorMessages());
             }
           },
           builder: (context, state) {
-            final readOnly = _isViewMode || state.isConverted;
+            final readOnly =
+                _isViewMode || state.isConverted || state.isRefreshing;
 
             if (state.isEditorLoading) {
               return const Center(
@@ -174,5 +195,19 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _onRefreshPressed(BuildContext context) async {
+    final bloc = context.read<SalesOrderEditorBloc>();
+    final snapshotNotes = bloc.state.editingOrder?.notes ?? '';
+    final notesDirty =
+        _notesController.text.trim() != snapshotNotes.trim();
+    final dirty = bloc.state.isFormDirty || notesDirty;
+    if (dirty) {
+      final ok = await confirmDiscardEditsForRefresh(context);
+      if (!ok || !context.mounted) return;
+    }
+    bloc.add(UpdateOrderNotes(_notesController.text));
+    bloc.add(RefreshSalesOrderFromZoho(forceDirty: dirty));
   }
 }

@@ -7,6 +7,7 @@ import '../../../../domain/models/paired_printer.dart';
 import '../../../../domain/models/thermal_paper_size.dart';
 import '../../../../domain/repositories/thermal_printer_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'thermal_printer_state.dart';
 
 /// App-level cubit for Bluetooth ESC/POS printer settings and printing.
@@ -75,7 +76,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       emit(
         state.copyWith(
           isLoading: false,
-          errorMessage: e.toString().replaceFirst('Exception: ', ''),
+          errorMessage: userFacingMessage(e),
         ),
       );
     }
@@ -116,7 +117,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
         state.copyWith(
           isLoading: false,
           needsAppSettings: true,
-          errorMessage: e.toString().replaceFirst('Exception: ', ''),
+          errorMessage: userFacingMessage(e),
         ),
       );
       return false;
@@ -197,7 +198,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       emit(
         state.copyWith(
           isLoading: false,
-          errorMessage: e.toString().replaceFirst('Exception: ', ''),
+          errorMessage: userFacingMessage(e),
         ),
       );
     }
@@ -253,7 +254,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       emit(
         state.copyWith(
           isPrinting: false,
-          errorMessage: e.toString().replaceFirst('Exception: ', ''),
+          errorMessage: userFacingMessage(e),
           needsAppSettings: _isPermissionError(e),
         ),
       );
@@ -298,7 +299,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       emit(
         state.copyWith(
           isPrinting: false,
-          errorMessage: e.toString().replaceFirst('Exception: ', ''),
+          errorMessage: userFacingMessage(e),
           needsAppSettings: _isPermissionError(e),
         ),
       );

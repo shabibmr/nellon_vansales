@@ -14,12 +14,12 @@ class ExpenseLineItemModel extends ExpenseLineItem {
   /// Factory constructor to parse local database JSON maps into an [ExpenseLineItemModel].
   factory ExpenseLineItemModel.fromJson(Map<String, dynamic> json) {
     return ExpenseLineItemModel(
-      category: json['category'] ?? 'Parking fee',
-      amount: (json['amount'] ?? 0.0).toDouble(),
-      description: json['description'] ?? '',
+      category: (json['category'] as String?) ?? 'Parking fee',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      description: (json['description'] as String?) ?? '',
     );
   }
-
+ 
   /// Converts this [ExpenseLineItemModel] into a serialization compatible JSON map, injecting Zoho Account ID mappings.
   Map<String, dynamic> toJson() {
     return {
@@ -73,19 +73,52 @@ class ExpenseEntryModel extends ExpenseEntry {
   /// Factory constructor to parse local database JSON maps into an [ExpenseEntryModel].
   factory ExpenseEntryModel.fromJson(Map<String, dynamic> json) {
     return ExpenseEntryModel(
-      id: json['expense_id'] ?? json['id'] ?? '',
+      id: ((json['expense_id'] ?? json['id']) as String?) ?? '',
       date: json['date'] != null
-          ? DateTime.parse(json['date'])
+          ? DateTime.parse(json['date'] as String)
           : DateTime.now(),
       lines:
           (json['lines'] as List?)
-              ?.map((item) => ExpenseLineItemModel.fromJson(item))
+              ?.map((item) => ExpenseLineItemModel.fromJson(item as Map<String, dynamic>))
               .toList() ??
           [],
-      receiptImagePath: json['receiptImagePath'],
-      isPendingSync: json['isPendingSync'] ?? false,
-      locationId: json['location_id'],
+      receiptImagePath: json['receiptImagePath'] as String?,
+      isPendingSync: (json['isPendingSync'] as bool?) ?? false,
+      locationId: json['location_id'] as String?,
     );
+  }
+
+  /// Parses a Zoho Books expense envelope (`line_items` / `account_name`).
+  ///
+  /// Local Hive records already use [fromJson] with a `lines` array. Zoho detail
+  /// and list payloads use `line_items` with `account_name` instead of `category`.
+  factory ExpenseEntryModel.fromZohoJson(Map<String, dynamic> json) {
+    return ExpenseEntryModel.fromJson(normalizeZohoExpenseJson(json));
+  }
+
+  /// Maps Zoho `line_items` → local `lines` shape expected by [fromJson].
+  ///
+  /// If [json] already has `lines` and no `line_items`, it is returned as-is.
+  static Map<String, dynamic> normalizeZohoExpenseJson(
+    Map<String, dynamic> json,
+  ) {
+    final lineItems = (json['line_items'] as List?) ?? const [];
+    if (lineItems.isEmpty && json['lines'] != null) {
+      return json;
+    }
+    return {
+      ...json,
+      'lines': lineItems
+          .whereType<Map<dynamic, dynamic>>()
+          .map(
+            (l) => <String, dynamic>{
+              'category': l['account_name'] ?? l['category'] ?? 'Miscellaneous',
+              'amount': l['amount'] ?? 0.0,
+              'description': l['description'] ?? '',
+            },
+          )
+          .toList(),
+    };
   }
 
   /// Converts this [ExpenseEntryModel] instance into a serializable JSON map.

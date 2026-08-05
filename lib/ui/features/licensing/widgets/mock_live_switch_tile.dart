@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/injection.dart';
-import '../../../../data/services/zoho_api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
 import '../cubit/server_config_cubit.dart';
@@ -15,8 +13,8 @@ class MockLiveSwitchTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<ServerConfigCubit, ServerConfigState>(
       builder: (context, state) {
-        final apiClient = sl<ZohoApiClient>();
-        final credentialsLocked = apiClient.usesPlaceholderCredentials;
+        final credentialsLocked =
+            context.read<ServerConfigCubit>().usesPlaceholderCredentials;
         final isLive = !state.isMockModeEnabled;
 
         return SwitchListTile(

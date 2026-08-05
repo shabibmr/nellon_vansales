@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_return.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/quantity_format.dart';
@@ -32,7 +32,6 @@ class ReturnInvoiceSelectorDialog extends StatefulWidget {
 
 class _ReturnInvoiceSelectorDialogState
     extends State<ReturnInvoiceSelectorDialog> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
   final _formKey = GlobalKey<FormState>();
 
@@ -75,7 +74,8 @@ class _ReturnInvoiceSelectorDialogState
   void initState() {
     super.initState();
     // Get all local invoices for the customer containing the selected item
-    final customerInvoices = _db
+    final customerInvoices = context
+        .read<SalesRepository>()
         .getLocalInvoices()
         .where((inv) => inv.customerId == widget.customer.id)
         .toList();

@@ -9,7 +9,9 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
+import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/voucher_refresh_action.dart';
 import '../bloc/sales_return_editor_bloc.dart';
 import '../bloc/sales_return_editor_event.dart';
 import '../bloc/sales_return_editor_state.dart';
@@ -92,12 +94,27 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
             );
           },
         ),
+        actions: [
+          BlocBuilder<SalesReturnEditorBloc, SalesReturnEditorState>(
+            buildWhen: (p, c) =>
+                p.canRefreshFromZoho != c.canRefreshFromZoho ||
+                p.isRefreshing != c.isRefreshing,
+            builder: (context, state) {
+              return VoucherRefreshAction(
+                visible: state.canRefreshFromZoho,
+                isLoading: state.isRefreshing,
+                onPressed: () => _onRefreshPressed(context),
+              );
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: BlocConsumer<SalesReturnEditorBloc, SalesReturnEditorState>(
           listenWhen: (previous, current) =>
               previous.successMessage != current.successMessage ||
               previous.errorMessage != current.errorMessage ||
+              previous.infoMessage != current.infoMessage ||
               previous.editingReason != current.editingReason,
           listener: (context, state) {
             if (_reasonController.text != state.editingReason) {
@@ -114,10 +131,15 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
               context
                   .read<SalesReturnEditorBloc>()
                   .add(const ClearSalesReturnEditorMessages());
+            } else if (state.infoMessage != null) {
+              showInfoSnackBar(context, state.infoMessage!);
+              context
+                  .read<SalesReturnEditorBloc>()
+                  .add(const ClearSalesReturnEditorMessages());
             }
           },
           builder: (context, state) {
-            final readOnly = _isViewMode;
+            final readOnly = _isViewMode || state.isRefreshing;
 
             if (state.isEditorLoading) {
               return const Center(
@@ -150,5 +172,19 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _onRefreshPressed(BuildContext context) async {
+    final bloc = context.read<SalesReturnEditorBloc>();
+    final snapshotReason = bloc.state.editingReturn?.reason ?? '';
+    final reasonDirty =
+        _reasonController.text.trim() != snapshotReason.trim();
+    final dirty = bloc.state.isFormDirty || reasonDirty;
+    if (dirty) {
+      final ok = await confirmDiscardEditsForRefresh(context);
+      if (!ok || !context.mounted) return;
+    }
+    bloc.add(UpdateReturnReason(_reasonController.text));
+    bloc.add(RefreshSalesReturnFromZoho(forceDirty: dirty));
   }
 }

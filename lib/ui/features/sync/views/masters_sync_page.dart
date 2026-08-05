@@ -3,9 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/error_classification.dart';
-import '../../../../data/services/hive_database_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/status_pill.dart';
@@ -17,6 +17,9 @@ import '../bloc/sync_bloc.dart';
 import '../bloc/masters_sync_bloc.dart';
 import '../bloc/masters_sync_event.dart';
 import '../bloc/masters_sync_state.dart';
+import '../widgets/masters_sync_card_list.dart';
+import '../widgets/masters_sync_console_panel.dart';
+import '../widgets/masters_sync_header.dart';
 
 /// The Core Master Data Bootstrap / Sync Screen.
 ///
@@ -72,8 +75,8 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
   /// the Cash Closing workflow — otherwise a day's cash-in-hand discrepancy
   /// could be walked away from unnoticed.
   Future<void> _attemptLogout(BuildContext context) async {
-    final hasPendingClosing = sl<HiveDatabaseService>()
-        .hasPendingCashClosingForToday();
+    final hasPendingClosing =
+        sl<SalesRepository>().hasPendingCashClosingForToday();
     if (!hasPendingClosing) {
       context.read<AuthBloc>().add(LogoutRequested());
       return;
@@ -186,53 +189,32 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   children: [
-                    _buildHeroCard(context, state, isDark, syncedCount, totalCount),
-                    if (state.bulkSyncStatus != null) ...[
-                      const SizedBox(height: 16),
-                      _buildStatusBanner(state, isDark),
-                    ],
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 10),
-                      child: Row(
-                        children: [
-                          Text(
-                            'DATA CATEGORIES',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                              color: isDark
-                                  ? AppTheme.darkTextSecondary
-                                  : AppTheme.lightTextSecondary,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '$syncedCount / $totalCount',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? AppTheme.darkTextSecondary
-                                  : AppTheme.lightTextSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
+                    MastersSyncHeader(
+                      state: state,
+                      isDark: isDark,
+                      syncedCount: syncedCount,
+                      totalCount: totalCount,
+                      onLongPressConsole: () {
+                        setState(() => _showConsoleLogs = true);
+                      },
                     ),
-                    ...MasterType.values.map(
-                      (type) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _buildMasterCard(context, state, type, isDark),
-                      ),
+                    const SizedBox(height: 20),
+                    MastersSyncCardList(
+                      state: state,
+                      isDark: isDark,
+                      syncedCount: syncedCount,
+                      totalCount: totalCount,
                     ),
                   ],
                 ),
               ),
               Visibility(
                 visible: _showConsoleLogs,
-                child: _buildConsoleLogs(context, state),
+                child: MastersSyncConsolePanel(
+                  state: state,
+                  scrollController: _scrollController,
+                  onClose: () => setState(() => _showConsoleLogs = false),
+                ),
               ),
               _buildBottomBar(context, state.canProceed),
             ],
@@ -240,308 +222,6 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
         },
       ),
     );
-  }
-
-  Widget _buildHeroCard(
-    BuildContext context,
-    MastersSyncState state,
-    bool isDark,
-    int syncedCount,
-    int totalCount,
-  ) {
-    final progress = totalCount == 0 ? 0.0 : syncedCount / totalCount;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppTheme.primaryIndigo, AppTheme.primaryDarkIndigo],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryIndigo.withValues(alpha: 0.27),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.cloud_sync_rounded,
-                  color: Colors.white,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Text(
-                  'Master Data',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Text(
-                '$syncedCount of $totalCount synced',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${(progress * 100).round()}%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: state.bulkInFlight && progress == 0 ? null : progress,
-              minHeight: 8,
-              backgroundColor: Colors.white.withValues(alpha: 0.2),
-              valueColor: const AlwaysStoppedAnimation(Colors.white),
-            ),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            // GestureDetector so long-press works even while the button is
-            // disabled during an in-flight bulk sync.
-            child: GestureDetector(
-              onLongPress: () {
-                setState(() => _showConsoleLogs = true);
-              },
-              child: ElevatedButton.icon(
-                onPressed: state.bulkInFlight
-                    ? null
-                    : () => context
-                        .read<MastersSyncBloc>()
-                        .add(SyncAllRequested()),
-                icon: state.bulkInFlight
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.primaryIndigo,
-                        ),
-                      )
-                    : const Icon(Icons.sync_rounded),
-                label: Text(
-                  state.bulkInFlight ? 'Syncing all…' : 'Sync All Masters',
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppTheme.primaryIndigo,
-                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.7),
-                  disabledForegroundColor: AppTheme.primaryIndigo,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusBanner(MastersSyncState state, bool isDark) {
-    final success = state.bulkSyncSuccess;
-    final Color bg = success == true
-        ? (isDark
-              ? AppTheme.successEmerald.withValues(alpha: 0.16)
-              : const Color(0xFFE8F5E9))
-        : success == false
-        ? (isDark ? AppTheme.errorRose.withValues(alpha: 0.16) : const Color(0xFFFFEBEE))
-        : (isDark
-              ? AppTheme.primaryIndigo.withValues(alpha: 0.16)
-              : const Color(0xFFE8EAF6));
-    final Color border = success == true
-        ? AppTheme.successEmerald.withValues(alpha: 0.39)
-        : success == false
-        ? AppTheme.errorRose.withValues(alpha: 0.39)
-        : AppTheme.primaryIndigo.withValues(alpha: 0.39);
-    final Color fg = success == true
-        ? (isDark ? Colors.green[200]! : const Color(0xFF2E7D32))
-        : success == false
-        ? (isDark ? Colors.red[200]! : const Color(0xFFC62828))
-        : (isDark ? Colors.indigo[200]! : AppTheme.primaryIndigo);
-    final IconData icon = success == true
-        ? Icons.check_circle_rounded
-        : success == false
-        ? Icons.error_outline_rounded
-        : Icons.sync_outlined;
-    final Color iconColor = success == true
-        ? AppTheme.successEmerald
-        : success == false
-        ? AppTheme.errorRose
-        : AppTheme.primaryIndigo;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: iconColor),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              state.bulkSyncStatus!,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: fg,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMasterCard(
-    BuildContext context,
-    MastersSyncState state,
-    MasterType type,
-    bool isDark,
-  ) {
-    final isBusy = state.inFlight.contains(type) || state.bulkInFlight;
-    final error = state.lastError[type];
-    final isSynced = state.syncedTypes.contains(type) && error == null;
-
-    Color accent;
-    Widget trailing;
-    if (isBusy) {
-      accent = AppTheme.infoSky;
-      trailing = const SizedBox(
-        width: 22,
-        height: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.5,
-          color: AppTheme.infoSky,
-        ),
-      );
-    } else if (isSynced) {
-      accent = AppTheme.successEmerald;
-      trailing = const StatusPill(
-        label: 'Synced',
-        color: AppTheme.successEmerald,
-        icon: Icons.check_circle_rounded,
-      );
-    } else if (error != null) {
-      accent = AppTheme.errorRose;
-      trailing = const StatusPill(
-        label: 'Retry',
-        color: AppTheme.errorRose,
-        icon: Icons.refresh_rounded,
-      );
-    } else {
-      accent = AppTheme.primaryIndigo;
-      trailing = const StatusPill(
-        label: 'Sync',
-        color: AppTheme.primaryIndigo,
-        icon: Icons.sync_rounded,
-      );
-    }
-
-    return SyncItemCard(
-      icon: _iconForType(type),
-      title: type.label,
-      subtitle: error ?? _descForType(type),
-      accentColor: accent,
-      trailing: trailing,
-      onTap: isBusy
-          ? null
-          : () {
-              context.read<MastersSyncBloc>().add(SyncOneRequested(type));
-            },
-      hasError: error != null,
-    );
-  }
-
-  IconData _iconForType(MasterType type) {
-    switch (type) {
-      case MasterType.organization:
-        return Icons.business_rounded;
-      case MasterType.warehouses:
-        return Icons.warehouse_rounded;
-      case MasterType.paymentAccounts:
-        return Icons.account_balance_wallet_rounded;
-      case MasterType.taxes:
-        return Icons.percent_rounded;
-      case MasterType.expenseAccounts:
-        return Icons.request_quote_rounded;
-      case MasterType.routes:
-        return Icons.route_rounded;
-      case MasterType.items:
-        return Icons.inventory_2_rounded;
-      case MasterType.customers:
-        return Icons.people_alt_rounded;
-      case MasterType.salespersons:
-        return Icons.badge_rounded;
-    }
-  }
-
-  String _descForType(MasterType type) {
-    switch (type) {
-      case MasterType.organization:
-        return 'Currency, formatting & org settings';
-      case MasterType.warehouses:
-        return 'Van compartments & stock locations';
-      case MasterType.paymentAccounts:
-        return 'Bank & cash accounts for receipts';
-      case MasterType.taxes:
-        return 'VAT rates & tax configurations';
-      case MasterType.expenseAccounts:
-        return 'Categories for on-route expenses';
-      case MasterType.routes:
-        return 'Delivery routes & sequences';
-      case MasterType.items:
-        return 'Product catalog & van stock';
-      case MasterType.customers:
-        return 'Contacts, balances & credit limits';
-      case MasterType.salespersons:
-        return 'Sales users & location assignments';
-    }
   }
 
   Widget _buildBottomBar(BuildContext context, bool hasMasters) {
@@ -839,125 +519,6 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- Diagnostic Console (hidden by default; long-press Sync All Masters) ---
-
-  Widget _buildConsoleLogs(BuildContext context, MastersSyncState state) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      height: 120,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.black : const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade800),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade900,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(11),
-                topRight: Radius.circular(11),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.terminal_rounded,
-                  color: Colors.greenAccent,
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'DIAGNOSTIC LOGS',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-                if (state.consoleLogs.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      context.read<MastersSyncBloc>().add(ClearLogsRequested());
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        'CLEAR',
-                        style: TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
-                  ),
-                GestureDetector(
-                  onTap: () => setState(() => _showConsoleLogs = false),
-                  child: const Icon(
-                    Icons.close_rounded,
-                    color: Colors.white70,
-                    size: 18,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: SelectionArea(
-              child: state.consoleLogs.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No logs yet. Start sync to capture diagnostics.',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(8),
-                      itemCount: state.consoleLogs.length,
-                      itemBuilder: (context, index) {
-                        final log = state.consoleLogs[index];
-                        Color textColor = Colors.white70;
-                        if (log.toLowerCase().contains('failed') ||
-                            log.toLowerCase().contains('error')) {
-                          textColor = Colors.redAccent;
-                        } else if (log.toLowerCase().contains('synced') ||
-                            log.toLowerCase().contains('success')) {
-                          textColor = Colors.greenAccent;
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            log,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
           ),
         ],
       ),

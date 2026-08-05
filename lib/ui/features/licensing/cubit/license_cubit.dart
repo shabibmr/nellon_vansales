@@ -7,6 +7,7 @@ import '../../../../data/services/local_storage_service.dart';
 import '../../../../domain/models/license_document.dart';
 import '../../../../domain/models/server_config.dart';
 import '../../../../domain/models/user.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'license_state.dart';
 
 /// Cubit managing the App Licensing flow, checking licenses, registering first-time users,
@@ -145,7 +146,7 @@ class LicenseCubit extends Cubit<LicenseState> {
     } catch (e) {
       emit(
         LicenseError(
-          'Failed to register application license: ${e.toString().replaceAll('Exception: ', '')}',
+          'Failed to register application license: ${userFacingMessage(e)}',
         ),
       );
     }

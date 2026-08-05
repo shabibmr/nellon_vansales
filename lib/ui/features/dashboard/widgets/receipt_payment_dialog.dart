@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/receipt_voucher.dart';
+import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../domain/repositories/sales_repository.dart';
@@ -37,9 +38,10 @@ class ReceiptPaymentDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider<ReceiptAllocationBloc>(
-      create: (_) => ReceiptAllocationBloc(
-        salesRepository: sl<SalesRepository>(),
+      create: (ctx) => ReceiptAllocationBloc(
+        salesRepository: ctx.read<SalesRepository>(),
         syncWorker: sl<SyncWorker>(),
+        documentNumberService: sl<DocumentNumberService>(),
       )..add(ReceiptAllocationStarted(customer)),
       child: _ReceiptPaymentDialogView(
         customer: customer,

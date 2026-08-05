@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
-import '../../../../domain/models/warehouse.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/quantity_format.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -21,7 +18,6 @@ class StockUnloadingPage extends StatefulWidget {
 }
 
 class _StockUnloadingPageState extends State<StockUnloadingPage> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
   final TextEditingController _notesController = TextEditingController();
   final Map<String, TextEditingController> _qtyControllers = {};
 
@@ -43,38 +39,9 @@ class _StockUnloadingPageState extends State<StockUnloadingPage> {
     return created;
   }
 
-  Warehouse _resolveDefaultWarehouse() {
-    final warehouses = _db.getWarehouses();
-    if (warehouses.isEmpty) {
-      return const Warehouse(id: '', name: 'Default Warehouse', address: '');
-    }
-    final primaryId = _db.primaryWarehouseId;
-    if (primaryId != null && primaryId.isNotEmpty) {
-      for (final w in warehouses) {
-        if (w.id == primaryId) return w;
-      }
-    }
-    return warehouses.firstWhere(
-      (w) => w.isPrimary,
-      orElse: () => warehouses.first,
-    );
-  }
-
-  Warehouse _resolveCurrentLocation() {
-    final id = _db.assignedWarehouseId;
-    final warehouses = _db.getWarehouses();
-    return warehouses.firstWhere(
-      (w) => w.id == id,
-      orElse: () =>
-          Warehouse(id: id ?? '', name: 'Current Location', address: ''),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultWarehouse = _resolveDefaultWarehouse();
-    final currentLocation = _resolveCurrentLocation();
 
     return Scaffold(
       backgroundColor: isDark
@@ -123,7 +90,7 @@ class _StockUnloadingPageState extends State<StockUnloadingPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          currentLocation.name,
+                          state.currentLocation.name,
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
@@ -138,7 +105,7 @@ class _StockUnloadingPageState extends State<StockUnloadingPage> {
                       ),
                       Expanded(
                         child: Text(
-                          defaultWarehouse.name,
+                          state.defaultWarehouse.name,
                           textAlign: TextAlign.right,
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,

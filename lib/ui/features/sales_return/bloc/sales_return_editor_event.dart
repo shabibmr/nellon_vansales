@@ -37,6 +37,28 @@ class RetryLoadSalesReturn extends SalesReturnEditorEvent {
   const RetryLoadSalesReturn();
 }
 
+/// Re-fetches a synced sales return from Zoho and updates the form if it changed.
+///
+/// [forceDirty] covers controller-only reason edits not yet in BLoC state.
+class RefreshSalesReturnFromZoho extends SalesReturnEditorEvent {
+  final bool forceDirty;
+
+  const RefreshSalesReturnFromZoho({this.forceDirty = false});
+
+  @override
+  List<Object?> get props => [forceDirty];
+}
+
+/// Mirrors return reason text into BLoC state (dirty tracking).
+class UpdateReturnReason extends SalesReturnEditorEvent {
+  final String reason;
+
+  const UpdateReturnReason(this.reason);
+
+  @override
+  List<Object?> get props => [reason];
+}
+
 /// Updates return date.
 class UpdateReturnDate extends SalesReturnEditorEvent {
   final DateTime date;

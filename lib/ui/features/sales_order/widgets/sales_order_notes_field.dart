@@ -6,11 +6,13 @@ import '../../../../ui/core/theme/app_theme.dart';
 class SalesOrderNotesField extends StatelessWidget {
   final TextEditingController controller;
   final bool readOnly;
+  final ValueChanged<String>? onChanged;
 
   const SalesOrderNotesField({
     super.key,
     required this.controller,
     required this.readOnly,
+    this.onChanged,
   });
 
   @override
@@ -20,6 +22,7 @@ class SalesOrderNotesField extends StatelessWidget {
       maxLines: 2,
       readOnly: readOnly,
       enabled: !readOnly,
+      onChanged: readOnly ? null : onChanged,
       decoration: const InputDecoration(
         labelText: 'Order Notes',
         hintText: 'Add remarks or special terms...',

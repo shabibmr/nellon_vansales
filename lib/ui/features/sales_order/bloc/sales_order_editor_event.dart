@@ -40,6 +40,28 @@ class RetryLoadSalesOrder extends SalesOrderEditorEvent {
   const RetryLoadSalesOrder();
 }
 
+/// Re-fetches a synced sales order from Zoho and updates the form if it changed.
+///
+/// [forceDirty] covers controller-only notes edits not yet in BLoC state.
+class RefreshSalesOrderFromZoho extends SalesOrderEditorEvent {
+  final bool forceDirty;
+
+  const RefreshSalesOrderFromZoho({this.forceDirty = false});
+
+  @override
+  List<Object?> get props => [forceDirty];
+}
+
+/// Mirrors notes text from the editor field into BLoC state (dirty tracking).
+class UpdateOrderNotes extends SalesOrderEditorEvent {
+  final String notes;
+
+  const UpdateOrderNotes(this.notes);
+
+  @override
+  List<Object?> get props => [notes];
+}
+
 /// Updates the expected shipment date under the editor.
 class UpdateOrderShipmentDate extends SalesOrderEditorEvent {
   final DateTime shipmentDate;

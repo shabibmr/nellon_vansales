@@ -3,7 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/customer_ledger.dart';
 import '../../../../domain/repositories/sales_repository.dart';
-import '../../../../data/services/zoho_api_client.dart';
+import '../../../core/utils/error_mapper.dart';
 
 // --- Events ---
 
@@ -103,12 +103,11 @@ class CustomerLedgerState extends Equatable {
 class CustomerLedgerBloc
     extends Bloc<CustomerLedgerEvent, CustomerLedgerState> {
   final SalesRepository _salesRepository;
-  final ZohoApiClient _apiClient;
 
   CustomerLedgerBloc({
-    required this._salesRepository,
-    required this._apiClient,
-  }) : super(CustomerLedgerState()) {
+    required SalesRepository salesRepository,
+  }) : _salesRepository = salesRepository,
+       super(CustomerLedgerState()) {
     on<SetLedgerCustomer>(_onSetCustomer);
     on<SetLedgerStartDate>(_onSetStartDate);
     on<SetLedgerEndDate>(_onSetEndDate);
@@ -155,29 +154,17 @@ class CustomerLedgerBloc
 
     emit(state.copyWith(isLoading: true, clearError: true, clearLedger: true));
     try {
-      final raw = await _apiClient.fetchCustomerStatement(
+      final ledger = await _salesRepository.fetchCustomerLedger(
         state.selectedCustomer!.id,
         startDate: state.startDate,
         endDate: state.endDate,
-      );
-
-      // Inject the real customer name from local cache when Zoho returns a generic/mock name
-      final rawWithName = Map<String, dynamic>.from(raw);
-      if ((rawWithName['contact_name'] as String? ?? '').isEmpty ||
-          rawWithName['contact_name'] == 'Demo Customer') {
-        rawWithName['contact_name'] = state.selectedCustomer!.name;
-      }
-
-      final ledger = CustomerLedger.fromJson(
-        rawWithName,
-        state.selectedCustomer!.id,
       );
       emit(state.copyWith(ledger: ledger, isLoading: false));
     } catch (e) {
       emit(
         state.copyWith(
           isLoading: false,
-          errorMessage: e.toString().replaceFirst('Exception: ', ''),
+          errorMessage: userFacingMessage(e),
         ),
       );
     }

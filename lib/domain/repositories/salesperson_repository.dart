@@ -30,6 +30,9 @@ abstract class SalespersonRepository {
   /// Returns the resolved active salesperson for the current session, if any.
   Salesperson? get currentSalesperson;
 
+  /// Whether the active session is restricted to orders-only mode.
+  bool get isOrdersOnlyMode;
+
   /// Clears the session's active salesperson (e.g. on logout).
   Future<void> clearCurrentSalesperson();
 }

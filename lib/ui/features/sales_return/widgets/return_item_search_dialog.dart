@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/sales_return.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/widgets/item_search_sheet.dart';
 import 'return_invoice_selector_dialog.dart';
@@ -14,9 +14,9 @@ class ReturnItemSearchDialog {
     required String customerId,
     List<String> excludedItemIds = const [],
   }) async {
-    final db = sl<HiveDatabaseService>();
+    final sales = context.read<SalesRepository>();
 
-    final invoices = db
+    final invoices = sales
         .getLocalInvoices()
         .where((inv) => inv.customerId == customerId)
         .toList();
@@ -25,7 +25,7 @@ class ReturnItemSearchDialog {
         .map((line) => line.item.id)
         .toSet();
 
-    final items = db
+    final items = sales
         .getItems()
         .where((item) => purchasedItemIds.contains(item.id))
         .where((item) => !excludedItemIds.contains(item.id))
@@ -40,7 +40,7 @@ class ReturnItemSearchDialog {
       emptyMessage: 'No items found for this customer',
       accentColor: AppTheme.warningAmber,
       onSelected: (item, sheetContext) async {
-        final customer = db.getCustomers().firstWhere(
+        final customer = sales.getCustomers().firstWhere(
           (c) => c.id == customerId,
         );
         final lines = await showDialog<List<SalesReturnLineItem>>(

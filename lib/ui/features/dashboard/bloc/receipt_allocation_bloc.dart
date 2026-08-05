@@ -6,18 +6,20 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/document_number_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
+import '../../../core/utils/error_mapper.dart';
 import 'receipt_allocation_event.dart';
 import 'receipt_allocation_state.dart';
 
 class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocationState> {
   final SalesRepository salesRepository;
   final SyncWorker syncWorker;
+  final DocumentNumberService documentNumberService;
 
   ReceiptAllocationBloc({
     required this.salesRepository,
     required this.syncWorker,
+    required this.documentNumberService,
   }) : super(const ReceiptAllocationState()) {
     on<ReceiptAllocationStarted>(_onStarted);
     on<OpenInvoicesRefreshRequested>(_onRefreshRequested);
@@ -185,7 +187,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
 
     try {
       final tempId = 'temp_pay_${DateTime.now().millisecondsSinceEpoch}';
-      final paymentNum = await sl<DocumentNumberService>().nextNumber(
+      final paymentNum = await documentNumberService.nextNumber(
         DocType.receipt,
       );
       final voucher = ReceiptVoucher(
@@ -215,7 +217,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
       await salesRepository.enqueueSyncItem(syncItem);
 
       // Kick sync in background
-      syncWorker.syncPendingItems();
+      unawaited(syncWorker.syncPendingItems());
 
       emit(state.copyWith(
         submitting: false,
@@ -224,7 +226,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
     } catch (e) {
       emit(state.copyWith(
         submitting: false,
-        submitError: e.toString(),
+        submitError: userFacingMessage(e),
       ));
     }
   }

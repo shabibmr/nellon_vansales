@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_return.dart';
+import '../../../../domain/utils/voucher_content_fingerprint.dart';
 
 /// Form-only state for creating/viewing a single sales return (credit note).
 class SalesReturnEditorState extends Equatable {
@@ -14,11 +15,15 @@ class SalesReturnEditorState extends Equatable {
   final bool isEditingNew;
 
   final bool isEditorLoading;
+  final bool isRefreshing;
   final bool isSaving;
   final String? editorError;
 
   final String? errorMessage;
   final String? successMessage;
+
+  /// Non-blocking toast (refresh result / offline open); does not pop the route.
+  final String? infoMessage;
 
   const SalesReturnEditorState({
     this.editingReturnId,
@@ -29,11 +34,38 @@ class SalesReturnEditorState extends Equatable {
     this.editingReason = '',
     this.isEditingNew = false,
     this.isEditorLoading = false,
+    this.isRefreshing = false,
     this.isSaving = false,
     this.editorError,
     this.errorMessage,
     this.successMessage,
+    this.infoMessage,
   });
+
+  /// True when a loaded, synced voucher can be refreshed from Zoho.
+  bool get canRefreshFromZoho {
+    if (isEditingNew || editorError != null) return false;
+    final ret = editingReturn;
+    if (ret == null || ret.isPendingSync) return false;
+    final id = editingReturnId ?? ret.id;
+    if (id.isEmpty || id.startsWith('temp_ret_')) return false;
+    return true;
+  }
+
+  /// True when form fields differ from the last loaded [editingReturn] snapshot.
+  bool get isFormDirty {
+    final ret = editingReturn;
+    if (ret == null) return false;
+    final formFp = VoucherContentFingerprint.salesReturnForm(
+      id: ret.id,
+      creditNoteNumber: ret.creditNoteNumber,
+      customerId: editingCustomer?.id ?? '',
+      date: editingDate ?? ret.date,
+      reason: editingReason,
+      items: editingItems,
+    );
+    return formFp != VoucherContentFingerprint.salesReturn(ret);
+  }
 
   SalesReturnEditorState copyWith({
     String? editingReturnId,
@@ -44,10 +76,12 @@ class SalesReturnEditorState extends Equatable {
     String? editingReason,
     bool? isEditingNew,
     bool? isEditorLoading,
+    bool? isRefreshing,
     bool? isSaving,
     String? editorError,
     String? errorMessage,
     String? successMessage,
+    String? infoMessage,
     bool clearMessages = false,
     bool clearEditingCustomer = false,
     bool clearEditingReturnId = false,
@@ -69,11 +103,13 @@ class SalesReturnEditorState extends Equatable {
       editingReason: editingReason ?? this.editingReason,
       isEditingNew: isEditingNew ?? this.isEditingNew,
       isEditorLoading: isEditorLoading ?? this.isEditorLoading,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
       isSaving: isSaving ?? this.isSaving,
       editorError: clearEditorError ? null : (editorError ?? this.editorError),
       errorMessage: clearMessages ? null : (errorMessage ?? this.errorMessage),
       successMessage:
           clearMessages ? null : (successMessage ?? this.successMessage),
+      infoMessage: clearMessages ? null : (infoMessage ?? this.infoMessage),
     );
   }
 
@@ -87,9 +123,11 @@ class SalesReturnEditorState extends Equatable {
     editingReason,
     isEditingNew,
     isEditorLoading,
+    isRefreshing,
     isSaving,
     editorError,
     errorMessage,
     successMessage,
+    infoMessage,
   ];
 }

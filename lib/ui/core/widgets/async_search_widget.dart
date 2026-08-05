@@ -6,7 +6,6 @@ import 'empty_state.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/models/item.dart';
 import '../../../domain/repositories/sales_repository.dart';
-import '../../../data/services/injection.dart';
 import '../bloc/async_search_bloc.dart';
 import '../bloc/async_search_event.dart';
 import '../bloc/async_search_state.dart';
@@ -32,7 +31,7 @@ class AsyncSearchWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => AsyncSearchBloc(salesRepository: sl<SalesRepository>()),
+      create: (ctx) => AsyncSearchBloc(salesRepository: ctx.read<SalesRepository>()),
       child: _AsyncSearchView(
         onCustomerSelected: onCustomerSelected,
         onItemSelected: onItemSelected,

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/item.dart';
-import '../../../../domain/models/warehouse.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/quantity_format.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -27,7 +25,6 @@ class IssueToVanPage extends StatefulWidget {
 }
 
 class _IssueToVanPageState extends State<IssueToVanPage> {
-  final HiveDatabaseService _db = sl<HiveDatabaseService>();
   final TextEditingController _notesController = TextEditingController();
   final Map<String, TextEditingController> _extraControllers = {};
 
@@ -47,36 +44,11 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
     );
   }
 
-  Warehouse _resolveDefaultWarehouse() {
-    final warehouses = _db.getWarehouses();
-    if (warehouses.isEmpty) {
-      return const Warehouse(id: '', name: 'Default Warehouse', address: '');
-    }
-    final primaryId = _db.primaryWarehouseId;
-    if (primaryId != null && primaryId.isNotEmpty) {
-      for (final w in warehouses) {
-        if (w.id == primaryId) return w;
-      }
-    }
-    return warehouses.firstWhere(
-      (w) => w.isPrimary,
-      orElse: () => warehouses.first,
-    );
-  }
-
-  Warehouse _resolveCurrentLocation() {
-    final id = _db.assignedWarehouseId;
-    final warehouses = _db.getWarehouses();
-    return warehouses.firstWhere(
-      (w) => w.id == id,
-      orElse: () => Warehouse(id: id ?? '', name: 'Current Location', address: ''),
-    );
-  }
-
   Future<void> _openAddItemSheet(BuildContext pageContext) async {
     final bloc = pageContext.read<StockTransferBloc>();
     final excludedIds = bloc.state.rows.map((r) => r.item.id).toSet();
-    final items = _db
+    final items = pageContext
+        .read<SalesRepository>()
         .getItems()
         .where((it) => !excludedIds.contains(it.id))
         .toList();
@@ -193,8 +165,6 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultWarehouse = _resolveDefaultWarehouse();
-    final currentLocation = _resolveCurrentLocation();
 
     return Scaffold(
       backgroundColor: isDark
@@ -222,8 +192,8 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                 if (state.isLoading)
                   const LinearProgressIndicator(color: AppTheme.primaryIndigo),
                 _RouteHeader(
-                  fromLabel: defaultWarehouse.name,
-                  toLabel: currentLocation.name,
+                  fromLabel: state.defaultWarehouse.name,
+                  toLabel: state.currentLocation.name,
                   isDark: isDark,
                 ),
                 if (!state.isLiveData)
@@ -257,7 +227,7 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                           child: SingleChildScrollView(
                             child: ConstrainedBox(
                               constraints: BoxConstraints(
-                                minWidth: MediaQuery.of(context).size.width,
+                                minWidth: MediaQuery.sizeOf(context).width,
                               ),
                               child: _buildGrid(context, state, isDark),
                             ),

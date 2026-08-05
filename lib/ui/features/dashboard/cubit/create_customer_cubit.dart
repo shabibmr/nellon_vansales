@@ -1,13 +1,20 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
+import '../../../../ui/core/utils/error_mapper.dart';
 import 'create_customer_state.dart';
 
 class CreateCustomerCubit extends Cubit<CreateCustomerState> {
   final SalesRepository salesRepository;
+  final SyncRepository syncRepository;
 
-  CreateCustomerCubit({required this.salesRepository}) : super(CreateCustomerInitial());
+  CreateCustomerCubit({
+    required this.salesRepository,
+    required this.syncRepository,
+  }) : super(CreateCustomerInitial());
 
   Future<void> submit({
     required String name,
@@ -16,7 +23,7 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
     required String phone,
     required String address,
     required double creditLimit,
-    required String activeRouteId,
+    String? activeRouteId,
     double? latitude,
     double? longitude,
   }) async {
@@ -24,6 +31,8 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
     emit(CreateCustomerSaving());
 
     try {
+      final routeId =
+          activeRouteId ?? salesRepository.activeRouteId ?? 'route_default';
       final localCustomers = salesRepository.getCustomers();
       final tempId = 'temp_cust_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -36,7 +45,7 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
         address: address,
         outstandingBalance: 0.0,
         creditLimit: creditLimit,
-        routeId: activeRouteId,
+        routeId: routeId,
         sequence: localCustomers.length + 1,
         latitude: latitude,
         longitude: longitude,
@@ -53,7 +62,7 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
         'email': email,
         'phone': phone,
         'billing_address': {'address': address},
-        'route_id': activeRouteId,
+        'route_id': routeId,
         'credit_limit': creditLimit,
         'isPendingSync': true,
       };
@@ -75,9 +84,12 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
       );
       await salesRepository.enqueueSyncItem(syncItem);
 
+      // 4. Trigger background sync
+      unawaited(syncRepository.triggerSync());
+
       emit(CreateCustomerSuccess(newCustomer));
     } catch (e) {
-      emit(CreateCustomerFailure(e.toString()));
+      emit(CreateCustomerFailure(userFacingMessage(e)));
     }
   }
 }

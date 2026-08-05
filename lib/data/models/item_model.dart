@@ -24,15 +24,16 @@ class ItemModel extends Item {
   /// Maps Zoho API keys (`item_id`, `stock_on_hand`, `tax_percentage`, `unit`) with fallback defaults.
   factory ItemModel.fromJson(Map<String, dynamic> json) {
     return ItemModel(
-      id: json['item_id'] ?? json['id'] ?? '',
-      name: json['name'] ?? '',
-      sku: json['sku'] ?? '',
-      rate: (json['rate'] ?? json['price'] ?? 0.0).toDouble(),
+      id: ((json['item_id'] ?? json['id']) as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      sku: (json['sku'] as String?) ?? '',
+      rate: ((json['rate'] ?? json['price']) as num?)?.toDouble() ?? 0.0,
       stock: ((json['stock_on_hand'] ?? json['stock'] ?? 0) as num).toDouble(),
-      description: json['description'] ?? '',
-      taxName: json['tax_name'] ?? json['taxName'] ?? 'VAT 5%',
-      taxPercentage: (json['tax_percentage'] ?? json['taxPercentage'] ?? 5.0)
-          .toDouble(),
+      description: (json['description'] as String?) ?? '',
+      taxName: ((json['tax_name'] ?? json['taxName']) as String?) ?? 'VAT 5%',
+      taxPercentage: ((json['tax_percentage'] ?? json['taxPercentage']) as num?)
+              ?.toDouble() ??
+          5.0,
       // Zoho Books/Inventory use `unit`; local cache may store `uom`.
       uom: (json['unit'] ?? json['uom'] ?? '').toString(),
       // Only present after unit-conversion enrichment (item detail fetch).

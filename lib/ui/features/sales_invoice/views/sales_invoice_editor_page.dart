@@ -10,7 +10,9 @@ import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
+import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/voucher_refresh_action.dart';
 import '../bloc/sales_invoice_editor_bloc.dart';
 import '../bloc/sales_invoice_editor_event.dart';
 import '../bloc/sales_invoice_editor_state.dart';
@@ -100,12 +102,27 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
             );
           },
         ),
+        actions: [
+          BlocBuilder<SalesInvoiceEditorBloc, SalesInvoiceEditorState>(
+            buildWhen: (p, c) =>
+                p.canRefreshFromZoho != c.canRefreshFromZoho ||
+                p.isRefreshing != c.isRefreshing,
+            builder: (context, state) {
+              return VoucherRefreshAction(
+                visible: state.canRefreshFromZoho,
+                isLoading: state.isRefreshing,
+                onPressed: () => _onRefreshPressed(context),
+              );
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: BlocConsumer<SalesInvoiceEditorBloc, SalesInvoiceEditorState>(
           listenWhen: (previous, current) =>
               previous.successMessage != current.successMessage ||
               previous.errorMessage != current.errorMessage ||
+              previous.infoMessage != current.infoMessage ||
               previous.editingNotes != current.editingNotes,
           listener: (context, state) {
             if (_notesController.text != state.editingNotes) {
@@ -122,10 +139,15 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
               context
                   .read<SalesInvoiceEditorBloc>()
                   .add(const ClearSalesInvoiceEditorMessages());
+            } else if (state.infoMessage != null) {
+              showInfoSnackBar(context, state.infoMessage!);
+              context
+                  .read<SalesInvoiceEditorBloc>()
+                  .add(const ClearSalesInvoiceEditorMessages());
             }
           },
           builder: (context, state) {
-            final readOnly = _isViewMode;
+            final readOnly = _isViewMode || state.isRefreshing;
 
             if (state.isEditorLoading) {
               return const Center(
@@ -158,5 +180,21 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _onRefreshPressed(BuildContext context) async {
+    final bloc = context.read<SalesInvoiceEditorBloc>();
+    // Notes live in the controller until Save; include them in dirty detection.
+    final snapshotNotes = bloc.state.editingInvoice?.notes ?? '';
+    final notesDirty =
+        _notesController.text.trim() != snapshotNotes.trim();
+    final dirty = bloc.state.isFormDirty || notesDirty;
+    if (dirty) {
+      final ok = await confirmDiscardEditsForRefresh(context);
+      if (!ok || !context.mounted) return;
+    }
+    // Keep BLoC notes in sync for fingerprint / wasDirty consistency.
+    bloc.add(UpdateInvoiceNotes(_notesController.text));
+    bloc.add(RefreshSalesInvoiceFromZoho(forceDirty: dirty));
   }
 }

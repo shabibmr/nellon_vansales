@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/hive_database_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/sales_return.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../core/cubit/salesperson_cubit.dart';
+import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/permission_dialogs.dart';
 import '../../../core/utils/snackbars.dart';
@@ -35,9 +36,9 @@ class VoucherPdfActionsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider<VoucherPdfBloc>(
-      create: (_) => VoucherPdfBloc(
-        pdfService: sl<VoucherPdfRepository>(),
-        dbService: sl<HiveDatabaseService>(),
+      create: (ctx) => VoucherPdfBloc(
+        pdfService: ctx.read<VoucherPdfRepository>(),
+        salesRepository: ctx.read<SalesRepository>(),
       ),
       child: _VoucherPdfActionsBody(type: type, voucher: voucher),
     );
@@ -61,8 +62,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
   }
 
   void _printThermal(BuildContext context) {
-    final db = sl<HiveDatabaseService>();
-    final org = db.getOrganization();
+    final org = context.org.state;
     if (org == null) {
       showErrorSnackBar(
         context,
@@ -71,9 +71,11 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       return;
     }
     final customerId = _customerIdFor(type, voucher);
-    final customer =
-        customerId != null ? db.getCustomerById(customerId) : null;
-    final salesperson = db.getCurrentSalesperson()?.name;
+    final customers = context.read<SalesRepository>().getCustomers();
+    final customer = customerId != null
+        ? customers.where((c) => c.id == customerId).firstOrNull
+        : null;
+    final salesperson = context.read<SalespersonCubit>().state?.name;
 
     context.read<ThermalPrinterCubit>().printVoucher(
           type: type,
