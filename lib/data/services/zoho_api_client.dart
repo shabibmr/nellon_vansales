@@ -615,6 +615,23 @@ class ZohoApiClient {
     return (id != null && id.isNotEmpty) ? {'salesperson_id': id} : {};
   }
 
+  /// Client-side re-check of [_salespersonFilterParams], applied after a
+  /// server-filtered fetch. Belt-and-suspenders: keeps rows whose
+  /// `salesperson_id` is missing (legacy data) or matches the bound
+  /// salesperson; drops anything that resolves to someone else's, in case the
+  /// server-side filter param isn't fully enforced. No-op (returns [rows]
+  /// unchanged) when no salesperson session is bound.
+  List<Map<String, dynamic>> _filterBySalesperson(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final salespersonId = _dbService.getCurrentSalesperson()?.id;
+    if (salespersonId == null || salespersonId.isEmpty) return rows;
+    return rows.where((j) {
+      final spId = j['salesperson_id']?.toString();
+      return spId == null || spId.isEmpty || spId == salespersonId;
+    }).toList();
+  }
+
   /// Scopes customer-payment lists to this salesperson's app-generated series.
   ///
   /// Zoho Payments have no `salesperson_id`; the app stores its offline number
@@ -664,14 +681,7 @@ class ZohoApiClient {
         ..._salespersonFilterParams(),
         ..._dateRangeParams(startDate: startDate, endDate: endDate),
       });
-      final salespersonId = _dbService.getCurrentSalesperson()?.id;
-      if (salespersonId != null && salespersonId.isNotEmpty) {
-        return list.where((j) {
-          final spId = j['salesperson_id']?.toString();
-          return spId == null || spId.isEmpty || spId == salespersonId;
-        }).toList();
-      }
-      return list;
+      return _filterBySalesperson(list);
     } catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesOrders error: $e');
       throw Exception('Failed to fetch sales orders from Zoho: $e');
@@ -750,10 +760,25 @@ class ZohoApiClient {
     DateTime? endDate,
   }) async {
     try {
-      return await _fetchAllPages(
+      final list = await _fetchAllPages(
         '$_inventoryApiUrl/transferorders',
         _dateRangeParams(startDate: startDate, endDate: endDate),
       );
+      // Zoho Inventory has no salesperson_id on Transfer Orders and no
+      // documented from/to location query filter, so scope client-side. A
+      // van's transfers can appear on either side depending on direction
+      // (Issue to Van puts the van in `to`, Stock Unloading puts it in
+      // `from`), so match either field.
+      final locationId = _dbService.getCurrentSalesperson()?.locationId;
+      if (locationId != null && locationId.isNotEmpty) {
+        return list.where((j) {
+          final from = j['from_location_id']?.toString();
+          final to = j['to_location_id']?.toString();
+          if (from == null && to == null) return true;
+          return from == locationId || to == locationId;
+        }).toList();
+      }
+      return list;
     } catch (e) {
       AppLogger.error('ZohoApi', 'fetchStockTransfers error: $e');
       throw Exception('Failed to fetch stock transfers from Zoho: $e');
@@ -1272,7 +1297,7 @@ class ZohoApiClient {
           AppLogger.error('ZohoApi', 'fetchInvoiceDetail($id) error: $e');
         }
       }
-      return details;
+      return _filterBySalesperson(details);
     } catch (e) {
       AppLogger.error('ZohoApi', 'fetchInvoices error: $e');
       throw Exception('Failed to fetch invoices from Zoho: $e');

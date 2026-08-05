@@ -11,6 +11,7 @@ class ReportsTab extends StatelessWidget {
   final VoidCallback onCustomerLedger;
   final VoidCallback onAgingReport;
   final VoidCallback onStockReport;
+  final VoidCallback onStockTransferHistoryReport;
 
   final VoidCallback onTransactionsSummaryReport;
   final VoidCallback onExpenseSummaryReport;
@@ -36,6 +37,7 @@ class ReportsTab extends StatelessWidget {
     required this.onCustomerLedger,
     required this.onAgingReport,
     required this.onStockReport,
+    required this.onStockTransferHistoryReport,
     required this.onTransactionsSummaryReport,
     required this.onExpenseSummaryReport,
     required this.onInvoiceReceiptsSummaryReport,
@@ -84,6 +86,13 @@ class ReportsTab extends StatelessWidget {
               icon: Icons.inventory_2_outlined,
               color: AppTheme.successEmerald,
               onTap: onStockReport,
+            ),
+            _ReportItem(
+              title: 'Stock Transfer History',
+              subtitle: 'Issue to Van and Stock Unloading vouchers.',
+              icon: Icons.local_shipping_outlined,
+              color: AppTheme.primaryIndigo,
+              onTap: onStockTransferHistoryReport,
             ),
           ],
         ),

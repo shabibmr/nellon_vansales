@@ -247,6 +247,35 @@ class ZohoMockFixtures {
     ];
   }
 
+  static List<Map<String, dynamic>> transferOrders() {
+    final now = DateTime.now();
+    return [
+      {
+        'transfer_order_id': 'to_9001',
+        'transfer_order_number': 'STV-00001',
+        'date': now.subtract(const Duration(days: 1)).toIso8601String().split(
+              'T',
+            )[0],
+        'direction': 'load',
+        // Mock sandbox has a single location fixture (`van_wh_01`), so the
+        // sample transfer is scoped to it on both sides — enough to exercise
+        // the from/to location filter in ZohoApiClient.fetchStockTransfers
+        // without inventing a second location fixture.
+        'from_location_id': 'van_wh_01',
+        'to_location_id': 'van_wh_01',
+        'line_items': [
+          {
+            'item_id': 'item_501',
+            'name': 'Sample Product A',
+            'quantity_transfer': 20,
+            'quantity': 20,
+          },
+        ],
+        'notes': 'Morning stock load',
+      },
+    ];
+  }
+
   static List<Map<String, dynamic>> get locations => [
         {
           'location_id': 'van_wh_01',

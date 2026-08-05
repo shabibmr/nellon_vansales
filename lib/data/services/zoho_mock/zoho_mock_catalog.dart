@@ -223,6 +223,12 @@ class ZohoMockCatalog {
         'expense': ZohoMockFixtures.expenseDetail(id),
       });
     }
+    if (method == 'GET' && path.endsWith('/transferorders')) {
+      return _MockResult(200, {
+        'transfer_orders': ZohoMockFixtures.transferOrders(),
+        'page_context': ZohoMockFixtures.pageContext(),
+      });
+    }
     if (method == 'GET' && path == '/locations') {
       return _MockResult(200, {
         'locations': ZohoMockFixtures.locations,

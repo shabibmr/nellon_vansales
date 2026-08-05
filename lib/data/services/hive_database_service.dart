@@ -762,10 +762,22 @@ class HiveDatabaseService {
 
   /// Retrieves list of stock transfers (Issue to Van / Stock Unloading) recorded
   /// locally, scoped to the active session location.
-  List<StockTransfer> getLocalStockTransfers() => _filterByActiveLocation(
-    _getAllLocalStockTransfers(),
-    (t) => t.locationId,
-  );
+  ///
+  /// Unlike [_filterByActiveLocation]'s other callers, a transfer's `locationId`
+  /// (the app-local bookkeeping field, stamped only on local creation) is
+  /// `null` for anything parsed from a Zoho response — Zoho never sends a
+  /// `location_id` key for Transfer Orders. Falls back to matching the real
+  /// `fromLocationId`/`toLocationId` fields in that case, so remote-fetched
+  /// transfers are still scoped to this van instead of showing for everyone.
+  List<StockTransfer> getLocalStockTransfers() {
+    final active = assignedWarehouseId;
+    final all = _getAllLocalStockTransfers();
+    if (active == null) return List<StockTransfer>.of(all);
+    return all.where((t) {
+      if (t.locationId != null) return t.locationId == active;
+      return t.fromLocationId == active || t.toLocationId == active;
+    }).toList();
+  }
 
   /// Caches a newly created stock transfer locally and adjusts the van's local
   /// item stock levels: [StockTransferDirection.load] increases stock (Issue
