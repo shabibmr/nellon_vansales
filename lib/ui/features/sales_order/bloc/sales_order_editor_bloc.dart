@@ -415,6 +415,7 @@ class SalesOrderEditorBloc
         zohoOrderId: existingZohoOrderId,
         status: state.editingOrder?.status ?? SalesOrderStatus.open,
         convertedInvoiceNumber: state.editingOrder?.convertedInvoiceNumber,
+        locationId: state.editingOrder?.locationId,
       );
 
       await _salesRepository.saveLocalOrder(order);

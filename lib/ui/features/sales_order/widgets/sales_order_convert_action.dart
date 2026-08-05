@@ -8,13 +8,19 @@ import '../../sales_invoice/views/sales_invoice_editor_page.dart';
 class SalesOrderConvertAction extends StatelessWidget {
   final SalesOrder order;
 
-  const SalesOrderConvertAction({super.key, required this.order});
+  /// Dense single-row layout for the editor footer sheet.
+  final bool compact;
+
+  const SalesOrderConvertAction({
+    super.key,
+    required this.order,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (order.isConverted) {
       return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Icon(
             Icons.check_circle,
@@ -22,11 +28,16 @@ class SalesOrderConvertAction extends StatelessWidget {
             size: 18,
           ),
           const SizedBox(width: 8),
-          Text(
-            order.convertedInvoiceNumber != null
-                ? 'Converted to ${order.convertedInvoiceNumber}'
-                : 'Converted to invoice',
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          Expanded(
+            child: Text(
+              order.convertedInvoiceNumber != null
+                  ? 'Converted to ${order.convertedInvoiceNumber}'
+                  : 'Converted to invoice',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: compact ? 13 : 14,
+              ),
+            ),
           ),
         ],
       );
@@ -35,12 +46,14 @@ class SalesOrderConvertAction extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        icon: const Icon(Icons.receipt_long),
-        label: const Text('CONVERT TO INVOICE'),
+        icon: Icon(Icons.receipt_long, size: compact ? 18 : 20),
+        label: Text(compact ? 'Convert to invoice' : 'CONVERT TO INVOICE'),
         style: OutlinedButton.styleFrom(
           foregroundColor: AppTheme.primaryIndigo,
           side: const BorderSide(color: AppTheme.primaryIndigo),
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: EdgeInsets.symmetric(vertical: compact ? 10 : 14),
+          visualDensity:
+              compact ? VisualDensity.compact : VisualDensity.standard,
         ),
         onPressed: () {
           SalesInvoiceEditorPage.open(context, fromOrder: order);

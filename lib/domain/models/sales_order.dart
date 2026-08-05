@@ -130,6 +130,18 @@ class SalesOrder extends Equatable {
   /// The Zoho Location ID of the salesperson/van that created this order.
   final String? locationId;
 
+  /// Grand total from Zoho list headers when [items] are not loaded.
+  final double? listedTotal;
+
+  /// Zoho `order_status` (e.g. `draft`, `open`, `invoiced`) from list/detail.
+  final String orderStatus;
+
+  /// Zoho `invoiced_status` from list/detail (empty when not invoiced).
+  final String invoicedStatus;
+
+  /// Zoho `reference_number` (customer/PO reference) from list/detail.
+  final String referenceNumber;
+
   /// Creates a new [SalesOrder].
   const SalesOrder({
     required this.id,
@@ -145,10 +157,16 @@ class SalesOrder extends Equatable {
     this.convertedInvoiceNumber,
     this.zohoOrderId,
     this.locationId,
+    this.listedTotal,
+    this.orderStatus = '',
+    this.invoicedStatus = '',
+    this.referenceNumber = '',
   });
 
   /// Whether this order has already been converted into an invoice.
-  bool get isConverted => status == SalesOrderStatus.invoiced;
+  bool get isConverted =>
+      status == SalesOrderStatus.invoiced ||
+      orderStatus.toLowerCase() == 'invoiced';
 
   /// Computes sum of all sub-totals (excluding taxes).
   double get subTotal =>
@@ -162,15 +180,22 @@ class SalesOrder extends Equatable {
   double get discountTotal =>
       roundMoney(items.fold(0.0, (sum, item) => sum + item.discount));
 
-  /// Computes the unrounded grand total.
+  /// Computes the unrounded grand total from line items.
   double get rawTotal =>
       roundMoney(items.fold(0.0, (sum, item) => sum + item.total));
 
-  /// Computes the final grand total billed, rounded to the nearest integer.
-  double get total => rawTotal.roundToDouble();
+  /// Final grand total: line-derived when items exist, else [listedTotal].
+  double get total {
+    if (items.isNotEmpty) return rawTotal.roundToDouble();
+    if (listedTotal != null) return listedTotal!.roundToDouble();
+    return 0.0;
+  }
 
-  /// Computes the round off adjustment.
-  double get roundOff => roundMoney(total - rawTotal);
+  /// Computes the round off adjustment (meaningful when line items exist).
+  double get roundOff {
+    if (items.isEmpty) return 0.0;
+    return roundMoney(total - rawTotal);
+  }
 
   /// Creates a copy of this [SalesOrder] with replaced values for specific fields.
   SalesOrder copyWith({
@@ -187,6 +212,12 @@ class SalesOrder extends Equatable {
     String? convertedInvoiceNumber,
     String? zohoOrderId,
     String? locationId,
+    double? listedTotal,
+    String? orderStatus,
+    String? invoicedStatus,
+    String? referenceNumber,
+    bool clearListedTotal = false,
+    bool clearLocationId = false,
   }) {
     return SalesOrder(
       id: id ?? this.id,
@@ -202,7 +233,12 @@ class SalesOrder extends Equatable {
       convertedInvoiceNumber:
           convertedInvoiceNumber ?? this.convertedInvoiceNumber,
       zohoOrderId: zohoOrderId ?? this.zohoOrderId,
-      locationId: locationId ?? this.locationId,
+      locationId:
+          clearLocationId ? null : (locationId ?? this.locationId),
+      listedTotal: clearListedTotal ? null : (listedTotal ?? this.listedTotal),
+      orderStatus: orderStatus ?? this.orderStatus,
+      invoicedStatus: invoicedStatus ?? this.invoicedStatus,
+      referenceNumber: referenceNumber ?? this.referenceNumber,
     );
   }
 
@@ -221,5 +257,9 @@ class SalesOrder extends Equatable {
     convertedInvoiceNumber,
     zohoOrderId,
     locationId,
+    listedTotal,
+    orderStatus,
+    invoicedStatus,
+    referenceNumber,
   ];
 }

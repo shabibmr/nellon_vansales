@@ -7,7 +7,8 @@ class Tax extends Equatable {
   /// Unique tax identifier from Zoho (tax_id).
   final String id;
 
-  /// The name/label of the tax (e.g. "VAT (5%)", "Zero Tax").
+  /// Canonical Zoho tax name (e.g. `"Standard Rate"`, `"Zero Rate"`).
+  /// Display forms like `"Standard Rate [5%]"` are UI-only, not this field.
   final String name;
 
   /// Tax rate percentage value (e.g. 5.0).

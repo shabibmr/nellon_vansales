@@ -181,11 +181,8 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final expense = list[index];
-                              final firstLine = expense.lines.isNotEmpty
-                                  ? expense.lines.first
-                                  : null;
-                              final category = firstLine?.category ?? 'Expense';
-                              final description = firstLine?.description ?? '';
+                              final category = expense.displayCategory;
+                              final description = expense.displayDescription;
 
                               return DocumentListCard(
                                 key: ValueKey(expense.id),

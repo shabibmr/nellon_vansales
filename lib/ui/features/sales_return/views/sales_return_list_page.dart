@@ -192,7 +192,11 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
                                 date: dateStr,
                                 subtitle: subtitle,
                                 total: formatCurrency(ret.total, cs),
-                                itemCount: ret.items.length,
+                                // Remote list headers omit line_items —
+                                // only show a count when lines are known.
+                                itemCount: ret.items.isEmpty
+                                    ? null
+                                    : ret.items.length,
                                 isPendingSync: ret.isPendingSync,
                                 accentColor: AppTheme.warningAmber,
                                 onTap: () => _openEditor(

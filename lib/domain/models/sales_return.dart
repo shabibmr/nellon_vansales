@@ -153,6 +153,9 @@ class SalesReturn extends Equatable {
   /// The Zoho Location ID of the salesperson/van that created this return.
   final String? locationId;
 
+  /// Grand total from Zoho list headers when [items] are not loaded.
+  final double? listedTotal;
+
   /// Creates a new [SalesReturn] record.
   const SalesReturn({
     required this.id,
@@ -164,11 +167,17 @@ class SalesReturn extends Equatable {
     required this.reason,
     this.isPendingSync = false,
     this.locationId,
+    this.listedTotal,
   });
 
-  /// Computes the final grand total return value.
-  double get total =>
-      roundMoney(items.fold(0.0, (sum, item) => sum + item.total));
+  /// Final grand total: line-derived when items exist, else [listedTotal].
+  double get total {
+    if (items.isNotEmpty) {
+      return roundMoney(items.fold(0.0, (sum, item) => sum + item.total));
+    }
+    if (listedTotal != null) return roundMoney(listedTotal!);
+    return 0.0;
+  }
 
   /// Creates a copy of this [SalesReturn] with replaced values for specific fields.
   SalesReturn copyWith({
@@ -181,6 +190,8 @@ class SalesReturn extends Equatable {
     String? reason,
     bool? isPendingSync,
     String? locationId,
+    double? listedTotal,
+    bool clearListedTotal = false,
   }) {
     return SalesReturn(
       id: id ?? this.id,
@@ -192,6 +203,7 @@ class SalesReturn extends Equatable {
       reason: reason ?? this.reason,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       locationId: locationId ?? this.locationId,
+      listedTotal: clearListedTotal ? null : (listedTotal ?? this.listedTotal),
     );
   }
 
@@ -206,5 +218,6 @@ class SalesReturn extends Equatable {
     reason,
     isPendingSync,
     locationId,
+    listedTotal,
   ];
 }

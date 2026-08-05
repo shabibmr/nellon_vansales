@@ -58,7 +58,7 @@ class SalesInvoiceListBloc
       state.copyWith(
         startDate: applyDates ? () => rangeStart : null,
         endDate: applyDates ? () => rangeEnd : null,
-        isLoading: true,
+        status: SalesInvoiceListStatus.loading,
         clearMessages: true,
       ),
     );
@@ -69,13 +69,18 @@ class SalesInvoiceListBloc
         endDate: rangeEnd,
       );
       if (generation != _fetchGeneration) return;
-      emit(state.copyWith(invoices: loaded, isLoading: false));
+      emit(
+        state.copyWith(
+          invoices: loaded,
+          status: SalesInvoiceListStatus.success,
+        ),
+      );
     } catch (e) {
       if (generation != _fetchGeneration) return;
       emit(
         state.copyWith(
           invoices: _salesRepository.getLocalInvoices(),
-          isLoading: false,
+          status: SalesInvoiceListStatus.failure,
           errorMessage: humanizeSyncError(e),
         ),
       );
@@ -136,7 +141,12 @@ class SalesInvoiceListBloc
       return;
     }
 
-    emit(state.copyWith(isLoading: true, clearMessages: true));
+    emit(
+      state.copyWith(
+        status: SalesInvoiceListStatus.loading,
+        clearMessages: true,
+      ),
+    );
     var successCount = 0;
     final failures = <String>[];
 
@@ -159,7 +169,7 @@ class SalesInvoiceListBloc
       emit(
         state.copyWith(
           invoices: updatedInvoices,
-          isLoading: false,
+          status: SalesInvoiceListStatus.failure,
           errorMessage: failures.isEmpty
               ? 'No orders converted'
               : 'Convert failed. Load stock first if needed.\n${failures.join('\n')}',
@@ -177,7 +187,7 @@ class SalesInvoiceListBloc
     emit(
       state.copyWith(
         invoices: updatedInvoices,
-        isLoading: false,
+        status: SalesInvoiceListStatus.success,
         successMessage: summary,
       ),
     );

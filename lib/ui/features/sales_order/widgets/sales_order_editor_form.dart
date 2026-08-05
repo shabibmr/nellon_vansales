@@ -10,7 +10,6 @@ import '../../../../ui/core/utils/currency.dart';
 import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/customer_selector_sheet.dart';
-import '../../../../ui/core/widgets/editor_footer.dart';
 import '../../../../ui/core/widgets/item_line_editor_dialog.dart';
 import '../../../../ui/core/widgets/item_search_sheet.dart';
 import '../../dashboard/widgets/create_customer_dialog.dart';
@@ -19,7 +18,7 @@ import '../bloc/sales_order_editor_event.dart';
 import '../bloc/sales_order_editor_state.dart';
 import 'sales_order_customer_card.dart';
 import 'sales_order_date_card.dart';
-import 'sales_order_editor_trailing.dart';
+import 'sales_order_editor_footer_sheet.dart';
 import 'sales_order_line_items_section.dart';
 import 'sales_order_notes_field.dart';
 
@@ -199,125 +198,132 @@ class SalesOrderEditorForm extends StatelessWidget {
       notes: '',
     );
 
+    final footerRows = <({String label, String value, bool emphasize})>[
+      (
+        label: 'Subtotal:',
+        value: formatCurrency(tempOrder.subTotal, cs),
+        emphasize: false,
+      ),
+      if (tempOrder.discountTotal > 0)
+        (
+          label: 'Discount Total:',
+          value: formatCurrency(tempOrder.discountTotal, cs),
+          emphasize: false,
+        ),
+      (
+        label: 'VAT (Tax):',
+        value: formatCurrency(tempOrder.taxTotal, cs),
+        emphasize: false,
+      ),
+      if (tempOrder.roundOff != 0)
+        (
+          label: 'Round Off:',
+          value: formatCurrency(tempOrder.roundOff, cs),
+          emphasize: false,
+        ),
+      (
+        label: 'Total Amount:',
+        value: formatCurrency(tempOrder.total, cs),
+        emphasize: true,
+      ),
+    ];
+
+    final showDocumentActions = !state.isEditingNew;
+    // Leave room under the list for the collapsed sheet (total + save).
+    final listBottomPad = showDocumentActions ? 150.0 : 130.0;
+
     return Column(
       children: [
         if (state.isSaving)
           const LinearProgressIndicator(color: AppTheme.primaryIndigo),
         Expanded(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: ListView(
-                padding: const EdgeInsets.all(16.0),
-                children: [
-                  SalesOrderCustomerCard(
-                    customer: customer,
-                    canSelect: !readOnly && state.isEditingNew,
-                    onTap: () => _showCustomerSelector(context),
+          child: Stack(
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, listBottomPad),
+                    children: [
+                      SalesOrderCustomerCard(
+                        customer: customer,
+                        canSelect: !readOnly && state.isEditingNew,
+                        onTap: () => _showCustomerSelector(context),
+                      ),
+                      const SizedBox(height: 12),
+                      SalesOrderDateCard(
+                        label: 'ORDER DATE',
+                        date: date,
+                        icon: Icons.calendar_today,
+                        accentColor: AppTheme.infoSky,
+                      ),
+                      const SizedBox(height: 12),
+                      SalesOrderDateCard(
+                        label: 'EXPECTED SHIPPING DATE',
+                        date: shipmentDate,
+                        icon: Icons.local_shipping_outlined,
+                        accentColor: AppTheme.warningAmber,
+                        onTap: readOnly
+                            ? null
+                            : () =>
+                                _selectShipmentDate(context, shipmentDate),
+                      ),
+                      const SizedBox(height: 20),
+                      SalesOrderLineItemsSection(
+                        items: state.editingItems,
+                        currencySymbol: cs,
+                        readOnly: readOnly,
+                        hasCustomer: customer != null,
+                        onAdd: () =>
+                            _openItemSearch(context, state.editingItems),
+                        onEdit: (index) => _editLineItem(
+                          context,
+                          state.editingItems[index],
+                          state.isEditingNew,
+                          state.editingOrder,
+                        ),
+                        onRemove: (index) {
+                          context.read<SalesOrderEditorBloc>().add(
+                            RemoveOrderLine(state.editingItems[index].item),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      SalesOrderNotesField(
+                        controller: notesController,
+                        readOnly: readOnly,
+                        onChanged: readOnly
+                            ? null
+                            : (value) => context
+                                .read<SalesOrderEditorBloc>()
+                                .add(UpdateOrderNotes(value)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  SalesOrderDateCard(
-                    label: 'ORDER DATE',
-                    date: date,
-                    icon: Icons.calendar_today,
-                    accentColor: AppTheme.infoSky,
-                  ),
-                  const SizedBox(height: 12),
-                  SalesOrderDateCard(
-                    label: 'EXPECTED SHIPPING DATE',
-                    date: shipmentDate,
-                    icon: Icons.local_shipping_outlined,
-                    accentColor: AppTheme.warningAmber,
-                    onTap: readOnly
-                        ? null
-                        : () => _selectShipmentDate(context, shipmentDate),
-                  ),
-                  const SizedBox(height: 20),
-                  SalesOrderLineItemsSection(
-                    items: state.editingItems,
-                    currencySymbol: cs,
-                    readOnly: readOnly,
-                    hasCustomer: customer != null,
-                    onAdd: () => _openItemSearch(context, state.editingItems),
-                    onEdit: (index) => _editLineItem(
-                      context,
-                      state.editingItems[index],
-                      state.isEditingNew,
-                      state.editingOrder,
-                    ),
-                    onRemove: (index) {
-                      context.read<SalesOrderEditorBloc>().add(
-                        RemoveOrderLine(state.editingItems[index].item),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  SalesOrderNotesField(
-                    controller: notesController,
-                    readOnly: readOnly,
-                    onChanged: readOnly
-                        ? null
-                        : (value) => context
-                            .read<SalesOrderEditorBloc>()
-                            .add(UpdateOrderNotes(value)),
-                  ),
-                  const SizedBox(height: 30),
-                ],
+                ),
               ),
-            ),
+              SalesOrderEditorFooterSheet(
+                rows: footerRows,
+                buttonLabel: readOnly ? 'CLOSE' : 'SAVE',
+                showDocumentActions: showDocumentActions,
+                state: state,
+                customer: customer,
+                orderDate: date,
+                notes: notesController.text,
+                onSave: readOnly
+                    ? () => Navigator.pop(context)
+                    : (customer == null ||
+                            state.editingItems.isEmpty ||
+                            state.isSaving)
+                        ? null
+                        : () {
+                            context.read<SalesOrderEditorBloc>().add(
+                              SaveSalesOrder(notes: notesController.text),
+                            );
+                          },
+              ),
+            ],
           ),
-        ),
-        EditorFooter(
-          rows: [
-            (
-              label: 'Subtotal:',
-              value: formatCurrency(tempOrder.subTotal, cs),
-              emphasize: false,
-            ),
-            if (tempOrder.discountTotal > 0)
-              (
-                label: 'Discount Total:',
-                value: formatCurrency(tempOrder.discountTotal, cs),
-                emphasize: false,
-              ),
-            (
-              label: 'VAT (Tax):',
-              value: formatCurrency(tempOrder.taxTotal, cs),
-              emphasize: false,
-            ),
-            if (tempOrder.roundOff != 0)
-              (
-                label: 'Round Off:',
-                value: formatCurrency(tempOrder.roundOff, cs),
-                emphasize: false,
-              ),
-            (
-              label: 'Total Amount:',
-              value: formatCurrency(tempOrder.total, cs),
-              emphasize: true,
-            ),
-          ],
-          buttonLabel: readOnly ? 'CLOSE' : 'SAVE SALES ORDER',
-          buttonColor: AppTheme.primaryIndigo,
-          onSave: readOnly
-              ? () => Navigator.pop(context)
-              : (customer == null ||
-                    state.editingItems.isEmpty ||
-                    state.isSaving)
-              ? null
-              : () {
-                  context.read<SalesOrderEditorBloc>().add(
-                    SaveSalesOrder(notes: notesController.text),
-                  );
-                },
-          trailing: !state.isEditingNew
-              ? SalesOrderEditorTrailing(
-                  state: state,
-                  customer: customer,
-                  orderDate: date,
-                  notes: notesController.text,
-                )
-              : null,
         ),
       ],
     );

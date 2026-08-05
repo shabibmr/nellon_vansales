@@ -45,6 +45,15 @@ class ExpenseEntry extends Equatable {
   /// The Zoho Location ID of the salesperson/van that logged this expense.
   final String? locationId;
 
+  /// Grand total from Zoho list headers when [lines] are not loaded.
+  final double? listedTotal;
+
+  /// Category from Zoho list header (`account_name`) when [lines] are empty.
+  final String listedCategory;
+
+  /// Description from Zoho list header when [lines] are empty.
+  final String listedDescription;
+
   /// Creates a new [ExpenseEntry] voucher.
   const ExpenseEntry({
     required this.id,
@@ -53,11 +62,32 @@ class ExpenseEntry extends Equatable {
     this.receiptImagePath,
     this.isPendingSync = false,
     this.locationId,
+    this.listedTotal,
+    this.listedCategory = '',
+    this.listedDescription = '',
   });
 
-  /// Computes the total combined cost of all line items contained in this entry.
-  double get amount =>
-      roundMoney(lines.fold(0.0, (sum, item) => sum + item.amount));
+  /// Combined cost: line-derived when [lines] exist, else [listedTotal].
+  double get amount {
+    if (lines.isNotEmpty) {
+      return roundMoney(lines.fold(0.0, (sum, item) => sum + item.amount));
+    }
+    if (listedTotal != null) return roundMoney(listedTotal!);
+    return 0.0;
+  }
+
+  /// Category for list cards: first line, else header [listedCategory].
+  String get displayCategory {
+    if (lines.isNotEmpty) return lines.first.category;
+    if (listedCategory.isNotEmpty) return listedCategory;
+    return 'Expense';
+  }
+
+  /// Description for list cards: first line, else header [listedDescription].
+  String get displayDescription {
+    if (lines.isNotEmpty) return lines.first.description;
+    return listedDescription;
+  }
 
   /// Creates a copy of this [ExpenseEntry] with replaced values for specific fields.
   ExpenseEntry copyWith({
@@ -67,6 +97,10 @@ class ExpenseEntry extends Equatable {
     String? receiptImagePath,
     bool? isPendingSync,
     String? locationId,
+    double? listedTotal,
+    bool clearListedTotal = false,
+    String? listedCategory,
+    String? listedDescription,
   }) {
     return ExpenseEntry(
       id: id ?? this.id,
@@ -75,6 +109,9 @@ class ExpenseEntry extends Equatable {
       receiptImagePath: receiptImagePath ?? this.receiptImagePath,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       locationId: locationId ?? this.locationId,
+      listedTotal: clearListedTotal ? null : (listedTotal ?? this.listedTotal),
+      listedCategory: listedCategory ?? this.listedCategory,
+      listedDescription: listedDescription ?? this.listedDescription,
     );
   }
 
@@ -86,5 +123,8 @@ class ExpenseEntry extends Equatable {
     receiptImagePath,
     isPendingSync,
     locationId,
+    listedTotal,
+    listedCategory,
+    listedDescription,
   ];
 }

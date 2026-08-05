@@ -137,7 +137,7 @@ class SalesRepositoryImpl implements SalesRepository {
         if (allowOfflineFallback && local != null) return local;
         return null;
       }
-      final remote = SalesInvoiceModel.fromJson(json);
+      final remote = _invoiceFromZoho(json);
       await _dbService.saveRemoteInvoices([remote]);
       return remote;
     } catch (_) {
@@ -151,13 +151,28 @@ class SalesRepositoryImpl implements SalesRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    final raw = await _apiClient.fetchInvoices(
+    // Header-only list path (no per-invoice detail). Full line items load
+    // lazily via [fetchInvoiceById] when the editor opens.
+    final raw = await _apiClient.fetchInvoiceHeaders(
       startDate: startDate,
       endDate: endDate,
     );
-    final invoices = raw.map((json) => SalesInvoiceModel.fromJson(json)).toList();
+    final vanId = _dbService.assignedWarehouseId;
+    final invoices = raw.map((json) {
+      final inv = _invoiceFromZoho(json);
+      if (vanId == null || vanId.isEmpty) return inv;
+      return inv.copyWith(locationId: vanId);
+    }).toList();
     await _dbService.saveRemoteInvoices(invoices);
     return _dbService.getLocalInvoices();
+  }
+
+  /// Zoho header `location_id` is org primary, not van warehouse — see
+  /// [_orderFromZoho].
+  SalesInvoice _invoiceFromZoho(Map<String, dynamic> json) {
+    final map = Map<String, dynamic>.from(json);
+    map.remove('location_id');
+    return SalesInvoiceModel.fromJson(map);
   }
 
   @override
@@ -182,7 +197,7 @@ class SalesRepositoryImpl implements SalesRepository {
         if (allowOfflineFallback && local != null) return local;
         return null;
       }
-      final remote = ReceiptVoucherModel.fromJson(json);
+      final remote = _receiptFromZoho(json);
       await _dbService.saveRemoteReceipts([remote]);
       return remote;
     } catch (_) {
@@ -244,13 +259,21 @@ class SalesRepositoryImpl implements SalesRepository {
         if (allowOfflineFallback && local != null) return local;
         return null;
       }
-      final remote = ExpenseEntryModel.fromZohoJson(json);
+      final remote = _expenseFromZoho(json);
       await _dbService.saveRemoteExpenses([remote]);
       return remote;
     } catch (_) {
       if (allowOfflineFallback && local != null) return local;
       rethrow;
     }
+  }
+
+  /// Zoho header `location_id` is org primary, not van warehouse — see
+  /// [_orderFromZoho].
+  ExpenseEntry _expenseFromZoho(Map<String, dynamic> json) {
+    final map = Map<String, dynamic>.from(json);
+    map.remove('location_id');
+    return ExpenseEntryModel.fromZohoJson(map);
   }
 
   @override
@@ -292,8 +315,24 @@ class SalesRepositoryImpl implements SalesRepository {
       startDate: startDate,
       endDate: endDate,
     );
-    final orders = raw.map(_orderFromZoho).toList();
-    await _dbService.saveRemoteOrders(orders);
+    // Stamp with this session's van warehouse so [getLocalOrders] location
+    // filter keeps them. Zoho header location_id is the org primary branch
+    // (stripped in [_orderFromZoho]); without a van stamp, rows either stay
+    // null (ok) or re-merge an old HQ id from Hive and disappear for every van.
+    final vanId = _dbService.assignedWarehouseId;
+    final orders = raw.map((json) {
+      final order = _orderFromZoho(json);
+      if (vanId == null || vanId.isEmpty) return order;
+      return order.copyWith(locationId: vanId);
+    }).toList();
+    // List fetch is authoritative for the requested window: drop Hive rows
+    // that fall in-range but are gone from Zoho (deleted remotely).
+    await _dbService.saveRemoteOrders(
+      orders,
+      pruneMissingInRange: true,
+      rangeStart: startDate,
+      rangeEnd: endDate,
+    );
     return _dbService.getLocalOrders();
   }
 
@@ -317,6 +356,12 @@ class SalesRepositoryImpl implements SalesRepository {
       }
       final order = _orderFromZoho(json);
       await _dbService.saveRemoteOrders([order]);
+      // Return the merged/patched cache entry, not the raw Zoho parse — the
+      // raw parse never carries `locationId` (Zoho has no such field), while
+      // saveRemoteOrders folds in whatever this device previously stamped.
+      for (final o in _dbService.getLocalOrders()) {
+        if (o.id == order.id) return o;
+      }
       return order;
     } catch (_) {
       if (allowOfflineFallback && local != null) return local;
@@ -331,11 +376,19 @@ class SalesRepositoryImpl implements SalesRepository {
   /// stamp is done here, not in [SalesOrderModel.fromJson], because that
   /// factory also reads back local records whose `salesorder_id` is a
   /// `temp_so_…` id that Zoho has never seen.
-  SalesOrder _orderFromZoho(Map<String, dynamic> json) =>
-      SalesOrderModel.fromJson({
-        ...json,
-        'zoho_order_id': json['salesorder_id'],
-      });
+  ///
+  /// **location_id is not mapped.** Zoho's header `location_id` is the org
+  /// primary / branch location (see [ZohoApiClient] Option B), not the van
+  /// warehouse id used for on-device list scoping
+  /// ([HiveDatabaseService.getLocalOrders]). Mapping it in caused remote
+  /// orders (e.g. Test Customer) to save under HQ id and then disappear from
+  /// every van session after `getLocalOrders` filtered them out.
+  SalesOrder _orderFromZoho(Map<String, dynamic> json) {
+    final map = Map<String, dynamic>.from(json);
+    map['zoho_order_id'] = json['salesorder_id'];
+    map.remove('location_id');
+    return SalesOrderModel.fromJson(map);
+  }
 
   @override
   List<ReceiptVoucher> getLocalReceipts() =>
@@ -354,11 +407,24 @@ class SalesRepositoryImpl implements SalesRepository {
       startDate: startDate,
       endDate: endDate,
     );
-    final receipts = raw.map((json) => ReceiptVoucherModel.fromJson(json)).toList();
+    final vanId = _dbService.assignedWarehouseId;
+    final receipts = raw.map((json) {
+      final rec = _receiptFromZoho(json);
+      if (vanId == null || vanId.isEmpty) return rec;
+      return rec.copyWith(locationId: vanId);
+    }).toList();
     await _dbService.saveRemoteReceipts(receipts);
     // API is already series-scoped; re-apply client-side so a polluted local
     // cache (pre-filter downloads) cannot surface other salesmen's receipts.
     return getLocalReceipts();
+  }
+
+  /// Zoho header `location_id` is org primary, not van warehouse — see
+  /// [_orderFromZoho].
+  ReceiptVoucher _receiptFromZoho(Map<String, dynamic> json) {
+    final map = Map<String, dynamic>.from(json);
+    map.remove('location_id');
+    return ReceiptVoucherModel.fromJson(map);
   }
 
   /// Keeps receipts whose app series number matches this session's
@@ -389,13 +455,28 @@ class SalesRepositoryImpl implements SalesRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    final raw = await _apiClient.fetchSalesReturns(
+    // Header-only list path (no per-return detail). Full line items load
+    // lazily via [fetchSalesReturnById] when the editor opens.
+    final raw = await _apiClient.fetchSalesReturnHeaders(
       startDate: startDate,
       endDate: endDate,
     );
-    final returns = raw.map((json) => SalesReturnModel.fromJson(json)).toList();
+    final vanId = _dbService.assignedWarehouseId;
+    final returns = raw.map((json) {
+      final ret = _returnFromZoho(json);
+      if (vanId == null || vanId.isEmpty) return ret;
+      return ret.copyWith(locationId: vanId);
+    }).toList();
     await _dbService.saveRemoteReturns(returns);
     return _dbService.getLocalReturns();
+  }
+
+  /// Zoho header `location_id` is org primary, not van warehouse — see
+  /// [_orderFromZoho].
+  SalesReturn _returnFromZoho(Map<String, dynamic> json) {
+    final map = Map<String, dynamic>.from(json);
+    map.remove('location_id');
+    return SalesReturnModel.fromJson(map);
   }
 
   @override
@@ -410,12 +491,18 @@ class SalesRepositoryImpl implements SalesRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    final raw = await _apiClient.fetchExpenses(
+    // Header-only list path (no per-expense detail). Full line items load
+    // lazily via [fetchExpenseById] when the editor opens.
+    final raw = await _apiClient.fetchExpenseHeaders(
       startDate: startDate,
       endDate: endDate,
     );
-    final remote =
-        raw.map((json) => ExpenseEntryModel.fromZohoJson(json)).toList();
+    final vanId = _dbService.assignedWarehouseId;
+    final remote = raw.map((json) {
+      final exp = _expenseFromZoho(json);
+      if (vanId == null || vanId.isEmpty) return exp;
+      return exp.copyWith(locationId: vanId);
+    }).toList();
     await _dbService.saveRemoteExpenses(remote);
     // Zoho scopes via paid_through_account_id; local cache is only
     // location-filtered and can still hold other salesmen's rows from older

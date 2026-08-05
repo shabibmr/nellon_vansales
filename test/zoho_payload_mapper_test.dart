@@ -65,9 +65,15 @@ void main() {
             'item_id': 'item_1',
             'quantity': 2,
             'rate': 10.0,
+            'tax_id': 'tax_std',
             'tax_percentage': 5.0,
             'discount': 0.0,
-            'item': {'id': 'item_1', 'sku': 'SKU1', 'stock_on_hand': 99},
+            'item': {
+              'id': 'item_1',
+              'sku': 'SKU1',
+              'stock_on_hand': 99,
+              'tax_id': 'tax_std',
+            },
           },
         ],
       };
@@ -85,7 +91,24 @@ void main() {
       final line = (out['line_items'] as List).first as Map;
       expect(line['item_id'], 'item_1');
       expect(line['quantity'], 2);
+      expect(line['tax_id'], 'tax_std');
       expect(line.containsKey('item'), isFalse);
+    });
+
+    test('lifts tax_id from nested item when line-level missing', () {
+      final out = ZohoPayloadMapper.zohoInvoicePayload({
+        'customer_id': 'c1',
+        'line_items': [
+          {
+            'item_id': 'item_1',
+            'quantity': 1,
+            'rate': 10.0,
+            'tax_percentage': 5.0,
+            'item': {'id': 'item_1', 'tax_id': 'tax_from_item'},
+          },
+        ],
+      });
+      expect((out['line_items'] as List).first['tax_id'], 'tax_from_item');
     });
   });
 
@@ -111,9 +134,10 @@ void main() {
             'item_id': 'item_1',
             'quantity': 3,
             'rate': 20.0,
+            'tax_id': 'tax_std',
             'tax_percentage': 5.0,
             'discount': 1.0,
-            'item': {'id': 'item_1', 'name': 'X'},
+            'item': {'id': 'item_1', 'name': 'X', 'tax_id': 'tax_std'},
           },
         ],
       };
@@ -136,6 +160,122 @@ void main() {
       final line = (out['line_items'] as List).first as Map;
       expect(line.containsKey('item'), isFalse);
       expect(line['discount'], 1.0);
+      expect(line['tax_id'], 'tax_std');
+    });
+  });
+
+  group('withResolvedLineTaxIds', () {
+    /// Mirrors [ZohoApiClient._withResolvedLineTaxIds] resolution policy:
+    /// pct &gt; 0 → match rate; else default Standard Rate (never Zero Rate via 0%).
+    String? resolveLikeApi(double? pct) {
+      if (pct != null && pct > 0) {
+        if ((pct - 5.0).abs() < 0.001) return 'tax_standard';
+      }
+      return 'tax_standard'; // default is_default_tax
+    }
+
+    test('fills missing tax_id from resolveTaxId by percentage', () {
+      final out = ZohoPayloadMapper.withResolvedLineTaxIds(
+        {
+          'line_items': [
+            {'item_id': 'i1', 'tax_percentage': 5.0},
+            {'item_id': 'i2', 'tax_id': 'keep_me', 'tax_percentage': 0},
+          ],
+        },
+        resolveTaxId: (pct) => pct == 5.0 ? 'tax_5' : 'tax_default',
+      );
+      final lines = out['line_items'] as List;
+      expect(lines[0]['tax_id'], 'tax_5');
+      expect(lines[1]['tax_id'], 'keep_me');
+    });
+
+    test('missing tax_id with pct 5 resolves to Standard Rate id', () {
+      final out = ZohoPayloadMapper.withResolvedLineTaxIds(
+        {
+          'line_items': [
+            {'item_id': 'i1', 'quantity': 1, 'rate': 10, 'tax_percentage': 5.0},
+          ],
+        },
+        resolveTaxId: resolveLikeApi,
+      );
+      expect((out['line_items'] as List).first['tax_id'], 'tax_standard');
+    });
+
+    test('missing tax_id with pct 0/null falls back to default Standard Rate', () {
+      final out = ZohoPayloadMapper.withResolvedLineTaxIds(
+        {
+          'line_items': [
+            {'item_id': 'i1', 'tax_percentage': 0},
+            {'item_id': 'i2'},
+          ],
+        },
+        resolveTaxId: resolveLikeApi,
+      );
+      final lines = out['line_items'] as List;
+      expect(lines[0]['tax_id'], 'tax_standard');
+      expect(lines[1]['tax_id'], 'tax_standard');
+    });
+
+    test('keeps explicit Zero Rate tax_id unchanged', () {
+      final out = ZohoPayloadMapper.withResolvedLineTaxIds(
+        {
+          'line_items': [
+            {
+              'item_id': 'i1',
+              'tax_id': 'tax_zero',
+              'tax_percentage': 0,
+            },
+          ],
+        },
+        resolveTaxId: resolveLikeApi,
+      );
+      expect((out['line_items'] as List).first['tax_id'], 'tax_zero');
+    });
+
+    test('strips residual tax_exemption keys when resolving', () {
+      final out = ZohoPayloadMapper.withResolvedLineTaxIds(
+        {
+          'line_items': [
+            {
+              'item_id': 'i1',
+              'tax_percentage': 5.0,
+              'tax_exemption_id': 'ex_1',
+              'tax_exemption_code': 'EXEMPT',
+            },
+          ],
+        },
+        resolveTaxId: resolveLikeApi,
+      );
+      final line = (out['line_items'] as List).first as Map;
+      expect(line['tax_id'], 'tax_standard');
+      expect(line.containsKey('tax_exemption_id'), isFalse);
+      expect(line.containsKey('tax_exemption_code'), isFalse);
+    });
+
+    test('invoice/SO/credit-note cleaned lines keep resolved tax_id', () {
+      final line = <String, dynamic>{
+        'item_id': 'item_1',
+        'quantity': 1,
+        'rate': 10.0,
+        'tax_id': 'tax_standard',
+        'tax_percentage': 5.0,
+      };
+      final withTax = {
+        'customer_id': 'c1',
+        'line_items': [line],
+      };
+      for (final out in [
+        ZohoPayloadMapper.zohoInvoicePayload(withTax),
+        ZohoPayloadMapper.zohoSalesOrderPayload(withTax),
+        ZohoPayloadMapper.zohoCreditNotePayload({
+          'customer_id': 'c1',
+          'line_items': [
+            {...line, 'invoice_id': 'inv_1'},
+          ],
+        }),
+      ]) {
+        expect((out['line_items'] as List).first['tax_id'], 'tax_standard');
+      }
     });
   });
 
@@ -193,9 +333,14 @@ void main() {
             'item_id': 'item_1',
             'quantity': 1,
             'rate': 10.0,
+            'tax_id': 'tax_std',
+            'tax_percentage': 5.0,
             'invoice_id': 'inv_1',
             'invoice_number': 'INV-1',
-            'invoiceLineItem': {'item_id': 'item_1', 'item': {'id': 'item_1'}},
+            'invoiceLineItem': {
+              'item_id': 'item_1',
+              'item': {'id': 'item_1', 'tax_id': 'tax_std'},
+            },
           },
         ],
       };
@@ -210,8 +355,27 @@ void main() {
       final line = (out['line_items'] as List).first as Map;
       expect(line['item_id'], 'item_1');
       expect(line['invoice_id'], 'inv_1');
+      expect(line['tax_id'], 'tax_std');
       expect(line.containsKey('invoice_number'), isFalse);
       expect(line.containsKey('invoiceLineItem'), isFalse);
+    });
+
+    test('lifts tax_id from nested invoiceLineItem.item', () {
+      final out = ZohoPayloadMapper.zohoCreditNotePayload({
+        'customer_id': 'c1',
+        'line_items': [
+          {
+            'item_id': 'item_1',
+            'quantity': 1,
+            'rate': 10.0,
+            'invoice_id': 'inv_1',
+            'invoiceLineItem': {
+              'item': {'id': 'item_1', 'tax_id': 'tax_nested'},
+            },
+          },
+        ],
+      });
+      expect((out['line_items'] as List).first['tax_id'], 'tax_nested');
     });
   });
 

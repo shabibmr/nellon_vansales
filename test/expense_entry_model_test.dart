@@ -40,5 +40,39 @@ void main() {
       expect(expense.lines.single.category, 'Tolls');
       expect(expense.amount, 10);
     });
+
+    test('header JSON maps listedTotal and category without line items', () {
+      final expense = ExpenseEntryModel.fromZohoJson({
+        'expense_id': 'exp_hdr',
+        'date': '2026-03-03',
+        'total': 99.5,
+        'account_name': 'Fuel',
+        'description': 'Pump stop',
+      });
+
+      expect(expense.lines, isEmpty);
+      expect(expense.listedTotal, 99.5);
+      expect(expense.amount, 99.5);
+      expect(expense.displayCategory, 'Fuel');
+      expect(expense.displayDescription, 'Pump stop');
+    });
+
+    test('line items win over listedTotal for amount', () {
+      final expense = ExpenseEntryModel.fromZohoJson({
+        'expense_id': 'exp_detail',
+        'date': '2026-03-04',
+        'total': 9999,
+        'line_items': [
+          {
+            'account_name': 'Tolls',
+            'amount': 15,
+            'description': 'Bridge',
+          },
+        ],
+      });
+
+      expect(expense.amount, 15);
+      expect(expense.displayCategory, 'Tolls');
+    });
   });
 }

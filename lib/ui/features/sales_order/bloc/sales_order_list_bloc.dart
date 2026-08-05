@@ -28,6 +28,7 @@ class SalesOrderListBloc
       ) {
     on<LoadSalesOrders>(_onLoadSalesOrders);
     on<RefreshSalesOrders>(_onRefreshSalesOrders);
+    on<ReloadSalesOrdersFromCache>(_onReloadFromCache);
     on<SetSalesOrderDateFilter>(_onSetDateFilter);
     on<ClearSalesOrderListMessages>(_onClearMessages);
   }
@@ -103,6 +104,14 @@ class SalesOrderListBloc
         rangeEnd: event.endDate,
         applyDates: true,
       );
+
+  /// Local-only reload — see [ReloadSalesOrdersFromCache].
+  void _onReloadFromCache(
+    ReloadSalesOrdersFromCache event,
+    Emitter<SalesOrderListState> emit,
+  ) {
+    emit(state.copyWith(orders: _salesRepository.getLocalOrders()));
+  }
 
   void _onClearMessages(
     ClearSalesOrderListMessages event,

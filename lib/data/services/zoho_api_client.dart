@@ -417,8 +417,10 @@ class ZohoApiClient {
   }
 
   /// Stamps the session salesperson id onto a transaction header when absent
-  /// (B4). Not applicable to `customerpayments`/`expenses`, which have no
-  /// `salesperson_id` field in the Zoho schema.
+  /// (B4). Not applicable to `expenses`, which has no salesperson-equivalent
+  /// field in the Zoho schema (only `employee_id`, unrelated to van reps).
+  /// `customerpayments` has its own differently-named field — see
+  /// [_withReceiptSalespersonId].
   Map<String, dynamic> _withSalespersonId(Map<String, dynamic> json) {
     final salespersonId = _dbService.getCurrentSalesperson()?.id;
     if (salespersonId != null &&
@@ -426,6 +428,22 @@ class ZohoApiClient {
         json['salesperson_id'] == null) {
       final updatedJson = Map<String, dynamic>.from(json);
       updatedJson['salesperson_id'] = salespersonId;
+      return updatedJson;
+    }
+    return json;
+  }
+
+  /// Stamps the session salesperson id onto a customer-payment header when
+  /// absent. Verified against the live API: `customerpayments` carries the
+  /// salesperson under `sales_person_id` (underscore-separated) — a different
+  /// key from `salesperson_id` used by invoices/orders/creditnotes.
+  Map<String, dynamic> _withReceiptSalespersonId(Map<String, dynamic> json) {
+    final salespersonId = _dbService.getCurrentSalesperson()?.id;
+    if (salespersonId != null &&
+        salespersonId.isNotEmpty &&
+        json['sales_person_id'] == null) {
+      final updatedJson = Map<String, dynamic>.from(json);
+      updatedJson['sales_person_id'] = salespersonId;
       return updatedJson;
     }
     return json;
@@ -452,6 +470,45 @@ class ZohoApiClient {
       return map;
     }).toList();
     return {...json, 'line_items': updatedLines};
+  }
+
+  /// Ensures every line has a Zoho `tax_id` before post.
+  ///
+  /// UAE Books applies customer exemption **EXEMPT** when lines omit `tax_id`
+  /// (even if `tax_percentage` is set). That happens for both
+  /// `vat_registered` and `vat_not_registered` contacts — unregistered
+  /// customers are still taxable (`is_taxable=true`) and must get **Standard
+  /// Rate**, not EXEMPT.
+  ///
+  /// Resolution order per line:
+  /// 1. Keep an existing non-empty `tax_id` (item Zero Rate / explicit tax wins).
+  /// 2. If `tax_percentage` is positive, match [HiveDatabaseService.getTaxes] by rate.
+  /// 3. Otherwise fall back to the **default tax** (Standard Rate 5% in this org).
+  ///
+  /// Percentage 0 is *not* treated as Zero Rate here: missing tax data on
+  /// queued lines usually means "unset", and matching 0% would incorrectly
+  /// pick Zero Rate instead of Standard Rate.
+  Map<String, dynamic> _withResolvedLineTaxIds(Map<String, dynamic> payload) {
+    final taxes = _dbService.getTaxes();
+    if (taxes.isEmpty) return payload;
+    return ZohoPayloadMapper.withResolvedLineTaxIds(
+      payload,
+      resolveTaxId: (pct) {
+        if (pct != null && pct > 0) {
+          for (final t in taxes) {
+            if ((t.percentage - pct).abs() < 0.001) return t.id;
+          }
+        }
+        for (final t in taxes) {
+          if (t.isDefault) return t.id;
+        }
+        // Last resort: first positive-rate tax (Standard Rate style).
+        for (final t in taxes) {
+          if (t.percentage > 0) return t.id;
+        }
+        return null;
+      },
+    );
   }
 
   // 4. Zoho Books Contacts API: Sync New Customer
@@ -506,7 +563,9 @@ class ZohoApiClient {
     try {
       final response = await _dio.post(
         '/invoices',
-        data: ZohoPayloadMapper.zohoInvoicePayload(invoiceJson),
+        data: _withResolvedLineTaxIds(
+          ZohoPayloadMapper.zohoInvoicePayload(invoiceJson),
+        ),
         queryParameters: const {'ignore_auto_number_generation': true},
       );
       if (response.statusCode == 201 || response.statusCode == 200) {
@@ -523,7 +582,9 @@ class ZohoApiClient {
     salesOrderJson = _withVanLineItemLocations(
       _withSalespersonId(_withPrimaryHeaderLocation(salesOrderJson)),
     );
-    final payload = ZohoPayloadMapper.zohoSalesOrderPayload(salesOrderJson);
+    final payload = _withResolvedLineTaxIds(
+      ZohoPayloadMapper.zohoSalesOrderPayload(salesOrderJson),
+    );
     // Debug: log exact outbound body so 400s can be matched to Zoho's message.
     AppLogger.debug(
       'ZohoApi',
@@ -671,20 +732,62 @@ class ZohoApiClient {
     return params;
   }
 
-  // 5d. Zoho Books Sales Orders API: List all sales orders (paginated).
+  // 5d. Zoho Books Sales Orders API: List headers only (paginated).
+  // Includes status/total; no line items / no N detail calls. Powers the
+  // sales order list page. Reports that need lines use
+  // [fetchSalesOrdersWithDetails].
   Future<List<Map<String, dynamic>>> fetchSalesOrders({
     DateTime? startDate,
     DateTime? endDate,
   }) async {
     try {
+      final spParams = _salespersonFilterParams();
+      final dateParams = _dateRangeParams(
+        startDate: startDate,
+        endDate: endDate,
+      );
       final list = await _fetchAllPages('/salesorders', {
-        ..._salespersonFilterParams(),
-        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+        ...spParams,
+        ...dateParams,
       });
-      return _filterBySalesperson(list);
+      final filtered = _filterBySalesperson(list);
+      AppLogger.info(
+        'ZohoApi',
+        'fetchSalesOrders raw=${list.length} afterSpFilter=${filtered.length} '
+        'sp=${spParams['salesperson_id'] ?? '(none)'} '
+        'dates=${dateParams['date_start'] ?? '*'}..${dateParams['date_end'] ?? '*'}',
+      );
+      return filtered;
     } catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesOrders error: $e');
       throw Exception('Failed to fetch sales orders from Zoho: $e');
+    }
+  }
+
+  // 5d2. Full sales-order list with line items — powers itemwise/order reports.
+  Future<List<Map<String, dynamic>>> fetchSalesOrdersWithDetails({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final headers = await fetchSalesOrders(
+        startDate: startDate,
+        endDate: endDate,
+      );
+      final details = <Map<String, dynamic>>[];
+      for (final header in headers) {
+        final id = header['salesorder_id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        try {
+          details.add(await fetchSalesOrder(id));
+        } catch (e) {
+          AppLogger.error('ZohoApi', 'fetchSalesOrder($id) error: $e');
+        }
+      }
+      return _filterBySalesperson(details);
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchSalesOrdersWithDetails error: $e');
+      throw Exception('Failed to fetch sales order details from Zoho: $e');
     }
   }
 
@@ -715,7 +818,9 @@ class ZohoApiClient {
     try {
       final response = await _dio.put(
         '/salesorders/$salesOrderId',
-        data: ZohoPayloadMapper.zohoSalesOrderPayload(payload),
+        data: _withResolvedLineTaxIds(
+          ZohoPayloadMapper.zohoSalesOrderPayload(payload),
+        ),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
         return response.data['salesorder']['salesorder_id'] as String;
@@ -787,7 +892,9 @@ class ZohoApiClient {
 
   // 6. Zoho Books Customer Payments API: Sync Receipt Voucher
   Future<String> syncReceiptVoucher(Map<String, dynamic> paymentJson) async {
-    paymentJson = _withPrimaryHeaderLocation(paymentJson);
+    paymentJson = _withReceiptSalespersonId(
+      _withPrimaryHeaderLocation(paymentJson),
+    );
     // B4/B5: the app's offline receipt number has no home in Zoho's own
     // `payment_number` series, so it travels as `reference_number`. Deposit
     // account is the session salesperson's personal cash ledger.
@@ -821,7 +928,9 @@ class ZohoApiClient {
     try {
       final response = await _dio.post(
         '/creditnotes',
-        data: ZohoPayloadMapper.zohoCreditNotePayload(creditNoteJson),
+        data: _withResolvedLineTaxIds(
+          ZohoPayloadMapper.zohoCreditNotePayload(creditNoteJson),
+        ),
         queryParameters: const {'ignore_auto_number_generation': true},
       );
       if (response.statusCode == 201 || response.statusCode == 200) {
@@ -1276,8 +1385,9 @@ class ZohoApiClient {
     return Map<String, dynamic>.from(response.data['invoice'] ?? {});
   }
 
-  // 17. Full invoice list with line items — powers the Item Sales Report.
-  Future<List<Map<String, dynamic>>> fetchInvoices({
+  // 16b. Invoice list headers only (GET /invoices) — powers the sales invoice
+  // list page. Includes status/total; no line items / no N detail calls.
+  Future<List<Map<String, dynamic>>> fetchInvoiceHeaders({
     DateTime? startDate,
     DateTime? endDate,
   }) async {
@@ -1286,6 +1396,25 @@ class ZohoApiClient {
         ..._salespersonFilterParams(),
         ..._dateRangeParams(startDate: startDate, endDate: endDate),
       });
+      return _filterBySalesperson(headers);
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchInvoiceHeaders error: $e');
+      throw Exception('Failed to fetch invoice list from Zoho: $e');
+    }
+  }
+
+  // 17. Full invoice list with line items — powers reports that need lines
+  // (Item Sales, customer sales summaries, transactions summary). Not used
+  // by the sales invoice list page (see [fetchInvoiceHeaders]).
+  Future<List<Map<String, dynamic>>> fetchInvoices({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final headers = await fetchInvoiceHeaders(
+        startDate: startDate,
+        endDate: endDate,
+      );
       final details = <Map<String, dynamic>>[];
       for (final header in headers) {
         final id = header['invoice_id']?.toString();
@@ -1316,19 +1445,35 @@ class ZohoApiClient {
     return Map<String, dynamic>.from(response.data['expense'] ?? {});
   }
 
-  // 19. Full expense list with itemized line items — powers the Expense
-  // list page, Expense Summary and Transactions Summary reports.
-  // Scoped to the session cash ledger via paid_through_account_id (no
-  // salesperson_id on Zoho expenses).
+  // 18b. Expense list headers only (GET /expenses) — powers the expense list
+  // page. Includes total/account_name/description; no N detail calls.
+  // Scoped to the session cash ledger via paid_through_account_id.
+  Future<List<Map<String, dynamic>>> fetchExpenseHeaders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      return await _fetchAllPages('/expenses', {
+        ..._paidThroughAccountFilterParams(),
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+      });
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchExpenseHeaders error: $e');
+      throw Exception('Failed to fetch expense list from Zoho: $e');
+    }
+  }
+
+  // 19. Full expense list with itemized line items — powers Expense Summary
+  // and Transactions Summary reports (not the expense list page).
   Future<List<Map<String, dynamic>>> fetchExpenses({
     DateTime? startDate,
     DateTime? endDate,
   }) async {
     try {
-      final headers = await _fetchAllPages('/expenses', {
-        ..._paidThroughAccountFilterParams(),
-        ..._dateRangeParams(startDate: startDate, endDate: endDate),
-      });
+      final headers = await fetchExpenseHeaders(
+        startDate: startDate,
+        endDate: endDate,
+      );
       final details = <Map<String, dynamic>>[];
       for (final header in headers) {
         final id = header['expense_id']?.toString();
@@ -1391,8 +1536,27 @@ class ZohoApiClient {
     return Map<String, dynamic>.from(response.data['creditnote'] ?? {});
   }
 
+  // 21b. Sales-return list headers only (GET /creditnotes) — powers the
+  // sales return list page. Includes total; no line items / no N detail calls.
+  Future<List<Map<String, dynamic>>> fetchSalesReturnHeaders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final headers = await _fetchAllPages('/creditnotes', {
+        ..._salespersonFilterParams(),
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+      });
+      return _filterSalesReturnsByLocation(headers);
+    } catch (e) {
+      AppLogger.error('ZohoApi', 'fetchSalesReturnHeaders error: $e');
+      throw Exception('Failed to fetch sales return list from Zoho: $e');
+    }
+  }
+
   // 22. Full sales-return (credit note) list with line items — powers the
-  // Sales Returns reports.
+  // Sales Returns reports (not the list page). Location is applied after
+  // detail load so list-header rows missing `location_id` are not dropped early.
   Future<List<Map<String, dynamic>>> fetchSalesReturns({
     DateTime? startDate,
     DateTime? endDate,
@@ -1416,17 +1580,21 @@ class ZohoApiClient {
           );
         }
       }
-      final locationId = _dbService.getCurrentSalesperson()?.locationId;
-      if (locationId != null && locationId.isNotEmpty) {
-        return details.where((j) {
-          final locId = j['location_id']?.toString();
-          return locId == null || locId.isEmpty || locId == locationId;
-        }).toList();
-      }
-      return details;
+      return _filterSalesReturnsByLocation(details);
     } catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesReturns error: $e');
       throw Exception('Failed to fetch sales returns from Zoho: $e');
     }
+  }
+
+  List<Map<String, dynamic>> _filterSalesReturnsByLocation(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final locationId = _dbService.getCurrentSalesperson()?.locationId;
+    if (locationId == null || locationId.isEmpty) return rows;
+    return rows.where((j) {
+      final locId = j['location_id']?.toString();
+      return locId == null || locId.isEmpty || locId == locationId;
+    }).toList();
   }
 }

@@ -61,6 +61,10 @@ class ReceiptVoucher extends Equatable {
   /// The Zoho Location ID of the salesperson/van that created this receipt.
   final String? locationId;
 
+  /// The Zoho salesperson ID (`sales_person_id` in the Books API) who
+  /// collected this receipt.
+  final String? salespersonId;
+
   /// Creates a new [ReceiptVoucher].
   const ReceiptVoucher({
     required this.id,
@@ -74,6 +78,7 @@ class ReceiptVoucher extends Equatable {
     required this.date,
     this.isPendingSync = false,
     this.locationId,
+    this.salespersonId,
   });
 
   /// Calculates the sum of all allocations applied to specific invoices.
@@ -97,6 +102,7 @@ class ReceiptVoucher extends Equatable {
     DateTime? date,
     bool? isPendingSync,
     String? locationId,
+    String? salespersonId,
   }) {
     return ReceiptVoucher(
       id: id ?? this.id,
@@ -110,6 +116,7 @@ class ReceiptVoucher extends Equatable {
       date: date ?? this.date,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       locationId: locationId ?? this.locationId,
+      salespersonId: salespersonId ?? this.salespersonId,
     );
   }
 
@@ -126,5 +133,6 @@ class ReceiptVoucher extends Equatable {
     date,
     isPendingSync,
     locationId,
+    salespersonId,
   ];
 }

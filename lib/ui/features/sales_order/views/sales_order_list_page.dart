@@ -26,6 +26,45 @@ class SalesOrderListPage extends StatefulWidget {
 class _SalesOrderListPageState extends State<SalesOrderListPage> {
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
 
+  /// Zoho `order_status` (or related fields) for a synced order, title-cased.
+  /// Pending-sync local drafts omit this — only the "Pending Sync" pill shows.
+  static String? _zohoStatusBadgeLabel(SalesOrder order) {
+    if (order.isPendingSync) return null;
+
+    String raw = order.orderStatus.trim();
+    if (raw.isEmpty) raw = order.invoicedStatus.trim();
+    if (raw.isEmpty && order.isConverted) raw = 'invoiced';
+
+    if (raw.isEmpty) return null;
+    return raw
+        .split(RegExp(r'[_\s]+'))
+        .where((p) => p.isNotEmpty)
+        .map((p) => '${p[0].toUpperCase()}${p.substring(1).toLowerCase()}')
+        .join(' ');
+  }
+
+  static Color _zohoStatusBadgeColor(String? label) {
+    switch ((label ?? '').toLowerCase()) {
+      case 'invoiced':
+      case 'closed':
+        return AppTheme.successEmerald;
+      case 'partially_invoiced':
+      case 'partially invoiced':
+        return AppTheme.warningAmber;
+      case 'void':
+      case 'cancelled':
+      case 'canceled':
+        return AppTheme.errorRose;
+      case 'draft':
+        return AppTheme.lightTextSecondary;
+      case 'open':
+      case 'confirmed':
+        return AppTheme.infoSky;
+      default:
+        return AppTheme.primaryIndigo;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,7 +112,10 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
       readOnly: readOnly,
     );
     if (mounted) {
-      context.read<SalesOrderListBloc>().add(const LoadSalesOrders());
+      // Local-only reload: a live Zoho fetch here would race the background
+      // sync push the editor just fired and can clobber the just-saved edit
+      // (see ReloadSalesOrdersFromCache).
+      context.read<SalesOrderListBloc>().add(const ReloadSalesOrdersFromCache());
     }
   }
 
@@ -183,6 +225,8 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final order = list[index];
+                              final statusLabel =
+                                  _zohoStatusBadgeLabel(order);
                               return DocumentListCard(
                                 key: ValueKey(order.id),
                                 docNumber: order.orderNumber,
@@ -195,9 +239,10 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
                                     ? null
                                     : order.items.length,
                                 isPendingSync: order.isPendingSync,
-                                extraBadgeLabel: order.isConverted
-                                    ? 'Converted'
-                                    : null,
+                                // Once synced: Zoho order_status (e.g. Draft).
+                                extraBadgeLabel: statusLabel,
+                                extraBadgeColor:
+                                    _zohoStatusBadgeColor(statusLabel),
                                 onTap: () => _openEditor(
                                   order: order,
                                   readOnly: true,

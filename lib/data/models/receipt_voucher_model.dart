@@ -57,6 +57,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
     required super.date,
     super.isPendingSync,
     super.locationId,
+    super.salespersonId,
   });
 
   /// Factory constructor to parse local database JSON maps into a [ReceiptVoucherModel].
@@ -91,6 +92,10 @@ class ReceiptVoucherModel extends ReceiptVoucher {
           : DateTime.now(),
       isPendingSync: json['isPendingSync'] ?? false,
       locationId: json['location_id'],
+      // Zoho key is `sales_person_id` (underscore-separated) — different from
+      // the `salesperson_id` used by invoices/orders/creditnotes.
+      salespersonId: (json['sales_person_id'] ?? json['salespersonId'])
+          ?.toString(),
     );
   }
 
@@ -108,6 +113,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
       'date': date.toIso8601String().split('T')[0],
       'isPendingSync': isPendingSync,
       'location_id': locationId,
+      'sales_person_id': salespersonId,
       // Transforms domain allocations back into JSON representation for storage.
       'invoices': allocations
           .map((item) => PaymentAllocationModel.fromDomain(item).toJson())
@@ -129,6 +135,7 @@ class ReceiptVoucherModel extends ReceiptVoucher {
       date: voucher.date,
       isPendingSync: voucher.isPendingSync,
       locationId: voucher.locationId,
+      salespersonId: voucher.salespersonId,
     );
   }
 }

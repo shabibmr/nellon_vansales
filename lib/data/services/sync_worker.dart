@@ -463,7 +463,7 @@ class SyncWorker {
           );
         }
       case 'sales_order':
-        final orders = _dbService.getLocalOrders();
+        final orders = _dbService.getAllLocalOrdersUnfiltered();
         final index = orders.indexWhere((o) => o.id == localId);
         if (index >= 0) {
           await _dbService.saveLocalOrder(
@@ -526,7 +526,7 @@ class SyncWorker {
     String localOrderId,
     String zohoOrderId,
   ) async {
-    final orders = _dbService.getLocalOrders();
+    final orders = _dbService.getAllLocalOrdersUnfiltered();
     final index = orders.indexWhere((o) => o.id == localOrderId);
     if (index >= 0) {
       await _dbService.saveLocalOrder(

@@ -26,6 +26,32 @@ class SalesInvoiceListPage extends StatefulWidget {
 class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
 
+  static String? _statusBadgeLabel(String status) {
+    final s = status.trim();
+    if (s.isEmpty) return null;
+    return s
+        .split('_')
+        .where((p) => p.isNotEmpty)
+        .map((p) => '${p[0].toUpperCase()}${p.substring(1).toLowerCase()}')
+        .join(' ');
+  }
+
+  static Color _statusBadgeColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return AppTheme.successEmerald;
+      case 'overdue':
+        return AppTheme.errorRose;
+      case 'partially_paid':
+        return AppTheme.warningAmber;
+      case 'void':
+      case 'draft':
+        return AppTheme.lightTextSecondary;
+      default:
+        return AppTheme.primaryIndigo;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -108,6 +134,7 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
           builder: (context, state) {
             final hasFilter = state.startDate != null || state.endDate != null;
             final list = state.filteredInvoices;
+            final loading = state.status == SalesInvoiceListStatus.loading;
 
             return Column(
               children: [
@@ -118,7 +145,7 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
                   onEndTap: () => _selectDate(false, state.endDate),
                   onClear: _clearFilters,
                 ),
-                if (state.isLoading)
+                if (loading)
                   const Expanded(
                     child: Center(
                       child: CircularProgressIndicator(
@@ -171,14 +198,23 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final invoice = list[index];
+                              final statusLabel = _statusBadgeLabel(
+                                invoice.status,
+                              );
                               return DocumentListCard(
                                 key: ValueKey(invoice.id),
                                 docNumber: invoice.invoiceNumber,
                                 customerName: invoice.customerName,
                                 date: _dateFormat.format(invoice.date),
                                 total: formatCurrency(invoice.total, cs),
-                                itemCount: invoice.items.length,
+                                itemCount: invoice.items.isNotEmpty
+                                    ? invoice.items.length
+                                    : null,
                                 isPendingSync: invoice.isPendingSync,
+                                extraBadgeLabel: statusLabel,
+                                extraBadgeColor: _statusBadgeColor(
+                                  invoice.status,
+                                ),
                                 onTap: () => _openEditor(
                                   invoice: invoice,
                                   readOnly: true,

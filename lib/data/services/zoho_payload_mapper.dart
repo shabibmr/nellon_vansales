@@ -28,11 +28,16 @@ class ZohoPayloadMapper {
 
   /// Reduces a stored `line_items` array to the whitelisted primitive keys,
   /// dropping nested `item`/`invoiceLineItem` objects and duplicate keys.
+  ///
+  /// When `tax_id` is allowed but only present on nested `item` /
+  /// `invoiceLineItem.item`, it is lifted onto the cleaned line (UAE orgs
+  /// require tax_id — tax_percentage alone yields EXEMPT).
   static List<Map<String, dynamic>> _cleanLineItems(
     dynamic rawLines,
     List<String> allowedKeys,
   ) {
     if (rawLines is! List) return const [];
+    final allowTaxId = allowedKeys.contains('tax_id');
     return rawLines.whereType<Map>().map((line) {
       final map = Map<String, dynamic>.from(line);
       final cleaned = <String, dynamic>{};
@@ -41,8 +46,74 @@ class ZohoPayloadMapper {
           cleaned[key] = map[key];
         }
       }
+      if (allowTaxId) {
+        final existing = cleaned['tax_id']?.toString() ?? '';
+        if (existing.isEmpty) {
+          final lifted = _extractNestedTaxId(map);
+          if (lifted != null) cleaned['tax_id'] = lifted;
+        }
+      }
       return cleaned;
     }).toList();
+  }
+
+  /// Reads tax_id from nested local payload shapes (item / invoiceLineItem).
+  static String? _extractNestedTaxId(Map<dynamic, dynamic> map) {
+    String? from(dynamic node) {
+      if (node is! Map) return null;
+      final id = (node['tax_id'] ?? node['taxId'])?.toString();
+      if (id != null && id.isNotEmpty) return id;
+      return null;
+    }
+
+    final direct = from(map);
+    if (direct != null) return direct;
+    final fromItem = from(map['item']);
+    if (fromItem != null) return fromItem;
+    final invLine = map['invoiceLineItem'];
+    if (invLine is Map) {
+      final fromInv = from(invLine);
+      if (fromInv != null) return fromInv;
+      return from(invLine['item']);
+    }
+    return null;
+  }
+
+  /// Fills missing line `tax_id` values using [resolveTaxId].
+  ///
+  /// UAE: lines without `tax_id` post as **EXEMPT** regardless of customer
+  /// `tax_treatment` (`vat_registered` / `vat_not_registered`). Van sales
+  /// must send Standard Rate (or the item's explicit tax_id) so unregistered
+  /// customers are still charged VAT.
+  ///
+  /// [resolveTaxId] receives the line's `tax_percentage` (nullable; may be 0
+  /// when unset) and must return a Zoho tax_id or null. Callers should treat
+  /// null/0% as "use default Standard Rate", not Zero Rate, unless the line
+  /// already carries an explicit tax_id.
+  static Map<String, dynamic> withResolvedLineTaxIds(
+    Map<String, dynamic> payload, {
+    required String? Function(double? taxPercentage) resolveTaxId,
+  }) {
+    final rawLines = payload['line_items'];
+    if (rawLines is! List) return payload;
+    final lines = rawLines.map((line) {
+      if (line is! Map) return line;
+      final m = Map<String, dynamic>.from(line);
+      final existing = m['tax_id']?.toString() ?? '';
+      if (existing.isNotEmpty) return m;
+      final pctRaw = m['tax_percentage'];
+      final pct = pctRaw is num ? pctRaw.toDouble() : null;
+      final resolved = resolveTaxId(pct);
+      if (resolved != null && resolved.isNotEmpty) {
+        m['tax_id'] = resolved;
+      }
+      // Never forward exemption markers — whitelist builders omit them, but
+      // stored queue maps must not reintroduce EXEMPT via residual keys.
+      m.remove('tax_exemption_id');
+      m.remove('tax_exemption_code');
+      return m;
+    }).toList();
+    return {...payload, 'line_items': lines};
   }
 
   // --- Contact / Customer (POST /contacts) ---------------------------------
@@ -92,6 +163,7 @@ class ZohoPayloadMapper {
       'item_id',
       'quantity',
       'rate',
+      'tax_id', // required for UAE VAT; percentage alone → EXEMPT
       'tax_percentage',
       'discount',
       'unit',
@@ -123,6 +195,8 @@ class ZohoPayloadMapper {
       'notes',
       'location_id',
       'salesperson_id',
+      // Customer/PO reference from Zoho list/detail (optional on create).
+      'reference_number',
     ]) {
       _putIfPresent(out, raw, key);
     }
@@ -130,6 +204,7 @@ class ZohoPayloadMapper {
       'item_id',
       'quantity',
       'rate',
+      'tax_id', // required for UAE VAT; percentage alone → EXEMPT
       'tax_percentage',
       'discount',
       'unit',
@@ -153,6 +228,7 @@ class ZohoPayloadMapper {
       'date',
       'reference_number',
       'location_id',
+      'sales_person_id',
       // Deposit account: the session salesperson's personal cash ledger.
       'account_id',
     ]) {
@@ -186,6 +262,8 @@ class ZohoPayloadMapper {
       'item_id',
       'quantity',
       'rate',
+      'tax_id', // required for UAE VAT; percentage alone → EXEMPT
+      'tax_percentage',
       'invoice_id',
       'unit',
       'unit_conversion_id', // multi-UOM; omitted for base-unit lines

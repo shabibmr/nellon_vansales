@@ -4,8 +4,10 @@ import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../domain/repositories/report_repository.dart';
+import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../core/widgets/customer_selector_sheet.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
 import '../aggregators/aging_receivables_aggregator.dart';
 import '../bloc/report_bloc.dart';
@@ -84,6 +86,19 @@ class _AgingReceivablesReportViewState
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _showCustomerSelector(BuildContext context) {
+    final allCustomers = context.read<SalesRepository>().getCustomers()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    CustomerSelectorSheet.show(
+      context,
+      customers: allCustomers,
+      onSelected: (customer) {
+        _searchController.text = customer.name;
+        setState(() => _query = customer.name);
+      },
+    );
   }
 
   List<AgingRow> _buildReport(ReportState<AgingReportData> state) {
@@ -208,10 +223,10 @@ class _AgingReceivablesReportViewState
           const SizedBox(height: 10),
           TextField(
             controller: _searchController,
-            onChanged: (value) => setState(() => _query = value),
-            textInputAction: TextInputAction.search,
+            readOnly: true,
+            onTap: () => _showCustomerSelector(context),
             decoration: InputDecoration(
-              hintText: 'Search customers by name…',
+              hintText: 'Tap to search customers…',
               isDense: true,
               prefixIcon: const Icon(
                 Icons.search_rounded,
@@ -219,7 +234,7 @@ class _AgingReceivablesReportViewState
               ),
               suffixIcon: hasQuery
                   ? IconButton(
-                      tooltip: 'Clear search',
+                      tooltip: 'Clear filter',
                       icon: Icon(
                         Icons.cancel,
                         size: 20,

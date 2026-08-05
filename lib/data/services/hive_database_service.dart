@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../domain/models/customer.dart';
 import '../../domain/models/item.dart';
@@ -58,6 +60,30 @@ class HiveDatabaseService {
   /// Lazily-built id-indexed cache backing [getCustomerById], invalidated
   /// whenever [saveCustomers] persists a new master list.
   Map<String, Customer>? _customerCache;
+
+  /// Serializes read-modify-write access to the `sales_orders` local-history
+  /// key. [saveLocalOrder] (editor save, post-sync id patch) and
+  /// [saveRemoteOrders] (list refresh) both read the full list, compute a
+  /// merged copy, and write it back — without this, two overlapping calls
+  /// (e.g. an editor save's background sync completion racing an immediate
+  /// list reload) can interleave and one write silently discards the other.
+  Future<void> _ordersLock = Future.value();
+
+  /// Runs [action] only after every previously-queued order write has
+  /// finished, guaranteeing each read-modify-write cycle completes atomically
+  /// relative to the others.
+  Future<T> _withOrdersLock<T>(Future<T> Function() action) {
+    final previous = _ordersLock;
+    final completer = Completer<void>();
+    _ordersLock = completer.future;
+    return previous.then((_) async {
+      try {
+        return await action();
+      } finally {
+        completer.complete();
+      }
+    });
+  }
 
   /// Initializes the local database bindings and opens Hive boxes.
   Future<void> init() async {
@@ -667,14 +693,42 @@ class HiveDatabaseService {
   /// remote counterpart (unlike sales orders' `zohoOrderId`), so a locally
   /// created invoice (`temp_inv_...` id) is simply kept until Zoho's list
   /// happens to be re-fetched under that same id.
+  ///
+  /// Header-only remote rows (`items` empty) preserve any existing local line
+  /// items so list refreshes do not wipe a previously cached full detail.
   Future<void> saveRemoteInvoices(List<SalesInvoice> remote) async {
     final current = _getAllLocalInvoices();
+    final byId = {for (final inv in current) inv.id: inv};
+
+    final mergedRemote = <SalesInvoice>[];
+    for (final remoteInv in remote) {
+      final local = byId[remoteInv.id];
+      if (remoteInv.items.isEmpty &&
+          local != null &&
+          local.items.isNotEmpty) {
+        mergedRemote.add(
+          remoteInv.copyWith(
+            items: local.items,
+            // Prefer van stamp over Zoho primary header location.
+            locationId: local.locationId ?? remoteInv.locationId,
+            notes: remoteInv.notes.isNotEmpty ? remoteInv.notes : local.notes,
+          ),
+        );
+      } else if (local != null &&
+          local.locationId != null &&
+          remoteInv.locationId == null) {
+        mergedRemote.add(remoteInv.copyWith(locationId: local.locationId));
+      } else {
+        mergedRemote.add(remoteInv);
+      }
+    }
+
     final remoteIds = remote.map((i) => i.id).toSet();
     final keptLocal = current
         .where((i) => !remoteIds.contains(i.id))
         .toList();
 
-    final merged = [...keptLocal, ...remote];
+    final merged = [...keptLocal, ...mergedRemote];
     final serialized = merged
         .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
         .toList();
@@ -699,10 +753,17 @@ class HiveDatabaseService {
   List<SalesOrder> getLocalOrders() =>
       _filterByActiveLocation(_getAllLocalOrders(), (ord) => ord.locationId);
 
+  /// Retrieves every locally-cached sales order regardless of the active
+  /// session's location. For internal post-sync bookkeeping (patching a
+  /// record's Zoho id / doc number / pending flag right after a push
+  /// succeeds) — that write must never silently no-op just because the
+  /// record's location happens not to match the current session.
+  List<SalesOrder> getAllLocalOrdersUnfiltered() => _getAllLocalOrders();
+
   /// Caches a newly created sales order locally.
   ///
   /// Note: Unlike Sales Invoices, creating a Sales Order does not directly deduct physical inventory stock levels immediately.
-  Future<void> saveLocalOrder(SalesOrder order) async {
+  Future<void> saveLocalOrder(SalesOrder order) => _withOrdersLock(() async {
     final stamped = order.locationId == null && assignedWarehouseId != null
         ? order.copyWith(locationId: assignedWarehouseId)
         : order;
@@ -721,31 +782,157 @@ class HiveDatabaseService {
         .map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson()))
         .toList();
     await _localHistoryBox.put('sales_orders', serialized);
-  }
+  });
 
   /// Merges a freshly downloaded set of remote sales orders into the local cache.
   ///
   /// Upsert, not replace: a fetch may be date-scoped (e.g. today only), so any
   /// local order outside that range must survive untouched. A local order is
-  /// dropped only when the remote set is authoritative for it — either it's
-  /// still pending sync and remote already confirms it (matched by
-  /// `zohoOrderId`), or it's already synced and remote carries a fresher copy
-  /// (matched by `id`). Remote records are always appended on top.
-  Future<void> saveRemoteOrders(List<SalesOrder> remote) async {
-    final current = _getAllLocalOrders();
+  /// dropped when:
+  /// - remote carries a fresher copy of the same id (replaced by the remote row), or
+  /// - [pruneMissingInRange] is true and the order's date falls inside the
+  ///   authoritative window ([rangeStart] / [rangeEnd]) but remote no longer
+  ///   lists it (deleted on Zoho), or
+  /// - a still-pending local row is no longer queued and remote already
+  ///   confirms it (matched by `zohoOrderId`).
+  ///
+  /// Pass [pruneMissingInRange] only from list refreshes. Single-order detail
+  /// fetches must leave it false so one upsert does not wipe the cache.
+  Future<void> saveRemoteOrders(
+    List<SalesOrder> remote, {
+    bool pruneMissingInRange = false,
+    DateTime? rangeStart,
+    DateTime? rangeEnd,
+  }) =>
+      _withOrdersLock(() async {
+        final current = _getAllLocalOrders();
+        final queuedOrderIds = getSyncQueue()
+            .where(
+              (q) =>
+                  (q.type == 'sales_order' || q.type == 'update_sales_order') &&
+                  q.status != SyncStatus.completed,
+            )
+            .map((q) => q.id)
+            .toSet();
+
+        final merged = mergeRemoteOrders(
+          current: current,
+          remote: remote,
+          queuedOrderIds: queuedOrderIds,
+          pruneMissingInRange: pruneMissingInRange,
+          rangeStart: rangeStart,
+          rangeEnd: rangeEnd,
+        );
+        final serialized = merged
+            .map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson()))
+            .toList();
+        await _localHistoryBox.put('sales_orders', serialized);
+      });
+
+  /// Pure merge step behind [saveRemoteOrders] — factored out so the race
+  /// scenario (a locally-pending edit vs. a stale/concurrent remote fetch)
+  /// can be unit tested without a real Hive box.
+  ///
+  /// Upsert, not replace: a fetch may be date-scoped (e.g. today only), so any
+  /// local order outside that range must survive untouched. When
+  /// [pruneMissingInRange] is true, a synced local order whose calendar date
+  /// sits inside [rangeStart]..[rangeEnd] (inclusive; open bounds allowed) and
+  /// is absent from [remote] is treated as deleted on Zoho and dropped.
+  /// Both bounds null with prune enabled means the remote list is fully
+  /// authoritative (unbounded list fetch).
+  ///
+  /// An id present in the fresh [remote] fetch does NOT by itself prove a
+  /// pending local edit already landed — the fetch and the background sync
+  /// push race independently, and an update never changes the order's id.
+  /// Only drop a still-queued edit once its own sync-queue item — passed in
+  /// as [queuedOrderIds] — is gone.
+  @visibleForTesting
+  static List<SalesOrder> mergeRemoteOrders({
+    required List<SalesOrder> current,
+    required List<SalesOrder> remote,
+    required Set<String> queuedOrderIds,
+    bool pruneMissingInRange = false,
+    DateTime? rangeStart,
+    DateTime? rangeEnd,
+  }) {
+    final byId = {for (final o in current) o.id: o};
+
+    // Header-only remote rows (empty items) keep any cached full line items.
+    // Prefer **remote** locationId when set (session van stamp from
+    // fetchRemoteOrders). Never re-apply a stale local HQ location_id that
+    // came from Zoho's primary branch — that hid orders from every van list.
+    final mergedRemote = <SalesOrder>[];
+    for (final remoteOrd in remote) {
+      final local = byId[remoteOrd.id];
+      // Still-queued local edit wins: keep only the local row (see keptLocal).
+      // Do not also append remote or the list ends up with two copies of the id.
+      if (local != null &&
+          local.isPendingSync &&
+          queuedOrderIds.contains(local.id)) {
+        continue;
+      }
+      if (remoteOrd.items.isEmpty &&
+          local != null &&
+          local.items.isNotEmpty) {
+        mergedRemote.add(
+          remoteOrd.copyWith(
+            items: local.items,
+            locationId: remoteOrd.locationId ?? local.locationId,
+            notes: remoteOrd.notes.isNotEmpty ? remoteOrd.notes : local.notes,
+            zohoOrderId: remoteOrd.zohoOrderId ?? local.zohoOrderId,
+            isPendingSync: false,
+          ),
+        );
+      } else {
+        mergedRemote.add(
+          remoteOrd.isPendingSync
+              ? remoteOrd.copyWith(isPendingSync: false)
+              : remoteOrd,
+        );
+      }
+    }
+
     final remoteIds = remote.map((o) => o.id).toSet();
     final keptLocal = current.where((o) {
       if (o.isPendingSync) {
+        if (queuedOrderIds.contains(o.id)) return true;
         return o.zohoOrderId == null || !remoteIds.contains(o.zohoOrderId);
       }
-      return !remoteIds.contains(o.id);
+      // Already in remote → superseded by mergedRemote.
+      if (remoteIds.contains(o.id)) return false;
+      // List refresh: remote is authoritative for the fetched window — a
+      // synced order in that window missing from remote was deleted in Zoho.
+      if (pruneMissingInRange &&
+          _orderDateInAuthoritativeRange(o.date, rangeStart, rangeEnd)) {
+        return false;
+      }
+      return true;
     }).toList();
 
-    final merged = [...keptLocal, ...remote];
-    final serialized = merged
-        .map((ord) => jsonEncode(SalesOrderModel.fromDomain(ord).toJson()))
-        .toList();
-    await _localHistoryBox.put('sales_orders', serialized);
+    return [...keptLocal, ...mergedRemote];
+  }
+
+  /// Calendar-date check for Zoho `date_start`/`date_end` windows (yyyy-MM-dd).
+  /// Both bounds null ⇒ every date is in range (unbounded authoritative fetch).
+  static bool _orderDateInAuthoritativeRange(
+    DateTime date,
+    DateTime? rangeStart,
+    DateTime? rangeEnd,
+  ) {
+    final d = DateTime(date.year, date.month, date.day);
+    if (rangeStart != null) {
+      final start = DateTime(
+        rangeStart.year,
+        rangeStart.month,
+        rangeStart.day,
+      );
+      if (d.isBefore(start)) return false;
+    }
+    if (rangeEnd != null) {
+      final end = DateTime(rangeEnd.year, rangeEnd.month, rangeEnd.day);
+      if (d.isAfter(end)) return false;
+    }
+    return true;
   }
 
   /// Retrieves the full, unfiltered list of stock transfers recorded locally (for internal read-modify-write use).
@@ -868,9 +1055,15 @@ class HiveDatabaseService {
 
   /// Caches a newly created receipt locally and instantly decrements the matching customer's outstanding balance in memory.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {
-    final stamped = voucher.locationId == null && assignedWarehouseId != null
+    var stamped = voucher.locationId == null && assignedWarehouseId != null
         ? voucher.copyWith(locationId: assignedWarehouseId)
         : voucher;
+    final salespersonId = getCurrentSalesperson()?.id;
+    if (stamped.salespersonId == null &&
+        salespersonId != null &&
+        salespersonId.isNotEmpty) {
+      stamped = stamped.copyWith(salespersonId: salespersonId);
+    }
     final current = _getAllLocalReceipts();
     final model = ReceiptVoucherModel.fromDomain(stamped);
 
@@ -903,14 +1096,42 @@ class HiveDatabaseService {
 
   /// Merges a freshly downloaded set of remote receipts into the local cache.
   /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  ///
+  /// Header-only remote rows (empty allocations) preserve any existing local
+  /// invoice allocations so list refreshes do not wipe a cached full detail.
   Future<void> saveRemoteReceipts(List<ReceiptVoucher> remote) async {
     final current = _getAllLocalReceipts();
+    final byId = {for (final r in current) r.id: r};
+
+    final mergedRemote = <ReceiptVoucher>[];
+    for (final remoteRec in remote) {
+      final local = byId[remoteRec.id];
+      if (remoteRec.allocations.isEmpty &&
+          local != null &&
+          local.allocations.isNotEmpty) {
+        mergedRemote.add(
+          remoteRec.copyWith(
+            allocations: local.allocations,
+            locationId: remoteRec.locationId ?? local.locationId,
+            paymentNumber: remoteRec.paymentNumber.isNotEmpty
+                ? remoteRec.paymentNumber
+                : local.paymentNumber,
+            referenceNumber: remoteRec.referenceNumber.isNotEmpty
+                ? remoteRec.referenceNumber
+                : local.referenceNumber,
+          ),
+        );
+      } else {
+        mergedRemote.add(remoteRec);
+      }
+    }
+
     final remoteIds = remote.map((r) => r.id).toSet();
     final keptLocal = current
         .where((r) => !remoteIds.contains(r.id))
         .toList();
 
-    final merged = [...keptLocal, ...remote];
+    final merged = [...keptLocal, ...mergedRemote];
     final serialized = merged
         .map((rec) => jsonEncode(ReceiptVoucherModel.fromDomain(rec).toJson()))
         .toList();
@@ -972,14 +1193,37 @@ class HiveDatabaseService {
 
   /// Merges a freshly downloaded set of remote sales returns into the local cache.
   /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  ///
+  /// Header-only remote rows (`items` empty) preserve any existing local line
+  /// items so list refreshes do not wipe a previously cached full detail.
   Future<void> saveRemoteReturns(List<SalesReturn> remote) async {
     final current = _getAllLocalReturns();
+    final byId = {for (final r in current) r.id: r};
+
+    final mergedRemote = <SalesReturn>[];
+    for (final remoteRet in remote) {
+      final local = byId[remoteRet.id];
+      if (remoteRet.items.isEmpty &&
+          local != null &&
+          local.items.isNotEmpty) {
+        mergedRemote.add(
+          remoteRet.copyWith(
+            items: local.items,
+            locationId: remoteRet.locationId ?? local.locationId,
+            reason: remoteRet.reason.isNotEmpty ? remoteRet.reason : local.reason,
+          ),
+        );
+      } else {
+        mergedRemote.add(remoteRet);
+      }
+    }
+
     final remoteIds = remote.map((r) => r.id).toSet();
     final keptLocal = current
         .where((r) => !remoteIds.contains(r.id))
         .toList();
 
-    final merged = [...keptLocal, ...remote];
+    final merged = [...keptLocal, ...mergedRemote];
     final serialized = merged
         .map((ret) => jsonEncode(SalesReturnModel.fromDomain(ret).toJson()))
         .toList();
@@ -1025,14 +1269,38 @@ class HiveDatabaseService {
 
   /// Merges a freshly downloaded set of remote expenses into the local cache.
   /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  ///
+  /// Header-only remote rows (`lines` empty) preserve any existing local line
+  /// items so list refreshes do not wipe a previously cached full detail.
   Future<void> saveRemoteExpenses(List<ExpenseEntry> remote) async {
     final current = _getAllLocalExpenses();
+    final byId = {for (final e in current) e.id: e};
+
+    final mergedRemote = <ExpenseEntry>[];
+    for (final remoteExp in remote) {
+      final local = byId[remoteExp.id];
+      if (remoteExp.lines.isEmpty &&
+          local != null &&
+          local.lines.isNotEmpty) {
+        mergedRemote.add(
+          remoteExp.copyWith(
+            lines: local.lines,
+            locationId: remoteExp.locationId ?? local.locationId,
+            receiptImagePath:
+                remoteExp.receiptImagePath ?? local.receiptImagePath,
+          ),
+        );
+      } else {
+        mergedRemote.add(remoteExp);
+      }
+    }
+
     final remoteIds = remote.map((e) => e.id).toSet();
     final keptLocal = current
         .where((e) => !remoteIds.contains(e.id))
         .toList();
 
-    final merged = [...keptLocal, ...remote];
+    final merged = [...keptLocal, ...mergedRemote];
     final serialized = merged
         .map((exp) => jsonEncode(ExpenseEntryModel.fromDomain(exp).toJson()))
         .toList();

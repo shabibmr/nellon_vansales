@@ -33,8 +33,9 @@ class ReportSummaryChip {
 }
 
 /// Shared chrome for aggregation-style report pages: app bar with
-/// refresh/loading indicator, optional date-range filter, optional summary
-/// chip strip, a sortable column header, and a sorted/empty list body.
+/// refresh/loading indicator, body progress when [isLoading] and rows are
+/// empty, optional date-range filter, optional summary chip strip, a sortable
+/// column header, and a sorted/empty list body.
 ///
 /// Each report page owns its own data fetching, aggregation, and sort
 /// comparator (row shapes differ per report); this widget only renders the
@@ -292,52 +293,54 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
               ),
             const SizedBox(height: 4),
             Expanded(
-              child: rows.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            emptyIcon,
-                            size: 64,
-                            color: isDark
-                                ? const Color(0xFF334155)
-                                : const Color(0xFFCBD5E1),
+              child: isLoading && rows.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : rows.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                emptyIcon,
+                                size: 64,
+                                color: isDark
+                                    ? const Color(0xFF334155)
+                                    : const Color(0xFFCBD5E1),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                emptyTitle,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? AppTheme.darkTextSecondary
+                                      : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                hasActiveFilter
+                                    ? emptyFilteredMessage
+                                    : emptyMessage,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? const Color(0xFF475569)
+                                      : const Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            emptyTitle,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? AppTheme.darkTextSecondary
-                                  : AppTheme.lightTextSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            hasActiveFilter
-                                ? emptyFilteredMessage
-                                : emptyMessage,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark
-                                  ? const Color(0xFF475569)
-                                  : const Color(0xFF94A3B8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      itemCount: rows.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) =>
-                          itemBuilder(context, rows[index]),
-                    ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          itemCount: rows.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 6),
+                          itemBuilder: (context, index) =>
+                              itemBuilder(context, rows[index]),
+                        ),
             ),
           ],
         ),

@@ -116,6 +116,14 @@ class SalesInvoice extends Equatable {
   /// The Zoho Location ID of the salesperson/van that created this invoice.
   final String? locationId;
 
+  /// Zoho list/detail payment status (e.g. unpaid, paid, overdue). Empty when unknown.
+  final String status;
+
+  /// Grand total from Zoho list headers when [items] are not loaded.
+  ///
+  /// Prefer line-derived totals when [items] is non-empty.
+  final double? listedTotal;
+
   /// Creates a new [SalesInvoice].
   const SalesInvoice({
     required this.id,
@@ -128,6 +136,8 @@ class SalesInvoice extends Equatable {
     required this.notes,
     this.isPendingSync = false,
     this.locationId,
+    this.status = '',
+    this.listedTotal,
   });
 
   /// Computes sum of all sub-totals (excluding taxes).
@@ -142,15 +152,22 @@ class SalesInvoice extends Equatable {
   double get discountTotal =>
       roundMoney(items.fold(0.0, (sum, item) => sum + item.discount));
 
-  /// Computes the unrounded grand total.
+  /// Computes the unrounded grand total from line items.
   double get rawTotal =>
       roundMoney(items.fold(0.0, (sum, item) => sum + item.total));
 
-  /// Computes the final grand total billed, rounded to the nearest integer.
-  double get total => rawTotal.roundToDouble();
+  /// Final grand total: line-derived when items exist, else [listedTotal].
+  double get total {
+    if (items.isNotEmpty) return rawTotal.roundToDouble();
+    if (listedTotal != null) return listedTotal!.roundToDouble();
+    return 0.0;
+  }
 
-  /// Computes the round off adjustment.
-  double get roundOff => roundMoney(total - rawTotal);
+  /// Computes the round off adjustment (meaningful when line items exist).
+  double get roundOff {
+    if (items.isEmpty) return 0.0;
+    return roundMoney(total - rawTotal);
+  }
 
   /// Creates a copy of this [SalesInvoice] with replaced values for specific fields.
   SalesInvoice copyWith({
@@ -164,6 +181,9 @@ class SalesInvoice extends Equatable {
     String? notes,
     bool? isPendingSync,
     String? locationId,
+    String? status,
+    double? listedTotal,
+    bool clearListedTotal = false,
   }) {
     return SalesInvoice(
       id: id ?? this.id,
@@ -176,6 +196,8 @@ class SalesInvoice extends Equatable {
       notes: notes ?? this.notes,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       locationId: locationId ?? this.locationId,
+      status: status ?? this.status,
+      listedTotal: clearListedTotal ? null : (listedTotal ?? this.listedTotal),
     );
   }
 
@@ -191,5 +213,7 @@ class SalesInvoice extends Equatable {
     notes,
     isPendingSync,
     locationId,
+    status,
+    listedTotal,
   ];
 }

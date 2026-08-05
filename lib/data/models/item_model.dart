@@ -1,6 +1,14 @@
 import '../../domain/models/item.dart';
 import 'unit_conversion_model.dart';
 
+/// Parses a JSON value that may be a [num] or a numeric [String] (Zoho
+/// sometimes returns numeric fields as strings).
+double _parseNum(dynamic value, [double fallback = 0.0]) {
+  if (value == null) return fallback;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString()) ?? fallback;
+}
+
 /// Data transfer object representing stocked inventory [Item]s.
 ///
 /// Bridges the UI representation of stocked goods with Zoho Books Item API payloads.
@@ -15,25 +23,29 @@ class ItemModel extends Item {
     required super.description,
     required super.taxName,
     required super.taxPercentage,
+    super.taxId = '',
     super.uom = '',
     super.unitConversions = const [],
   });
 
   /// Factory constructor to parse local/remote JSON into an [ItemModel].
   ///
-  /// Maps Zoho API keys (`item_id`, `stock_on_hand`, `tax_percentage`, `unit`) with fallback defaults.
+  /// Maps Zoho API keys (`item_id`, `stock_on_hand`, `tax_id`, `tax_percentage`,
+  /// `unit`) with empty/zero defaults when tax is absent (do not invent
+  /// "VAT 5%" — this org uses "Standard Rate" / tax_id).
   factory ItemModel.fromJson(Map<String, dynamic> json) {
     return ItemModel(
       id: ((json['item_id'] ?? json['id']) as String?) ?? '',
       name: (json['name'] as String?) ?? '',
       sku: (json['sku'] as String?) ?? '',
-      rate: ((json['rate'] ?? json['price']) as num?)?.toDouble() ?? 0.0,
-      stock: ((json['stock_on_hand'] ?? json['stock'] ?? 0) as num).toDouble(),
+      rate: _parseNum(json['rate'] ?? json['price']),
+      stock: _parseNum(json['stock_on_hand'] ?? json['stock']),
       description: (json['description'] as String?) ?? '',
-      taxName: ((json['tax_name'] ?? json['taxName']) as String?) ?? 'VAT 5%',
-      taxPercentage: ((json['tax_percentage'] ?? json['taxPercentage']) as num?)
-              ?.toDouble() ??
-          5.0,
+      taxId: ((json['tax_id'] ?? json['taxId']) as String?) ?? '',
+      taxName: ((json['tax_name'] ?? json['taxName']) as String?) ?? '',
+      taxPercentage: _parseNum(
+        json['tax_percentage'] ?? json['taxPercentage'],
+      ),
       // Zoho Books/Inventory use `unit`; local cache may store `uom`.
       uom: (json['unit'] ?? json['uom'] ?? '').toString(),
       // Only present after unit-conversion enrichment (item detail fetch).
@@ -54,6 +66,7 @@ class ItemModel extends Item {
       'stock': stock,
       'stock_on_hand': stock,
       'description': description,
+      'tax_id': taxId,
       'tax_name': taxName,
       'tax_percentage': taxPercentage,
       'unit': uom,
@@ -73,6 +86,7 @@ class ItemModel extends Item {
       rate: item.rate,
       stock: item.stock,
       description: item.description,
+      taxId: item.taxId,
       taxName: item.taxName,
       taxPercentage: item.taxPercentage,
       uom: item.uom,

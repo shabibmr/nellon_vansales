@@ -73,8 +73,9 @@ abstract class SalesRepository {
     bool allowOfflineFallback = true,
   });
 
-  /// Downloads invoices from Zoho Books, merges them into the local cache,
-  /// and returns the resulting local list.
+  /// Downloads invoice **headers** from Zoho Books (list endpoint only — no
+  /// per-invoice detail), merges them into the local cache, and returns the
+  /// resulting local list. Line items load via [fetchInvoiceById] on open.
   Future<List<SalesInvoice>> fetchRemoteInvoices({
     DateTime? startDate,
     DateTime? endDate,
@@ -118,9 +119,10 @@ abstract class SalesRepository {
   /// payload lives in the data layer so UI/BLoCs stay on domain types.
   Future<void> enqueueSalesOrder(SalesOrder order, {required bool isUpdate});
 
-  /// Downloads sales orders from Zoho Books, merges them into the local cache,
-  /// and returns the resulting local list. Omitting the date range pulls
-  /// unfiltered (all salesperson history); passing one scopes the Zoho query.
+  /// Downloads sales order **headers** from Zoho Books (list endpoint only —
+  /// no per-order detail), merges them into the local cache, and returns the
+  /// resulting local list. Line items load via [fetchRemoteOrder] on open.
+  /// Omitting the date range pulls unfiltered history; passing one scopes Zoho.
   Future<List<SalesOrder>> fetchRemoteOrders({
     DateTime? startDate,
     DateTime? endDate,
@@ -141,8 +143,9 @@ abstract class SalesRepository {
   /// Logs a new collection receipt locally and caches it.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher);
 
-  /// Downloads receipts from Zoho Books, merges them into the local cache,
-  /// and returns the resulting local list.
+  /// Downloads receipt **headers** from Zoho Books, merges them into the local
+  /// cache, and returns the resulting local list. Invoice allocations load via
+  /// [fetchReceiptById] when the editor opens.
   Future<List<ReceiptVoucher>> fetchRemoteReceipts({
     DateTime? startDate,
     DateTime? endDate,
@@ -154,8 +157,9 @@ abstract class SalesRepository {
   /// Logs a credit note/sales return locally and caches it.
   Future<void> saveLocalReturn(SalesReturn salesReturn);
 
-  /// Downloads sales returns from Zoho Books, merges them into the local
-  /// cache, and returns the resulting local list.
+  /// Downloads sales return **headers** from Zoho Books (list endpoint only —
+  /// no per-return detail), merges them into the local cache, and returns the
+  /// resulting local list. Line items load via [fetchSalesReturnById] on open.
   Future<List<SalesReturn>> fetchRemoteReturns({
     DateTime? startDate,
     DateTime? endDate,
@@ -167,8 +171,9 @@ abstract class SalesRepository {
   /// Saves a new multi-line expense entry locally.
   Future<void> saveLocalExpense(ExpenseEntry expense);
 
-  /// Downloads expenses from Zoho Books, merges them into the local cache,
-  /// and returns the resulting local list.
+  /// Downloads expense **headers** from Zoho Books (list endpoint only — no
+  /// per-expense detail), merges them into the local cache, and returns the
+  /// resulting local list. Lines load via [fetchExpenseById] on open.
   Future<List<ExpenseEntry>> fetchRemoteExpenses({
     DateTime? startDate,
     DateTime? endDate,

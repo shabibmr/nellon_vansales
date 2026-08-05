@@ -1,6 +1,14 @@
 import '../../domain/models/sales_invoice.dart';
 import 'item_model.dart';
 
+/// Parses a JSON value that may be a [num] or a numeric [String] (Zoho
+/// sometimes returns line-item numeric fields as strings).
+double _parseNum(dynamic value, [double fallback = 0.0]) {
+  if (value == null) return fallback;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString()) ?? fallback;
+}
+
 /// Data transfer object representing an [InvoiceLineItem].
 ///
 /// Handles converting specific invoice row mappings, stock SKUs, and tax percentages to backend schemas.
@@ -18,17 +26,30 @@ class InvoiceLineItemModel extends InvoiceLineItem {
 
   /// Factory constructor to parse local/remote JSON maps into an [InvoiceLineItemModel].
   factory InvoiceLineItemModel.fromJson(Map<String, dynamic> json) {
-    final rawDiscount = json['discount_amount'] ?? json['discount'] ?? 0.0;
-    final item = ItemModel.fromJson(json['item'] ?? json);
+    var item = ItemModel.fromJson(json['item'] ?? json);
+    // Line-level tax fields win when Zoho returns them only on the line.
+    final lineTaxId = (json['tax_id'] ?? '').toString();
+    final lineTaxName = (json['tax_name'] ?? '').toString();
+    if (lineTaxId.isNotEmpty || lineTaxName.isNotEmpty) {
+      item = ItemModel.fromDomain(
+        item.copyWith(
+          taxId: lineTaxId.isNotEmpty ? lineTaxId : null,
+          taxName: lineTaxName.isNotEmpty ? lineTaxName : null,
+          taxPercentage: json['tax_percentage'] != null
+              ? _parseNum(json['tax_percentage'])
+              : null,
+        ),
+      );
+    }
     final lineUom = (json['unit'] ?? json['uom'] ?? '').toString();
     return InvoiceLineItemModel(
       item: item,
-      quantity: ((json['quantity'] ?? 1) as num).toDouble(),
-      rate: (json['rate'] ?? 0.0).toDouble(),
-      taxPercentage: (json['tax_percentage'] ?? 0.0).toDouble(),
-      discount: rawDiscount is num
-          ? rawDiscount.toDouble()
-          : (double.tryParse(rawDiscount.toString()) ?? 0.0),
+      quantity: _parseNum(json['quantity'], 1.0),
+      rate: _parseNum(json['rate']),
+      taxPercentage: json['tax_percentage'] != null
+          ? _parseNum(json['tax_percentage'])
+          : item.taxPercentage,
+      discount: _parseNum(json['discount_amount'] ?? json['discount']),
       uom: lineUom.isNotEmpty ? lineUom : item.uom,
       unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
     );
@@ -37,11 +58,13 @@ class InvoiceLineItemModel extends InvoiceLineItem {
   /// Converts this [InvoiceLineItemModel] into a serialization compatible JSON map.
   Map<String, dynamic> toJson() {
     final unit = displayUom;
+    final taxId = item.taxId;
     return {
       'item_id': item.id,
       'quantity': quantity,
       'rate': rate,
       'tax_percentage': taxPercentage,
+      if (taxId.isNotEmpty) 'tax_id': taxId,
       'discount': discount,
       if (unit.isNotEmpty) 'unit': unit,
       if (unit.isNotEmpty) 'uom': unit,
@@ -80,10 +103,20 @@ class SalesInvoiceModel extends SalesInvoice {
     required super.notes,
     super.isPendingSync,
     super.locationId,
+    super.status,
+    super.listedTotal,
   });
 
   /// Factory constructor to parse local database JSON maps into a [SalesInvoiceModel].
   factory SalesInvoiceModel.fromJson(Map<String, dynamic> json) {
+    final rawTotal = json['total'] ?? json['listedTotal'];
+    double? listedTotal;
+    if (rawTotal is num) {
+      listedTotal = rawTotal.toDouble();
+    } else if (rawTotal != null) {
+      listedTotal = double.tryParse(rawTotal.toString());
+    }
+
     return SalesInvoiceModel(
       id: json['invoice_id'] ?? json['id'] ?? '',
       invoiceNumber: json['invoice_number'] ?? json['invoiceNumber'] ?? '',
@@ -103,6 +136,8 @@ class SalesInvoiceModel extends SalesInvoice {
       notes: json['notes'] ?? '',
       isPendingSync: json['isPendingSync'] ?? false,
       locationId: json['location_id'],
+      status: (json['status'] ?? '').toString(),
+      listedTotal: listedTotal,
     );
   }
 
@@ -123,6 +158,8 @@ class SalesInvoiceModel extends SalesInvoice {
       'isPendingSync': isPendingSync,
       'round_off': roundOff,
       'location_id': locationId,
+      'status': status,
+      if (listedTotal != null) 'total': listedTotal,
     };
   }
 
@@ -139,6 +176,8 @@ class SalesInvoiceModel extends SalesInvoice {
       notes: invoice.notes,
       isPendingSync: invoice.isPendingSync,
       locationId: invoice.locationId,
+      status: invoice.status,
+      listedTotal: invoice.listedTotal,
     );
   }
 }

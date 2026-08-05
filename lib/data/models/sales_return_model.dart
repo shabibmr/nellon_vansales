@@ -37,10 +37,13 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
   /// the Zoho credit-note mapper whitelists them directly.
   Map<String, dynamic> toJson() {
     final unit = displayUom;
+    final taxId = invoiceLineItem.item.taxId;
     return {
       'item_id': invoiceLineItem.item.id,
       'quantity': returnedQuantity,
       'rate': rate,
+      'tax_percentage': invoiceLineItem.taxPercentage,
+      if (taxId.isNotEmpty) 'tax_id': taxId,
       'invoice_id': invoiceId,
       'invoice_number': invoiceNumber,
       if (unit.isNotEmpty) 'unit': unit,
@@ -82,10 +85,19 @@ class SalesReturnModel extends SalesReturn {
     required super.reason,
     super.isPendingSync,
     super.locationId,
+    super.listedTotal,
   });
 
   /// Factory constructor to parse local database JSON maps into a [SalesReturnModel].
   factory SalesReturnModel.fromJson(Map<String, dynamic> json) {
+    final rawTotal = json['total'] ?? json['listedTotal'];
+    double? listedTotal;
+    if (rawTotal is num) {
+      listedTotal = rawTotal.toDouble();
+    } else if (rawTotal != null) {
+      listedTotal = double.tryParse(rawTotal.toString());
+    }
+
     return SalesReturnModel(
       id: json['creditnote_id'] ?? json['id'] ?? '',
       creditNoteNumber:
@@ -100,9 +112,14 @@ class SalesReturnModel extends SalesReturn {
               ?.map((item) => SalesReturnLineItemModel.fromJson(item))
               .toList() ??
           [],
-      reason: json['reason'] ?? '',
+      reason:
+          json['reason'] ??
+          json['reason_for_credit_debit_note'] ??
+          json['notes'] ??
+          '',
       isPendingSync: json['isPendingSync'] ?? false,
       locationId: json['location_id'],
+      listedTotal: listedTotal,
     );
   }
 
@@ -121,6 +138,7 @@ class SalesReturnModel extends SalesReturn {
       'reason': reason,
       'isPendingSync': isPendingSync,
       'location_id': locationId,
+      if (listedTotal != null) 'total': listedTotal,
     };
   }
 
@@ -136,6 +154,7 @@ class SalesReturnModel extends SalesReturn {
       reason: salesReturn.reason,
       isPendingSync: salesReturn.isPendingSync,
       locationId: salesReturn.locationId,
+      listedTotal: salesReturn.listedTotal,
     );
   }
 }

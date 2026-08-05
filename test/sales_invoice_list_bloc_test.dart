@@ -1,30 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:van_sales/data/models/sync_queue_item.dart';
-import 'package:van_sales/data/services/sync_worker.dart';
-import 'package:van_sales/domain/models/cash_closing.dart';
-import 'package:van_sales/domain/models/customer.dart';
-import 'package:van_sales/domain/models/expense_entry.dart';
-import 'package:van_sales/domain/models/item.dart';
-import 'package:van_sales/domain/models/open_invoice.dart';
-import 'package:van_sales/domain/models/receipt_voucher.dart';
-import 'package:van_sales/domain/models/route.dart';
+import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
-import 'package:van_sales/domain/models/sales_order.dart';
-import 'package:van_sales/domain/models/sales_return.dart';
-import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_bloc.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_event.dart';
+import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_state.dart';
 
+/// Minimal recording repo: only invoice list methods are real; others noSuchMethod.
 class RecordingSalesRepository implements SalesRepository {
   final List<({DateTime? start, DateTime? end})> fetchCalls = [];
   List<SalesInvoice> remoteInvoices = [];
   List<SalesInvoice> localInvoices = [];
   Object? fetchFailure;
-
   final List<Future<List<SalesInvoice>>> responseQueue = [];
 
   @override
@@ -44,99 +34,55 @@ class RecordingSalesRepository implements SalesRepository {
   List<SalesInvoice> getLocalInvoices() => List.of(localInvoices);
 
   @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
-  @override
-  Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
-  @override
-  Future<void> enqueueSyncItem(SyncQueueItem item) async {}
-  @override
-  Future<void> enqueueSalesOrder(SalesOrder order, {required bool isUpdate}) async {}
-  @override
-  List<SalesOrder> getLocalOrders() => [];
-  @override
-  Future<void> saveLocalOrder(SalesOrder order) async {}
-  @override
-  Future<List<SalesOrder>> fetchRemoteOrders({DateTime? startDate, DateTime? endDate}) async => [];
-  @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
-  @override
-  List<Customer> getCustomers() => [];
-  @override
-  Future<void> saveCustomers(List<Customer> customers) async {}
-  @override
-  List<SyncQueueItem> getSyncQueue() => [];
-  @override
-  List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
-  @override
-  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async => [];
-  @override
-  List<ReceiptVoucher> getLocalReceipts() => [];
-  @override
-  Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
-  @override
-  Future<List<ReceiptVoucher>> fetchRemoteReceipts({DateTime? startDate, DateTime? endDate}) async => [];
-  @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
-  @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
-  @override
-  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
-  @override
-  List<RouteModel> getRoutes() => [];
-  @override
-  String? get activeRouteId => null;
-  @override
-  Future<void> setActiveRouteId(String? routeId) async {}
-  @override
-  List<Item> getItems() => [];
-  @override
-  Future<void> saveItems(List<Item> items) async {}
-  @override
-  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async =>
-      (item: item, offlineFallback: false);
-  @override
-  List<SalesReturn> getLocalReturns() => [];
-  @override
-  Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
-  @override
-  Future<List<SalesReturn>> fetchRemoteReturns({DateTime? startDate, DateTime? endDate}) async => [];
-  @override
-  List<ExpenseEntry> getLocalExpenses() => [];
-  @override
-  Future<void> saveLocalExpense(ExpenseEntry expense) async {}
-  @override
-  Future<List<ExpenseEntry>> fetchRemoteExpenses({DateTime? startDate, DateTime? endDate}) async => [];
-  @override
-  CashClosing? getLocalCashClosing() => null;
-  @override
-  Future<void> saveLocalCashClosing(CashClosing closing) async {}
-  @override
-  List<StockTransfer> getLocalStockTransfers() => [];
-  @override
-  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
-  @override
-  Future<List<StockTransfer>> fetchRemoteStockTransfers({DateTime? startDate, DateTime? endDate}) async => [];
+  dynamic noSuchMethod(Invocation invocation) {
+    final name = invocation.memberName.toString();
+    if (name.contains('get') ||
+        name.contains('has') ||
+        name.contains('Id') ||
+        name.contains('activeRoute')) {
+      return null;
+    }
+    if (invocation.isGetter) return null;
+    if (invocation.typeArguments.isNotEmpty ||
+        name.contains('List') ||
+        name.contains('getLocal') ||
+        name.contains('getCustomers') ||
+        name.contains('getItems') ||
+        name.contains('getRoutes') ||
+        name.contains('getSync') ||
+        name.contains('getOpen') ||
+        name.contains('getWarehouses')) {
+      return [];
+    }
+    if (name.contains('hasPending')) return false;
+    if (name.contains('isSyncing')) return false;
+    return Future.value();
+  }
 }
 
 class FakeSyncRepository implements SyncRepository {
   @override
-  Future<void> triggerSync({bool forceRetryAll = false}) async {}
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.isGetter) {
+      if (invocation.memberName.toString().contains('Stream')) {
+        return const Stream.empty();
+      }
+      if (invocation.memberName.toString().contains('isSyncing')) {
+        return false;
+      }
+      return null;
+    }
+    if (invocation.memberName.toString().contains('getSyncQueue')) {
+      return <dynamic>[];
+    }
+    if (invocation.memberName.toString().contains('hasCore')) return true;
+    return Future.value();
+  }
+}
+
+class FakeDocumentNumberService implements DocumentNumberService {
   @override
-  Stream<String> get syncStatusStream => const Stream.empty();
-  @override
-  Stream<int> get syncCountStream => const Stream.empty();
-  @override
-  bool get isSyncing => false;
-  @override
-  List<SyncQueueItem> getSyncQueue() => [];
-  @override
-  Future<void> clearFailedSyncItems() async {}
-  @override
-  Future<void> refreshMasterData() async {}
-  @override
-  Future<void> syncMaster(MasterType type) async {}
-  @override
-  bool hasCoreMasters() => true;
+  dynamic noSuchMethod(Invocation invocation) => Future.value('INV-00001');
 }
 
 SalesInvoice _inv(String id, DateTime date) => SalesInvoice(
@@ -148,6 +94,7 @@ SalesInvoice _inv(String id, DateTime date) => SalesInvoice(
       dueDate: date,
       items: const [],
       notes: '',
+      listedTotal: 100,
     );
 
 void main() {
@@ -161,6 +108,7 @@ void main() {
     bloc = SalesInvoiceListBloc(
       salesRepository: repo,
       syncRepository: syncRepo,
+      documentNumberService: FakeDocumentNumberService(),
     );
   });
 
@@ -175,14 +123,18 @@ void main() {
     repo.remoteInvoices = [_inv('1', today)];
 
     bloc.add(const LoadInvoices());
-    await bloc.stream.firstWhere((s) => !s.isLoading);
+    await bloc.stream.firstWhere(
+      (s) => s.status == SalesInvoiceListStatus.success,
+    );
 
     expect(repo.fetchCalls, hasLength(1));
     expect(bloc.state.invoices, hasLength(1));
+    expect(bloc.state.status, SalesInvoiceListStatus.success);
     expect(bloc.state.errorMessage, isNull);
   });
 
-  test('fetch failure falls back to local invoices with humanized error', () async {
+  test('fetch failure falls back to local invoices with humanized error',
+      () async {
     final today = DateTime(
       DateTime.now().year,
       DateTime.now().month,
@@ -192,9 +144,12 @@ void main() {
     repo.localInvoices = [_inv('local', today)];
 
     bloc.add(const LoadInvoices());
-    await bloc.stream.firstWhere((s) => !s.isLoading);
+    await bloc.stream.firstWhere(
+      (s) => s.status == SalesInvoiceListStatus.failure,
+    );
 
     expect(bloc.state.invoices.map((i) => i.id), ['local']);
+    expect(bloc.state.status, SalesInvoiceListStatus.failure);
     expect(bloc.state.errorMessage, isNotNull);
   });
 
@@ -215,7 +170,9 @@ void main() {
 
     fastB.complete([_inv('june', startB)]);
     await bloc.stream.firstWhere(
-      (s) => !s.isLoading && s.invoices.any((i) => i.id == 'june'),
+      (s) =>
+          s.status == SalesInvoiceListStatus.success &&
+          s.invoices.any((i) => i.id == 'june'),
     );
 
     slowA.complete([_inv('jan', startA)]);
@@ -224,6 +181,7 @@ void main() {
     expect(bloc.state.startDate, startB);
     expect(bloc.state.endDate, endB);
     expect(bloc.state.invoices.map((i) => i.id), ['june']);
+    expect(bloc.state.status, SalesInvoiceListStatus.success);
     expect(bloc.state.isLoading, isFalse);
   });
 }

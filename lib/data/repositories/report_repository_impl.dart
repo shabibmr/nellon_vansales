@@ -48,7 +48,8 @@ class ReportRepositoryImpl implements ReportRepository {
 
   @override
   Future<List<SalesOrder>> fetchSalesOrders() async {
-    final raw = await apiClient.fetchSalesOrders();
+    // Reports need line items (itemwise / shipment); list page uses headers only.
+    final raw = await apiClient.fetchSalesOrdersWithDetails();
     return raw.map((json) => SalesOrderModel.fromJson(json)).toList();
   }
 

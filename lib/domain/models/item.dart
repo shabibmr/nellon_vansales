@@ -25,7 +25,13 @@ class Item extends Equatable {
   /// Brief product description or details.
   final String description;
 
-  /// Name of the tax applied to this item (e.g. VAT 5%).
+  /// Zoho tax_id for this item (e.g. Standard Rate). Empty when unknown.
+  ///
+  /// Required on invoice/order/credit-note line posts — UAE orgs apply EXEMPT
+  /// when lines omit tax_id even if tax_percentage is present.
+  final String taxId;
+
+  /// Name of the tax applied to this item (e.g. "Standard Rate").
   final String taxName;
 
   /// The tax rate percentage (e.g., 5.0 for 5% tax).
@@ -47,6 +53,7 @@ class Item extends Equatable {
     required this.description,
     required this.taxName,
     required this.taxPercentage,
+    this.taxId = '',
     this.uom = '',
     this.unitConversions = const [],
   });
@@ -76,6 +83,7 @@ class Item extends Equatable {
     double? rate,
     double? stock,
     String? description,
+    String? taxId,
     String? taxName,
     double? taxPercentage,
     String? uom,
@@ -88,6 +96,7 @@ class Item extends Equatable {
       rate: rate ?? this.rate,
       stock: stock ?? this.stock,
       description: description ?? this.description,
+      taxId: taxId ?? this.taxId,
       taxName: taxName ?? this.taxName,
       taxPercentage: taxPercentage ?? this.taxPercentage,
       uom: uom ?? this.uom,
@@ -103,6 +112,7 @@ class Item extends Equatable {
     rate,
     stock,
     description,
+    taxId,
     taxName,
     taxPercentage,
     uom,

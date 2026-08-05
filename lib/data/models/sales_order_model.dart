@@ -18,13 +18,27 @@ class OrderLineItemModel extends OrderLineItem {
 
   /// Factory constructor to parse local/remote JSON maps into an [OrderLineItemModel].
   factory OrderLineItemModel.fromJson(Map<String, dynamic> json) {
-    final item = ItemModel.fromJson(json['item'] ?? json);
+    var item = ItemModel.fromJson(json['item'] ?? json);
+    // Line-level tax fields win when Zoho returns them only on the line.
+    final lineTaxId = (json['tax_id'] ?? '').toString();
+    final lineTaxName = (json['tax_name'] ?? '').toString();
+    if (lineTaxId.isNotEmpty || lineTaxName.isNotEmpty) {
+      item = ItemModel.fromDomain(
+        item.copyWith(
+          taxId: lineTaxId.isNotEmpty ? lineTaxId : null,
+          taxName: lineTaxName.isNotEmpty ? lineTaxName : null,
+          taxPercentage: json['tax_percentage'] != null
+              ? (json['tax_percentage'] as num).toDouble()
+              : null,
+        ),
+      );
+    }
     final lineUom = (json['unit'] ?? json['uom'] ?? '').toString();
     return OrderLineItemModel(
       item: item,
       quantity: ((json['quantity'] ?? 1) as num).toDouble(),
       rate: (json['rate'] ?? 0.0).toDouble(),
-      taxPercentage: (json['tax_percentage'] ?? 0.0).toDouble(),
+      taxPercentage: (json['tax_percentage'] ?? item.taxPercentage).toDouble(),
       discount: (json['discount'] ?? 0.0).toDouble(),
       uom: lineUom.isNotEmpty ? lineUom : item.uom,
       unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
@@ -34,11 +48,13 @@ class OrderLineItemModel extends OrderLineItem {
   /// Converts this [OrderLineItemModel] into a serialization compatible JSON map.
   Map<String, dynamic> toJson() {
     final unit = displayUom;
+    final taxId = item.taxId;
     return {
       'item_id': item.id,
       'quantity': quantity,
       'rate': rate,
       'tax_percentage': taxPercentage,
+      if (taxId.isNotEmpty) 'tax_id': taxId,
       'discount': discount,
       if (unit.isNotEmpty) 'unit': unit,
       if (unit.isNotEmpty) 'uom': unit,
@@ -80,10 +96,29 @@ class SalesOrderModel extends SalesOrder {
     super.convertedInvoiceNumber,
     super.zohoOrderId,
     super.locationId,
+    super.listedTotal,
+    super.orderStatus,
+    super.invoicedStatus,
+    super.referenceNumber,
   });
 
   /// Factory constructor to parse local database JSON maps into a [SalesOrderModel].
   factory SalesOrderModel.fromJson(Map<String, dynamic> json) {
+    final rawTotal = json['total'] ?? json['listedTotal'];
+    double? listedTotal;
+    if (rawTotal is num) {
+      listedTotal = rawTotal.toDouble();
+    } else if (rawTotal != null) {
+      listedTotal = double.tryParse(rawTotal.toString());
+    }
+
+    final orderStatus = (json['order_status'] ?? json['orderStatus'] ?? '')
+        .toString();
+    final invoicedStatus =
+        (json['invoiced_status'] ?? json['invoicedStatus'] ?? '').toString();
+    final referenceNumber =
+        (json['reference_number'] ?? json['referenceNumber'] ?? '').toString();
+
     return SalesOrderModel(
       id: json['salesorder_id'] ?? json['id'] ?? '',
       orderNumber: json['salesorder_number'] ?? json['orderNumber'] ?? '',
@@ -102,18 +137,36 @@ class SalesOrderModel extends SalesOrder {
           [],
       notes: json['notes'] ?? '',
       isPendingSync: json['isPendingSync'] ?? false,
-      status: _statusFromString(json['status']),
+      status: _statusFromZohoFields(
+        status: json['status'],
+        orderStatus: orderStatus,
+        invoicedStatus: invoicedStatus,
+      ),
       convertedInvoiceNumber: json['converted_invoice_number'],
       zohoOrderId: json['zoho_order_id'],
       locationId: json['location_id'],
+      listedTotal: listedTotal,
+      orderStatus: orderStatus,
+      invoicedStatus: invoicedStatus,
+      referenceNumber: referenceNumber,
     );
   }
 
-  /// Parses a stored status string into a [SalesOrderStatus], defaulting to open.
-  static SalesOrderStatus _statusFromString(dynamic value) {
-    return value == 'invoiced'
-        ? SalesOrderStatus.invoiced
-        : SalesOrderStatus.open;
+  /// Maps Zoho `status` / `order_status` / `invoiced_status` into the app's
+  /// two-value [SalesOrderStatus]. Any field equal to `invoiced` wins.
+  static SalesOrderStatus _statusFromZohoFields({
+    dynamic status,
+    required String orderStatus,
+    required String invoicedStatus,
+  }) {
+    bool isInvoiced(dynamic v) =>
+        v?.toString().toLowerCase().trim() == 'invoiced';
+    if (isInvoiced(status) ||
+        isInvoiced(orderStatus) ||
+        isInvoiced(invoicedStatus)) {
+      return SalesOrderStatus.invoiced;
+    }
+    return SalesOrderStatus.open;
   }
 
   /// Converts this [SalesOrderModel] instance into a serializable JSON map.
@@ -133,9 +186,13 @@ class SalesOrderModel extends SalesOrder {
       'isPendingSync': isPendingSync,
       'round_off': roundOff,
       'status': status == SalesOrderStatus.invoiced ? 'invoiced' : 'open',
+      'order_status': orderStatus,
+      'invoiced_status': invoicedStatus,
+      'reference_number': referenceNumber,
       'converted_invoice_number': convertedInvoiceNumber,
       'zoho_order_id': zohoOrderId,
       'location_id': locationId,
+      if (listedTotal != null) 'total': listedTotal,
     };
   }
 
@@ -155,6 +212,10 @@ class SalesOrderModel extends SalesOrder {
       convertedInvoiceNumber: order.convertedInvoiceNumber,
       zohoOrderId: order.zohoOrderId,
       locationId: order.locationId,
+      listedTotal: order.listedTotal,
+      orderStatus: order.orderStatus,
+      invoicedStatus: order.invoicedStatus,
+      referenceNumber: order.referenceNumber,
     );
   }
 }

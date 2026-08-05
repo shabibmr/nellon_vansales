@@ -4,15 +4,18 @@ import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/customer.dart';
+import 'package:van_sales/domain/models/customer_ledger.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/open_invoice.dart';
+import 'package:van_sales/domain/models/organization.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
 import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
+import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
@@ -31,7 +34,10 @@ class FakeSalesRepository implements SalesRepository {
   Object? fetchFailure;
 
   @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async {
+  Future<SalesOrder?> fetchRemoteOrder(
+    String zohoOrderId, {
+    bool allowOfflineFallback = false,
+  }) async {
     fetchedOrderIds.add(zohoOrderId);
     if (fetchFailure != null) throw fetchFailure!;
     return remoteOrder;
@@ -85,11 +91,29 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
   @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+  Future<SalesInvoice?> fetchInvoiceById(
+    String invoiceId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+  Future<ReceiptVoucher?> fetchReceiptById(
+    String paymentId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
+  Future<SalesReturn?> fetchSalesReturnById(
+    String creditNoteId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
+  @override
+  Future<ExpenseEntry?> fetchExpenseById(
+    String expenseId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   List<Customer> customers = [];
 
   @override
@@ -171,6 +195,32 @@ class FakeSalesRepository implements SalesRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async => [];
+  @override
+  Future<CustomerLedger> fetchCustomerLedger(
+    String customerId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) => throw UnimplementedError();
+  @override
+  Customer? getCustomerById(String id) => null;
+  @override
+  Organization? getOrganization() => null;
+  @override
+  String? get assignedWarehouseId => null;
+  @override
+  String? get primaryWarehouseId => null;
+  @override
+  List<Warehouse> getWarehouses() => [];
+  @override
+  bool hasPendingCashClosingForToday() => false;
+  @override
+  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
+  @override
+  Future<void> pushCustomerGpsRemote(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) => throw UnimplementedError();
 }
 
 class FakeSyncRepository implements SyncRepository {
@@ -230,6 +280,7 @@ SalesOrder _order({
   List<OrderLineItem> items = const [],
   bool isPendingSync = false,
   String? zohoOrderId,
+  String? locationId,
 }) => SalesOrder(
   id: id,
   orderNumber: orderNumber,
@@ -241,6 +292,7 @@ SalesOrder _order({
   notes: 'note',
   isPendingSync: isPendingSync,
   zohoOrderId: zohoOrderId,
+  locationId: locationId,
 );
 
 void main() {
@@ -376,6 +428,27 @@ void main() {
     // The original number is kept — an update must not renumber the order.
     expect(queued.payload['salesorder_number'], 'SO-00042');
     expect(syncRepo.triggerCount, 1);
+  });
+
+  test('saving a fetched order keeps its locationId', () async {
+    // Regression: _onSaveOrder used to rebuild the SalesOrder without
+    // carrying forward locationId, silently dropping it on every edit.
+    salesRepo.remoteOrder = _order(
+      id: 'so_9001',
+      items: [_line('item_1', 4)],
+      zohoOrderId: 'so_9001',
+      locationId: 'warehouse_van_7',
+    );
+
+    bloc.add(OpenSalesOrder(_order(id: 'so_9001')));
+    await bloc.stream.firstWhere((s) => !s.isEditorLoading);
+    expect(bloc.state.editingOrder?.locationId, 'warehouse_van_7');
+
+    bloc.add(const SaveSalesOrder(notes: 'updated'));
+    await bloc.stream.firstWhere((s) => s.successMessage != null);
+
+    expect(salesRepo.savedOrders, isNotEmpty);
+    expect(salesRepo.savedOrders.last.locationId, 'warehouse_van_7');
   });
 
   test('saving a new order queues a create with a document number', () async {

@@ -68,10 +68,21 @@ class ExpenseEntryModel extends ExpenseEntry {
     super.receiptImagePath,
     super.isPendingSync,
     super.locationId,
+    super.listedTotal,
+    super.listedCategory,
+    super.listedDescription,
   });
 
   /// Factory constructor to parse local database JSON maps into an [ExpenseEntryModel].
   factory ExpenseEntryModel.fromJson(Map<String, dynamic> json) {
+    final rawTotal = json['total'] ?? json['amount'] ?? json['listedTotal'];
+    double? listedTotal;
+    if (rawTotal is num) {
+      listedTotal = rawTotal.toDouble();
+    } else if (rawTotal != null) {
+      listedTotal = double.tryParse(rawTotal.toString());
+    }
+
     return ExpenseEntryModel(
       id: ((json['expense_id'] ?? json['id']) as String?) ?? '',
       date: json['date'] != null
@@ -85,6 +96,13 @@ class ExpenseEntryModel extends ExpenseEntry {
       receiptImagePath: json['receiptImagePath'] as String?,
       isPendingSync: (json['isPendingSync'] as bool?) ?? false,
       locationId: json['location_id'] as String?,
+      listedTotal: listedTotal,
+      listedCategory: (json['listedCategory'] ??
+              json['account_name'] ??
+              '')
+          .toString(),
+      listedDescription:
+          (json['listedDescription'] ?? json['description'] ?? '').toString(),
     );
   }
 
@@ -92,6 +110,7 @@ class ExpenseEntryModel extends ExpenseEntry {
   ///
   /// Local Hive records already use [fromJson] with a `lines` array. Zoho detail
   /// and list payloads use `line_items` with `account_name` instead of `category`.
+  /// List headers often omit `line_items` but still carry `total` / `account_name`.
   factory ExpenseEntryModel.fromZohoJson(Map<String, dynamic> json) {
     return ExpenseEntryModel.fromJson(normalizeZohoExpenseJson(json));
   }
@@ -130,7 +149,12 @@ class ExpenseEntryModel extends ExpenseEntry {
       'receiptImagePath': receiptImagePath,
       'isPendingSync': isPendingSync,
       'location_id': locationId,
-      'amount': amount, // Summed dynamically from lines
+      'amount': amount,
+      if (listedTotal != null) 'total': listedTotal,
+      if (listedCategory.isNotEmpty) 'listedCategory': listedCategory,
+      if (listedCategory.isNotEmpty) 'account_name': listedCategory,
+      if (listedDescription.isNotEmpty) 'listedDescription': listedDescription,
+      if (listedDescription.isNotEmpty) 'description': listedDescription,
       'lines': lines
           .map((item) => ExpenseLineItemModel.fromDomain(item).toJson())
           .toList(),
@@ -146,6 +170,9 @@ class ExpenseEntryModel extends ExpenseEntry {
       receiptImagePath: expense.receiptImagePath,
       isPendingSync: expense.isPendingSync,
       locationId: expense.locationId,
+      listedTotal: expense.listedTotal,
+      listedCategory: expense.listedCategory,
+      listedDescription: expense.listedDescription,
     );
   }
 }

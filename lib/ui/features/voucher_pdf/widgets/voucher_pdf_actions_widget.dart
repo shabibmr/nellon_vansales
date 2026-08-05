@@ -27,10 +27,14 @@ class VoucherPdfActionsWidget extends StatelessWidget {
   final VoucherType type;
   final dynamic voucher;
 
+  /// Dense layout without outer card chrome (for bottom sheets / tight footers).
+  final bool compact;
+
   const VoucherPdfActionsWidget({
     super.key,
     required this.type,
     required this.voucher,
+    this.compact = false,
   });
 
   @override
@@ -40,7 +44,11 @@ class VoucherPdfActionsWidget extends StatelessWidget {
         pdfService: ctx.read<VoucherPdfRepository>(),
         salesRepository: ctx.read<SalesRepository>(),
       ),
-      child: _VoucherPdfActionsBody(type: type, voucher: voucher),
+      child: _VoucherPdfActionsBody(
+        type: type,
+        voucher: voucher,
+        compact: compact,
+      ),
     );
   }
 }
@@ -48,8 +56,13 @@ class VoucherPdfActionsWidget extends StatelessWidget {
 class _VoucherPdfActionsBody extends StatelessWidget {
   final VoucherType type;
   final dynamic voucher;
+  final bool compact;
 
-  const _VoucherPdfActionsBody({required this.type, required this.voucher});
+  const _VoucherPdfActionsBody({
+    required this.type,
+    required this.voucher,
+    this.compact = false,
+  });
 
   String? _customerIdFor(VoucherType type, dynamic voucher) {
     return switch (type) {
@@ -174,134 +187,159 @@ class _VoucherPdfActionsBody extends StatelessWidget {
               final isLoading =
                   state is VoucherPdfLoading || thermalState.isPrinting;
 
+              final actions = Wrap(
+                spacing: compact ? 8 : 10,
+                runSpacing: compact ? 8 : 10,
+                children: [
+                  _buildActionButton(
+                    context: context,
+                    icon: Icons.visibility,
+                    label: 'Preview',
+                    color: AppTheme.primaryIndigo,
+                    isDisabled: isLoading,
+                    compact: compact,
+                    onPressed: () {
+                      context.read<VoucherPdfBloc>().add(
+                            GenerateVoucherPdfPreviewRequested(
+                              type: type,
+                              voucher: voucher,
+                            ),
+                          );
+                    },
+                  ),
+                  _buildActionButton(
+                    context: context,
+                    icon: Icons.print,
+                    label: 'Print',
+                    color: AppTheme.infoSky,
+                    isDisabled: isLoading,
+                    compact: compact,
+                    onPressed: () {
+                      context.read<VoucherPdfBloc>().add(
+                            PrintVoucherPdfRequested(
+                              type: type,
+                              voucher: voucher,
+                            ),
+                          );
+                    },
+                  ),
+                  _buildActionButton(
+                    context: context,
+                    icon: Icons.bluetooth,
+                    label: 'Thermal',
+                    color: AppTheme.primaryDarkIndigo,
+                    isDisabled: isLoading,
+                    compact: compact,
+                    onPressed: () => _printThermal(context),
+                  ),
+                  _buildActionButton(
+                    context: context,
+                    icon: Icons.share,
+                    label: 'Share',
+                    color: isDark ? Colors.white70 : Colors.black87,
+                    isDisabled: isLoading,
+                    compact: compact,
+                    onPressed: () {
+                      context.read<VoucherPdfBloc>().add(
+                            ShareVoucherPdfRequested(
+                              type: type,
+                              voucher: voucher,
+                            ),
+                          );
+                    },
+                  ),
+                  _buildActionButton(
+                    context: context,
+                    icon: Icons.email,
+                    label: 'Email',
+                    color: AppTheme.warningAmber,
+                    isDisabled: isLoading,
+                    compact: compact,
+                    onPressed: () {
+                      context.read<VoucherPdfBloc>().add(
+                            EmailVoucherPdfRequested(
+                              type: type,
+                              voucher: voucher,
+                            ),
+                          );
+                    },
+                  ),
+                  _buildActionButton(
+                    context: context,
+                    icon: Icons.chat_bubble,
+                    label: 'WhatsApp',
+                    color: AppTheme.successEmerald,
+                    isDisabled: isLoading,
+                    compact: compact,
+                    onPressed: () {
+                      context.read<VoucherPdfBloc>().add(
+                            WhatsAppVoucherPdfRequested(
+                              type: type,
+                              voucher: voucher,
+                            ),
+                          );
+                    },
+                  ),
+                ],
+              );
+
+              final body = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!compact)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Document Actions',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppTheme.primaryIndigo,
+                          ),
+                        ),
+                        if (isLoading)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.primaryIndigo,
+                            ),
+                          ),
+                      ],
+                    ),
+                  if (!compact) const SizedBox(height: 12),
+                  if (isLoading) ...[
+                    if (compact)
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primaryIndigo,
+                          ),
+                        ),
+                      ),
+                    const LinearProgressIndicator(
+                      color: AppTheme.primaryIndigo,
+                    ),
+                    SizedBox(height: compact ? 8 : 12),
+                  ],
+                  actions,
+                ],
+              );
+
+              if (compact) return body;
+
               return Card(
                 margin: const EdgeInsets.all(16.0),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Document Actions',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: AppTheme.primaryIndigo,
-                            ),
-                          ),
-                          if (isLoading)
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTheme.primaryIndigo,
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (isLoading) ...[
-                        const LinearProgressIndicator(
-                          color: AppTheme.primaryIndigo,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _buildActionButton(
-                            context: context,
-                            icon: Icons.visibility,
-                            label: 'Preview',
-                            color: AppTheme.primaryIndigo,
-                            isDisabled: isLoading,
-                            onPressed: () {
-                              context.read<VoucherPdfBloc>().add(
-                                    GenerateVoucherPdfPreviewRequested(
-                                      type: type,
-                                      voucher: voucher,
-                                    ),
-                                  );
-                            },
-                          ),
-                          _buildActionButton(
-                            context: context,
-                            icon: Icons.print,
-                            label: 'Print',
-                            color: AppTheme.infoSky,
-                            isDisabled: isLoading,
-                            onPressed: () {
-                              context.read<VoucherPdfBloc>().add(
-                                    PrintVoucherPdfRequested(
-                                      type: type,
-                                      voucher: voucher,
-                                    ),
-                                  );
-                            },
-                          ),
-                          _buildActionButton(
-                            context: context,
-                            icon: Icons.bluetooth,
-                            label: 'Thermal',
-                            color: AppTheme.primaryDarkIndigo,
-                            isDisabled: isLoading,
-                            onPressed: () => _printThermal(context),
-                          ),
-                          _buildActionButton(
-                            context: context,
-                            icon: Icons.share,
-                            label: 'Share',
-                            color: isDark ? Colors.white70 : Colors.black87,
-                            isDisabled: isLoading,
-                            onPressed: () {
-                              context.read<VoucherPdfBloc>().add(
-                                    ShareVoucherPdfRequested(
-                                      type: type,
-                                      voucher: voucher,
-                                    ),
-                                  );
-                            },
-                          ),
-                          _buildActionButton(
-                            context: context,
-                            icon: Icons.email,
-                            label: 'Email',
-                            color: AppTheme.warningAmber,
-                            isDisabled: isLoading,
-                            onPressed: () {
-                              context.read<VoucherPdfBloc>().add(
-                                    EmailVoucherPdfRequested(
-                                      type: type,
-                                      voucher: voucher,
-                                    ),
-                                  );
-                            },
-                          ),
-                          _buildActionButton(
-                            context: context,
-                            icon: Icons.chat_bubble,
-                            label: 'WhatsApp',
-                            color: AppTheme.successEmerald,
-                            isDisabled: isLoading,
-                            onPressed: () {
-                              context.read<VoucherPdfBloc>().add(
-                                    WhatsAppVoucherPdfRequested(
-                                      type: type,
-                                      voucher: voucher,
-                                    ),
-                                  );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  child: body,
                 ),
               );
             },
@@ -318,6 +356,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
     required Color color,
     required bool isDisabled,
     required VoidCallback onPressed,
+    bool compact = false,
   }) {
     return Theme(
       data: Theme.of(context).copyWith(
@@ -325,12 +364,17 @@ class _VoucherPdfActionsBody extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: color.withValues(alpha: 0.1),
             foregroundColor: color,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 10 : 14,
+              vertical: compact ? 8 : 10,
             ),
-            textStyle: const TextStyle(
-              fontSize: 12,
+            visualDensity:
+                compact ? VisualDensity.compact : VisualDensity.standard,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(compact ? 8 : 10),
+            ),
+            textStyle: TextStyle(
+              fontSize: compact ? 11 : 12,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -338,7 +382,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       ),
       child: ElevatedButton.icon(
         onPressed: isDisabled ? null : onPressed,
-        icon: Icon(icon, size: 16),
+        icon: Icon(icon, size: compact ? 14 : 16),
         label: Text(label),
       ),
     );
