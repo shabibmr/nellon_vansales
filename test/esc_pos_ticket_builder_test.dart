@@ -9,16 +9,22 @@ import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/thermal_paper_size.dart';
 import 'package:van_sales/domain/repositories/voucher_pdf_repository.dart';
 
+String latin1Payload(List<int> bytes) =>
+    String.fromCharCodes(bytes.where((b) => b >= 32 && b < 127));
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const org = Organization(
     id: 'org1',
     name: 'Test Van Co',
-    currencyCode: 'INR',
+    currencyCode: 'AED',
     currencySymbol: 'AED',
     fiscalYearStartMonth: '4',
     timeZone: 'Asia/Kolkata',
+    address: '12 Warehouse Rd, Dubai',
+    phone: '+97141234567',
+    trn: '100123456700003',
   );
 
   const customer = Customer(
@@ -27,7 +33,8 @@ void main() {
     companyName: 'Acme Mart LLC',
     email: 'a@test.com',
     phone: '9999999999',
-    address: '12 Main St',
+    address: '12 Main St Industrial Area Dubai',
+    trn: '200987654300001',
     outstandingBalance: 0,
     creditLimit: 10000,
     routeId: 'r1',
@@ -90,6 +97,17 @@ void main() {
         3,
       );
     });
+
+    test('wrapText breaks long names without dropping content', () {
+      final lines = EscPosTicketBuilder.wrapText(
+        'Premium Widget Extra Long Name For Wrap',
+        12,
+      );
+      expect(lines, isNotEmpty);
+      expect(lines.every((l) => l.length <= 12), isTrue);
+      expect(lines.join(' '), contains('Premium'));
+      expect(lines.join(' '), contains('Wrap'));
+    });
   });
 
   group('VoucherTicketBuilder', () {
@@ -108,7 +126,39 @@ void main() {
       }
     });
 
-    test('invoice ticket embeds UOM next to quantity', () async {
+    test('invoice header layout and table formatting', () async {
+      final bytes = await VoucherTicketBuilder.build(
+        type: VoucherType.salesInvoice,
+        voucher: invoice,
+        org: org,
+        customer: customer,
+        paperSize: ThermalPaperSize.inch4,
+      );
+      final text = latin1Payload(bytes);
+
+      expect(text.contains('SALES INVOICE'), isTrue);
+      expect(text.contains('Type:'), isFalse);
+      expect(text.contains('Due:'), isFalse);
+      expect(text.contains('Date: 15-01-2026'), isTrue);
+      expect(text.contains('12 Warehouse Rd'), isTrue);
+      expect(text.contains('Phone: +97141234567'), isTrue);
+      expect(text.contains('TRN: 100123456700003'), isTrue);
+      expect(text.contains('TRN: 200987654300001'), isTrue);
+      expect(text.contains('Address:'), isTrue);
+      expect(text.contains('|'), isTrue);
+      expect(text.contains('Sl'), isTrue);
+      expect(text.contains('2 pcs') || text.contains('2pcs'), isTrue);
+      // Prefer spaced qty+uom
+      expect(text.contains('2 pcs'), isTrue);
+      expect(text.contains('AED '), isTrue);
+      expect(text.contains('In words:'), isTrue);
+      expect(text.contains('Dirhams'), isTrue);
+      // Full long name should appear across payload (wrap, not hard drop)
+      expect(text.contains('Premium'), isTrue);
+      expect(text.contains('Wrap') || text.contains('Widget'), isTrue);
+    });
+
+    test('invoice ticket embeds UOM with space next to quantity', () async {
       final multiUomInvoice = SalesInvoice(
         id: 'inv2',
         invoiceNumber: 'INV-200',
@@ -135,12 +185,14 @@ void main() {
         customer: customer,
         paperSize: ThermalPaperSize.inch4,
       );
-      // ESC/POS payload is mostly Latin-1 text; "2kg" is the qty+unit cell.
-      final asText = String.fromCharCodes(bytes.where((b) => b >= 32 && b < 127));
-      expect(asText.contains('2kg'), isTrue);
+      final asText = latin1Payload(bytes);
+      expect(asText.contains('2 kg'), isTrue);
+      // Amount column should not glue AED into the cell for line items.
+      // Totals still use "AED " with a space.
+      expect(asText.contains('AED '), isTrue);
     });
 
-    test('builds non-empty receipt ticket', () async {
+    test('builds non-empty receipt ticket with amount in words', () async {
       final receipt = ReceiptVoucher(
         id: 'rc1',
         paymentNumber: 'RCP-1',
@@ -167,6 +219,10 @@ void main() {
         paperSize: ThermalPaperSize.inch4,
       );
       expect(bytes, isNotEmpty);
+      final text = latin1Payload(bytes);
+      expect(text.contains('RECEIPT'), isTrue);
+      expect(text.contains('In words:'), isTrue);
+      expect(text.contains('AED 100.00') || text.contains('AED 50.00'), isTrue);
     });
 
     test('builds non-empty test page for both sizes', () async {

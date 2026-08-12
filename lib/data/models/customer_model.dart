@@ -13,6 +13,7 @@ class CustomerModel extends Customer {
     required super.email,
     required super.phone,
     required super.address,
+    super.trn,
     required super.outstandingBalance,
     required super.creditLimit,
     required super.routeId,
@@ -56,22 +57,68 @@ class CustomerModel extends Customer {
       for (final item in cfs) {
         if (item is! Map) continue;
         final m = Map<String, dynamic>.from(item);
-        final api = (m['api_name'] ?? m['field_name'] ?? '').toString().toLowerCase();
+        final api =
+            (m['api_name'] ?? m['field_name'] ?? '').toString().toLowerCase();
         final label = (m['label'] ?? '').toString().toLowerCase();
         final val = m['value'];
 
         if (lat == null &&
-            (api.contains('latitude') || label.contains('latitude') || api == 'cf_latitude')) {
+            (api.contains('latitude') ||
+                label.contains('latitude') ||
+                api == 'cf_latitude')) {
           lat = _parseLatLng(val);
         }
         if (lng == null &&
-            (api.contains('longitude') || label.contains('longitude') || api == 'cf_longitude')) {
+            (api.contains('longitude') ||
+                label.contains('longitude') ||
+                api == 'cf_longitude')) {
           lng = _parseLatLng(val);
         }
       }
     }
 
     return (lat, lng);
+  }
+
+  static String _extractTrn(Map<String, dynamic> json) {
+    final direct = _firstNonEmpty([
+      json['tax_reg_no'],
+      json['trn'],
+      json['taxRegNo'],
+      json['tax_number'],
+      json['tax_id'],
+      json['custom_field_hash']?['cf_trn'],
+      json['custom_field_hash']?['tax_reg_no'],
+    ]);
+    if (direct.isNotEmpty) return direct;
+
+    final cfs = json['custom_fields'];
+    if (cfs is List) {
+      for (final item in cfs) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+        final api =
+            (m['api_name'] ?? m['field_name'] ?? '').toString().toLowerCase();
+        final label = (m['label'] ?? '').toString().toLowerCase();
+        if (api.contains('trn') ||
+            api.contains('tax_reg') ||
+            label.contains('trn') ||
+            label.contains('tax reg')) {
+          final v = (m['value'] ?? '').toString().trim();
+          if (v.isNotEmpty) return v;
+        }
+      }
+    }
+    return '';
+  }
+
+  static String _firstNonEmpty(List<dynamic> values) {
+    for (final v in values) {
+      if (v == null) continue;
+      final s = v.toString().trim();
+      if (s.isNotEmpty) return s;
+    }
+    return '';
   }
 
   /// Factory constructor to parse local/remote JSON payload into a [CustomerModel].
@@ -85,17 +132,22 @@ class CustomerModel extends Customer {
     return CustomerModel(
       id: ((json['contact_id'] ?? json['id']) as String?) ?? '',
       name: ((json['contact_name'] ?? json['name']) as String?) ?? '',
-      companyName: ((json['company_name'] ?? json['companyName']) as String?) ?? '',
+      companyName:
+          ((json['company_name'] ?? json['companyName']) as String?) ?? '',
       email: (json['email'] as String?) ?? '',
       phone: (json['phone'] as String?) ?? '',
-      address: ((json['address'] ?? (json['billing_address'] as Map?)?['address']) as String?) ?? '',
-      outstandingBalance:
-          ((json['outstanding_receivable_amount'] ??
+      address: ((json['address'] ??
+                  (json['billing_address'] as Map?)?['address']) as String?) ??
+          '',
+      trn: _extractTrn(json),
+      outstandingBalance: ((json['outstanding_receivable_amount'] ??
                   json['outstanding_balance'] ??
                   json['outstandingBalance']) as num?)
-              ?.toDouble() ?? 0.0,
-      creditLimit: ((json['credit_limit'] ?? json['creditLimit']) as num?)
-          ?.toDouble() ?? 0.0,
+              ?.toDouble() ??
+          0.0,
+      creditLimit:
+          ((json['credit_limit'] ?? json['creditLimit']) as num?)?.toDouble() ??
+              0.0,
       routeId: ((json['route_id'] ?? json['routeId']) as String?) ?? '',
       sequence: (json['sequence'] as num?)?.toInt() ?? 0,
       latitude: lat,
@@ -115,6 +167,8 @@ class CustomerModel extends Customer {
       'email': email,
       'phone': phone,
       'address': address,
+      'trn': trn,
+      'tax_reg_no': trn,
       'outstandingBalance': outstandingBalance,
       'creditLimit': creditLimit,
       'route_id': routeId,
@@ -138,6 +192,7 @@ class CustomerModel extends Customer {
       email: customer.email,
       phone: customer.phone,
       address: customer.address,
+      trn: customer.trn,
       outstandingBalance: customer.outstandingBalance,
       creditLimit: customer.creditLimit,
       routeId: customer.routeId,

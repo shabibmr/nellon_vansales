@@ -23,6 +23,15 @@ class Organization extends Equatable {
   /// Standard timezone representation of the organization's location.
   final String timeZone;
 
+  /// Company street / postal address for tickets and letterheads.
+  final String address;
+
+  /// Company phone number for tickets and letterheads.
+  final String phone;
+
+  /// Company tax registration number (e.g. UAE TRN).
+  final String trn;
+
   /// Creates a new [Organization] configuration.
   const Organization({
     required this.id,
@@ -31,6 +40,9 @@ class Organization extends Equatable {
     required this.currencySymbol,
     required this.fiscalYearStartMonth,
     required this.timeZone,
+    this.address = '',
+    this.phone = '',
+    this.trn = '',
   });
 
   /// Creates a copy of this [Organization] with replaced values for specific fields.
@@ -41,6 +53,9 @@ class Organization extends Equatable {
     String? currencySymbol,
     String? fiscalYearStartMonth,
     String? timeZone,
+    String? address,
+    String? phone,
+    String? trn,
   }) {
     return Organization(
       id: id ?? this.id,
@@ -49,16 +64,22 @@ class Organization extends Equatable {
       currencySymbol: currencySymbol ?? this.currencySymbol,
       fiscalYearStartMonth: fiscalYearStartMonth ?? this.fiscalYearStartMonth,
       timeZone: timeZone ?? this.timeZone,
+      address: address ?? this.address,
+      phone: phone ?? this.phone,
+      trn: trn ?? this.trn,
     );
   }
 
   @override
   List<Object?> get props => [
-    id,
-    name,
-    currencyCode,
-    currencySymbol,
-    fiscalYearStartMonth,
-    timeZone,
-  ];
+        id,
+        name,
+        currencyCode,
+        currencySymbol,
+        fiscalYearStartMonth,
+        timeZone,
+        address,
+        phone,
+        trn,
+      ];
 }

@@ -25,6 +25,9 @@ class Customer extends Equatable {
   /// GPS coordinates are stored separately in [latitude] / [longitude].
   final String address;
 
+  /// Tax registration number (e.g. UAE TRN), when known.
+  final String trn;
+
   /// The current unpaid balance of this customer.
   final double outstandingBalance;
 
@@ -54,6 +57,7 @@ class Customer extends Equatable {
     required this.email,
     required this.phone,
     required this.address,
+    this.trn = '',
     required this.outstandingBalance,
     required this.creditLimit,
     required this.routeId,
@@ -71,6 +75,7 @@ class Customer extends Equatable {
     String? email,
     String? phone,
     String? address,
+    String? trn,
     double? outstandingBalance,
     double? creditLimit,
     String? routeId,
@@ -86,6 +91,7 @@ class Customer extends Equatable {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       address: address ?? this.address,
+      trn: trn ?? this.trn,
       outstandingBalance: outstandingBalance ?? this.outstandingBalance,
       creditLimit: creditLimit ?? this.creditLimit,
       routeId: routeId ?? this.routeId,
@@ -98,18 +104,19 @@ class Customer extends Equatable {
 
   @override
   List<Object?> get props => [
-    id,
-    name,
-    companyName,
-    email,
-    phone,
-    address,
-    outstandingBalance,
-    creditLimit,
-    routeId,
-    sequence,
-    latitude,
-    longitude,
-    isPendingSync,
-  ];
+        id,
+        name,
+        companyName,
+        email,
+        phone,
+        address,
+        trn,
+        outstandingBalance,
+        creditLimit,
+        routeId,
+        sequence,
+        latitude,
+        longitude,
+        isPendingSync,
+      ];
 }

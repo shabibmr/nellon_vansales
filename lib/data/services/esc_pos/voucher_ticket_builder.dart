@@ -69,7 +69,7 @@ class VoucherTicketBuilder {
     final bytes = <int>[];
     bytes.addAll(b.reset());
     bytes.addAll(b.doubleDivider());
-    bytes.addAll(b.center('PRINTER TEST', bold: true));
+    bytes.addAll(b.center('PRINTER TEST', bold: true, underline: true));
     bytes.addAll(b.center('Nigachi NC-MTP500'));
     bytes.addAll(b.divider());
     bytes.addAll(b.leftRight('Paper size:', paperSize.label));
@@ -89,10 +89,53 @@ class VoucherTicketBuilder {
     bytes.addAll(b.center('ABCDEFGHIJKLMNOPQRSTUVWXYZ'));
     bytes.addAll(b.center('0123456789'));
     bytes.addAll(b.leftRight('Left', 'Right'));
+    bytes.addAll(b.divider());
+    final totalCols = (paperSize.columns / 2).floor().clamp(16, paperSize.columns);
+    bytes.addAll(
+      b.leftRight(
+        'TOTAL SAMPLE',
+        'AED 100.00',
+        bold: true,
+        width: PosTextSize.size2,
+        height: PosTextSize.size2,
+        layoutColumns: totalCols,
+      ),
+    );
     bytes.addAll(b.doubleDivider());
     bytes.addAll(b.center('If readable, setup OK'));
     bytes.addAll(b.cut());
     return bytes;
+  }
+
+  static List<int> _orgHeader(
+    EscPosTicketBuilder b,
+    Organization org, {
+    required String voucherTitle,
+    required String voucherNumber,
+    required DateTime date,
+  }) {
+    return b.header(
+      orgName: org.name,
+      orgAddress: org.address,
+      orgPhone: org.phone,
+      orgTrn: org.trn,
+      voucherTitle: voucherTitle,
+      voucherNumber: voucherNumber,
+      date: date,
+    );
+  }
+
+  static List<int> _customer(
+    EscPosTicketBuilder b, {
+    required String name,
+    required Customer? customer,
+  }) {
+    return b.customerBlock(
+      name: name,
+      phone: customer?.phone,
+      address: customer?.address,
+      trn: customer?.trn,
+    );
   }
 
   static List<int> _invoice(
@@ -105,30 +148,24 @@ class VoucherTicketBuilder {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
     bytes.addAll(
-      b.header(
-        orgName: org.name,
-        voucherTitle: 'INVOICE',
+      _orgHeader(
+        b,
+        org,
+        voucherTitle: 'SALES INVOICE',
         voucherNumber: invoice.invoiceNumber,
         date: invoice.date,
       ),
     );
-    bytes.addAll(
-      b.customerBlock(
-        name: invoice.customerName,
-        phone: customer?.phone,
-        address: customer?.address,
-      ),
-    );
-    bytes.addAll(
-      b.leftRight('Due:', EscPosTicketBuilder.dateOnlyFormat.format(invoice.dueDate)),
-    );
+    bytes.addAll(_customer(b, name: invoice.customerName, customer: customer));
     bytes.addAll(b.itemTableHeader());
-    for (final line in invoice.items) {
+    for (var i = 0; i < invoice.items.length; i++) {
+      final line = invoice.items[i];
       bytes.addAll(
         b.itemRow(
+          serial: i + 1,
           name: line.item.name,
           qty: line.quantity,
-          amountText: b.money(line.total, symbol),
+          amountText: b.amountOnly(line.total),
           uom: line.displayUom,
         ),
       );
@@ -136,6 +173,7 @@ class VoucherTicketBuilder {
     bytes.addAll(
       b.totalsBlock(
         symbol: symbol,
+        currencyCode: org.currencyCode,
         subTotal: invoice.subTotal,
         taxTotal: invoice.taxTotal,
         discountTotal: invoice.discountTotal,
@@ -160,20 +198,15 @@ class VoucherTicketBuilder {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
     bytes.addAll(
-      b.header(
-        orgName: org.name,
+      _orgHeader(
+        b,
+        org,
         voucherTitle: 'SALES ORDER',
         voucherNumber: order.orderNumber,
         date: order.date,
       ),
     );
-    bytes.addAll(
-      b.customerBlock(
-        name: order.customerName,
-        phone: customer?.phone,
-        address: customer?.address,
-      ),
-    );
+    bytes.addAll(_customer(b, name: order.customerName, customer: customer));
     bytes.addAll(
       b.leftRight(
         'Ship:',
@@ -181,12 +214,14 @@ class VoucherTicketBuilder {
       ),
     );
     bytes.addAll(b.itemTableHeader());
-    for (final line in order.items) {
+    for (var i = 0; i < order.items.length; i++) {
+      final line = order.items[i];
       bytes.addAll(
         b.itemRow(
+          serial: i + 1,
           name: line.item.name,
           qty: line.quantity,
-          amountText: b.money(line.total, symbol),
+          amountText: b.amountOnly(line.total),
           uom: line.displayUom,
         ),
       );
@@ -194,6 +229,7 @@ class VoucherTicketBuilder {
     bytes.addAll(
       b.totalsBlock(
         symbol: symbol,
+        currencyCode: org.currencyCode,
         subTotal: order.subTotal,
         taxTotal: order.taxTotal,
         discountTotal: order.discountTotal,
@@ -218,33 +254,36 @@ class VoucherTicketBuilder {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
     bytes.addAll(
-      b.header(
-        orgName: org.name,
+      _orgHeader(
+        b,
+        org,
         voucherTitle: 'SALES RETURN',
         voucherNumber: salesReturn.creditNoteNumber,
         date: salesReturn.date,
       ),
     );
     bytes.addAll(
-      b.customerBlock(
-        name: salesReturn.customerName,
-        phone: customer?.phone,
-        address: customer?.address,
-      ),
+      _customer(b, name: salesReturn.customerName, customer: customer),
     );
     bytes.addAll(b.itemTableHeader());
-    for (final line in salesReturn.items) {
+    for (var i = 0; i < salesReturn.items.length; i++) {
+      final line = salesReturn.items[i];
       bytes.addAll(
         b.itemRow(
+          serial: i + 1,
           name: line.invoiceLineItem.item.name,
           qty: line.returnedQuantity,
-          amountText: b.money(line.total, symbol),
+          amountText: b.amountOnly(line.total),
           uom: line.displayUom,
         ),
       );
     }
     bytes.addAll(
-      b.totalsBlock(symbol: symbol, total: salesReturn.total),
+      b.totalsBlock(
+        symbol: symbol,
+        currencyCode: org.currencyCode,
+        total: salesReturn.total,
+      ),
     );
     if (salesReturn.reason.trim().isNotEmpty) {
       bytes.addAll(
@@ -265,27 +304,29 @@ class VoucherTicketBuilder {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
     bytes.addAll(
-      b.header(
-        orgName: org.name,
+      _orgHeader(
+        b,
+        org,
         voucherTitle: 'RECEIPT',
         voucherNumber: receipt.paymentNumber,
         date: receipt.date,
       ),
     );
-    bytes.addAll(
-      b.customerBlock(
-        name: receipt.customerName,
-        phone: customer?.phone,
-        address: customer?.address,
-      ),
-    );
+    bytes.addAll(_customer(b, name: receipt.customerName, customer: customer));
     bytes.addAll(b.divider());
-    bytes.addAll(leftRightSafe(b, 'Mode:', receipt.paymentMode));
+    bytes.addAll(b.leftRight('Mode:', receipt.paymentMode));
     if (receipt.referenceNumber.trim().isNotEmpty) {
-      bytes.addAll(leftRightSafe(b, 'Ref:', receipt.referenceNumber));
+      bytes.addAll(b.leftRight('Ref:', receipt.referenceNumber));
     }
     bytes.addAll(
       b.leftRight('Amount:', b.money(receipt.amount, symbol), bold: true),
+    );
+    bytes.addAll(
+      b.amountInWordsBlock(
+        total: receipt.amount,
+        symbol: symbol,
+        currencyCode: org.currencyCode,
+      ),
     );
     if (receipt.allocations.isNotEmpty) {
       bytes.addAll(b.divider());
@@ -303,14 +344,6 @@ class VoucherTicketBuilder {
     return bytes;
   }
 
-  static List<int> leftRightSafe(
-    EscPosTicketBuilder b,
-    String left,
-    String right,
-  ) {
-    return b.leftRight(left, right);
-  }
-
   static List<int> _expense(
     EscPosTicketBuilder b,
     ExpenseEntry expense,
@@ -320,8 +353,9 @@ class VoucherTicketBuilder {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
     bytes.addAll(
-      b.header(
-        orgName: org.name,
+      _orgHeader(
+        b,
+        org,
         voucherTitle: 'EXPENSE',
         voucherNumber: expense.id,
         date: expense.date,
@@ -346,7 +380,11 @@ class VoucherTicketBuilder {
       }
     }
     bytes.addAll(
-      b.totalsBlock(symbol: symbol, total: expense.amount),
+      b.totalsBlock(
+        symbol: symbol,
+        currencyCode: org.currencyCode,
+        total: expense.amount,
+      ),
     );
     bytes.addAll(b.footer(salespersonName: salespersonName));
     return bytes;
