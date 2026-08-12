@@ -19,7 +19,9 @@ class EscPosTicketBuilder {
 
   /// Maps app paper size to esc_pos_utils [PaperSize].
   ///
-  /// 4" uses the widest stock profile (mm80 / 48 cols); 2" uses mm58.
+  /// Layout width is driven by [ThermalPaperSize.columns] (4" = 64, 2" = 32).
+  /// The library has no 112mm profile; 4" uses the widest stock option (mm80)
+  /// for Generator image/row math only.
   static PaperSize toEscPosPaperSize(ThermalPaperSize size) {
     return switch (size) {
       ThermalPaperSize.inch2 => PaperSize.mm58,

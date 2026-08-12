@@ -2,7 +2,7 @@
 ///
 /// Persisted in Settings. Default is [inch4] for Nigachi NC-MTP500 class printers.
 enum ThermalPaperSize {
-  /// ~112mm / 4-inch class (default). Mapped to wide ESC/POS profile (~48 cols).
+  /// ~110–112mm / 4-inch class (default). Layout uses ~64 Font A columns.
   inch4,
 
   /// ~58mm / 2-inch rolls (~32 cols Font A).
@@ -22,9 +22,11 @@ extension ThermalPaperSizeX on ThermalPaperSize {
         ThermalPaperSize.inch2 => '2"',
       };
 
-  /// Approximate Font A columns used by ticket builders.
+  /// Font A columns used by ticket builders for padding / truncation.
+  ///
+  /// 4" targets ~110mm printers (not the library's mm80/48 profile).
   int get columns => switch (this) {
-        ThermalPaperSize.inch4 => 48,
+        ThermalPaperSize.inch4 => 64,
         ThermalPaperSize.inch2 => 32,
       };
 

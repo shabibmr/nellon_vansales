@@ -69,7 +69,7 @@ void main() {
     test('defaults storage key to inch4', () {
       expect(ThermalPaperSizeX.fromStorageKey(null), ThermalPaperSize.inch4);
       expect(ThermalPaperSizeX.fromStorageKey('inch2'), ThermalPaperSize.inch2);
-      expect(ThermalPaperSize.inch4.columns, 48);
+      expect(ThermalPaperSize.inch4.columns, 64);
       expect(ThermalPaperSize.inch2.columns, 32);
     });
   });

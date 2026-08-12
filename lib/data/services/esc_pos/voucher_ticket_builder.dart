@@ -80,6 +80,12 @@ class VoucherTicketBuilder {
       );
     }
     bytes.addAll(b.divider());
+    // Full-width ruler: exactly [columns] chars to verify edge-to-edge fit.
+    final ruler = List.generate(
+      paperSize.columns,
+      (i) => '${(i + 1) % 10}',
+    ).join();
+    bytes.addAll(b.left(ruler));
     bytes.addAll(b.center('ABCDEFGHIJKLMNOPQRSTUVWXYZ'));
     bytes.addAll(b.center('0123456789'));
     bytes.addAll(b.leftRight('Left', 'Right'));
