@@ -40,13 +40,7 @@ class OrganizationModel extends Organization {
         json['contact_number'],
         json['company_phone'],
       ]),
-      trn: _firstNonEmpty([
-        json['tax_reg_no'],
-        json['tax_id'],
-        json['tax_number'],
-        json['trn'],
-        json['taxRegNo'],
-      ]),
+      trn: _extractTrn(json),
     );
   }
 
@@ -82,41 +76,94 @@ class OrganizationModel extends Organization {
     );
   }
 
-  static String _extractAddress(Map<String, dynamic> json) {
-    final direct = _firstNonEmpty([
-      json['address'],
-      json['company_address'],
-      json['org_address'],
-    ]);
-    if (direct.isNotEmpty) return direct;
-
-    // Zoho org payloads often split address into street/city/state/zip/country.
-    final parts = <String>[
-      _asString(json['street_address1'] ?? json['address1']),
-      _asString(json['street_address2'] ?? json['address2']),
-      _asString(json['city']),
-      _asString(json['state']),
-      _asString(json['zip'] ?? json['zipcode'] ?? json['postal_code']),
-      _asString(json['country']),
-    ].where((p) => p.isNotEmpty).toList();
-
-    if (parts.isNotEmpty) return parts.join(', ');
-
-    final nested = json['address'];
-    if (nested is Map) {
-      final m = Map<String, dynamic>.from(nested);
-      final nestedParts = <String>[
-        _asString(m['street_address1'] ?? m['address'] ?? m['address1']),
-        _asString(m['street_address2'] ?? m['address2']),
-        _asString(m['city']),
-        _asString(m['state']),
-        _asString(m['zip'] ?? m['zipcode']),
-        _asString(m['country']),
-      ].where((p) => p.isNotEmpty).toList();
-      return nestedParts.join(', ');
+  /// UAE Books puts the TRN on [tax_settings.tax_reg_no], not [tax_id_value].
+  static String _extractTrn(Map<String, dynamic> json) {
+    final settings = json['tax_settings'];
+    if (settings is Map) {
+      final fromSettings = _asString(settings['tax_reg_no']);
+      if (fromSettings.isNotEmpty) return fromSettings;
     }
 
+    final fromCustom = _trnFromCustomFields(json);
+    if (fromCustom.isNotEmpty) return fromCustom;
+
+    return _firstNonEmpty([
+      json['tax_reg_no'],
+      json['tax_number'],
+      json['trn'],
+      json['taxRegNo'],
+    ]);
+  }
+
+  static String _trnFromCustomFields(Map<String, dynamic> json) {
+    final cfs = json['custom_fields'];
+    if (cfs is! List) return '';
+    for (final item in cfs) {
+      if (item is! Map) continue;
+      final m = Map<String, dynamic>.from(item);
+      final label = _asString(m['label']).toLowerCase();
+      final api = _asString(m['api_name'] ?? m['field_name']).toLowerCase();
+      if (label.contains('trn') || api.contains('trn')) {
+        final value = _asString(m['value']);
+        if (value.isNotEmpty) return value;
+      }
+    }
     return '';
+  }
+
+  static String _extractAddress(Map<String, dynamic> json) {
+    for (final key in ['address', 'company_address', 'org_address']) {
+      final formatted = _formatAddressField(json[key]);
+      if (formatted.isNotEmpty) return formatted;
+    }
+
+    return _joinAddressParts([
+      json['street_address1'] ?? json['address1'],
+      json['street_address2'] ?? json['address2'],
+      json['city'],
+      json['state'],
+      json['zip'] ?? json['zipcode'] ?? json['postal_code'],
+      json['country'],
+    ]);
+  }
+
+  static String _formatAddressField(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    if (value is Map) {
+      final m = Map<String, dynamic>.from(value);
+      return _joinAddressParts([
+        m['street_address1'] ?? m['address'] ?? m['address1'],
+        m['street_address2'] ?? m['address2'] ?? m['street2'],
+        m['city'],
+        m['state'],
+        m['zip'] ?? m['zipcode'],
+        m['country'],
+      ]);
+    }
+    return '';
+  }
+
+  static String _joinAddressParts(List<dynamic> raw) {
+    final parts = <String>[];
+    for (final part in raw) {
+      final s = _asString(part);
+      if (s.isEmpty) continue;
+      if (_alreadyContains(parts, s)) continue;
+      parts.add(s);
+    }
+    return parts.join(', ');
+  }
+
+  static bool _alreadyContains(List<String> existing, String candidate) {
+    final token = _normalizeAddressToken(candidate);
+    if (token.isEmpty) return true;
+    final joined = existing.map(_normalizeAddressToken).join(' ');
+    return joined.contains(token);
+  }
+
+  static String _normalizeAddressToken(String value) {
+    return value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
   }
 
   static String _firstNonEmpty(List<dynamic> values) {
@@ -128,7 +175,7 @@ class OrganizationModel extends Organization {
   }
 
   static String _asString(dynamic v) {
-    if (v == null) return '';
+    if (v == null || v is Map || v is List) return '';
     return v.toString().trim();
   }
 }

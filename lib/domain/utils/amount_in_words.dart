@@ -1,26 +1,44 @@
 /// Converts a numeric amount to English words for thermal / PDF totals.
 ///
-/// Example: `amountInWords(1234.56, currencyName: 'Dirhams')`
-/// → `Dirhams One Thousand Two Hundred Thirty-Four and 56/100 only`
+/// Whole amounts omit the fraction: `AED Fifteen only`.
+/// With fils: `AED One Thousand Two Hundred Thirty-Four And fifty six fils.`
 String amountInWords(num amount, {String currencyName = ''}) {
   final absolute = amount.abs();
   final whole = absolute.floor();
   final cents = ((absolute - whole) * 100).round().clamp(0, 99);
 
   final wholeWords = _integerToWords(whole);
-  final fraction = cents.toString().padLeft(2, '0');
-  final body = '$wholeWords and $fraction/100 only';
+  final String body;
+  if (cents == 0) {
+    body = '$wholeWords only';
+  } else {
+    final filsWords =
+        _integerToWords(cents).toLowerCase().replaceAll('-', ' ');
+    body = '$wholeWords And $filsWords ${_subunitName(currencyName)}.';
+  }
 
   final prefix = currencyName.trim();
   if (prefix.isEmpty) return body;
   return '$prefix $body';
 }
 
+/// Fractional unit for [currencyName] (Dirhams → fils).
+String _subunitName(String currencyName) {
+  final key = currencyName.trim().toLowerCase();
+  return switch (key) {
+    'dirhams' || 'dirham' || 'aed' || 'dhs' || 'dh' => 'fils',
+    'rupees' || 'rupee' || 'inr' => 'paise',
+    'pounds' || 'pound' || 'gbp' => 'pence',
+    'dollars' || 'dollar' || 'usd' || 'euros' || 'euro' => 'cents',
+    _ => 'fils',
+  };
+}
+
 /// Maps common currency codes/symbols to a printable unit name.
 String currencyUnitName(String codeOrSymbol) {
   final key = codeOrSymbol.trim().toUpperCase();
   return switch (key) {
-    'AED' || 'DHS' || 'DH' => 'Dirhams',
+    'AED' || 'DHS' || 'DH' || 'DIRHAMS' || 'DIRHAM' => 'AED',
     'INR' || 'RS' || '₹' => 'Rupees',
     'USD' || r'$' || r'US$' => 'Dollars',
     'EUR' || '€' => 'Euros',

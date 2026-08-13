@@ -171,20 +171,37 @@ class VoucherTicketBuilder {
       );
     }
     bytes.addAll(
-      b.totalsBlock(
-        symbol: symbol,
-        currencyCode: org.currencyCode,
-        subTotal: invoice.subTotal,
-        taxTotal: invoice.taxTotal,
-        discountTotal: invoice.discountTotal,
-        total: invoice.total,
-        roundOff: invoice.roundOff,
+      _padToMinLength(
+        b,
+        tableStyle: true,
+        buildTail: (tail) {
+          final after = <int>[];
+          after.addAll(
+            tail.totalsBlock(
+              symbol: symbol,
+              currencyCode: org.currencyCode,
+              subTotal: invoice.subTotal,
+              taxTotal: invoice.taxTotal,
+              discountTotal: invoice.discountTotal,
+              total: invoice.total,
+              roundOff: invoice.roundOff,
+              taxLabel: _vatLabel(
+                invoice.items.map((line) => line.taxPercentage),
+              ),
+            ),
+          );
+          if (invoice.notes.trim().isNotEmpty) {
+            after.addAll(
+              tail.left(
+                'Notes: ${tail.truncate(invoice.notes, tail.columns - 7)}',
+              ),
+            );
+          }
+          after.addAll(tail.footer(salespersonName: salespersonName));
+          return after;
+        },
       ),
     );
-    if (invoice.notes.trim().isNotEmpty) {
-      bytes.addAll(b.left('Notes: ${b.truncate(invoice.notes, b.columns - 7)}'));
-    }
-    bytes.addAll(b.footer(salespersonName: salespersonName));
     return bytes;
   }
 
@@ -227,20 +244,37 @@ class VoucherTicketBuilder {
       );
     }
     bytes.addAll(
-      b.totalsBlock(
-        symbol: symbol,
-        currencyCode: org.currencyCode,
-        subTotal: order.subTotal,
-        taxTotal: order.taxTotal,
-        discountTotal: order.discountTotal,
-        total: order.total,
-        roundOff: order.roundOff,
+      _padToMinLength(
+        b,
+        tableStyle: true,
+        buildTail: (tail) {
+          final after = <int>[];
+          after.addAll(
+            tail.totalsBlock(
+              symbol: symbol,
+              currencyCode: org.currencyCode,
+              subTotal: order.subTotal,
+              taxTotal: order.taxTotal,
+              discountTotal: order.discountTotal,
+              total: order.total,
+              roundOff: order.roundOff,
+              taxLabel: _vatLabel(
+                order.items.map((line) => line.taxPercentage),
+              ),
+            ),
+          );
+          if (order.notes.trim().isNotEmpty) {
+            after.addAll(
+              tail.left(
+                'Notes: ${tail.truncate(order.notes, tail.columns - 7)}',
+              ),
+            );
+          }
+          after.addAll(tail.footer(salespersonName: salespersonName));
+          return after;
+        },
       ),
     );
-    if (order.notes.trim().isNotEmpty) {
-      bytes.addAll(b.left('Notes: ${b.truncate(order.notes, b.columns - 7)}'));
-    }
-    bytes.addAll(b.footer(salespersonName: salespersonName));
     return bytes;
   }
 
@@ -279,18 +313,34 @@ class VoucherTicketBuilder {
       );
     }
     bytes.addAll(
-      b.totalsBlock(
-        symbol: symbol,
-        currencyCode: org.currencyCode,
-        total: salesReturn.total,
+      _padToMinLength(
+        b,
+        tableStyle: true,
+        buildTail: (tail) {
+          final after = <int>[];
+          after.addAll(
+            tail.totalsBlock(
+              symbol: symbol,
+              currencyCode: org.currencyCode,
+              total: salesReturn.total,
+              taxLabel: _vatLabel(
+                salesReturn.items
+                    .map((line) => line.invoiceLineItem.taxPercentage),
+              ),
+            ),
+          );
+          if (salesReturn.reason.trim().isNotEmpty) {
+            after.addAll(
+              tail.left(
+                'Reason: ${tail.truncate(salesReturn.reason, tail.columns - 8)}',
+              ),
+            );
+          }
+          after.addAll(tail.footer(salespersonName: salespersonName));
+          return after;
+        },
       ),
     );
-    if (salesReturn.reason.trim().isNotEmpty) {
-      bytes.addAll(
-        b.left('Reason: ${b.truncate(salesReturn.reason, b.columns - 8)}'),
-      );
-    }
-    bytes.addAll(b.footer(salespersonName: salespersonName));
     return bytes;
   }
 
@@ -340,7 +390,13 @@ class VoucherTicketBuilder {
         );
       }
     }
-    bytes.addAll(b.footer(salespersonName: salespersonName));
+    bytes.addAll(
+      _padToMinLength(
+        b,
+        tableStyle: false,
+        buildTail: (tail) => tail.footer(salespersonName: salespersonName),
+      ),
+    );
     return bytes;
   }
 
@@ -380,13 +436,57 @@ class VoucherTicketBuilder {
       }
     }
     bytes.addAll(
-      b.totalsBlock(
-        symbol: symbol,
-        currencyCode: org.currencyCode,
-        total: expense.amount,
+      _padToMinLength(
+        b,
+        tableStyle: false,
+        buildTail: (tail) {
+          final after = <int>[];
+          after.addAll(
+            tail.totalsBlock(
+              symbol: symbol,
+              currencyCode: org.currencyCode,
+              total: expense.amount,
+            ),
+          );
+          after.addAll(tail.footer(salespersonName: salespersonName));
+          return after;
+        },
       ),
     );
-    bytes.addAll(b.footer(salespersonName: salespersonName));
+    return bytes;
+  }
+
+  /// UAE VAT line label, e.g. `VAT @ 5%`.
+  static String _vatLabel(Iterable<double> percentages) {
+    final rates = percentages.where((p) => p != 0).toSet();
+    if (rates.length == 1) {
+      final rate = rates.first;
+      final text = rate % 1 == 0 ? '${rate.toInt()}' : '$rate';
+      return 'VAT @ $text%';
+    }
+    return 'VAT @ 5%';
+  }
+
+  /// Inserts empty table (or blank) rows so the ticket is at least 8" long.
+  static List<int> _padToMinLength(
+    EscPosTicketBuilder b, {
+    required List<int> Function(EscPosTicketBuilder tail) buildTail,
+    required bool tableStyle,
+  }) {
+    final tail = EscPosTicketBuilder(
+      generator: b.generator,
+      paperSize: b.paperSize,
+    );
+    final tailBytes = buildTail(tail);
+    final pad = EscPosTicketBuilder.emptyRowsForMinLength(
+      usedUnits: b.lineUnits,
+      remainingUnits: tail.lineUnits,
+    );
+    final bytes = <int>[];
+    for (var i = 0; i < pad; i++) {
+      bytes.addAll(tableStyle ? b.emptyItemRow() : b.blankLine());
+    }
+    bytes.addAll(tailBytes);
     return bytes;
   }
 }

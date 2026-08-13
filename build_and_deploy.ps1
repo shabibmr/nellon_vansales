@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 
 # Define paths
 $apkPath = "E:\work\nellon\build\app\outputs\apk\release\app-nellon-release.apk"
-$destination = "gm1:~/uae/ap1/"
+$destination = "gm1:/var/www/html/algo_cloud/nellon/"
 
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host "Building APK in release mode..." -ForegroundColor Cyan

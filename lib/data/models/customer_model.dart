@@ -83,6 +83,7 @@ class CustomerModel extends Customer {
   static String _extractTrn(Map<String, dynamic> json) {
     final direct = _firstNonEmpty([
       json['tax_reg_no'],
+      json['vat_reg_no'],
       json['trn'],
       json['taxRegNo'],
       json['tax_number'],

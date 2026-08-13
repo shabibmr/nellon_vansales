@@ -245,6 +245,14 @@ void main() {
       expect(org, isNotNull);
       expect(org!['currency_code'], 'AED');
       expect(org['name'], 'Mock Org');
+      expect(org['tax_settings']['tax_reg_no'], '100577492000003');
+      expect(org['address'], isA<Map>());
+    });
+
+    test('fetchContactDetail includes tax_reg_no', () async {
+      final contact = await client.fetchContactDetail('cust_101');
+      expect(contact['contact_id'], 'cust_101');
+      expect(contact['tax_reg_no'], '100533986400003');
     });
 
     test('fetchInvoiceDetail unwraps invoice envelope', () async {

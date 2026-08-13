@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:van_sales/data/models/organization_model.dart';
 import 'package:van_sales/data/services/esc_pos/esc_pos_ticket_builder.dart';
 import 'package:van_sales/data/services/esc_pos/voucher_ticket_builder.dart';
 import 'package:van_sales/domain/models/customer.dart';
@@ -98,6 +99,26 @@ void main() {
       );
     });
 
+    test('emptyRowsForMinLength pads to 8 inches at 6 lines/inch', () {
+      expect(EscPosTicketBuilder.minLengthInches, 8);
+      expect(EscPosTicketBuilder.linesPerInch, 6);
+      expect(EscPosTicketBuilder.minLineUnits, 48);
+      expect(
+        EscPosTicketBuilder.emptyRowsForMinLength(
+          usedUnits: 20,
+          remainingUnits: 10,
+        ),
+        18,
+      );
+      expect(
+        EscPosTicketBuilder.emptyRowsForMinLength(
+          usedUnits: 40,
+          remainingUnits: 20,
+        ),
+        0,
+      );
+    });
+
     test('wrapText breaks long names without dropping content', () {
       final lines = EscPosTicketBuilder.wrapText(
         'Premium Widget Extra Long Name For Wrap',
@@ -151,8 +172,10 @@ void main() {
       // Prefer spaced qty+uom
       expect(text.contains('2 pcs'), isTrue);
       expect(text.contains('AED '), isTrue);
+      expect(text.contains('VAT @ 5%'), isTrue);
+      expect(text.contains('Tax'), isFalse);
       expect(text.contains('In words:'), isTrue);
-      expect(text.contains('Dirhams'), isTrue);
+      expect(text.contains('AED'), isTrue);
       // Full long name should appear across payload (wrap, not hard drop)
       expect(text.contains('Premium'), isTrue);
       expect(text.contains('Wrap') || text.contains('Widget'), isTrue);
@@ -223,6 +246,92 @@ void main() {
       expect(text.contains('RECEIPT'), isTrue);
       expect(text.contains('In words:'), isTrue);
       expect(text.contains('AED 100.00') || text.contains('AED 50.00'), isTrue);
+    });
+
+    test('prints org and customer TRN lines from live-shaped data', () async {
+      final liveOrg = OrganizationModel.fromJson({
+        'organization_id': '783019958',
+        'name': 'KOYSON GENERAL TRADING LLC',
+        'currency_code': 'AED',
+        'currency_symbol': 'AED',
+        'fiscal_year_start_month': 'january',
+        'time_zone': 'Asia/Dubai',
+        'phone': '00971545829444',
+        'address': {
+          'street_address1': 'JEBEL ALI IND-1, DUBAI, UAE',
+          'city': 'DUBAI',
+          'state': 'Dubai',
+          'country': 'U.A.E',
+        },
+        'tax_settings': {'tax_reg_no': '100577492000003'},
+      });
+      const registered = Customer(
+        id: 'c2',
+        name: 'AL AMANAH SPICES TR FLOUR MILL',
+        companyName: 'AL AMANAH SPICES TR FLOUR MILL',
+        email: '',
+        phone: '065260032',
+        address: 'NEAR FIRE STATION ROAD MUWAILAH',
+        trn: '100533986400003',
+        outstandingBalance: 0,
+        creditLimit: 0,
+        routeId: 'r1',
+        sequence: 1,
+      );
+      final bytes = await VoucherTicketBuilder.build(
+        type: VoucherType.salesInvoice,
+        voucher: invoice,
+        org: liveOrg,
+        customer: registered,
+        paperSize: ThermalPaperSize.inch4,
+      );
+      final text = latin1Payload(bytes);
+      expect(text.contains('JEBEL ALI IND-1, DUBAI, UAE'), isTrue);
+      expect(text.contains('street_address1'), isFalse);
+      expect(text.contains('TRN: 100577492000003'), isTrue);
+      expect(text.contains('TRN: 100533986400003'), isTrue);
+    });
+
+    test('omits customer TRN line when customer trn is empty', () async {
+      const unregistered = Customer(
+        id: 'c3',
+        name: 'AQSA AL MADEENA HYPERMARKET',
+        companyName: 'AQSA AL MADEENA HYPERMARKET',
+        email: '',
+        phone: '',
+        address: '',
+        outstandingBalance: 0,
+        creditLimit: 0,
+        routeId: 'r1',
+        sequence: 1,
+      );
+      final bytes = await VoucherTicketBuilder.build(
+        type: VoucherType.salesInvoice,
+        voucher: invoice,
+        org: org,
+        customer: unregistered,
+        paperSize: ThermalPaperSize.inch4,
+      );
+      final text = latin1Payload(bytes);
+      expect(text.contains('TRN: 100123456700003'), isTrue);
+      expect(text.contains('TRN: 200987654300001'), isFalse);
+    });
+
+    test('short invoice pads item table to minimum 8 inch length', () async {
+      final bytes = await VoucherTicketBuilder.build(
+        type: VoucherType.salesInvoice,
+        voucher: invoice,
+        org: org,
+        customer: customer,
+        paperSize: ThermalPaperSize.inch4,
+      );
+      final text = latin1Payload(bytes);
+      final emptyTableRow = RegExp(r'\| {3}\| {2,}\| {7}\| {10}\|');
+      final emptyRows = emptyTableRow.allMatches(text).length;
+      expect(emptyRows, greaterThanOrEqualTo(5));
+      expect(text.contains('SALES INVOICE'), isTrue);
+      expect(text.contains('TOTAL'), isTrue);
+      expect(text.indexOf('TOTAL'), greaterThan(text.indexOf('|')));
     });
 
     test('builds non-empty test page for both sizes', () async {

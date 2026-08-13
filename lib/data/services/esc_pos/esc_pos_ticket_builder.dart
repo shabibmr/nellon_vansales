@@ -15,6 +15,21 @@ class EscPosTicketBuilder {
   final ThermalPaperSize paperSize;
   final int columns;
 
+  /// Printed line units so far (double-height text counts as 2).
+  int _lineUnits = 0;
+
+  /// Visible for tests and tail-padding math.
+  int get lineUnits => _lineUnits;
+
+  /// Minimum ticket length. ESC/POS default line spacing after reset is 1/6".
+  static const double minLengthInches = 8;
+
+  /// Default ESC/POS line spacing: ESC 2 = 1/6 inch.
+  static const int linesPerInch = 6;
+
+  static int get minLineUnits =>
+      (minLengthInches * linesPerInch).round();
+
   static final DateFormat ticketDateFormat = DateFormat('dd-MM-yyyy');
   static final DateFormat dateOnlyFormat = DateFormat('dd MMM yyyy');
 
@@ -114,21 +129,43 @@ class EscPosTicketBuilder {
     return lines;
   }
 
+  /// Empty table rows needed so [usedUnits] + [remainingUnits] + pad >= [minLineUnits].
+  static int emptyRowsForMinLength({
+    required int usedUnits,
+    required int remainingUnits,
+    int minLineUnits = -1,
+  }) {
+    final target = minLineUnits < 0
+        ? EscPosTicketBuilder.minLineUnits
+        : minLineUnits;
+    final need = target - usedUnits - remainingUnits;
+    return need > 0 ? need : 0;
+  }
+
+  void _countLine({PosTextSize height = PosTextSize.size1}) {
+    _lineUnits += height.value;
+  }
+
   List<int> reset() => generator.reset();
 
-  List<int> feed([int n = 2]) => generator.feed(n);
+  List<int> feed([int n = 2]) {
+    _lineUnits += n;
+    return generator.feed(n);
+  }
 
   List<int> cut() {
     // Prefer feed over hard cut — many mobile printers lack a cutter.
-    return generator.feed(3);
+    return feed(3);
   }
 
   List<int> divider() {
+    _countLine();
     final line = List.filled(columns, '-').join();
     return generator.text(line);
   }
 
   List<int> doubleDivider() {
+    _countLine();
     final line = List.filled(columns, '=').join();
     return generator.text(line);
   }
@@ -141,6 +178,7 @@ class EscPosTicketBuilder {
     PosTextSize width = PosTextSize.size1,
     PosTextSize height = PosTextSize.size1,
   }) {
+    _countLine(height: height);
     return generator.text(
       sanitize(text),
       styles: PosStyles(
@@ -162,6 +200,7 @@ class EscPosTicketBuilder {
     PosTextSize width = PosTextSize.size1,
     PosTextSize height = PosTextSize.size1,
   }) {
+    _countLine(height: height);
     return generator.text(
       sanitize(text),
       styles: PosStyles(
@@ -196,6 +235,7 @@ class EscPosTicketBuilder {
             '$leftClean $rightClean',
             cols,
           );
+    _countLine(height: height);
     return generator.text(
       line,
       styles: PosStyles(
@@ -221,14 +261,17 @@ class EscPosTicketBuilder {
   }) {
     final bytes = <int>[];
     bytes.addAll(doubleDivider());
-    bytes.addAll(
-      center(
-        orgName.toUpperCase(),
-        bold: true,
-        width: PosTextSize.size1,
-        height: PosTextSize.size2,
-      ),
-    );
+    // Double-width halves usable columns; wrap so 2" tickets still fit.
+    final nameCols = (columns / 2).floor().clamp(8, columns);
+    for (final line in wrapText(orgName.toUpperCase(), nameCols)) {
+      bytes.addAll(
+        center(
+          line,
+          width: PosTextSize.size2,
+          height: PosTextSize.size2,
+        ),
+      );
+    }
 
     final address = orgAddress.trim();
     if (address.isNotEmpty) {
@@ -330,6 +373,15 @@ class EscPosTicketBuilder {
     return bytes;
   }
 
+  /// One blank item-table row (`|   | … |       |          |`).
+  List<int> emptyItemRow() {
+    return left(
+      _pipeRow(sl: '', name: '', qty: '', amount: ''),
+    );
+  }
+
+  List<int> blankLine() => left('');
+
   List<int> itemRow({
     required int serial,
     required String name,
@@ -370,6 +422,7 @@ class EscPosTicketBuilder {
     double? discountTotal,
     required double total,
     double? roundOff,
+    String taxLabel = 'VAT @ 5%',
   }) {
     final bytes = <int>[];
     bytes.addAll(divider());
@@ -377,7 +430,7 @@ class EscPosTicketBuilder {
       bytes.addAll(leftRight('Subtotal', money(subTotal, symbol)));
     }
     if (taxTotal != null && taxTotal != 0) {
-      bytes.addAll(leftRight('Tax', money(taxTotal, symbol)));
+      bytes.addAll(leftRight(taxLabel, money(taxTotal, symbol)));
     }
     if (discountTotal != null && discountTotal != 0) {
       bytes.addAll(leftRight('Discount', money(discountTotal, symbol)));

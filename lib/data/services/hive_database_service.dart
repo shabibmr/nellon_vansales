@@ -267,6 +267,17 @@ class HiveDatabaseService {
     return _customerCache![id];
   }
 
+  /// Replaces a single customer by id. No-op when [customer.id] is not in Hive.
+  Future<void> upsertCustomer(Customer customer) async {
+    if (customer.id.isEmpty) return;
+    final current = getCustomers();
+    final index = current.indexWhere((c) => c.id == customer.id);
+    if (index < 0) return;
+    final newList = List<Customer>.from(current);
+    newList[index] = customer;
+    await saveCustomers(newList);
+  }
+
   /// Updates latitude/longitude for a specific customer (by id) and persists.
   /// If the customer is not found, this is a no-op.
   Future<void> updateCustomerGps(

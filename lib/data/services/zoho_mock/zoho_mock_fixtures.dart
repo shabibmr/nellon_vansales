@@ -401,6 +401,20 @@ class ZohoMockFixtures {
         'currency_symbol': 'AED',
         'fiscal_year_start_month': 'april',
         'time_zone': 'Asia/Kolkata',
+        'phone': '00971545829444',
+        'address': {
+          'street_address1': 'JEBEL ALI IND-1, DUBAI, UAE',
+          'street_address2': '',
+          'city': 'DUBAI',
+          'state': 'Dubai',
+          'country': 'U.A.E',
+          'zip': '',
+        },
+        'tax_settings': {
+          'is_tax_registered': true,
+          'tax_reg_no': '100577492000003',
+          'tax_reg_no_label': 'TRN',
+        },
       };
 
   static List<Map<String, dynamic>> openInvoices() {
@@ -715,12 +729,24 @@ class ZohoMockFixtures {
 
   static Map<String, dynamic> contactDetail(String contactId) {
     final fromList = customers.where((c) => c['contact_id'] == contactId);
-    if (fromList.isNotEmpty) return Map<String, dynamic>.from(fromList.first);
+    if (fromList.isNotEmpty) {
+      return Map<String, dynamic>.from(fromList.first)
+        ..['tax_reg_no'] = '100533986400003'
+        ..['vat_reg_no'] = '100533986400003'
+        ..['tax_treatment'] = 'vat_registered'
+        ..['billing_address'] = {
+          'address': 'Plot 42, Sector 5, North Corridor',
+          'country': 'U.A.E',
+        };
+    }
     return {
       'contact_id': contactId,
       'contact_name': 'Demo Customer',
       'company_name': 'Demo Customer',
       'opening_balance_amount': 5000.0,
+      'tax_reg_no': '100533986400003',
+      'vat_reg_no': '100533986400003',
+      'tax_treatment': 'vat_registered',
     };
   }
 }

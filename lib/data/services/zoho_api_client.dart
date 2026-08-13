@@ -323,8 +323,8 @@ class ZohoApiClient {
     return all;
   }
 
-  /// Fetches a single contact detail record (needed for opening_balance_amount).
-  Future<Map<String, dynamic>> _fetchContactDetail(String contactId) async {
+  /// Fetches a single contact detail record (opening balance, tax_reg_no).
+  Future<Map<String, dynamic>> fetchContactDetail(String contactId) async {
     final response = await _dio.get('/contacts/$contactId');
     if (response.statusCode != 200) {
       throw Exception(
@@ -1219,7 +1219,7 @@ class ZohoApiClient {
       final to = endDate ?? DateTime.now();
 
       final results = await Future.wait([
-        _fetchContactDetail(contactId),
+        fetchContactDetail(contactId),
         _fetchAllPages('/invoices', {'customer_id': contactId}),
         _fetchAllPages('/customerpayments', {'customer_id': contactId}),
         _fetchAllPages('/creditnotes', {'customer_id': contactId}),
