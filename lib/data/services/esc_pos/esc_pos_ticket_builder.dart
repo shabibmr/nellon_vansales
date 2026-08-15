@@ -2,14 +2,13 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 
 import '../../../domain/models/thermal_paper_size.dart';
+import '../../../domain/models/thermal_ticket_preview.dart';
 import '../../../domain/utils/amount_in_words.dart';
 
 /// Shared ESC/POS layout helpers for 2" / 4" thermal tickets.
 class EscPosTicketBuilder {
-  EscPosTicketBuilder({
-    required this.generator,
-    required this.paperSize,
-  }) : columns = paperSize.columns;
+  EscPosTicketBuilder({required this.generator, required this.paperSize})
+    : columns = paperSize.columns;
 
   final Generator generator;
   final ThermalPaperSize paperSize;
@@ -18,8 +17,45 @@ class EscPosTicketBuilder {
   /// Printed line units so far (double-height text counts as 2).
   int _lineUnits = 0;
 
+  /// Visual stand-in for bytes emitted by [center], [left], [leftRight], and dividers.
+  final List<ThermalPreviewLine> previewLines = [];
+
   /// Visible for tests and tail-padding math.
   int get lineUnits => _lineUnits;
+
+  /// Appends [other]'s recorded preview lines (used when a tail builder is merged).
+  void absorbPreviewFrom(EscPosTicketBuilder other) {
+    previewLines.addAll(other.previewLines);
+  }
+
+  ThermalTicketPreview toPreview() {
+    return ThermalTicketPreview(
+      paperSize: paperSize,
+      lines: List.unmodifiable(previewLines),
+    );
+  }
+
+  void _recordPreview(
+    String text, {
+    bool bold = false,
+    bool underline = false,
+    bool reverse = false,
+    bool center = false,
+    PosTextSize width = PosTextSize.size1,
+    PosTextSize height = PosTextSize.size1,
+  }) {
+    previewLines.add(
+      ThermalPreviewLine(
+        text: text,
+        bold: bold,
+        underline: underline,
+        reverse: reverse,
+        center: center,
+        widthMultiplier: width.value,
+        heightMultiplier: height.value,
+      ),
+    );
+  }
 
   /// Minimum ticket length. ESC/POS default line spacing after reset is 1/6".
   static const double minLengthInches = 8;
@@ -27,8 +63,7 @@ class EscPosTicketBuilder {
   /// Default ESC/POS line spacing: ESC 2 = 1/6 inch.
   static const int linesPerInch = 6;
 
-  static int get minLineUnits =>
-      (minLengthInches * linesPerInch).round();
+  static int get minLineUnits => (minLengthInches * linesPerInch).round();
 
   static final DateFormat ticketDateFormat = DateFormat('dd-MM-yyyy');
   static final DateFormat dateOnlyFormat = DateFormat('dd MMM yyyy');
@@ -158,16 +193,28 @@ class EscPosTicketBuilder {
     return feed(3);
   }
 
-  List<int> divider() {
-    _countLine();
-    final line = List.filled(columns, '-').join();
-    return generator.text(line);
-  }
+  List<int> divider() => _ruleLine('-');
 
-  List<int> doubleDivider() {
+  List<int> doubleDivider() => _ruleLine('=');
+
+  /// Horizontal rule for Nigachi / ESC/POS firmware that drops a full-width
+  /// run of `-` or `=` when it is sent through [Generator.text].
+  ///
+  /// `text()` always prefixes `ESC $` (absolute position) using the library's
+  /// mm80 profile (48 Font A columns / 576 dots). On a 4" 64-column printer
+  /// that command plus a solid `-`/`=` line is discarded — individual hyphens
+  /// in invoice numbers still print, which matches the field tickets.
+  /// Sending the glyphs as a left-aligned raw line avoids that path.
+  List<int> _ruleLine(String ch) {
     _countLine();
-    final line = List.filled(columns, '=').join();
-    return generator.text(line);
+    final glyph = ch.isEmpty ? '-' : ch[0];
+    final line = List.filled(columns, glyph).join();
+    _recordPreview(line);
+    return [
+      ...generator.setStyles(const PosStyles(align: PosAlign.left)),
+      ...line.codeUnits,
+      0x0A,
+    ];
   }
 
   List<int> center(
@@ -178,9 +225,19 @@ class EscPosTicketBuilder {
     PosTextSize width = PosTextSize.size1,
     PosTextSize height = PosTextSize.size1,
   }) {
+    final clean = sanitize(text);
     _countLine(height: height);
+    _recordPreview(
+      clean,
+      bold: bold,
+      underline: underline,
+      reverse: reverse,
+      center: true,
+      width: width,
+      height: height,
+    );
     return generator.text(
-      sanitize(text),
+      clean,
       styles: PosStyles(
         align: PosAlign.center,
         bold: bold,
@@ -200,9 +257,18 @@ class EscPosTicketBuilder {
     PosTextSize width = PosTextSize.size1,
     PosTextSize height = PosTextSize.size1,
   }) {
+    final clean = sanitize(text);
     _countLine(height: height);
+    _recordPreview(
+      clean,
+      bold: bold,
+      underline: underline,
+      reverse: reverse,
+      width: width,
+      height: height,
+    );
     return generator.text(
-      sanitize(text),
+      clean,
       styles: PosStyles(
         align: PosAlign.left,
         bold: bold,
@@ -222,6 +288,7 @@ class EscPosTicketBuilder {
     bool reverse = false,
     PosTextSize width = PosTextSize.size1,
     PosTextSize height = PosTextSize.size1,
+
     /// When double-width, usable character columns are roughly half.
     int? layoutColumns,
   }) {
@@ -231,11 +298,16 @@ class EscPosTicketBuilder {
     final gap = cols - leftClean.length - rightClean.length;
     final line = gap >= 1
         ? '$leftClean${' ' * gap}$rightClean'
-        : truncate(
-            '$leftClean $rightClean',
-            cols,
-          );
+        : truncate('$leftClean $rightClean', cols);
     _countLine(height: height);
+    _recordPreview(
+      line,
+      bold: bold,
+      underline: underline,
+      reverse: reverse,
+      width: width,
+      height: height,
+    );
     return generator.text(
       line,
       styles: PosStyles(
@@ -265,11 +337,7 @@ class EscPosTicketBuilder {
     final nameCols = (columns / 2).floor().clamp(8, columns);
     for (final line in wrapText(orgName.toUpperCase(), nameCols)) {
       bytes.addAll(
-        center(
-          line,
-          width: PosTextSize.size2,
-          height: PosTextSize.size2,
-        ),
+        center(line, width: PosTextSize.size2, height: PosTextSize.size2),
       );
     }
 
@@ -290,11 +358,7 @@ class EscPosTicketBuilder {
 
     bytes.addAll(divider());
     bytes.addAll(
-      center(
-        voucherTitle.toUpperCase(),
-        bold: true,
-        underline: true,
-      ),
+      center(voucherTitle.toUpperCase(), bold: true, underline: true),
     );
     bytes.addAll(
       leftRight(
@@ -319,9 +383,8 @@ class EscPosTicketBuilder {
       bytes.addAll(left(nameLines[i], bold: i == 0));
     }
 
-    if (phone != null && phone.trim().isNotEmpty) {
-      bytes.addAll(left('Phone: ${truncate(phone, columns - 7)}'));
-    }
+    // Always print Phone / TRN labels so empty values still occupy a line.
+    bytes.addAll(left('Phone: ${truncate(phone?.trim() ?? '', columns - 7)}'));
 
     final addr = address?.trim() ?? '';
     if (addr.isNotEmpty) {
@@ -334,10 +397,7 @@ class EscPosTicketBuilder {
       }
     }
 
-    final customerTrn = trn?.trim() ?? '';
-    if (customerTrn.isNotEmpty) {
-      bytes.addAll(left('TRN: ${truncate(customerTrn, columns - 5)}'));
-    }
+    bytes.addAll(left('TRN: ${truncate(trn?.trim() ?? '', columns - 5)}'));
     return bytes;
   }
 
@@ -360,12 +420,7 @@ class EscPosTicketBuilder {
     bytes.addAll(divider());
     bytes.addAll(
       left(
-        _pipeRow(
-          sl: 'Sl',
-          name: 'Item',
-          qty: 'Qty',
-          amount: 'Amount',
-        ),
+        _pipeRow(sl: 'Sl', name: 'Item', qty: 'Qty', amount: 'Amount'),
         bold: true,
       ),
     );
@@ -375,9 +430,7 @@ class EscPosTicketBuilder {
 
   /// One blank item-table row (`|   | … |       |          |`).
   List<int> emptyItemRow() {
-    return left(
-      _pipeRow(sl: '', name: '', qty: '', amount: ''),
-    );
+    return left(_pipeRow(sl: '', name: '', qty: '', amount: ''));
   }
 
   List<int> blankLine() => left('');
@@ -453,11 +506,13 @@ class EscPosTicketBuilder {
       ),
     );
 
-    bytes.addAll(amountInWordsBlock(
-      total: total,
-      symbol: symbol,
-      currencyCode: currencyCode,
-    ));
+    bytes.addAll(
+      amountInWordsBlock(
+        total: total,
+        symbol: symbol,
+        currencyCode: currencyCode,
+      ),
+    );
     return bytes;
   }
 
@@ -482,14 +537,19 @@ class EscPosTicketBuilder {
     return bytes;
   }
 
-  List<int> footer({String? salespersonName}) {
+  static const String supervisorContact = 'Suneer (Supervisor) : +971501880810';
+
+  List<int> footer({String? salespersonName, String? salespersonPhone}) {
     final bytes = <int>[];
     bytes.addAll(divider());
-    if (salespersonName != null && salespersonName.trim().isNotEmpty) {
-      bytes.addAll(
-        left('Salesperson: ${truncate(salespersonName, columns - 13)}'),
-      );
-    }
+    final name = salespersonName?.trim() ?? '';
+    final phone = salespersonPhone?.trim() ?? '';
+    final salesmanRole = name.isEmpty
+        ? '( Salesman ) :'
+        : '$name ( Salesman ) :';
+    final salesmanLine = phone.isEmpty ? salesmanRole : '$salesmanRole $phone';
+    bytes.addAll(left(truncate(salesmanLine, columns)));
+    bytes.addAll(left(truncate(supervisorContact, columns)));
     bytes.addAll(center('Thank you'));
     bytes.addAll(doubleDivider());
     bytes.addAll(cut());

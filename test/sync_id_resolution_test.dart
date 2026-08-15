@@ -5,6 +5,10 @@ import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
+import 'package:van_sales/domain/models/sales_invoice.dart';
+import 'package:van_sales/domain/models/sales_return.dart';
+import 'package:van_sales/domain/models/receipt_voucher.dart';
+import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/item.dart';
 
 /// Always reports "online" so [SyncWorker.syncPendingItems] proceeds past its
@@ -40,6 +44,21 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
 
   @override
   List<SalesOrder> getLocalOrders() => _orders.values.toList();
+
+  @override
+  List<SalesOrder> getAllLocalOrdersUnfiltered() => _orders.values.toList();
+
+  @override
+  List<SalesReturn> getAllLocalReturnsUnfiltered() => [];
+
+  @override
+  List<StockTransfer> getAllLocalStockTransfersUnfiltered() => [];
+
+  @override
+  List<SalesInvoice> getAllLocalInvoicesUnfiltered() => [];
+
+  @override
+  List<ReceiptVoucher> getAllLocalReceiptsUnfiltered() => [];
 
   @override
   Future<void> saveLocalOrder(SalesOrder order) async {

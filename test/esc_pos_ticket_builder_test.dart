@@ -179,6 +179,9 @@ void main() {
       // Full long name should appear across payload (wrap, not hard drop)
       expect(text.contains('Premium'), isTrue);
       expect(text.contains('Wrap') || text.contains('Widget'), isTrue);
+      // Section rules must be present as hyphen / equals runs (not dropped).
+      expect(text.contains(List.filled(64, '-').join()), isTrue);
+      expect(text.contains(List.filled(64, '=').join()), isTrue);
     });
 
     test('invoice ticket embeds UOM with space next to quantity', () async {
@@ -292,29 +295,81 @@ void main() {
       expect(text.contains('TRN: 100533986400003'), isTrue);
     });
 
-    test('omits customer TRN line when customer trn is empty', () async {
-      const unregistered = Customer(
-        id: 'c3',
-        name: 'AQSA AL MADEENA HYPERMARKET',
-        companyName: 'AQSA AL MADEENA HYPERMARKET',
-        email: '',
-        phone: '',
-        address: '',
-        outstandingBalance: 0,
-        creditLimit: 0,
-        routeId: 'r1',
-        sequence: 1,
-      );
-      final bytes = await VoucherTicketBuilder.build(
+    test(
+      'prints empty customer Phone and TRN labels when values are missing',
+      () async {
+        const unregistered = Customer(
+          id: 'c3',
+          name: 'AQSA AL MADEENA HYPERMARKET',
+          companyName: 'AQSA AL MADEENA HYPERMARKET',
+          email: '',
+          phone: '',
+          address: '',
+          outstandingBalance: 0,
+          creditLimit: 0,
+          routeId: 'r1',
+          sequence: 1,
+        );
+        final preview = await VoucherTicketBuilder.buildPreview(
+          type: VoucherType.salesInvoice,
+          voucher: invoice,
+          org: org,
+          customer: unregistered,
+          paperSize: ThermalPaperSize.inch4,
+        );
+        expect(preview.plainText.contains('TRN: 100123456700003'), isTrue);
+        expect(preview.plainText.contains('TRN: 200987654300001'), isFalse);
+        expect(preview.lines.any((l) => l.text.trim() == 'Phone:'), isTrue);
+        expect(preview.lines.any((l) => l.text.trim() == 'TRN:'), isTrue);
+      },
+    );
+
+    test('prints salesperson phone at the bottom of the ticket', () async {
+      final preview = await VoucherTicketBuilder.buildPreview(
         type: VoucherType.salesInvoice,
         voucher: invoice,
         org: org,
-        customer: unregistered,
+        customer: customer,
         paperSize: ThermalPaperSize.inch4,
+        salespersonName: 'Shinad',
+        salespersonPhone: '+971565124529',
       );
-      final text = latin1Payload(bytes);
-      expect(text.contains('TRN: 100123456700003'), isTrue);
-      expect(text.contains('TRN: 200987654300001'), isFalse);
+      expect(
+        preview.plainText.contains('Shinad ( Salesman ) : +971565124529'),
+        isTrue,
+      );
+      expect(
+        preview.plainText.contains('Suneer (Supervisor) : +971501880810'),
+        isTrue,
+      );
+      final texts = preview.lines.map((l) => l.text).toList();
+      final salesIdx = texts.indexWhere(
+        (t) => t.contains('Shinad ( Salesman ) : +971565124529'),
+      );
+      final supervisorIdx = texts.indexWhere(
+        (t) => t.contains('Suneer (Supervisor) : +971501880810'),
+      );
+      final thanksIdx = texts.indexWhere((t) => t.contains('Thank you'));
+      expect(salesIdx, greaterThan(-1));
+      expect(supervisorIdx, greaterThan(salesIdx));
+      expect(thanksIdx, greaterThan(supervisorIdx));
+    });
+
+    test('prints salesman role line when number is missing', () async {
+      final preview = await VoucherTicketBuilder.buildPreview(
+        type: VoucherType.salesInvoice,
+        voucher: invoice,
+        org: org,
+        customer: customer,
+        paperSize: ThermalPaperSize.inch4,
+        salespersonName: 'Shinad',
+      );
+      final texts = preview.lines.map((l) => l.text).toList();
+      final salesIdx = texts.indexWhere(
+        (t) => t.trim() == 'Shinad ( Salesman ) :',
+      );
+      expect(salesIdx, greaterThan(-1));
+      expect(texts[salesIdx + 1].trim(), 'Suneer (Supervisor) : +971501880810');
     });
 
     test('short invoice pads item table to minimum 8 inch length', () async {
@@ -333,6 +388,84 @@ void main() {
       expect(text.contains('TOTAL'), isTrue);
       expect(text.indexOf('TOTAL'), greaterThan(text.indexOf('|')));
     });
+
+    test(
+      'buildPreview matches invoice ticket content and paper columns',
+      () async {
+        for (final size in ThermalPaperSize.values) {
+          final preview = await VoucherTicketBuilder.buildPreview(
+            type: VoucherType.salesInvoice,
+            voucher: invoice,
+            org: org,
+            customer: customer,
+            paperSize: size,
+            salespersonName: 'Ravi',
+            salespersonPhone: '0509998887',
+          );
+          expect(preview.paperSize, size);
+          expect(preview.lines, isNotEmpty);
+          expect(preview.plainText.contains('SALES INVOICE'), isTrue);
+          expect(preview.plainText.contains('Acme Mart'), isTrue);
+          expect(preview.plainText.contains('Date: 15-01-2026'), isTrue);
+          expect(preview.plainText.contains('In words:'), isTrue);
+          expect(preview.plainText.contains('Thank you'), isTrue);
+          expect(
+            preview.plainText.contains('Ravi ( Salesman ) : 0509998887'),
+            isTrue,
+          );
+          expect(preview.plainText.contains('Suneer (Supervisor)'), isTrue);
+          expect(
+            preview.lines.any(
+              (l) => l.text == List.filled(size.columns, '=').join(),
+            ),
+            isTrue,
+            reason: 'full-width divider for $size',
+          );
+          expect(
+            preview.lines.any(
+              (l) => l.center && l.bold && l.text == 'SALES INVOICE',
+            ),
+            isTrue,
+          );
+          expect(
+            preview.lines.any(
+              (l) => l.widthMultiplier == 2 && l.heightMultiplier == 2,
+            ),
+            isTrue,
+          );
+        }
+      },
+    );
+
+    test(
+      'buildPreview and build share the same printable invoice text',
+      () async {
+        final bytes = await VoucherTicketBuilder.build(
+          type: VoucherType.salesInvoice,
+          voucher: invoice,
+          org: org,
+          customer: customer,
+          paperSize: ThermalPaperSize.inch4,
+        );
+        final preview = await VoucherTicketBuilder.buildPreview(
+          type: VoucherType.salesInvoice,
+          voucher: invoice,
+          org: org,
+          customer: customer,
+          paperSize: ThermalPaperSize.inch4,
+        );
+        final printed = latin1Payload(bytes);
+        for (final line in preview.lines) {
+          final body = line.text.replaceAll(RegExp(r'\s+'), '');
+          if (body.isEmpty) continue;
+          expect(
+            printed.replaceAll(RegExp(r'\s+'), ''),
+            contains(body),
+            reason: 'preview line missing from ESC/POS payload: "${line.text}"',
+          );
+        }
+      },
+    );
 
     test('builds non-empty test page for both sizes', () async {
       for (final size in ThermalPaperSize.values) {

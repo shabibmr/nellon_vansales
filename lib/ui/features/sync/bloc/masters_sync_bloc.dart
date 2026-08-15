@@ -26,7 +26,10 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
     _statusSub = syncRepository.syncStatusStream.listen((status) {
       if (!isClosed) add(StatusLogReceived(status));
     });
-    emit(state.copyWith(hasCoreMasters: syncRepository.hasCoreMasters()));
+    emit(state.copyWith(
+      hasCoreMasters: syncRepository.hasCoreMasters(),
+      recordCounts: _allRecordCounts(),
+    ));
   }
 
   void _onLogReceived(StatusLogReceived event, Emitter<MastersSyncState> emit) {
@@ -63,10 +66,13 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
       if (isClosed) return;
       final newSynced = Set<MasterType>.from(state.syncedTypes)..add(type);
       final newInFlight = Set<MasterType>.from(state.inFlight)..remove(type);
+      final counts = Map<MasterType, int>.from(state.recordCounts)
+        ..[type] = syncRepository.getMasterRecordCount(type);
       emit(state.copyWith(
         syncedTypes: newSynced,
         inFlight: newInFlight,
         hasCoreMasters: syncRepository.hasCoreMasters(),
+        recordCounts: counts,
       ));
     } catch (e) {
       if (isClosed) return;
@@ -108,7 +114,9 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
           await syncRepository.syncMaster(type);
           if (isClosed) return;
           final newSynced = Set<MasterType>.from(state.syncedTypes)..add(type);
-          emit(state.copyWith(syncedTypes: newSynced));
+          final counts = Map<MasterType, int>.from(state.recordCounts)
+            ..[type] = syncRepository.getMasterRecordCount(type);
+          emit(state.copyWith(syncedTypes: newSynced, recordCounts: counts));
         } catch (e) {
           if (isClosed) return;
           final newLastError = Map<MasterType, String?>.from(state.lastError)
@@ -126,12 +134,14 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
       if (isClosed) return;
 
       final hasMasters = syncRepository.hasCoreMasters();
+      final counts = _allRecordCounts();
       if (hasMasters) {
         emit(state.copyWith(
           bulkSyncStatus: 'Master data sync completed successfully!',
           bulkSyncSuccess: true,
           bulkInFlight: false,
           hasCoreMasters: true,
+          recordCounts: counts,
         ));
       } else {
         emit(state.copyWith(
@@ -140,6 +150,7 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
           bulkSyncSuccess: false,
           bulkInFlight: false,
           hasCoreMasters: false,
+          recordCounts: counts,
         ));
       }
     } catch (e) {
@@ -155,6 +166,13 @@ class MastersSyncBloc extends Bloc<MastersSyncEvent, MastersSyncState> {
 
   void _onClearLogs(ClearLogsRequested event, Emitter<MastersSyncState> emit) {
     emit(state.copyWith(consoleLogs: const []));
+  }
+
+  Map<MasterType, int> _allRecordCounts() {
+    return {
+      for (final type in MasterType.values)
+        type: syncRepository.getMasterRecordCount(type),
+    };
   }
 
   @override

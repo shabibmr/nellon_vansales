@@ -123,7 +123,7 @@ void main() {
       expect(
         client.mockInterceptor.shouldMockRequest(
           RequestOptions(
-            path: 'https://www.zohoapis.com/inventory/v1/transferorders',
+            path: '/transferorders',
             method: 'POST',
           ),
         ),

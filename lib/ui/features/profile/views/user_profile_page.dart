@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/salesperson.dart';
 import '../../../core/cubit/salesperson_cubit.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../auth/logout.dart';
 
 /// Shows the salesperson session details resolved at login: name, phone,
 /// warehouse, cash account, voucher prefix, and status.
@@ -17,52 +18,79 @@ class UserProfilePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('My Profile')),
-      body: salesperson == null
-          ? Center(
-              child: Text(
-                'No active session.',
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.darkTextSecondary
-                      : AppTheme.lightTextSecondary,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (salesperson == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  'No active session.',
+                  style: TextStyle(
+                    color: isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.lightTextSecondary,
+                  ),
                 ),
               ),
             )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _ProfileHeader(salesperson: salesperson, isDark: isDark),
-                const SizedBox(height: 20),
-                _sectionTitle('Contact'),
-                const SizedBox(height: 8),
-                _infoCard([
-                  _infoRow(Icons.phone_outlined, 'Phone',
-                      salesperson.phone, isDark),
-                  _infoRow(Icons.email_outlined, 'Email',
-                      salesperson.email, isDark),
-                ]),
-                const SizedBox(height: 20),
-                _sectionTitle('Assignment'),
-                const SizedBox(height: 8),
-                _infoCard([
-                  _infoRow(Icons.warehouse_outlined, 'Warehouse',
-                      salesperson.locationName, isDark),
-                  _infoRow(Icons.account_balance_wallet_outlined,
-                      'Cash Account', salesperson.cashAccountName, isDark),
-                  _infoRow(Icons.tag_outlined, 'Voucher Prefix',
-                      salesperson.voucherPrefix, isDark),
-                ]),
-                const SizedBox(height: 20),
-                _sectionTitle('Account'),
-                const SizedBox(height: 8),
-                _infoCard([
-                  _infoRow(Icons.badge_outlined, 'Salesperson ID',
-                      salesperson.id, isDark),
-                  _statusRow(salesperson.status),
-                ]),
-                const SizedBox(height: 24),
-              ],
+          else ...[
+            _ProfileHeader(salesperson: salesperson, isDark: isDark),
+            const SizedBox(height: 20),
+            _sectionTitle('Contact'),
+            const SizedBox(height: 8),
+            _infoCard([
+              _infoRow(Icons.phone_outlined, 'Phone',
+                  salesperson.phone, isDark),
+              _infoRow(Icons.email_outlined, 'Email',
+                  salesperson.email, isDark),
+            ]),
+            const SizedBox(height: 20),
+            _sectionTitle('Assignment'),
+            const SizedBox(height: 8),
+            _infoCard([
+              _infoRow(Icons.warehouse_outlined, 'Warehouse',
+                  salesperson.locationName, isDark),
+              _infoRow(Icons.account_balance_wallet_outlined,
+                  'Cash Account', salesperson.cashAccountName, isDark),
+              _infoRow(Icons.tag_outlined, 'Voucher Prefix',
+                  salesperson.voucherPrefix, isDark),
+            ]),
+            const SizedBox(height: 20),
+            _sectionTitle('Account'),
+            const SizedBox(height: 8),
+            _infoCard([
+              _infoRow(Icons.badge_outlined, 'Salesperson ID',
+                  salesperson.id, isDark),
+              _statusRow(salesperson.status),
+            ]),
+          ],
+          const SizedBox(height: 20),
+          _sectionTitle('Session'),
+          const SizedBox(height: 8),
+          _infoCard([
+            ListTile(
+              dense: true,
+              leading: const Icon(
+                Icons.logout,
+                color: AppTheme.errorRose,
+                size: 20,
+              ),
+              title: const Text(
+                'Log out',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.errorRose,
+                ),
+              ),
+              onTap: () => attemptLogout(context),
             ),
+          ]),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 }

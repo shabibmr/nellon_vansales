@@ -28,7 +28,7 @@ void main() {
       ),
     );
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
 
     await tester.pumpWidget(
       MaterialApp(

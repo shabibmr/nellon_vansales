@@ -4,14 +4,12 @@ import 'package:intl/intl.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../data/services/sync_worker.dart';
-import '../../../../data/services/injection.dart';
-import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../../core/widgets/sync_item_card.dart';
 import '../../route/bloc/route_bloc.dart';
-import '../../auth/bloc/auth_bloc.dart';
+import '../../auth/logout.dart';
 import '../../../core/cubit/organization_cubit.dart';
 import '../bloc/sync_bloc.dart';
 import '../bloc/masters_sync_bloc.dart';
@@ -69,35 +67,6 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
     _tabController.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  /// Blocks logout if today's route activity hasn't been reconciled yet via
-  /// the Cash Closing workflow — otherwise a day's cash-in-hand discrepancy
-  /// could be walked away from unnoticed.
-  Future<void> _attemptLogout(BuildContext context) async {
-    final hasPendingClosing =
-        sl<SalesRepository>().hasPendingCashClosingForToday();
-    if (!hasPendingClosing) {
-      context.read<AuthBloc>().add(LogoutRequested());
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cash Closing Required'),
-        content: const Text(
-          "You have unreconciled sales activity today. Please complete "
-          "today's Cash Closing from the Dashboard before logging out.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -244,7 +213,7 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
             Expanded(
               flex: 2,
               child: OutlinedButton.icon(
-                onPressed: () => _attemptLogout(context),
+                onPressed: () => attemptLogout(context),
                 icon: const Icon(Icons.logout),
                 label: const Text('LOG OUT'),
                 style: OutlinedButton.styleFrom(

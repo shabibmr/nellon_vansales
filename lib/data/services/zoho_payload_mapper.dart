@@ -317,20 +317,23 @@ class ZohoPayloadMapper {
     return out;
   }
 
-  // --- Stock Transfer (POST inventory /transferorders) ---------------------
+  // --- Stock Transfer (POST books/v3 /transferorders) ----------------------
 
-  /// Whitelists a stock-transfer payload to the Zoho **Inventory**
+  /// Whitelists a stock-transfer payload to the Zoho Books v3
   /// `create-a-transfer-order` schema. Maps the model's local `notes` field to
   /// Zoho's `description`, reduces line items to `{item_id, name,
   /// quantity_transfer}`, and drops local keys (`id`, `transfer_order_id`,
-  /// `direction`, `isPendingSync`, `zoho_transfer_id`, `location_id`) plus the
-  /// duplicate `line_items[].quantity` and nested `line_items[].item`.
+  /// `transfer_order_number`, `direction`, `isPendingSync`, `zoho_transfer_id`,
+  /// `location_id`) plus the duplicate `line_items[].quantity` and nested
+  /// `line_items[].item`.
+  ///
+  /// Local `TO-TEMP-…` numbers are omitted so Zoho can auto-generate the
+  /// series number (sending a temp number returns Books error 4097).
   static Map<String, dynamic> zohoStockTransferPayload(
     Map<String, dynamic> raw,
   ) {
     final out = <String, dynamic>{};
     for (final key in const [
-      'transfer_order_number',
       'date',
       'from_location_id',
       'to_location_id',
@@ -343,8 +346,7 @@ class ZohoPayloadMapper {
     }
     // Multi-UOM note: transfer quantities are ALWAYS converted to the item's
     // base unit before reaching the stored payload (`quantity_transfer` is
-    // base-unit), so no unit keys are sent. Revisit if/when transfer orders
-    // go live (`_mockStockTransfers`).
+    // base-unit), so no unit keys are sent.
     out['line_items'] = _cleanLineItems(raw['line_items'], const [
       'item_id',
       'name',

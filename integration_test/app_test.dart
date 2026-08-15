@@ -104,6 +104,9 @@ class FakeSyncRepository implements SyncRepository {
 
   @override
   bool hasCoreMasters() => true;
+
+  @override
+  int getMasterRecordCount(MasterType type) => 0;
 }
 
 class FakeSalesRepository implements SalesRepository {
@@ -139,6 +142,12 @@ class FakeSalesRepository implements SalesRepository {
     Item item,
   ) async =>
       (item: item, offlineFallback: false);
+
+  @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(
+    Customer customer,
+  ) async =>
+      (customer: customer, offlineFallback: false);
 
   @override
   List<SalesInvoice> getLocalInvoices() => [];
@@ -242,6 +251,20 @@ class FakeSalesRepository implements SalesRepository {
     double latitude,
     double longitude,
   ) async {}
+
+  @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
 
   @override
   List<StockTransfer> getLocalStockTransfers() => [];

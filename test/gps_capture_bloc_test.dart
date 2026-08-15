@@ -11,19 +11,25 @@ import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
+import 'package:van_sales/domain/models/customer_ledger.dart';
+import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
-import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
-import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_bloc.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_event.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_state.dart';
 
 class FakeSalesRepository implements SalesRepository {
+  String? lastCustomerId;
   double? lastLatitude;
   double? lastLongitude;
-  String? lastCustomerId;
+  String? lastRemoteCustomerId;
+  double? lastRemoteLatitude;
+  double? lastRemoteLongitude;
+  bool shouldThrowRemoteGps = false;
   List<SyncQueueItem> queue = [];
 
   @override
@@ -32,6 +38,34 @@ class FakeSalesRepository implements SalesRepository {
     lastLatitude = latitude;
     lastLongitude = longitude;
   }
+
+  @override
+  Future<void> pushCustomerGpsRemote(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) async {
+    if (shouldThrowRemoteGps) {
+      throw Exception('Remote GPS push failed');
+    }
+    lastRemoteCustomerId = customerId;
+    lastRemoteLatitude = latitude;
+    lastRemoteLongitude = longitude;
+  }
+
+  @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
 
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) async {
@@ -44,7 +78,6 @@ class FakeSalesRepository implements SalesRepository {
     required bool isUpdate,
   }) async {}
 
-  // Stub other methods
   @override
   List<Customer> getCustomers() => [];
   @override
@@ -54,17 +87,13 @@ class FakeSalesRepository implements SalesRepository {
   @override
   List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
   @override
-  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async =>
-      [];
+  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async => [];
   @override
   List<ReceiptVoucher> getLocalReceipts() => [];
   @override
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
   @override
-  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<ReceiptVoucher>> fetchRemoteReceipts({DateTime? startDate, DateTime? endDate}) async => [];
   @override
   List<RouteModel> getRoutes() => [];
   @override
@@ -75,53 +104,65 @@ class FakeSalesRepository implements SalesRepository {
   List<Item> getItems() => [];
   @override
   Future<void> saveItems(List<Item> items) async {}
-
   @override
-  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async =>
+      (item: item, offlineFallback: false);
+  @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(Customer customer) async =>
+      (customer: customer, offlineFallback: false);
   @override
   List<SalesInvoice> getLocalInvoices() => [];
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
   @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+  Future<SalesInvoice?> fetchInvoiceById(
+    String invoiceId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
-  Future<List<SalesInvoice>> fetchRemoteInvoices({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<SalesInvoice>> fetchRemoteInvoices({DateTime? startDate, DateTime? endDate}) async => [];
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+  Future<ReceiptVoucher?> fetchReceiptById(
+    String paymentId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
+  Future<SalesReturn?> fetchSalesReturnById(
+    String creditNoteId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
+  @override
+  Future<ExpenseEntry?> fetchExpenseById(
+    String expenseId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
   List<SalesOrder> getLocalOrders() => [];
   @override
   Future<void> saveLocalOrder(SalesOrder order) async {}
   @override
-  Future<List<SalesOrder>> fetchRemoteOrders({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<SalesOrder>> fetchRemoteOrders({DateTime? startDate, DateTime? endDate}) async => [];
   @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
+  Future<SalesOrder?> fetchRemoteOrder(
+    String zohoOrderId, {
+    bool allowOfflineFallback = false,
+  }) async => null;
   @override
   List<SalesReturn> getLocalReturns() => [];
   @override
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
   @override
-  Future<List<SalesReturn>> fetchRemoteReturns({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<SalesReturn>> fetchRemoteReturns({DateTime? startDate, DateTime? endDate}) async => [];
   @override
   List<ExpenseEntry> getLocalExpenses() => [];
   @override
   Future<void> saveLocalExpense(ExpenseEntry expense) async {}
   @override
-  Future<List<ExpenseEntry>> fetchRemoteExpenses({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
+  Future<List<ExpenseEntry>> fetchRemoteExpenses({DateTime? startDate, DateTime? endDate}) async => [];
   @override
   CashClosing? getLocalCashClosing() => null;
   @override
@@ -131,57 +172,62 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
   @override
-  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({DateTime? startDate, DateTime? endDate}) async => [];
+  @override
+  Future<CustomerLedger> fetchCustomerLedger(
+    String customerId, {
     DateTime? startDate,
     DateTime? endDate,
-  }) async => [];
+  }) => throw UnimplementedError();
+  @override
+  Customer? getCustomerById(String id) => null;
+  @override
+  Organization? getOrganization() => null;
+  @override
+  String? get assignedWarehouseId => null;
+  @override
+  String? get primaryWarehouseId => null;
+  @override
+  List<Warehouse> getWarehouses() => [];
+  @override
+  bool hasPendingCashClosingForToday() => false;
+  @override
+  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
 }
 
-class FakeZohoApiClient extends ZohoApiClient {
-  FakeZohoApiClient({required super.dbService});
-
-  double? lastLatitude;
-  double? lastLongitude;
-  String? lastCustomerId;
-  bool shouldThrow = false;
-
-  @override
-  Future<String> updateCustomerGps(String customerId, double latitude, double longitude) async {
-    if (shouldThrow) {
-      throw Exception('Zoho API failed');
-    }
-    lastCustomerId = customerId;
-    lastLatitude = latitude;
-    lastLongitude = longitude;
-    return 'success';
-  }
-}
-
-class FakeHiveDatabaseService extends HiveDatabaseService {
-  @override
-  String? get assignedWarehouseId => 'van_wh_01';
-  @override
-  String? get activeRouteId => null;
-}
-
-class FakeSyncWorker extends SyncWorker {
-  FakeSyncWorker({required super.dbService, required super.apiClient});
-
+class FakeSyncRepository implements SyncRepository {
   int syncCount = 0;
 
   @override
-  Future<void> syncPendingItems({bool forceRetryAll = false}) async {
+  Future<void> triggerSync({bool forceRetryAll = false}) async {
     syncCount++;
   }
+
+  @override
+  Stream<String> get syncStatusStream => const Stream.empty();
+  @override
+  Stream<int> get syncCountStream => const Stream.empty();
+  @override
+  bool get isSyncing => false;
+  @override
+  List<SyncQueueItem> getSyncQueue() => [];
+  @override
+  Future<void> clearFailedSyncItems() async {}
+  @override
+  int getMasterRecordCount(MasterType type) => 0;
+  @override
+  bool hasCoreMasters() => true;
+  @override
+  Future<void> refreshMasterData() async {}
+  @override
+  Future<void> syncMaster(MasterType type) async {}
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakeSalesRepository salesRepo;
-  late FakeZohoApiClient zohoApi;
-  late FakeSyncWorker syncWorker;
-  late FakeHiveDatabaseService fakeDb;
+  late FakeSyncRepository syncRepo;
   late GpsCaptureBloc bloc;
 
   final testCustomer = const Customer(
@@ -199,13 +245,10 @@ void main() {
 
   setUp(() {
     salesRepo = FakeSalesRepository();
-    fakeDb = FakeHiveDatabaseService();
-    zohoApi = FakeZohoApiClient(dbService: fakeDb);
-    syncWorker = FakeSyncWorker(dbService: fakeDb, apiClient: zohoApi);
+    syncRepo = FakeSyncRepository();
     bloc = GpsCaptureBloc(
       salesRepository: salesRepo,
-      zohoApiClient: zohoApi,
-      syncWorker: syncWorker,
+      syncRepository: syncRepo,
     );
 
     // Setup Method Channel Mock for geolocator and permission_handler
@@ -289,17 +332,17 @@ void main() {
     expect(salesRepo.lastCustomerId, 'cust_01');
     expect(salesRepo.lastLatitude, 12.3456);
 
-    // Verify Zoho API updated directly
-    expect(zohoApi.lastCustomerId, 'cust_01');
-    expect(zohoApi.lastLatitude, 12.3456);
+    // Verify remote API updated directly
+    expect(salesRepo.lastRemoteCustomerId, 'cust_01');
+    expect(salesRepo.lastRemoteLatitude, 12.3456);
 
     // Verify no sync queued
     expect(salesRepo.queue.isEmpty, true);
-    expect(syncWorker.syncCount, 0);
+    expect(syncRepo.syncCount, 0);
   });
 
   test('GpsCaptureRequested in persist mode enqueues sync item if Zoho API throws', () async {
-    zohoApi.shouldThrow = true;
+    salesRepo.shouldThrowRemoteGps = true;
 
     final future = bloc.stream.firstWhere((state) => state is GpsCaptureSuccess);
     bloc.add(GpsCaptureRequested(customer: testCustomer, persist: true));
@@ -311,13 +354,13 @@ void main() {
     expect(salesRepo.lastCustomerId, 'cust_01');
 
     // Verify Zoho API did NOT complete
-    expect(zohoApi.lastCustomerId, isNull);
+    expect(salesRepo.lastRemoteCustomerId, isNull);
 
     // Verify sync was queued
     expect(salesRepo.queue.length, 1);
     expect(salesRepo.queue.first.type, 'customer_gps_update');
     expect(salesRepo.queue.first.payload['contact_id'], 'cust_01');
-    expect(syncWorker.syncCount, 1);
+    expect(syncRepo.syncCount, 1);
   });
 
   test('GpsCaptureRequested in persist mode enqueues sync item for temp_ customer automatically', () async {
@@ -333,11 +376,11 @@ void main() {
     expect(salesRepo.lastCustomerId, 'temp_cust_123');
 
     // Verify Zoho API was NOT called for temp customer
-    expect(zohoApi.lastCustomerId, isNull);
+    expect(salesRepo.lastRemoteCustomerId, isNull);
 
     // Verify sync was queued
     expect(salesRepo.queue.length, 1);
     expect(salesRepo.queue.first.payload['contact_id'], 'temp_cust_123');
-    expect(syncWorker.syncCount, 1);
+    expect(syncRepo.syncCount, 1);
   });
 }

@@ -55,11 +55,26 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
   @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
   List<Item> getItems() => [];
   @override
   Future<void> saveItems(List<Item> items) async {}
   @override
   Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
+
+  @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(Customer customer) async => (customer: customer, offlineFallback: false);
   @override
   List<SalesInvoice> getLocalInvoices() => [];
   @override
@@ -175,6 +190,9 @@ class FakeSyncRepository implements SyncRepository {
   Future<void> syncMaster(MasterType type) async {}
   @override
   bool hasCoreMasters() => true;
+
+  @override
+  int getMasterRecordCount(MasterType type) => 0;
 }
 
 void main() {

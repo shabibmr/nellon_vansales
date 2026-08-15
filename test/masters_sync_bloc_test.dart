@@ -30,6 +30,13 @@ class FakeSyncRepository implements SyncRepository {
   @override
   bool hasCoreMasters() => coreMastersResult;
 
+  Map<MasterType, int> recordCounts = {
+    for (final type in MasterType.values) type: 0,
+  };
+
+  @override
+  int getMasterRecordCount(MasterType type) => recordCounts[type] ?? 0;
+
   @override
   Future<void> triggerSync({bool forceRetryAll = false}) async {}
   @override
@@ -88,7 +95,20 @@ void main() {
     expect(state.consoleLogs.first, contains('Fetching customers...'));
   });
 
+  test('MastersSyncStarted seeds Hive record counts from the repository', () async {
+    syncRepo.recordCounts[MasterType.customers] = 12;
+    syncRepo.recordCounts[MasterType.items] = 3;
+    final started = bloc.stream.first;
+    bloc.add(MastersSyncStarted());
+    final state = await started;
+
+    expect(state.recordCounts[MasterType.customers], 12);
+    expect(state.recordCounts[MasterType.items], 3);
+    expect(state.recordCounts.length, MasterType.values.length);
+  });
+
   test('SyncOneRequested tracks individual in-flight progress and records success', () async {
+    syncRepo.recordCounts[MasterType.customers] = 42;
     final syncFuture = bloc.stream.firstWhere((s) => s.syncedTypes.contains(MasterType.customers));
     bloc.add(const SyncOneRequested(MasterType.customers));
     final state = await syncFuture;
@@ -97,6 +117,7 @@ void main() {
     expect(state.inFlight, isEmpty);
     expect(state.lastError[MasterType.customers], isNull);
     expect(state.hasCoreMasters, isTrue);
+    expect(state.recordCounts[MasterType.customers], 42);
   });
 
   test('SyncOneRequested flips canProceed when masters become available', () async {
@@ -127,6 +148,10 @@ void main() {
   });
 
   test('SyncAllRequested sequentially fetches all MasterTypes and completes with success status', () async {
+    syncRepo.recordCounts = {
+      for (final type in MasterType.values) type: 5,
+    };
+    syncRepo.recordCounts[MasterType.organization] = 1;
     final syncFuture = bloc.stream.firstWhere((s) => s.bulkSyncSuccess == true);
     bloc.add(SyncAllRequested());
     final state = await syncFuture;
@@ -137,6 +162,9 @@ void main() {
     expect(state.bulkSyncStatus, 'Master data sync completed successfully!');
     expect(state.hasCoreMasters, isTrue);
     expect(state.canProceed, isTrue);
+    expect(state.recordCounts[MasterType.organization], 1);
+    expect(state.recordCounts[MasterType.customers], 5);
+    expect(state.recordCounts.length, MasterType.values.length);
   });
 
   test('SyncAllRequested sets canProceed false when core masters still empty', () async {

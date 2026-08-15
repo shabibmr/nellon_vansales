@@ -2,6 +2,7 @@ import '../models/customer.dart';
 import '../models/organization.dart';
 import '../models/paired_printer.dart';
 import '../models/thermal_paper_size.dart';
+import '../models/thermal_ticket_preview.dart';
 import 'voucher_pdf_repository.dart';
 
 /// Contract for Bluetooth ESC/POS thermal printing (scan / pair prefs / print).
@@ -45,6 +46,17 @@ abstract class ThermalPrinterRepository {
     required Organization org,
     required Customer? customer,
     String? salespersonName,
+    String? salespersonPhone,
+  });
+
+  /// Builds the same ticket layout as [printVoucher] without sending bytes.
+  Future<ThermalTicketPreview> buildVoucherPreview({
+    required VoucherType type,
+    required dynamic voucher,
+    required Organization org,
+    required Customer? customer,
+    String? salespersonName,
+    String? salespersonPhone,
   });
 
   /// Prints a short calibration ticket showing paper size and connection info.

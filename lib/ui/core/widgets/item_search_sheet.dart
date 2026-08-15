@@ -8,10 +8,17 @@ import '../utils/currency.dart';
 import '../utils/snackbars.dart';
 import '../cubit/list_filter_cubit.dart';
 
+/// Items shown in [ItemSearchSheet]: in-stock only, unless [showAll] is on.
+List<Item> visibleSearchItems(List<Item> items, {required bool showAll}) {
+  if (showAll) return List<Item>.from(items);
+  return items.where((item) => item.stock > 0).toList();
+}
+
 /// Generic item-search bottom sheet shared by sales order, invoice, and return flows.
 ///
 /// The caller provides the pre-filtered [items] list and handles flow-specific
-/// follow-up dialogs via [onSelected].
+/// follow-up dialogs via [onSelected]. By default only items with [Item.stock]
+/// greater than zero are listed; a **Show all** checkbox reveals the rest.
 class ItemSearchSheet extends StatelessWidget {
   final List<Item> items;
   final String title;
@@ -97,6 +104,7 @@ class _ItemSearchSheetBody extends StatefulWidget {
 
 class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
   final _searchController = TextEditingController();
+  bool _showAll = false;
 
   /// Id of the item whose multi-UOM is being fetched, or null when idle.
   /// Drives the per-tile spinner and blocks concurrent taps.
@@ -168,7 +176,7 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                 child: TextField(
                   controller: _searchController,
                   autofocus: true,
@@ -184,13 +192,45 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                   ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 16, 0),
+                child: InkWell(
+                  onTap: () => setState(() => _showAll = !_showAll),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: _showAll,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (value) {
+                          setState(() => _showAll = value ?? false);
+                        },
+                      ),
+                      const Text(
+                        'Show all',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const Divider(height: 1),
               Expanded(
                 child: BlocBuilder<ListFilterCubit<Item>, ListFilterState<Item>>(
                   builder: (context, state) {
-                    final filtered = state.filteredItems;
+                    final filtered = visibleSearchItems(
+                      state.filteredItems,
+                      showAll: _showAll,
+                    );
 
                     if (filtered.isEmpty) {
+                      final emptyLabel =
+                          state.filteredItems.isNotEmpty && !_showAll
+                          ? 'No items in stock'
+                          : state.query.isEmpty
+                          ? widget.emptyMessage
+                          : 'No items match your search';
                       return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -204,9 +244,7 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              state.query.isEmpty
-                                  ? widget.emptyMessage
-                                  : 'No items match your search',
+                              emptyLabel,
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,

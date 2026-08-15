@@ -49,6 +49,15 @@ class Customer extends Equatable {
   /// Flag indicating if any local updates are waiting to sync to the server.
   final bool isPendingSync;
 
+  /// True when both latitude and longitude are present.
+  bool get hasGps => latitude != null && longitude != null;
+
+  /// True when a non-blank phone number is on file.
+  bool get hasPhone => phone.trim().isNotEmpty;
+
+  /// True when a non-blank tax registration number is on file.
+  bool get hasTrn => trn.trim().isNotEmpty;
+
   /// Creates a [Customer] record.
   const Customer({
     required this.id,
@@ -119,4 +128,37 @@ class Customer extends Equatable {
         longitude,
         isPendingSync,
       ];
+}
+
+/// Which of GPS / phone / TRN are still missing on a [Customer].
+class CustomerMissingFields {
+  final bool gps;
+  final bool phone;
+  final bool trn;
+
+  const CustomerMissingFields({
+    required this.gps,
+    required this.phone,
+    required this.trn,
+  });
+
+  factory CustomerMissingFields.of(Customer customer) {
+    return CustomerMissingFields(
+      gps: !customer.hasGps,
+      phone: !customer.hasPhone,
+      trn: !customer.hasTrn,
+    );
+  }
+
+  bool get any => gps || phone || trn;
+
+  bool get onlyGps => gps && !phone && !trn;
+
+  /// Dialog title that names only what is still required.
+  String get dialogTitle {
+    if (onlyGps) return 'Add GPS Location';
+    if (phone && !gps && !trn) return 'Add Phone Number';
+    if (trn && !gps && !phone) return 'Add TRN Number';
+    return 'Complete Customer Details';
+  }
 }

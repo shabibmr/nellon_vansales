@@ -94,7 +94,6 @@ Future<void> setupDependencyInjection() async {
   // 8. Bluetooth ESC/POS thermal printer (2" / 4" tickets)
   final thermalPrinterService = ThermalPrinterService(
     dbService: sl<HiveDatabaseService>(),
-    apiClient: sl<ZohoApiClient>(),
   );
   sl.registerLazySingleton<ThermalPrinterService>(() => thermalPrinterService);
   sl.registerLazySingleton<ThermalPrinterRepository>(

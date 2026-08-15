@@ -10,9 +10,7 @@ import '../utils/currency.dart';
 import '../utils/snackbars.dart';
 import '../cubit/list_filter_cubit.dart';
 import '../bloc/gps_capture_bloc.dart';
-import '../bloc/gps_capture_event.dart';
-import '../bloc/gps_capture_state.dart';
-import '../utils/permission_dialogs.dart';
+import 'customer_missing_fields_dialog.dart';
 
 /// Generic customer-selector bottom sheet shared by all editor flows.
 class CustomerSelectorSheet extends StatelessWidget {
@@ -120,10 +118,37 @@ class _CustomerSelectorSheetBody extends StatefulWidget {
 class _CustomerSelectorSheetBodyState extends State<_CustomerSelectorSheetBody> {
   final _searchController = TextEditingController();
 
+  /// Id of the customer whose TRN is being fetched, or null when idle.
+  String? _resolvingCustomerId;
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Fetches TRN / address (`GET /contacts/{id}`) before notifying the caller.
+  Future<Customer> _resolveDetails(Customer customer) async {
+    if (_resolvingCustomerId != null) return customer;
+    setState(() => _resolvingCustomerId = customer.id);
+    var resolved = customer;
+    var offlineFallback = false;
+    try {
+      final result = await context
+          .read<SalesRepository>()
+          .resolveCustomerDetails(customer);
+      resolved = result.customer;
+      offlineFallback = result.offlineFallback;
+    } finally {
+      if (mounted) setState(() => _resolvingCustomerId = null);
+    }
+    if (mounted && offlineFallback) {
+      showErrorSnackBar(
+        context,
+        "Couldn't load customer TRN — will retry when online.",
+      );
+    }
+    return resolved;
   }
 
   @override
@@ -249,7 +274,15 @@ class _CustomerSelectorSheetBodyState extends State<_CustomerSelectorSheetBody> 
                             overflow: TextOverflow.ellipsis,
                           ),
                           isThreeLine: false,
-                          trailing: customer.outstandingBalance > 0
+                          trailing: _resolvingCustomerId == customer.id
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : customer.outstandingBalance > 0
                               ? Text(
                                   'Outstanding: ${formatCurrency(customer.outstandingBalance, cs)}',
                                   style: const TextStyle(
@@ -259,22 +292,24 @@ class _CustomerSelectorSheetBodyState extends State<_CustomerSelectorSheetBody> 
                                   ),
                                 )
                               : null,
-                          onTap: () async {
+                          onTap: _resolvingCustomerId != null
+                              ? null
+                              : () async {
                             final navigator = Navigator.of(context);
                             final gpsBloc = context.read<GpsCaptureBloc>();
-                            Customer toSelect = customer;
+                            Customer toSelect =
+                                await _resolveDetails(customer);
+                            if (!context.mounted) return;
 
-                            if (customer.latitude == null ||
-                                customer.longitude == null) {
-                              final enriched = await _showGpsCapturePrompt(
+                            if (CustomerMissingFields.of(toSelect).any) {
+                              final enriched =
+                                  await showCustomerMissingFieldsDialog(
                                 context,
-                                gpsBloc,
-                                customer,
-                                isDark,
+                                gpsBloc: gpsBloc,
+                                customer: toSelect,
                               );
-                              if (enriched != null) {
-                                toSelect = enriched;
-                              }
+                              if (enriched == null) return;
+                              toSelect = enriched;
                             }
 
                             widget.onSelected(toSelect);
@@ -308,86 +343,4 @@ String _customerAddressOrLocation(Customer customer) {
   if (company.isNotEmpty) return company;
 
   return 'No address on file';
-}
-
-/// Shows a modal prompt offering to capture GPS for a customer that is missing it.
-/// On successful capture: updates local + attempts immediate Zoho update (via updateCustomerGps).
-/// Returns the enriched Customer (with lat/lng) or null if user skipped / failed.
-Future<Customer?> _showGpsCapturePrompt(
-  BuildContext context,
-  GpsCaptureBloc gpsBloc,
-  Customer customer,
-  bool isDark,
-) {
-  return showDialog<Customer>(
-    context: context,
-    barrierDismissible: false,
-    builder: (dialogCtx) => BlocProvider.value(
-      value: gpsBloc,
-      child: BlocListener<GpsCaptureBloc, GpsCaptureState>(
-        listenWhen: (prev, curr) =>
-            curr is GpsCaptureSuccess ||
-            curr is GpsCapturePermissionDenied ||
-            curr is GpsCaptureServiceDisabled ||
-            curr is GpsCaptureFailure,
-        listener: (ctx, state) {
-          if (state is GpsCaptureSuccess) {
-            Navigator.of(dialogCtx).pop(state.enrichedCustomer);
-          } else if (state is GpsCapturePermissionDenied) {
-            showLocationPermissionSettingsDialog(context);
-          } else if (state is GpsCaptureServiceDisabled) {
-            showEnableLocationServiceDialog(context);
-          } else if (state is GpsCaptureFailure) {
-            showErrorSnackBar(context, 'Capture failed: ${state.message}');
-          }
-        },
-        child: BlocBuilder<GpsCaptureBloc, GpsCaptureState>(
-          builder: (ctx, state) {
-            final capturing = state is GpsCaptureInProgress;
-            return AlertDialog(
-              title: const Text('Add GPS Location?'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${customer.name} (${customer.companyName})',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'This customer has no GPS location yet. Capture the current device location now to enrich the record and push it to Zoho Books.',
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(null), // skip
-                  child: const Text('SKIP'),
-                ),
-                FilledButton.icon(
-                  onPressed: capturing
-                      ? null
-                      : () => ctx.read<GpsCaptureBloc>().add(
-                            GpsCaptureRequested(
-                              customer: customer,
-                              persist: true,
-                            ),
-                          ),
-                  icon: capturing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.gps_fixed),
-                  label: const Text('CAPTURE GPS'),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    ),
-  );
 }

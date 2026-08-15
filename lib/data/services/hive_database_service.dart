@@ -244,16 +244,22 @@ class HiveDatabaseService {
     final rawList = _masterBox.get('customers', defaultValue: []);
     return (rawList as List)
         .map<Customer>(
-          (item) => CustomerModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item)),
+          (item) => _applyCachedCustomerDetail(
+            CustomerModel.fromJson(
+              Map<String, dynamic>.from(jsonDecode(item)),
+            ),
           ),
         )
         .toList();
   }
 
   /// Saves or refreshes customer master lists.
+  ///
+  /// Re-applies any lazily fetched TRN / address from [saveCustomerDetail]
+  /// so a full masters replace does not wipe print-ready fields.
   Future<void> saveCustomers(List<Customer> customers) async {
-    final serialized = customers
+    final merged = customers.map(_applyCachedCustomerDetail).toList();
+    final serialized = merged
         .map((c) => jsonEncode(CustomerModel.fromDomain(c).toJson()))
         .toList();
     await _masterBox.put('customers', serialized);
@@ -265,6 +271,57 @@ class HiveDatabaseService {
   Customer? getCustomerById(String id) {
     _customerCache ??= {for (final c in getCustomers()) c.id: c};
     return _customerCache![id];
+  }
+
+  static const _customerDetailsKey = 'customer_details';
+
+  Map<String, Map<String, String>> _readCustomerDetails() {
+    final raw = _masterBox.get(_customerDetailsKey);
+    if (raw == null) return {};
+    final decoded = raw is String ? jsonDecode(raw) : raw;
+    if (decoded is! Map) return {};
+    return decoded.map((key, value) {
+      final inner = value is Map
+          ? Map<String, dynamic>.from(value)
+          : <String, dynamic>{};
+      return MapEntry(key.toString(), {
+        'trn': (inner['trn'] ?? '').toString(),
+        'address': (inner['address'] ?? '').toString(),
+      });
+    });
+  }
+
+  /// Whether [GET /contacts/{id}] has already been fetched for this customer.
+  ///
+  /// A present-but-empty TRN means "checked, none exists" — skip re-fetch.
+  bool hasCustomerDetail(String id) => _readCustomerDetails().containsKey(id);
+
+  /// Cached TRN / address from a prior contact-detail fetch, if any.
+  ({String trn, String address})? getCustomerDetail(String id) {
+    final entry = _readCustomerDetails()[id];
+    if (entry == null) return null;
+    return (trn: entry['trn'] ?? '', address: entry['address'] ?? '');
+  }
+
+  /// Persists a contact-detail result, including empty TRN.
+  Future<void> saveCustomerDetail(
+    String id, {
+    required String trn,
+    required String address,
+  }) async {
+    final all = _readCustomerDetails();
+    all[id] = {'trn': trn, 'address': address};
+    await _masterBox.put(_customerDetailsKey, jsonEncode(all));
+  }
+
+  Customer _applyCachedCustomerDetail(Customer customer) {
+    final cached = getCustomerDetail(customer.id);
+    if (cached == null) return customer;
+    return customer.copyWith(
+      trn: customer.trn.trim().isNotEmpty ? customer.trn : cached.trn,
+      address:
+          customer.address.trim().isNotEmpty ? customer.address : cached.address,
+    );
   }
 
   /// Replaces a single customer by id. No-op when [customer.id] is not in Hive.
@@ -296,6 +353,36 @@ class HiveDatabaseService {
     final newList = List<Customer>.from(current);
     newList[index] = updated;
     await saveCustomers(newList);
+  }
+
+  /// Updates phone and/or TRN for a specific customer and persists.
+  /// If the customer is not found, this is a no-op.
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {
+    final current = getCustomers();
+    final index = current.indexWhere((c) => c.id == customerId);
+    if (index < 0) return;
+
+    final existing = current[index];
+    final updated = existing.copyWith(
+      phone: phone ?? existing.phone,
+      trn: trn ?? existing.trn,
+    );
+    final newList = List<Customer>.from(current);
+    newList[index] = updated;
+    await saveCustomers(newList);
+
+    if (trn != null) {
+      final cached = getCustomerDetail(customerId);
+      await saveCustomerDetail(
+        customerId,
+        trn: trn,
+        address: cached?.address ?? updated.address,
+      );
+    }
   }
 
   /// Retrieves the list of synced master stocked inventory products.
@@ -394,22 +481,40 @@ class HiveDatabaseService {
   }
 
   /// Retrieves list of synced warehouses.
+  ///
+  /// Uses `.map<Warehouse>` so the list is a true [List]<[Warehouse]> at
+  /// runtime. Without the type arg, Dart builds a `List<WarehouseModel>`;
+  /// `firstWhere(orElse: () => Warehouse(...))` then throws
+  /// `type 'Warehouse' is not a subtype of type 'WarehouseModel'`.
   List<Warehouse> getWarehouses() {
     final rawList = _masterBox.get('warehouses', defaultValue: []);
     return (rawList as List)
-        .map(
+        .map<Warehouse>(
           (w) =>
               WarehouseModel.fromJson(Map<String, dynamic>.from(jsonDecode(w))),
         )
         .toList();
   }
 
-  /// Saves master warehouses list.
+  /// Saves master warehouses list and refreshes [primaryWarehouseId].
+  ///
+  /// Locations master sync and login bind both write through here. Picks the
+  /// first `isPrimary` location, else the first location, else clears the key.
   Future<void> saveWarehouses(List<Warehouse> warehouses) async {
     final serialized = warehouses
         .map((w) => jsonEncode(WarehouseModel.fromDomain(w).toJson()))
         .toList();
     await _masterBox.put('warehouses', serialized);
+
+    Warehouse? primary;
+    for (final w in warehouses) {
+      if (w.isPrimary) {
+        primary = w;
+        break;
+      }
+    }
+    primary ??= warehouses.isNotEmpty ? warehouses.first : null;
+    await setPrimaryWarehouseId(primary?.id);
   }
 
   /// Retrieves the master list of all synced Zoho Books salespersons (sales users).
@@ -539,6 +644,18 @@ class HiveDatabaseService {
       jsonEncode(OrganizationModel.fromDomain(org).toJson()),
     );
   }
+
+  /// Number of JSON-encoded records stored under [key] in the master box.
+  ///
+  /// Reads the raw list only — does not deserialize models. Returns 0 when
+  /// the key is missing or is not a list (e.g. the single organization object).
+  int countMasterList(String key) {
+    final raw = _masterBox.get(key, defaultValue: const []);
+    return raw is List ? raw.length : 0;
+  }
+
+  /// Whether [key] has any persisted value in the master box.
+  bool hasMasterValue(String key) => _masterBox.containsKey(key);
 
   /// Retrieves synced outstanding customer invoices snapshot.
   ///
@@ -977,6 +1094,14 @@ class HiveDatabaseService {
     }).toList();
   }
 
+  /// Retrieves every locally-cached stock transfer regardless of the active
+  /// session's location. For internal post-sync bookkeeping (patching a
+  /// record's Zoho id / pending flag right after a push succeeds) — that
+  /// write must never silently no-op just because the record's location
+  /// happens not to match the current session.
+  List<StockTransfer> getAllLocalStockTransfersUnfiltered() =>
+      _getAllLocalStockTransfers();
+
   /// Caches a newly created stock transfer locally and adjusts the van's local
   /// item stock levels: [StockTransferDirection.load] increases stock (Issue
   /// to Van), [StockTransferDirection.unload] decreases it (Stock Unloading).
@@ -998,7 +1123,14 @@ class HiveDatabaseService {
       if (itemIndex < 0) continue;
       final existingItem = localItems[itemIndex];
       final updatedStock = stamped.direction == StockTransferDirection.load
-          ? existingItem.stock + line.quantity
+          // New stock = current stock (as shown to the user when they
+          // planned this transfer) + qty transferred. `line.item.stock` is
+          // that baseline — the grid stamps StockTransferRow.item (and thus
+          // this line's item) from the same fetch that set currentStock, so
+          // it must be used here instead of re-reading `existingItem.stock`,
+          // which reflects whatever the cache holds *now* and can have
+          // drifted from what the user actually saw.
+          ? line.item.stock + line.quantity
           : deductStock(
               itemId: existingItem.id,
               itemName: existingItem.name,
@@ -1024,6 +1156,23 @@ class HiveDatabaseService {
         .toList();
     await _localHistoryBox.put('stock_transfers', serialized);
     await saveItems(localItems);
+  }
+
+  /// Upserts [transfer] into the local stock-transfer cache without touching
+  /// item stock levels — for post-sync bookkeeping only (patching the Zoho
+  /// id / pending flag once a push succeeds). Creating a transfer must go
+  /// through [saveLocalStockTransfer] instead, which applies the stock
+  /// adjustment; calling it again here would double-apply it.
+  Future<void> updateStockTransferRecord(StockTransfer transfer) async {
+    final current = _getAllLocalStockTransfers();
+    final index = current.indexWhere((t) => t.id == transfer.id);
+    if (index < 0) return;
+    current[index] = StockTransferModel.fromDomain(transfer);
+
+    final serialized = current
+        .map((t) => jsonEncode(StockTransferModel.fromDomain(t).toJson()))
+        .toList();
+    await _localHistoryBox.put('stock_transfers', serialized);
   }
 
   /// Merges a freshly downloaded set of remote stock transfers into the local

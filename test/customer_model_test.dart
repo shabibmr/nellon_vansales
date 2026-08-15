@@ -42,6 +42,16 @@ void main() {
       expect(customer.trn, isEmpty);
     });
 
+    test('falls back to mobile when phone is empty', () {
+      final customer = CustomerModel.fromJson({
+        'contact_id': 'c1',
+        'contact_name': 'A',
+        'phone': '',
+        'mobile': '0501234567',
+      });
+      expect(customer.phone, '0501234567');
+    });
+
     test('list-shaped row without tax_reg_no has empty TRN', () {
       final customer = CustomerModel.fromJson({
         'contact_id': 'cust_01',

@@ -5,6 +5,7 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/paired_printer.dart';
 import '../../../../domain/models/thermal_paper_size.dart';
+import '../../../../domain/models/thermal_ticket_preview.dart';
 import '../../../../domain/repositories/thermal_printer_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -13,13 +14,13 @@ import 'thermal_printer_state.dart';
 /// App-level cubit for Bluetooth ESC/POS printer settings and printing.
 class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
   ThermalPrinterCubit({required ThermalPrinterRepository repository})
-      : _repo = repository,
-        super(
-          ThermalPrinterState(
-            paperSize: repository.paperSize,
-            preferredPrinter: repository.preferredPrinter,
-          ),
-        );
+    : _repo = repository,
+      super(
+        ThermalPrinterState(
+          paperSize: repository.paperSize,
+          preferredPrinter: repository.preferredPrinter,
+        ),
+      );
 
   final ThermalPrinterRepository _repo;
 
@@ -39,25 +40,29 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       ),
     );
     try {
-      final permission = await _repo
-          .isBluetoothPermissionGranted()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      final permission = await _repo.isBluetoothPermissionGranted().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => false,
+      );
 
       bool btOn = false;
       bool connected = false;
       List<PairedPrinter> bonded = const [];
 
       if (permission) {
-        btOn = await _repo
-            .isBluetoothOn()
-            .timeout(const Duration(seconds: 3), onTimeout: () => false);
+        btOn = await _repo.isBluetoothOn().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => false,
+        );
         if (btOn) {
-          connected = await _repo
-              .isConnected
-              .timeout(const Duration(seconds: 3), onTimeout: () => false);
-          bonded = await _repo
-              .getBondedDevices()
-              .timeout(const Duration(seconds: 3), onTimeout: () => const []);
+          connected = await _repo.isConnected.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => false,
+          );
+          bonded = await _repo.getBondedDevices().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => const [],
+          );
         }
       }
 
@@ -74,10 +79,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       );
     } catch (e) {
       emit(
-        state.copyWith(
-          isLoading: false,
-          errorMessage: userFacingMessage(e),
-        ),
+        state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)),
       );
     }
   }
@@ -95,8 +97,10 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       ),
     );
     try {
-      final granted = await _requestBluetoothPermission()
-          .timeout(const Duration(seconds: 10), onTimeout: () => false);
+      final granted = await _requestBluetoothPermission().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => false,
+      );
       emit(
         state.copyWith(
           isLoading: false,
@@ -137,13 +141,17 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     var permitted = await _repo.isBluetoothPermissionGranted();
     if (permitted) {
       if (!state.permissionGranted) {
-        emit(state.copyWith(permissionGranted: true, clearNeedsAppSettings: true));
+        emit(
+          state.copyWith(permissionGranted: true, clearNeedsAppSettings: true),
+        );
       }
       return true;
     }
     permitted = await _requestBluetoothPermission();
     if (permitted) {
-      emit(state.copyWith(permissionGranted: true, clearNeedsAppSettings: true));
+      emit(
+        state.copyWith(permissionGranted: true, clearNeedsAppSettings: true),
+      );
       return true;
     }
     emit(
@@ -196,10 +204,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       );
     } catch (e) {
       emit(
-        state.copyWith(
-          isLoading: false,
-          errorMessage: userFacingMessage(e),
-        ),
+        state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)),
       );
     }
   }
@@ -261,12 +266,32 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     }
   }
 
+  /// Builds a visual ticket preview. Does not connect or change print state.
+  Future<ThermalTicketPreview> previewVoucher({
+    required VoucherType type,
+    required dynamic voucher,
+    required Organization org,
+    required Customer? customer,
+    String? salespersonName,
+    String? salespersonPhone,
+  }) {
+    return _repo.buildVoucherPreview(
+      type: type,
+      voucher: voucher,
+      org: org,
+      customer: customer,
+      salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
+    );
+  }
+
   Future<void> printVoucher({
     required VoucherType type,
     required dynamic voucher,
     required Organization org,
     required Customer? customer,
     String? salespersonName,
+    String? salespersonPhone,
   }) async {
     emit(
       state.copyWith(
@@ -287,6 +312,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
         org: org,
         customer: customer,
         salespersonName: salespersonName,
+        salespersonPhone: salespersonPhone,
       );
       emit(
         state.copyWith(

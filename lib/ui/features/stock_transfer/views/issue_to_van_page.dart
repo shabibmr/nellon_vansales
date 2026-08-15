@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/utils/date_filter.dart';
 import '../../../../ui/core/utils/quantity_format.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/editor_footer.dart';
@@ -14,9 +16,8 @@ import '../bloc/stock_transfer_bloc.dart';
 /// Issue-to-Van planning grid: loads stock from the organization's default
 /// warehouse into the current van location.
 ///
-/// Shows a 5-column grid (Current stock | Today's Invoices | Subtotal |
-/// Extra to load | Grand total) so the salesperson can decide how much new
-/// stock to bring aboard on top of what's already loaded and already sold.
+/// Shows current van stock, extra to load, and resulting grand total. The
+/// transfer date is displayed read-only (today).
 class IssueToVanPage extends StatefulWidget {
   const IssueToVanPage({super.key});
 
@@ -27,6 +28,8 @@ class IssueToVanPage extends StatefulWidget {
 class _IssueToVanPageState extends State<IssueToVanPage> {
   final TextEditingController _notesController = TextEditingController();
   final Map<String, TextEditingController> _extraControllers = {};
+  final DateTime _issueDate = todayDate();
+  static final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
 
   @override
   void dispose() {
@@ -194,6 +197,7 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                 _RouteHeader(
                   fromLabel: state.defaultWarehouse.name,
                   toLabel: state.currentLocation.name,
+                  dateLabel: _dateFormat.format(_issueDate),
                   isDark: isDark,
                 ),
                 if (!state.isLiveData)
@@ -210,6 +214,25 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.warningAmber,
+                      ),
+                    ),
+                  ),
+                if (!state.isLoading && state.defaultWarehouse.id.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    color: AppTheme.errorRose.withValues(alpha: 0.12),
+                    child: const Text(
+                      'Primary location is not configured in Zoho. '
+                      'Contact your administrator — Issue to Van is disabled '
+                      'until this is fixed.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.errorRose,
                       ),
                     ),
                   ),
@@ -244,7 +267,9 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                   ],
                   buttonLabel: 'ISSUE TO VAN',
                   buttonColor: AppTheme.primaryIndigo,
-                  onSave: state.isLoading || state.totalTransferQty <= 0
+                  onSave: state.isLoading ||
+                          state.totalTransferQty <= 0 ||
+                          state.defaultWarehouse.id.isEmpty
                       ? null
                       : () {
                           context.read<StockTransferBloc>().add(
@@ -392,11 +417,9 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
       columnWidths: const {
         0: FixedColumnWidth(180),
         1: FixedColumnWidth(90),
-        2: FixedColumnWidth(90),
+        2: FixedColumnWidth(110),
         3: FixedColumnWidth(90),
-        4: FixedColumnWidth(110),
-        5: FixedColumnWidth(90),
-        6: FixedColumnWidth(48),
+        4: FixedColumnWidth(48),
       },
       children: [
         TableRow(
@@ -405,11 +428,9 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
           ),
           children: [
             headerCell('Item'),
-            headerCell('Current\n(1)', align: Alignment.center),
-            headerCell('Invoices\n(2)', align: Alignment.center),
-            headerCell('Total\n(3)', align: Alignment.center),
-            headerCell('Extra\n(4)', align: Alignment.center),
-            headerCell('Grand\n(5)', align: Alignment.center),
+            headerCell('Current', align: Alignment.center),
+            headerCell('Extra', align: Alignment.center),
+            headerCell('Grand', align: Alignment.center),
             const SizedBox.shrink(),
           ],
         ),
@@ -427,13 +448,6 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
                 align: Alignment.centerLeft,
               ),
               dataCell(Text(formatQuantity(row.currentStock))),
-              dataCell(Text(formatQuantity(row.invoiceQty))),
-              dataCell(
-                Text(
-                  formatQuantity(row.subtotal),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
               dataCell(_buildExtraQtyCell(context, row)),
               dataCell(
                 Text(
@@ -469,16 +483,21 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
 class _RouteHeader extends StatelessWidget {
   final String fromLabel;
   final String toLabel;
+  final String dateLabel;
   final bool isDark;
 
   const _RouteHeader({
     required this.fromLabel,
     required this.toLabel,
+    required this.dateLabel,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
+    final secondary = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -492,27 +511,61 @@ class _RouteHeader extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Text(
-              fromLabel,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-              overflow: TextOverflow.ellipsis,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  fromLabel,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_rounded,
+                size: 18,
+                color: AppTheme.primaryIndigo,
+              ),
+              Expanded(
+                child: Text(
+                  toLabel,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-          const Icon(
-            Icons.arrow_forward_rounded,
-            size: 18,
-            color: AppTheme.primaryIndigo,
-          ),
-          Expanded(
-            child: Text(
-              toLabel,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-              overflow: TextOverflow.ellipsis,
-            ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(Icons.event_outlined, size: 16, color: secondary),
+              const SizedBox(width: 6),
+              Text(
+                'Date',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: secondary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                dateLabel,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -37,4 +37,9 @@ abstract class SyncRepository {
 
   /// Returns true if essential master data lists (Customers, Items, Routes) are populated in local cache.
   bool hasCoreMasters();
+
+  /// Number of records currently stored in Hive for [type].
+  ///
+  /// Organization is a single object (0 or 1). Other types are list lengths.
+  int getMasterRecordCount(MasterType type);
 }

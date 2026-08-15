@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
@@ -9,10 +12,12 @@ import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../core/cubit/salesperson_cubit.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/permission_dialogs.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../thermal_print/cubit/thermal_printer_cubit.dart';
 import '../../thermal_print/cubit/thermal_printer_state.dart';
+import '../../thermal_print/widgets/thermal_print_preview_dialog.dart';
 import '../bloc/voucher_pdf_bloc.dart';
 import '../bloc/voucher_pdf_event.dart';
 import '../bloc/voucher_pdf_state.dart';
@@ -74,29 +79,74 @@ class _VoucherPdfActionsBody extends StatelessWidget {
     };
   }
 
-  void _printThermal(BuildContext context) {
+  ({
+    Organization org,
+    Customer? customer,
+    String? salespersonName,
+    String? salespersonPhone,
+  })?
+  _thermalContext(BuildContext context) {
     final org = context.org.state;
     if (org == null) {
       showErrorSnackBar(
         context,
         'Organization data not loaded — please sync first',
       );
-      return;
+      return null;
     }
     final customerId = _customerIdFor(type, voucher);
     final customers = context.read<SalesRepository>().getCustomers();
     final customer = customerId != null
         ? customers.where((c) => c.id == customerId).firstOrNull
         : null;
-    final salesperson = context.read<SalespersonCubit>().state?.name;
+    final salesperson = context.read<SalespersonCubit>().state;
+    return (
+      org: org,
+      customer: customer,
+      salespersonName: salesperson?.name,
+      salespersonPhone: salesperson?.phone,
+    );
+  }
 
+  void _printThermal(BuildContext context) {
+    final args = _thermalContext(context);
+    if (args == null) return;
     context.read<ThermalPrinterCubit>().printVoucher(
-          type: type,
-          voucher: voucher,
-          org: org,
-          customer: customer,
-          salespersonName: salesperson,
-        );
+      type: type,
+      voucher: voucher,
+      org: args.org,
+      customer: args.customer,
+      salespersonName: args.salespersonName,
+      salespersonPhone: args.salespersonPhone,
+    );
+  }
+
+  Future<void> _previewThermal(BuildContext context) async {
+    final args = _thermalContext(context);
+    if (args == null) return;
+    final cubit = context.read<ThermalPrinterCubit>();
+    await HapticFeedback.mediumImpact();
+    try {
+      final preview = await cubit.previewVoucher(
+        type: type,
+        voucher: voucher,
+        org: args.org,
+        customer: args.customer,
+        salespersonName: args.salespersonName,
+        salespersonPhone: args.salespersonPhone,
+      );
+      if (!context.mounted) return;
+      await ThermalPrintPreviewDialog.show(
+        context,
+        preview: preview,
+        onPrint: () {
+          if (context.mounted) _printThermal(context);
+        },
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      showErrorSnackBar(context, userFacingMessage(e));
+    }
   }
 
   @override
@@ -200,11 +250,11 @@ class _VoucherPdfActionsBody extends StatelessWidget {
                     compact: compact,
                     onPressed: () {
                       context.read<VoucherPdfBloc>().add(
-                            GenerateVoucherPdfPreviewRequested(
-                              type: type,
-                              voucher: voucher,
-                            ),
-                          );
+                        GenerateVoucherPdfPreviewRequested(
+                          type: type,
+                          voucher: voucher,
+                        ),
+                      );
                     },
                   ),
                   _buildActionButton(
@@ -216,11 +266,8 @@ class _VoucherPdfActionsBody extends StatelessWidget {
                     compact: compact,
                     onPressed: () {
                       context.read<VoucherPdfBloc>().add(
-                            PrintVoucherPdfRequested(
-                              type: type,
-                              voucher: voucher,
-                            ),
-                          );
+                        PrintVoucherPdfRequested(type: type, voucher: voucher),
+                      );
                     },
                   ),
                   _buildActionButton(
@@ -230,7 +277,10 @@ class _VoucherPdfActionsBody extends StatelessWidget {
                     color: AppTheme.primaryDarkIndigo,
                     isDisabled: isLoading,
                     compact: compact,
+                    tooltip: 'Tap to print · Long-press to preview',
+                    buttonKey: const Key('thermalPrintButton'),
                     onPressed: () => _printThermal(context),
+                    onLongPress: () => _previewThermal(context),
                   ),
                   _buildActionButton(
                     context: context,
@@ -241,11 +291,8 @@ class _VoucherPdfActionsBody extends StatelessWidget {
                     compact: compact,
                     onPressed: () {
                       context.read<VoucherPdfBloc>().add(
-                            ShareVoucherPdfRequested(
-                              type: type,
-                              voucher: voucher,
-                            ),
-                          );
+                        ShareVoucherPdfRequested(type: type, voucher: voucher),
+                      );
                     },
                   ),
                   _buildActionButton(
@@ -257,11 +304,8 @@ class _VoucherPdfActionsBody extends StatelessWidget {
                     compact: compact,
                     onPressed: () {
                       context.read<VoucherPdfBloc>().add(
-                            EmailVoucherPdfRequested(
-                              type: type,
-                              voucher: voucher,
-                            ),
-                          );
+                        EmailVoucherPdfRequested(type: type, voucher: voucher),
+                      );
                     },
                   ),
                   _buildActionButton(
@@ -273,11 +317,11 @@ class _VoucherPdfActionsBody extends StatelessWidget {
                     compact: compact,
                     onPressed: () {
                       context.read<VoucherPdfBloc>().add(
-                            WhatsAppVoucherPdfRequested(
-                              type: type,
-                              voucher: voucher,
-                            ),
-                          );
+                        WhatsAppVoucherPdfRequested(
+                          type: type,
+                          voucher: voucher,
+                        ),
+                      );
                     },
                   ),
                 ],
@@ -356,8 +400,21 @@ class _VoucherPdfActionsBody extends StatelessWidget {
     required Color color,
     required bool isDisabled,
     required VoidCallback onPressed,
+    VoidCallback? onLongPress,
+    String? tooltip,
+    Key? buttonKey,
     bool compact = false,
   }) {
+    Widget button = ElevatedButton.icon(
+      key: buttonKey,
+      onPressed: isDisabled ? null : onPressed,
+      onLongPress: isDisabled || onLongPress == null ? null : onLongPress,
+      icon: Icon(icon, size: compact ? 14 : 16),
+      label: Text(label),
+    );
+    if (tooltip != null) {
+      button = Tooltip(message: tooltip, child: button);
+    }
     return Theme(
       data: Theme.of(context).copyWith(
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -368,8 +425,9 @@ class _VoucherPdfActionsBody extends StatelessWidget {
               horizontal: compact ? 10 : 14,
               vertical: compact ? 8 : 10,
             ),
-            visualDensity:
-                compact ? VisualDensity.compact : VisualDensity.standard,
+            visualDensity: compact
+                ? VisualDensity.compact
+                : VisualDensity.standard,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(compact ? 8 : 10),
             ),
@@ -380,11 +438,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
           ),
         ),
       ),
-      child: ElevatedButton.icon(
-        onPressed: isDisabled ? null : onPressed,
-        icon: Icon(icon, size: compact ? 14 : 16),
-        label: Text(label),
-      ),
+      child: button,
     );
   }
 }

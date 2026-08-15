@@ -4,25 +4,20 @@ import '../../domain/models/customer.dart';
 import '../../domain/models/organization.dart';
 import '../../domain/models/paired_printer.dart';
 import '../../domain/models/thermal_paper_size.dart';
+import '../../domain/models/thermal_ticket_preview.dart';
 import '../../domain/repositories/thermal_printer_repository.dart';
 import '../../domain/repositories/voucher_pdf_repository.dart';
-import '../models/customer_model.dart';
 import 'esc_pos/voucher_ticket_builder.dart';
 import 'hive_database_service.dart';
-import 'zoho_api_client.dart';
 
 /// Bluetooth ESC/POS printer implementation for Android van devices.
 ///
 /// Persists preferred printer and paper size in Hive master box.
 class ThermalPrinterService implements ThermalPrinterRepository {
-  ThermalPrinterService({
-    required HiveDatabaseService dbService,
-    required ZohoApiClient apiClient,
-  })  : _db = dbService,
-        _api = apiClient;
+  ThermalPrinterService({required HiveDatabaseService dbService})
+    : _db = dbService;
 
   final HiveDatabaseService _db;
-  final ZohoApiClient _api;
 
   @override
   Future<bool> isBluetoothOn() => PrintBluetoothThermal.bluetoothEnabled;
@@ -35,9 +30,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
   Future<List<PairedPrinter>> getBondedDevices() async {
     final devices = await PrintBluetoothThermal.pairedBluetooths;
     return devices
-        .map(
-          (d) => PairedPrinter(name: d.name, macAddress: d.macAdress),
-        )
+        .map((d) => PairedPrinter(name: d.name, macAddress: d.macAdress))
         .where((p) => p.macAddress.isNotEmpty)
         .toList();
   }
@@ -133,43 +126,38 @@ class ThermalPrinterService implements ThermalPrinterRepository {
     required Organization org,
     required Customer? customer,
     String? salespersonName,
+    String? salespersonPhone,
   }) async {
-    final resolved = await _enrichCustomerForPrint(customer);
     final bytes = await VoucherTicketBuilder.build(
       type: type,
       voucher: voucher,
       org: org,
-      customer: resolved,
+      customer: customer,
       paperSize: paperSize,
       salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
     );
     await _writeBytes(bytes);
   }
 
-  /// List contacts never include tax_reg_no. One detail GET fills Hive when online.
-  Future<Customer?> _enrichCustomerForPrint(Customer? customer) async {
-    if (customer == null || customer.id.isEmpty) return customer;
-    if (customer.trn.trim().isNotEmpty) return customer;
-
-    try {
-      final detail = await _api.fetchContactDetail(customer.id);
-      if (detail.isEmpty) return customer;
-      final parsed = CustomerModel.fromJson(detail);
-      final trn = parsed.trn.trim();
-      final address = parsed.address.trim();
-      if (trn.isEmpty && address.isEmpty) return customer;
-
-      final updated = customer.copyWith(
-        trn: trn.isNotEmpty ? trn : customer.trn,
-        address: customer.address.trim().isEmpty && address.isNotEmpty
-            ? address
-            : customer.address,
-      );
-      await _db.upsertCustomer(updated);
-      return updated;
-    } catch (_) {
-      return customer;
-    }
+  @override
+  Future<ThermalTicketPreview> buildVoucherPreview({
+    required VoucherType type,
+    required dynamic voucher,
+    required Organization org,
+    required Customer? customer,
+    String? salespersonName,
+    String? salespersonPhone,
+  }) {
+    return VoucherTicketBuilder.buildPreview(
+      type: type,
+      voucher: voucher,
+      org: org,
+      customer: customer,
+      paperSize: paperSize,
+      salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
+    );
   }
 
   @override

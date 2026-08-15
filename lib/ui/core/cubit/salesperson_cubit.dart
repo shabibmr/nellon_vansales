@@ -21,6 +21,13 @@ class SalespersonCubit extends Cubit<Salesperson?> {
     return n;
   }
 
+  /// Session phone of the active salesperson, if resolved.
+  String? get phone {
+    final p = state?.phone?.trim();
+    if (p == null || p.isEmpty) return null;
+    return p;
+  }
+
   /// Re-reads the cached active salesperson from Hive (e.g. after login resolution).
   void refresh(HiveDatabaseService db) => emit(db.getCurrentSalesperson());
 }

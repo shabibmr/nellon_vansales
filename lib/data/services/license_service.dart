@@ -59,9 +59,9 @@ class LicenseService {
         'client_secret': '',
         'code': '',
         'organization_id': '',
-        'mock_transactions': true,
+        'mock_transactions': false,
         'mock_sales_order_transactions': false,
-        'mock_stock_transfers': true,
+        'mock_stock_transfers': false,
       };
 
       if (!doc.exists || doc.data() == null) {

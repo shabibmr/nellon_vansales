@@ -1,5 +1,6 @@
 import '../../domain/models/route.dart';
 import '../../domain/models/customer.dart';
+import '../models/customer_model.dart';
 import '../../domain/models/customer_ledger.dart';
 import '../../domain/models/item.dart';
 import '../../domain/models/organization.dart';
@@ -105,6 +106,52 @@ class SalesRepositoryImpl implements SalesRepository {
         'resolveItemUnitConversions(${item.id}) error: $e',
       );
       return (item: item, offlineFallback: true);
+    }
+  }
+
+  @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(
+    Customer customer,
+  ) async {
+    final id = customer.id.trim();
+    if (id.isEmpty || id.startsWith('temp_')) {
+      return (customer: customer, offlineFallback: false);
+    }
+
+    Customer merge(Customer base, {required String trn, required String address}) {
+      return base.copyWith(
+        trn: base.trn.trim().isNotEmpty ? base.trn : trn,
+        address: base.address.trim().isNotEmpty ? base.address : address,
+      );
+    }
+
+    if (customer.trn.trim().isNotEmpty) {
+      return (customer: customer, offlineFallback: false);
+    }
+
+    if (_dbService.hasCustomerDetail(id)) {
+      final cached = _dbService.getCustomerDetail(id)!;
+      return (
+        customer: merge(customer, trn: cached.trn, address: cached.address),
+        offlineFallback: false,
+      );
+    }
+
+    try {
+      final detail = await _apiClient.fetchContactDetail(id);
+      final parsed = CustomerModel.fromJson(detail);
+      final trn = parsed.trn.trim();
+      final address = parsed.address.trim();
+      await _dbService.saveCustomerDetail(id, trn: trn, address: address);
+      final resolved = merge(customer, trn: trn, address: address);
+      await _dbService.upsertCustomer(resolved);
+      return (customer: resolved, offlineFallback: false);
+    } catch (e) {
+      AppLogger.error(
+        'SalesRepository',
+        'resolveCustomerDetails($id) error: $e',
+      );
+      return (customer: customer, offlineFallback: true);
     }
   }
 
@@ -559,6 +606,18 @@ class SalesRepositoryImpl implements SalesRepository {
       _dbService.updateCustomerGps(customerId, latitude, longitude);
 
   @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) =>
+      _dbService.updateCustomerContactFields(
+        customerId,
+        phone: phone,
+        trn: trn,
+      );
+
+  @override
   List<StockTransfer> getLocalStockTransfers() =>
       _dbService.getLocalStockTransfers();
 
@@ -613,6 +672,19 @@ class SalesRepositoryImpl implements SalesRepository {
     double longitude,
   ) async {
     await _apiClient.updateCustomerGps(customerId, latitude, longitude);
+  }
+
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {
+    await _apiClient.updateCustomerContactFields(
+      customerId,
+      phone: phone,
+      trn: trn,
+    );
   }
 
   @override

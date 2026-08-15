@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/extensions/org_context_extension.dart';
+import 'customer_missing_fields_dialog.dart';
 import 'empty_state.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/models/item.dart';
 import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/sync_repository.dart';
 import '../bloc/async_search_bloc.dart';
 import '../bloc/async_search_event.dart';
 import '../bloc/async_search_state.dart';
+import '../bloc/gps_capture_bloc.dart';
 
 /// Reusable widget that facilitates debounced in-memory search over local cache.
 ///
@@ -30,8 +33,19 @@ class AsyncSearchWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (ctx) => AsyncSearchBloc(salesRepository: ctx.read<SalesRepository>()),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (ctx) =>
+              AsyncSearchBloc(salesRepository: ctx.read<SalesRepository>()),
+        ),
+        BlocProvider(
+          create: (ctx) => GpsCaptureBloc(
+            salesRepository: ctx.read<SalesRepository>(),
+            syncRepository: ctx.read<SyncRepository>(),
+          ),
+        ),
+      ],
       child: _AsyncSearchView(
         onCustomerSelected: onCustomerSelected,
         onItemSelected: onItemSelected,
@@ -55,11 +69,40 @@ class _AsyncSearchView extends StatefulWidget {
 
 class _AsyncSearchViewState extends State<_AsyncSearchView> {
   final _searchController = TextEditingController();
+  String? _resolvingCustomerId;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectCustomer(Customer customer) async {
+    final callback = widget.onCustomerSelected;
+    if (callback == null || _resolvingCustomerId != null) return;
+    setState(() => _resolvingCustomerId = customer.id);
+    var resolved = customer;
+    try {
+      final result = await context
+          .read<SalesRepository>()
+          .resolveCustomerDetails(customer);
+      resolved = result.customer;
+    } finally {
+      if (mounted) setState(() => _resolvingCustomerId = null);
+    }
+    if (!mounted) return;
+
+    if (CustomerMissingFields.of(resolved).any) {
+      final enriched = await showCustomerMissingFieldsDialog(
+        context,
+        gpsBloc: context.read<GpsCaptureBloc>(),
+        customer: resolved,
+      );
+      if (enriched == null) return;
+      resolved = enriched;
+    }
+
+    callback(resolved);
   }
 
   void _onSearchChanged(String query) {
@@ -240,25 +283,32 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text('Outstanding', style: TextStyle(fontSize: 10)),
-                  Text(
-                    '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: customer.outstandingBalance > 0
-                          ? AppTheme.errorRose
-                          : AppTheme.successEmerald,
+              trailing: _resolvingCustomerId == customer.id
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('Outstanding', style: TextStyle(fontSize: 10)),
+                        Text(
+                          '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: customer.outstandingBalance > 0
+                                ? AppTheme.errorRose
+                                : AppTheme.successEmerald,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-              onTap: widget.onCustomerSelected != null
-                  ? () => widget.onCustomerSelected!(customer)
+              onTap: widget.onCustomerSelected != null &&
+                      _resolvingCustomerId == null
+                  ? () => _selectCustomer(customer)
                   : null,
             ),
           );

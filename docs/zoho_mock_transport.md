@@ -28,7 +28,7 @@ payload → ZohoPayloadMapper / inject location / resolve accounts
 | Placeholder credentials (`YOUR_CLIENT_ID` / empty) | **All** Books/Inventory calls on this Dio |
 | Real credentials + `_mockTransactions` | POST/PUT contacts, invoices, payments, creditnotes, expenses |
 | Real credentials + `_mockSalesOrderTransactions` | Sales order create/update/convert |
-| Real credentials + `_mockStockTransfers` | Inventory `transferorders` |
+| Real credentials + `_mockStockTransfers` | Books v3 `transferorders` |
 | Real credentials + GET masters | **Live** network |
 
 ## Response shapes

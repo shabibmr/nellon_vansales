@@ -406,13 +406,20 @@ void main() {
 
       final out = ZohoPayloadMapper.zohoStockTransferPayload(raw);
 
-      expect(out['transfer_order_number'], 'TO-1');
+      expect(out.containsKey('transfer_order_number'), isFalse);
       expect(out['from_location_id'], 'loc_wh');
       expect(out['to_location_id'], 'loc_van');
       // notes mapped to description
       expect(out['description'], 'issue to van');
       expect(out.containsKey('notes'), isFalse);
-      for (final k in ['id', 'transfer_order_id', 'direction', 'isPendingSync', 'zoho_transfer_id', 'location_id']) {
+      for (final k in [
+        'id',
+        'transfer_order_id',
+        'direction',
+        'isPendingSync',
+        'zoho_transfer_id',
+        'location_id',
+      ]) {
         expect(out.containsKey(k), isFalse, reason: 'should drop $k');
       }
       final line = (out['line_items'] as List).first as Map;
@@ -421,6 +428,34 @@ void main() {
       expect(line['quantity_transfer'], 5);
       expect(line.containsKey('quantity'), isFalse);
       expect(line.containsKey('item'), isFalse);
+    });
+
+    test('drops local TO-TEMP transfer_order_number from queued model JSON', () {
+      final raw = {
+        'id': 'temp_to_1',
+        'transfer_order_id': 'temp_to_1',
+        'transfer_order_number': 'TO-TEMP-123456',
+        'date': '2026-08-14',
+        'direction': 'load',
+        'from_location_id': 'loc_wh',
+        'to_location_id': 'loc_van',
+        'notes': '',
+        'isPendingSync': true,
+        'line_items': [
+          {
+            'item_id': 'item_1',
+            'name': 'Rice',
+            'quantity_transfer': 1,
+            'quantity': 1,
+          },
+        ],
+      };
+
+      final out = ZohoPayloadMapper.zohoStockTransferPayload(raw);
+      expect(out.containsKey('transfer_order_number'), isFalse);
+      expect(out['from_location_id'], 'loc_wh');
+      expect(out['to_location_id'], 'loc_van');
+      expect(out.containsKey('description'), isFalse);
     });
   });
 

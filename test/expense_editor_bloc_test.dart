@@ -11,6 +11,9 @@ import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
+import 'package:van_sales/domain/models/customer_ledger.dart';
+import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
@@ -50,17 +53,19 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<List<SalesOrder>> fetchRemoteOrders({DateTime? startDate, DateTime? endDate}) async => [];
   @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
+  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId, {bool allowOfflineFallback = false}) async => null;
   @override
   List<SalesInvoice> getLocalInvoices() => [];
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
   @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+  Future<SalesInvoice?> fetchInvoiceById(String invoiceId, {bool forceRemote = false, bool allowOfflineFallback = true}) async => null;
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+  Future<ReceiptVoucher?> fetchReceiptById(String paymentId, {bool forceRemote = false, bool allowOfflineFallback = true}) async => null;
   @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
+  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId, {bool forceRemote = false, bool allowOfflineFallback = true}) async => null;
+  @override
+  Future<ExpenseEntry?> fetchExpenseById(String expenseId, {bool forceRemote = false, bool allowOfflineFallback = true}) async => null;
   @override
   List<Customer> getCustomers() => [];
   @override
@@ -82,6 +87,18 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
   @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
   List<RouteModel> getRoutes() => [];
   @override
   String? get activeRouteId => null;
@@ -94,6 +111,12 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async =>
       (item: item, offlineFallback: false);
+
+  @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(
+    Customer customer,
+  ) async =>
+      (customer: customer, offlineFallback: false);
   @override
   List<SalesReturn> getLocalReturns() => [];
   @override
@@ -110,6 +133,24 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
   @override
   Future<List<StockTransfer>> fetchRemoteStockTransfers({DateTime? startDate, DateTime? endDate}) async => [];
+  @override
+  Future<CustomerLedger> fetchCustomerLedger(String customerId, {DateTime? startDate, DateTime? endDate}) => throw UnimplementedError();
+  @override
+  Customer? getCustomerById(String id) => null;
+  @override
+  Organization? getOrganization() => null;
+  @override
+  String? get assignedWarehouseId => null;
+  @override
+  String? get primaryWarehouseId => null;
+  @override
+  List<Warehouse> getWarehouses() => [];
+  @override
+  bool hasPendingCashClosingForToday() => false;
+  @override
+  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
+  @override
+  Future<void> pushCustomerGpsRemote(String customerId, double latitude, double longitude) => throw UnimplementedError();
 }
 
 class FakeSyncRepository implements SyncRepository {
@@ -136,6 +177,9 @@ class FakeSyncRepository implements SyncRepository {
   Future<void> syncMaster(MasterType type) async {}
   @override
   bool hasCoreMasters() => true;
+
+  @override
+  int getMasterRecordCount(MasterType type) => 0;
 }
 
 void main() {

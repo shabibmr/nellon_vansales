@@ -10,7 +10,12 @@ import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
+import 'package:van_sales/domain/models/customer_ledger.dart';
+import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/create_customer_cubit.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/create_customer_state.dart';
@@ -44,6 +49,18 @@ class FakeSalesRepository implements SalesRepository {
   @override
   Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
   @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
   List<SyncQueueItem> getSyncQueue() => queue;
   @override
   List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
@@ -72,21 +89,42 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
+
+  @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(Customer customer) async => (customer: customer, offlineFallback: false);
   @override
   List<SalesInvoice> getLocalInvoices() => [];
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
   @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+  Future<SalesInvoice?> fetchInvoiceById(
+    String invoiceId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
   Future<List<SalesInvoice>> fetchRemoteInvoices({
     DateTime? startDate,
     DateTime? endDate,
   }) async => [];
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+  Future<ReceiptVoucher?> fetchReceiptById(
+    String paymentId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
+  Future<SalesReturn?> fetchSalesReturnById(
+    String creditNoteId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
+  @override
+  Future<ExpenseEntry?> fetchExpenseById(
+    String expenseId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
   @override
   List<SalesOrder> getLocalOrders() => [];
   @override
@@ -97,7 +135,10 @@ class FakeSalesRepository implements SalesRepository {
     DateTime? endDate,
   }) async => [];
   @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
+  Future<SalesOrder?> fetchRemoteOrder(
+    String zohoOrderId, {
+    bool allowOfflineFallback = false,
+  }) async => null;
   @override
   List<SalesReturn> getLocalReturns() => [];
   @override
@@ -129,15 +170,76 @@ class FakeSalesRepository implements SalesRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async => [];
+  @override
+  Future<CustomerLedger> fetchCustomerLedger(
+    String customerId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) => throw UnimplementedError();
+  @override
+  Customer? getCustomerById(String id) => null;
+  @override
+  Organization? getOrganization() => null;
+  @override
+  String? get assignedWarehouseId => null;
+  @override
+  String? get primaryWarehouseId => null;
+  @override
+  List<Warehouse> getWarehouses() => [];
+  @override
+  bool hasPendingCashClosingForToday() => false;
+  @override
+  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
+  @override
+  Future<void> pushCustomerGpsRemote(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) => throw UnimplementedError();
+}
+
+class FakeSyncRepository implements SyncRepository {
+  bool syncTriggered = false;
+  int triggerCount = 0;
+
+  @override
+  Future<void> triggerSync({bool forceRetryAll = false}) async {
+    syncTriggered = true;
+    triggerCount++;
+  }
+
+  @override
+  Stream<String> get syncStatusStream => const Stream.empty();
+  @override
+  Stream<int> get syncCountStream => const Stream.empty();
+  @override
+  bool get isSyncing => false;
+  @override
+  List<SyncQueueItem> getSyncQueue() => [];
+  @override
+  Future<void> clearFailedSyncItems() async {}
+  @override
+  Future<void> refreshMasterData() async {}
+  @override
+  Future<void> syncMaster(MasterType type) async {}
+  @override
+  bool hasCoreMasters() => true;
+  @override
+  int getMasterRecordCount(MasterType type) => 0;
 }
 
 void main() {
   late FakeSalesRepository salesRepo;
+  late FakeSyncRepository syncRepo;
   late CreateCustomerCubit cubit;
 
   setUp(() {
     salesRepo = FakeSalesRepository();
-    cubit = CreateCustomerCubit(salesRepository: salesRepo);
+    syncRepo = FakeSyncRepository();
+    cubit = CreateCustomerCubit(
+      salesRepository: salesRepo,
+      syncRepository: syncRepo,
+    );
   });
 
   tearDown(() {

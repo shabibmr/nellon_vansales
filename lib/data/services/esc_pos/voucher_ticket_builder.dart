@@ -8,6 +8,7 @@ import '../../../domain/models/sales_invoice.dart';
 import '../../../domain/models/sales_order.dart';
 import '../../../domain/models/sales_return.dart';
 import '../../../domain/models/thermal_paper_size.dart';
+import '../../../domain/models/thermal_ticket_preview.dart';
 import '../../../domain/repositories/voucher_pdf_repository.dart';
 import 'esc_pos_ticket_builder.dart';
 
@@ -21,6 +22,50 @@ class VoucherTicketBuilder {
     required Customer? customer,
     required ThermalPaperSize paperSize,
     String? salespersonName,
+    String? salespersonPhone,
+  }) async {
+    final composed = await _compose(
+      type: type,
+      voucher: voucher,
+      org: org,
+      customer: customer,
+      paperSize: paperSize,
+      salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
+    );
+    return composed.bytes;
+  }
+
+  /// Same layout as [build], as styled lines for an on-screen print preview.
+  static Future<ThermalTicketPreview> buildPreview({
+    required VoucherType type,
+    required dynamic voucher,
+    required Organization org,
+    required Customer? customer,
+    required ThermalPaperSize paperSize,
+    String? salespersonName,
+    String? salespersonPhone,
+  }) async {
+    final composed = await _compose(
+      type: type,
+      voucher: voucher,
+      org: org,
+      customer: customer,
+      paperSize: paperSize,
+      salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
+    );
+    return composed.preview;
+  }
+
+  static Future<({List<int> bytes, ThermalTicketPreview preview})> _compose({
+    required VoucherType type,
+    required dynamic voucher,
+    required Organization org,
+    required Customer? customer,
+    required ThermalPaperSize paperSize,
+    String? salespersonName,
+    String? salespersonPhone,
   }) async {
     final profile = await CapabilityProfile.load();
     final escPaper = EscPosTicketBuilder.toEscPosPaperSize(paperSize);
@@ -33,27 +78,61 @@ class VoucherTicketBuilder {
     switch (type) {
       case VoucherType.salesInvoice:
         bytes.addAll(
-          _invoice(b, voucher as SalesInvoice, org, customer, salespersonName),
+          _invoice(
+            b,
+            voucher as SalesInvoice,
+            org,
+            customer,
+            salespersonName,
+            salespersonPhone,
+          ),
         );
       case VoucherType.salesOrder:
         bytes.addAll(
-          _order(b, voucher as SalesOrder, org, customer, salespersonName),
+          _order(
+            b,
+            voucher as SalesOrder,
+            org,
+            customer,
+            salespersonName,
+            salespersonPhone,
+          ),
         );
       case VoucherType.salesReturn:
         bytes.addAll(
-          _return(b, voucher as SalesReturn, org, customer, salespersonName),
+          _return(
+            b,
+            voucher as SalesReturn,
+            org,
+            customer,
+            salespersonName,
+            salespersonPhone,
+          ),
         );
       case VoucherType.paymentReceipt:
         bytes.addAll(
-          _receipt(b, voucher as ReceiptVoucher, org, customer, salespersonName),
+          _receipt(
+            b,
+            voucher as ReceiptVoucher,
+            org,
+            customer,
+            salespersonName,
+            salespersonPhone,
+          ),
         );
       case VoucherType.expenseVoucher:
         bytes.addAll(
-          _expense(b, voucher as ExpenseEntry, org, salespersonName),
+          _expense(
+            b,
+            voucher as ExpenseEntry,
+            org,
+            salespersonName,
+            salespersonPhone,
+          ),
         );
     }
 
-    return bytes;
+    return (bytes: bytes, preview: b.toPreview());
   }
 
   /// Short calibration page for Settings → Test print.
@@ -90,7 +169,10 @@ class VoucherTicketBuilder {
     bytes.addAll(b.center('0123456789'));
     bytes.addAll(b.leftRight('Left', 'Right'));
     bytes.addAll(b.divider());
-    final totalCols = (paperSize.columns / 2).floor().clamp(16, paperSize.columns);
+    final totalCols = (paperSize.columns / 2).floor().clamp(
+      16,
+      paperSize.columns,
+    );
     bytes.addAll(
       b.leftRight(
         'TOTAL SAMPLE',
@@ -144,6 +226,7 @@ class VoucherTicketBuilder {
     Organization org,
     Customer? customer,
     String? salespersonName,
+    String? salespersonPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -197,7 +280,12 @@ class VoucherTicketBuilder {
               ),
             );
           }
-          after.addAll(tail.footer(salespersonName: salespersonName));
+          after.addAll(
+            tail.footer(
+              salespersonName: salespersonName,
+              salespersonPhone: salespersonPhone,
+            ),
+          );
           return after;
         },
       ),
@@ -211,6 +299,7 @@ class VoucherTicketBuilder {
     Organization org,
     Customer? customer,
     String? salespersonName,
+    String? salespersonPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -270,7 +359,12 @@ class VoucherTicketBuilder {
               ),
             );
           }
-          after.addAll(tail.footer(salespersonName: salespersonName));
+          after.addAll(
+            tail.footer(
+              salespersonName: salespersonName,
+              salespersonPhone: salespersonPhone,
+            ),
+          );
           return after;
         },
       ),
@@ -284,6 +378,7 @@ class VoucherTicketBuilder {
     Organization org,
     Customer? customer,
     String? salespersonName,
+    String? salespersonPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -324,8 +419,9 @@ class VoucherTicketBuilder {
               currencyCode: org.currencyCode,
               total: salesReturn.total,
               taxLabel: _vatLabel(
-                salesReturn.items
-                    .map((line) => line.invoiceLineItem.taxPercentage),
+                salesReturn.items.map(
+                  (line) => line.invoiceLineItem.taxPercentage,
+                ),
               ),
             ),
           );
@@ -336,7 +432,12 @@ class VoucherTicketBuilder {
               ),
             );
           }
-          after.addAll(tail.footer(salespersonName: salespersonName));
+          after.addAll(
+            tail.footer(
+              salespersonName: salespersonName,
+              salespersonPhone: salespersonPhone,
+            ),
+          );
           return after;
         },
       ),
@@ -350,6 +451,7 @@ class VoucherTicketBuilder {
     Organization org,
     Customer? customer,
     String? salespersonName,
+    String? salespersonPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -394,7 +496,10 @@ class VoucherTicketBuilder {
       _padToMinLength(
         b,
         tableStyle: false,
-        buildTail: (tail) => tail.footer(salespersonName: salespersonName),
+        buildTail: (tail) => tail.footer(
+          salespersonName: salespersonName,
+          salespersonPhone: salespersonPhone,
+        ),
       ),
     );
     return bytes;
@@ -405,6 +510,7 @@ class VoucherTicketBuilder {
     ExpenseEntry expense,
     Organization org,
     String? salespersonName,
+    String? salespersonPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -448,7 +554,12 @@ class VoucherTicketBuilder {
               total: expense.amount,
             ),
           );
-          after.addAll(tail.footer(salespersonName: salespersonName));
+          after.addAll(
+            tail.footer(
+              salespersonName: salespersonName,
+              salespersonPhone: salespersonPhone,
+            ),
+          );
           return after;
         },
       ),
@@ -487,6 +598,7 @@ class VoucherTicketBuilder {
       bytes.addAll(tableStyle ? b.emptyItemRow() : b.blankLine());
     }
     bytes.addAll(tailBytes);
+    b.absorbPreviewFrom(tail);
     return bytes;
   }
 }

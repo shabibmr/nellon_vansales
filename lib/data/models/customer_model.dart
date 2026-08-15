@@ -136,7 +136,11 @@ class CustomerModel extends Customer {
       companyName:
           ((json['company_name'] ?? json['companyName']) as String?) ?? '',
       email: (json['email'] as String?) ?? '',
-      phone: (json['phone'] as String?) ?? '',
+      phone: _firstNonEmpty([
+        json['phone'],
+        json['mobile'],
+        json['mobile_phone'],
+      ]),
       address: ((json['address'] ??
                   (json['billing_address'] as Map?)?['address']) as String?) ??
           '',

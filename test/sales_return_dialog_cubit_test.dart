@@ -15,6 +15,9 @@ import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
+import 'package:van_sales/domain/models/customer_ledger.dart';
+import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/sales_return_dialog_cubit.dart';
@@ -59,6 +62,20 @@ class FakeSalesRepository implements SalesRepository {
   ) async {}
 
   @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+
+  @override
   List<Customer> getCustomers() => [];
 
   @override
@@ -101,10 +118,17 @@ class FakeSalesRepository implements SalesRepository {
   Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
 
   @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(Customer customer) async => (customer: customer, offlineFallback: false);
+
+  @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
 
   @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
+  Future<SalesInvoice?> fetchInvoiceById(
+    String invoiceId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
 
   @override
   Future<List<SalesInvoice>> fetchRemoteInvoices({
@@ -113,10 +137,25 @@ class FakeSalesRepository implements SalesRepository {
   }) async => [];
 
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
+  Future<ReceiptVoucher?> fetchReceiptById(
+    String paymentId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
 
   @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
+  Future<SalesReturn?> fetchSalesReturnById(
+    String creditNoteId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
+
+  @override
+  Future<ExpenseEntry?> fetchExpenseById(
+    String expenseId, {
+    bool forceRemote = false,
+    bool allowOfflineFallback = true,
+  }) async => null;
 
   @override
   List<SalesOrder> getLocalOrders() => [];
@@ -131,7 +170,10 @@ class FakeSalesRepository implements SalesRepository {
   }) async => [];
 
   @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
+  Future<SalesOrder?> fetchRemoteOrder(
+    String zohoOrderId, {
+    bool allowOfflineFallback = false,
+  }) async => null;
 
   @override
   List<SalesReturn> getLocalReturns() => savedReturns;
@@ -171,6 +213,41 @@ class FakeSalesRepository implements SalesRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async => [];
+
+  @override
+  Future<CustomerLedger> fetchCustomerLedger(
+    String customerId, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) => throw UnimplementedError();
+
+  @override
+  Customer? getCustomerById(String id) => null;
+
+  @override
+  Organization? getOrganization() => null;
+
+  @override
+  String? get assignedWarehouseId => null;
+
+  @override
+  String? get primaryWarehouseId => null;
+
+  @override
+  List<Warehouse> getWarehouses() => [];
+
+  @override
+  bool hasPendingCashClosingForToday() => false;
+
+  @override
+  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
+
+  @override
+  Future<void> pushCustomerGpsRemote(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) => throw UnimplementedError();
 }
 
 class FakeHiveDatabaseService extends HiveDatabaseService {
@@ -275,12 +352,11 @@ void main() {
       sl.unregister<DocumentNumberService>();
     }
     final fakeDb = FakeHiveDatabaseService();
-    sl.registerSingleton<DocumentNumberService>(
-      DocumentNumberService(
-        dbService: fakeDb,
-        apiClient: FakeZohoApiClient(),
-      ),
+    final docService = DocumentNumberService(
+      dbService: fakeDb,
+      apiClient: FakeZohoApiClient(),
     );
+    sl.registerSingleton<DocumentNumberService>(docService);
 
     repo = FakeSalesRepository()
       ..invoices = [invoice]
@@ -290,6 +366,7 @@ void main() {
       customer: customer,
       salesRepository: repo,
       syncWorker: syncWorker,
+      documentNumberService: docService,
     );
   });
 

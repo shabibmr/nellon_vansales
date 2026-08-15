@@ -109,4 +109,61 @@ void main() {
       expect(linesToTransfer, isEmpty);
     });
   });
+
+  group('buildIssueToVanRows', () {
+    const zeroStock = Item(
+      id: 'item_zero',
+      name: 'Zero Stock',
+      sku: 'SKU0',
+      rate: 1.0,
+      stock: 0,
+      description: '',
+      taxName: 'No Tax',
+      taxPercentage: 0.0,
+    );
+    const soldOut = Item(
+      id: 'item_sold',
+      name: 'Sold Out Today',
+      sku: 'SKUS',
+      rate: 1.0,
+      stock: 0,
+      description: '',
+      taxName: 'No Tax',
+      taxPercentage: 0.0,
+    );
+    const inStockB = Item(
+      id: 'item_b',
+      name: 'Bravo Item',
+      sku: 'SKUB',
+      rate: 1.0,
+      stock: 4,
+      description: '',
+      taxName: 'No Tax',
+      taxPercentage: 0.0,
+    );
+
+    test('omits zero-stock items that have no invoice or demand qty', () {
+      final rows = buildIssueToVanRows(
+        [item, zeroStock, inStockB],
+        const {},
+      );
+      expect(rows.map((r) => r.item.id), equals(['item_b', 'item_1']));
+    });
+
+    test('keeps a sold-out item when it has invoice or demand qty', () {
+      final rows = buildIssueToVanRows(
+        [zeroStock, soldOut],
+        const {'item_sold': 6},
+      );
+      expect(rows, hasLength(1));
+      expect(rows.single.item.id, 'item_sold');
+      expect(rows.single.currentStock, 0);
+      expect(rows.single.invoiceQty, 6);
+    });
+
+    test('sorts remaining rows by item name', () {
+      final rows = buildIssueToVanRows([item, inStockB], const {});
+      expect(rows.map((r) => r.item.name), equals(['Bravo Item', 'Item One']));
+    });
+  });
 }

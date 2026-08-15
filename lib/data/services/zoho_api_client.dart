@@ -6,6 +6,7 @@ import 'hive_database_service.dart';
 import 'zoho_mock/zoho_mock_catalog.dart';
 import 'zoho_mock/zoho_mock_interceptor.dart';
 import 'zoho_payload_mapper.dart';
+import '../../domain/models/tax.dart';
 
 /// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
 ///
@@ -29,14 +30,6 @@ class ZohoApiClient {
   // Zoho OAuth 2.0 credentials (read from secure build configurations or environments in production)
   final String _accountsUrl = 'https://accounts.zoho.com/oauth/v2/token';
   final String _apiUrl = 'https://www.zohoapis.com/books/v3';
-
-  /// Zoho **Inventory** API base. Transfer Orders (stock transfers between
-  /// locations) live here, NOT under Books v3 — posting to an absolute URL off
-  /// this base overrides Dio's `baseUrl` while still running the auth/org-id
-  /// request interceptor. Requires the OAuth refresh token to carry the
-  /// `ZohoInventory.transferorders.CREATE` scope and Inventory to be enabled on
-  /// the organization.
-  final String _inventoryApiUrl = 'https://www.zohoapis.com/inventory/v1';
 
   String _clientId = '1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP';
   String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
@@ -489,7 +482,12 @@ class ZohoApiClient {
   /// queued lines usually means "unset", and matching 0% would incorrectly
   /// pick Zero Rate instead of Standard Rate.
   Map<String, dynamic> _withResolvedLineTaxIds(Map<String, dynamic> payload) {
-    final taxes = _dbService.getTaxes();
+    List<Tax> taxes;
+    try {
+      taxes = _dbService.getTaxes();
+    } catch (_) {
+      return payload;
+    }
     if (taxes.isEmpty) return payload;
     return ZohoPayloadMapper.withResolvedLineTaxIds(
       payload,
@@ -552,6 +550,30 @@ class ZohoApiClient {
       throw Exception('HTTP ${response.statusCode}');
     } catch (e) {
       throw Exception('Zoho Books Customer GPS Update Failed: $e');
+    }
+  }
+
+  /// Update phone and/or TRN on an existing Zoho contact.
+  ///
+  /// Sends only the fields being filled so other contact data is not overwritten.
+  Future<String> updateCustomerContactFields(
+    String contactId, {
+    String? phone,
+    String? trn,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (phone != null) payload['phone'] = phone;
+    if (trn != null) payload['tax_reg_no'] = trn;
+    if (payload.isEmpty) return contactId;
+
+    try {
+      final response = await _dio.put('/contacts/$contactId', data: payload);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return response.data['contact']?['contact_id']?.toString() ?? contactId;
+      }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Zoho Books Customer Contact Update Failed: $e');
     }
   }
 
@@ -835,13 +857,11 @@ class ZohoApiClient {
   //
   // Transfers carry explicit from/to location ids in the payload already, so
   // (unlike invoices/orders/receipts) this does NOT run _withPrimaryHeaderLocation.
+  // Posted to Books v3 — this org's Inventory account is disabled (HTTP 6018).
   Future<String> syncStockTransfer(Map<String, dynamic> transferJson) async {
     try {
-      // Transfer Orders belong to the Zoho Inventory API, not Books v3 — post
-      // to the absolute Inventory URL (overrides Dio's Books baseUrl; the
-      // interceptor still injects the token + organization_id).
       final response = await _dio.post(
-        '$_inventoryApiUrl/transferorders',
+        '/transferorders',
         data: ZohoPayloadMapper.zohoStockTransferPayload(transferJson),
       );
       if (response.statusCode == 201 || response.statusCode == 200) {
@@ -849,27 +869,21 @@ class ZohoApiClient {
       }
       throw Exception('HTTP ${response.statusCode}');
     } catch (e) {
-      throw Exception('Zoho Inventory Stock Transfer Sync Failed: $e');
+      throw Exception('Zoho Books Stock Transfer Sync Failed: $e');
     }
   }
 
-  // 5h. Zoho Inventory Transfer Orders API: List stock transfers (paginated).
-  //
-  // Same absolute-URL override as `syncStockTransfer` — Transfer Orders live
-  // under Inventory, not Books v3. `_fetchAllPages` works unchanged since it
-  // takes a full request path and Dio treats an absolute URL as overriding
-  // `baseUrl`; Inventory's list responses follow the same
-  // `page_context.has_more_page` pagination convention as Books.
+  // 5h. Zoho Books Transfer Orders API: List stock transfers (paginated).
   Future<List<Map<String, dynamic>>> fetchStockTransfers({
     DateTime? startDate,
     DateTime? endDate,
   }) async {
     try {
       final list = await _fetchAllPages(
-        '$_inventoryApiUrl/transferorders',
+        '/transferorders',
         _dateRangeParams(startDate: startDate, endDate: endDate),
       );
-      // Zoho Inventory has no salesperson_id on Transfer Orders and no
+      // Zoho Books has no salesperson_id on Transfer Orders and no
       // documented from/to location query filter, so scope client-side. A
       // van's transfers can appear on either side depending on direction
       // (Issue to Van puts the van in `to`, Stock Unloading puts it in

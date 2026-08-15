@@ -338,6 +338,19 @@ class SyncWorker {
         if (cid != null && lat != null && lng != null) {
           await _apiClient.updateCustomerGps(cid, lat, lng);
         }
+      case 'customer_contact_update':
+        final contactId =
+            item.payload['contact_id']?.toString() ??
+            item.payload['customer_id']?.toString();
+        if (contactId == null || contactId.isEmpty) return;
+        final phone = item.payload['phone']?.toString();
+        final trn = (item.payload['tax_reg_no'] ?? item.payload['trn'])
+            ?.toString();
+        await _apiClient.updateCustomerContactFields(
+          contactId,
+          phone: phone,
+          trn: trn,
+        );
       case 'invoice':
         await _apiClient.syncInvoice(item.payload);
       case 'sales_order':
@@ -363,7 +376,11 @@ class SyncWorker {
       case 'expense':
         await _apiClient.syncExpense(item.payload);
       case 'stock_transfer':
-        await _apiClient.syncStockTransfer(item.payload);
+        final remoteId = await _apiClient.syncStockTransfer(item.payload);
+        // Persist the permanent Zoho transfer_order_id on the local record
+        // so saveRemoteStockTransfers can dedupe it against the matching
+        // remote row instead of accumulating a duplicate on every refresh.
+        await _persistStockTransferZohoId(item.id, remoteId);
       default:
         throw Exception('Unsupported transaction sync type: ${item.type}');
     }
@@ -531,6 +548,25 @@ class SyncWorker {
     if (index >= 0) {
       await _dbService.saveLocalOrder(
         orders[index].copyWith(zohoOrderId: zohoOrderId, isPendingSync: false),
+      );
+    }
+  }
+
+  /// Stores the permanent Zoho `transfer_order_id` on the local stock
+  /// transfer record once synced, so a later remote fetch can be
+  /// deduplicated against it instead of accumulating as a duplicate.
+  Future<void> _persistStockTransferZohoId(
+    String localTransferId,
+    String zohoTransferId,
+  ) async {
+    final transfers = _dbService.getAllLocalStockTransfersUnfiltered();
+    final index = transfers.indexWhere((t) => t.id == localTransferId);
+    if (index >= 0) {
+      await _dbService.updateStockTransferRecord(
+        transfers[index].copyWith(
+          zohoTransferId: zohoTransferId,
+          isPendingSync: false,
+        ),
       );
     }
   }

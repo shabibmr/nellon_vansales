@@ -87,6 +87,23 @@ class StockTransferRow extends Equatable {
       [item, currentStock, invoiceQty, extraQty, uom, conversionRate];
 }
 
+/// Issue-to-Van planning rows: skip zero-stock items unless they have
+/// invoice/demand quantity that still needs to be transferred.
+List<StockTransferRow> buildIssueToVanRows(
+  Iterable<Item> items,
+  Map<String, double> qtyByItemId,
+) {
+  return [
+    for (final item in items)
+      if (item.stock > 0 || (qtyByItemId[item.id] ?? 0) > 0)
+        StockTransferRow(
+          item: item,
+          currentStock: item.stock,
+          invoiceQty: qtyByItemId[item.id] ?? 0,
+        ),
+  ]..sort((a, b) => a.item.name.compareTo(b.item.name));
+}
+
 // --- Events ---
 
 abstract class StockTransferEvent extends Equatable {
@@ -363,8 +380,9 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         currentItems = _salesRepository.getItems();
       }
 
-      // Union of current-stock items and demand/invoiced items — an item may
-      // have sold out (stock 0) yet still need to appear for the transfer.
+      // Union of fetched items and demand/invoiced items — a sold-out item
+      // (stock 0) still appears when it has quantity to transfer. Catalog
+      // items with neither stock nor demand stay off the grid.
       final itemsById = <String, Item>{for (final it in currentItems) it.id: it};
       final cachedItems = _salesRepository.getItems();
       for (final itemId in qtyByItemId.keys) {
@@ -385,17 +403,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         });
       }
 
-      final rows =
-          itemsById.values
-              .map(
-                (item) => StockTransferRow(
-                  item: item,
-                  currentStock: item.stock,
-                  invoiceQty: qtyByItemId[item.id] ?? 0,
-                ),
-              )
-              .toList()
-            ..sort((a, b) => a.item.name.compareTo(b.item.name));
+      final rows = buildIssueToVanRows(itemsById.values, qtyByItemId);
 
       final defaultWarehouse = _resolveDefaultWarehouse();
       final currentLocation = _resolveCurrentLocation();
@@ -544,12 +552,22 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     }
 
     final defaultWarehouse = _resolveDefaultWarehouse();
-    final currentLocationId = _salesRepository.assignedWarehouseId;
-    if (defaultWarehouse == null || currentLocationId == null) {
+    if (defaultWarehouse.id.isEmpty) {
       emit(
         state.copyWith(
           errorMessage:
-              'Unable to resolve warehouse/location. Please sync masters and re-select your route.',
+              'Primary location is not configured in Zoho for this organization. '
+              'Contact your administrator before issuing stock to the van.',
+        ),
+      );
+      return;
+    }
+    final currentLocationId = _salesRepository.assignedWarehouseId;
+    if (currentLocationId == null || currentLocationId.isEmpty) {
+      emit(
+        state.copyWith(
+          errorMessage:
+              'Unable to resolve your van location. Please sync masters and re-select your route.',
         ),
       );
       return;

@@ -74,6 +74,10 @@ class MastersSyncCardList extends StatelessWidget {
     final isBusy = state.inFlight.contains(type) || state.bulkInFlight;
     final error = state.lastError[type];
     final isSynced = state.syncedTypes.contains(type) && error == null;
+    final recordCount = state.recordCounts[type];
+    final countSubtitle = recordCount != null && (isSynced || recordCount > 0)
+        ? _recordCountLabel(recordCount)
+        : null;
 
     Color accent;
     Widget trailing;
@@ -113,7 +117,7 @@ class MastersSyncCardList extends StatelessWidget {
     return SyncItemCard(
       icon: _iconForType(type),
       title: type.label,
-      subtitle: error ?? _descForType(type),
+      subtitle: error ?? countSubtitle ?? _descForType(type),
       accentColor: accent,
       trailing: trailing,
       onTap: isBusy
@@ -123,6 +127,10 @@ class MastersSyncCardList extends StatelessWidget {
             },
       hasError: error != null,
     );
+  }
+
+  String _recordCountLabel(int count) {
+    return count == 1 ? '1 record' : '$count records';
   }
 
   IconData _iconForType(MasterType type) {

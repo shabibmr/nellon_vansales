@@ -38,6 +38,16 @@ abstract class SalesRepository {
   /// Used for on-the-fly enrichment when capturing location for existing customers.
   Future<void> updateCustomerGps(String customerId, double latitude, double longitude);
 
+  /// Updates phone and/or TRN for a single customer in local cache.
+  ///
+  /// Also refreshes the contact-detail TRN cache so a later masters refresh
+  /// does not wipe a user-entered tax number.
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  });
+
   /// Retrieves list of inventory items currently stocked in the van.
   List<Item> getItems();
 
@@ -51,6 +61,15 @@ abstract class SalesRepository {
   /// that case; the item is still usable in the base unit.
   Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(
     Item item,
+  );
+
+  /// Resolves TRN / billing address on demand (`GET /contacts/{id}`).
+  ///
+  /// The contacts list never includes `tax_reg_no`. First search tap fetches
+  /// and caches the detail (even when TRN is empty). Thermal print reads Hive
+  /// only. [offlineFallback] is true when a required fetch failed.
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(
+    Customer customer,
   );
 
   /// Gets all sales invoices recorded locally.
@@ -250,4 +269,12 @@ abstract class SalesRepository {
     double latitude,
     double longitude,
   );
+
+  /// Best-effort remote phone / TRN push for an existing Zoho contact.
+  /// Throws on failure so callers can fall back to the offline queue.
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  });
 }

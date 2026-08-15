@@ -151,6 +151,18 @@ class FakeSalesRepository implements SalesRepository {
     double longitude,
   ) async {}
   @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
+  Future<void> pushCustomerContactFieldsRemote(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {}
+  @override
   List<RouteModel> getRoutes() => [];
   @override
   String? get activeRouteId => null;
@@ -164,6 +176,12 @@ class FakeSalesRepository implements SalesRepository {
   Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(
     Item item,
   ) async => (item: item, offlineFallback: false);
+
+  @override
+  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(
+    Customer customer,
+  ) async =>
+      (customer: customer, offlineFallback: false);
   @override
   List<SalesReturn> getLocalReturns() => [];
   @override
@@ -247,6 +265,9 @@ class FakeSyncRepository implements SyncRepository {
   Future<void> syncMaster(MasterType type) async {}
   @override
   bool hasCoreMasters() => true;
+
+  @override
+  int getMasterRecordCount(MasterType type) => 0;
 }
 
 /// Stub for paths that never allocate a new document number.

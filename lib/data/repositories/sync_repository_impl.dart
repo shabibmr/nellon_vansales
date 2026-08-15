@@ -51,4 +51,28 @@ class SyncRepositoryImpl implements SyncRepository {
   bool hasCoreMasters() {
     return _dbService.getItems().isNotEmpty;
   }
+
+  @override
+  int getMasterRecordCount(MasterType type) {
+    switch (type) {
+      case MasterType.organization:
+        return _dbService.hasMasterValue('organization') ? 1 : 0;
+      case MasterType.warehouses:
+        return _dbService.countMasterList('warehouses');
+      case MasterType.paymentAccounts:
+        return _dbService.countMasterList('payment_accounts');
+      case MasterType.taxes:
+        return _dbService.countMasterList('taxes');
+      case MasterType.expenseAccounts:
+        return _dbService.countMasterList('expense_accounts');
+      case MasterType.routes:
+        return _dbService.countMasterList('routes');
+      case MasterType.items:
+        return _dbService.countMasterList('items');
+      case MasterType.customers:
+        return _dbService.countMasterList('customers');
+      case MasterType.salespersons:
+        return _dbService.countMasterList('salespersons');
+    }
+  }
 }

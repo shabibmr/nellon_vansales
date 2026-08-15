@@ -8,6 +8,9 @@ import 'package:van_sales/domain/models/session_bind_result.dart';
 import 'package:van_sales/domain/models/user.dart';
 import 'package:van_sales/domain/repositories/auth_repository.dart';
 import 'package:van_sales/domain/repositories/salesperson_repository.dart';
+import 'package:van_sales/data/services/document_number_service.dart';
+import 'package:van_sales/data/services/hive_database_service.dart';
+import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/ui/features/auth/bloc/auth_bloc.dart';
 
 class _FakeAuthRepository implements AuthRepository {
@@ -108,6 +111,9 @@ class _FakeSalespersonRepository implements SalespersonRepository {
   Salesperson? get currentSalesperson => bindResult.salesperson;
 
   @override
+  bool get isOrdersOnlyMode => false;
+
+  @override
   Future<void> clearCurrentSalesperson() async {
     clearCalls++;
   }
@@ -118,6 +124,32 @@ Future<void> _completeOtpLogin(AuthBloc bloc, {String code = '123456'}) async {
   bloc.add(const PhoneSubmitted('+971542891246'));
   await bloc.stream.firstWhere((s) => s is AuthCodeSent);
   bloc.add(OtpSubmitted(code));
+}
+
+class _FakeDocDb extends HiveDatabaseService {
+  final Map<String, int> _counters = {};
+
+  @override
+  String? get voucherPrefix => 'SHB-';
+
+  @override
+  int? getDocCounter(String tag) => _counters[tag];
+
+  @override
+  Future<void> setDocCounter(String tag, int value) async {
+    _counters[tag] = value;
+  }
+}
+
+class _FakeZohoApi extends ZohoApiClient {
+  _FakeZohoApi() : super(dbService: _FakeDocDb());
+}
+
+class _FakeDocNumberService extends DocumentNumberService {
+  _FakeDocNumberService() : super(dbService: _FakeDocDb(), apiClient: _FakeZohoApi());
+
+  @override
+  Future<void> seedCounters() async {}
 }
 
 void main() {
@@ -142,6 +174,7 @@ void main() {
     bloc = AuthBloc(
       authRepository: auth,
       salespersonRepository: salespersons,
+      documentNumberService: _FakeDocNumberService(),
     );
   });
 

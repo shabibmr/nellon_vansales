@@ -15,6 +15,9 @@ class MastersSyncState extends Equatable {
   /// a non-listenable repository [watch].
   final bool hasCoreMasters;
 
+  /// Hive record counts per master type, refreshed after each successful sync.
+  final Map<MasterType, int> recordCounts;
+
   const MastersSyncState({
     this.inFlight = const {},
     this.bulkInFlight = false,
@@ -24,6 +27,7 @@ class MastersSyncState extends Equatable {
     this.bulkSyncSuccess,
     this.consoleLogs = const [],
     this.hasCoreMasters = false,
+    this.recordCounts = const {},
   });
 
   bool get canProceed => hasCoreMasters;
@@ -37,6 +41,7 @@ class MastersSyncState extends Equatable {
     bool? bulkSyncSuccess,
     List<String>? consoleLogs,
     bool? hasCoreMasters,
+    Map<MasterType, int>? recordCounts,
     bool clearBulkSync = false,
   }) {
     return MastersSyncState(
@@ -50,6 +55,7 @@ class MastersSyncState extends Equatable {
           clearBulkSync ? null : (bulkSyncSuccess ?? this.bulkSyncSuccess),
       consoleLogs: consoleLogs ?? this.consoleLogs,
       hasCoreMasters: hasCoreMasters ?? this.hasCoreMasters,
+      recordCounts: recordCounts ?? this.recordCounts,
     );
   }
 
@@ -63,5 +69,6 @@ class MastersSyncState extends Equatable {
         bulkSyncSuccess,
         consoleLogs,
         hasCoreMasters,
+        recordCounts,
       ];
 }
