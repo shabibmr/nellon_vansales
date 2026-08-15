@@ -58,6 +58,8 @@ lib/
 
 Use `sl<T>()` to resolve anywhere; `setupDependencyInjection()` is called once in `main.dart`.
 
+Sideload APK updates (Firestore `server_config/app_version` + VPS HTTPS) are documented in `docs/app_update.md`.
+
 ### Local Storage (Hive)
 
 `HiveDatabaseService` manages three Hive boxes:

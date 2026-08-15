@@ -22,6 +22,7 @@ import '../repositories/report_repository_impl.dart';
 import 'local_storage_service.dart';
 import 'device_info_service.dart';
 import 'license_service.dart';
+import 'app_update_service.dart';
 
 /// Global service locator instance (GetIt sl) for dependency injection throughout the app.
 final GetIt sl = GetIt.instance;
@@ -78,10 +79,13 @@ Future<void> setupDependencyInjection() async {
     () => ReportRepositoryImpl(apiClient: sl(), dbService: sl()),
   );
 
-  // 6. Licensing & Device Services
+  // 6. Licensing, Device & Update Services
   sl.registerLazySingleton<LocalStorageService>(() => LocalStorageService());
   sl.registerLazySingleton<DeviceInfoService>(() => DeviceInfoService());
   sl.registerLazySingleton<LicenseService>(() => LicenseService());
+  sl.registerLazySingleton<AppUpdateService>(
+    () => AppUpdateService(dbService: sl<HiveDatabaseService>()),
+  );
 
   // 7. PDF Document Generation Service
   final voucherPdfService = VoucherPdfService();

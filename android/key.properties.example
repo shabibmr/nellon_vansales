@@ -1,0 +1,4 @@
+storePassword=
+keyPassword=
+keyAlias=nellon
+storeFile=nellon-release.jks

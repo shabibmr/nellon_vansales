@@ -43,6 +43,9 @@ import 'ui/features/licensing/cubit/server_config_state.dart';
 import 'ui/features/licensing/views/license_gate.dart';
 import 'domain/repositories/thermal_printer_repository.dart';
 import 'ui/features/thermal_print/cubit/thermal_printer_cubit.dart';
+import 'data/services/app_update_service.dart';
+import 'ui/features/app_update/cubit/app_update_cubit.dart';
+import 'ui/features/app_update/views/app_update_gate.dart';
 
 /// The root widget of the Van Sales Pro application.
 ///
@@ -158,6 +161,11 @@ class VanSalesApp extends StatelessWidget {
               repository: sl<ThermalPrinterRepository>(),
             ),
           ),
+          BlocProvider<AppUpdateCubit>(
+            create: (context) => AppUpdateCubit(
+              updateService: sl<AppUpdateService>(),
+            ),
+          ),
         ],
         child: BlocBuilder<ThemeCubit, AppThemeMode>(
           builder: (context, appThemeMode) {
@@ -187,7 +195,7 @@ class VanSalesApp extends StatelessWidget {
                   },
                 ),
               ),
-              home: const SessionGateway(),
+              home: const AppUpdateGate(child: SessionGateway()),
             );
           },
         ),

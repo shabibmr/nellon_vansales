@@ -5,6 +5,7 @@ import '../../../../domain/models/salesperson.dart';
 import '../../../core/cubit/salesperson_cubit.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/logout.dart';
+import '../../app_update/views/developer_channel_sheet.dart';
 
 /// Shows the salesperson session details resolved at login: name, phone,
 /// warehouse, cash account, voucher prefix, and status.
@@ -63,7 +64,7 @@ class UserProfilePage extends StatelessWidget {
             _infoCard([
               _infoRow(Icons.badge_outlined, 'Salesperson ID',
                   salesperson.id, isDark),
-              _statusRow(salesperson.status),
+              _StatusRow(status: salesperson.status),
             ]),
           ],
           const SizedBox(height: 20),
@@ -139,18 +140,72 @@ Widget _infoRow(IconData icon, String label, String? value, bool isDark) {
   );
 }
 
-Widget _statusRow(String status) {
-  final isActive = status.toLowerCase() == 'active';
-  final color = isActive ? AppTheme.successEmerald : AppTheme.warningAmber;
-  return ListTile(
-    dense: true,
-    leading: Icon(Icons.verified_user_outlined, color: color, size: 20),
-    title: const Text('Status', style: TextStyle(fontSize: 13)),
-    trailing: Text(
-      status,
-      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color),
-    ),
-  );
+class _StatusRow extends StatefulWidget {
+  final String status;
+
+  const _StatusRow({required this.status});
+
+  @override
+  State<_StatusRow> createState() => _StatusRowState();
+}
+
+class _StatusRowState extends State<_StatusRow> {
+  int _tapCount = 0;
+  DateTime? _lastTapTime;
+
+  void _handleTap() {
+    final now = DateTime.now();
+    if (_lastTapTime == null ||
+        now.difference(_lastTapTime!) > const Duration(seconds: 2)) {
+      _tapCount = 1;
+    } else {
+      _tapCount++;
+    }
+    _lastTapTime = now;
+
+    if (_tapCount == 5) {
+      _tapCount = 0;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Developer Mode: Channel Switcher'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      DeveloperChannelSheet.show(context);
+    } else if (_tapCount >= 2) {
+      final remaining = 5 - _tapCount;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tap $remaining more times for Developer Mode'),
+          duration: const Duration(milliseconds: 600),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = widget.status.toLowerCase() == 'active';
+    final color = isActive ? AppTheme.successEmerald : AppTheme.warningAmber;
+    return InkWell(
+      onTap: _handleTap,
+      child: ListTile(
+        dense: true,
+        leading: Icon(Icons.verified_user_outlined, color: color, size: 20),
+        title: const Text('Status', style: TextStyle(fontSize: 13)),
+        trailing: Text(
+          widget.status,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ProfileHeader extends StatelessWidget {

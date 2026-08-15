@@ -1518,4 +1518,13 @@ class HiveDatabaseService {
   Future<void> setOauthTokenExpiry(int? expiryMillis) async {
     await _masterBox.put('oauth_token_expiry', expiryMillis);
   }
+
+  /// Active update channel for in-app OTA updates ('production' or 'beta').
+  String get updateChannel =>
+      _masterBox.get('update_channel', defaultValue: 'production');
+
+  /// Sets the active update channel ('production' or 'beta').
+  Future<void> setUpdateChannel(String channel) async {
+    await _masterBox.put('update_channel', channel);
+  }
 }

@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -5,6 +8,13 @@ plugins {
     // END: FlutterFire Configuration
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -28,11 +38,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }
@@ -51,6 +72,16 @@ flutter {
 // AGP 9 removed the variant outputFileName API, so we copy after packaging.
 afterEvaluate {
     tasks.named("assembleRelease").configure {
+        doFirst {
+            if (!keystorePropertiesFile.exists()) {
+                throw GradleException(
+                    "Release signing is not configured. Copy android/key.properties.example " +
+                        "to android/key.properties and generate android/nellon-release.jks. " +
+                        "See docs/app_update.md. Phones already running a debug-signed build " +
+                        "cannot upgrade onto this keystore — they need a one-time reinstall.",
+                )
+            }
+        }
         doLast {
             val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
             val original = releaseDir.resolve("app-release.apk")
