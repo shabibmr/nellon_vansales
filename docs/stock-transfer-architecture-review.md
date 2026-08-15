@@ -146,6 +146,20 @@ Candidate 3 is genuinely speculative until `/grilling` resolves whether to broad
 
 ---
 
-## Decision
+## Decision & current status
 
-User selected: **all three candidates, in the recommended order** (1 → 2 → 3), each as its own `/grilling` session, finished (including any resulting implementation) before the next begins. See `stock-transfer-tasks.md` for the resulting task list.
+User selected **all three candidates, in the recommended order** (1 → 2 → 3), each as its own grilling session. See `stock-transfer-tasks.md` for the task list.
+
+### Candidate 1 — escalated, tracked elsewhere
+
+Candidate 1 was grilled and **widened materially**. The investigation confirmed the diagnosis but showed the problem is not specific to stock transfer: `SalesRepository` is a 51-method god-interface with **56 consuming files in `lib/`** and **20 hand-written test fakes totalling ~2,634 lines (~90% dead stubs)**. Every other repository interface in this codebase is 4–10 methods.
+
+The user chose to fix the root cause rather than one symptom. That work is now planned as a full 9-repository split:
+
+➡️ **[`sales-repository-split-plan.md`](./sales-repository-split-plan.md)** — full analysis, the proposed split, settled decisions, and 4 open questions.
+
+The `StockTransferRepository` carve-out described in Candidate 1 survives intact inside that plan (§5), including its agreed 5-method reshaped interface.
+
+### Candidates 2 and 3 — unchanged, still pending
+
+Both remain exactly as written above. Neither has been grilled yet, and neither depends on the outcome of the `SalesRepository` split — Candidate 2 is a widget-layer extraction and Candidate 3 is a dialog-reuse question.
