@@ -5,6 +5,7 @@ import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/core/cubit/organization_cubit.dart';
@@ -41,6 +42,16 @@ class _FakeSalesRepository implements SalesRepository {
     Customer customer,
   ) async =>
       (customer: customer, offlineFallback: false);
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    if (item.type == 'customer_contact_update') {
+      savedPhone = item.payload['phone']?.toString();
+      savedTrn = item.payload['tax_reg_no']?.toString();
+      remotePushed = true;
+    }
+    return SubmitResult.queued;
+  }
 
   @override
   Future<void> updateCustomerContactFields(

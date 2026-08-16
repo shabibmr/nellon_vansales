@@ -13,6 +13,7 @@ import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/customer_ledger.dart';
 import 'package:van_sales/domain/models/organization.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'helpers/sales_repository_enqueue_stubs.dart';
@@ -40,6 +41,13 @@ class FakeSalesRepository
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) async {
     queue.add(item);
+  }
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    if (shouldThrow) throw Exception('Database error');
+    await enqueueSyncItem(item);
+    return SubmitResult.queued;
   }
 
   @override
@@ -253,7 +261,7 @@ void main() {
     expect(cubit.state, CreateCustomerInitial());
   });
 
-  test('submit successfully saves customer locally and queues Zoho sync item', () async {
+  test('submit queues customer without writing master until Zoho succeeds', () async {
     final future = cubit.stream.firstWhere((state) => state is CreateCustomerSuccess);
 
     await cubit.submit(
@@ -276,9 +284,7 @@ void main() {
     expect(state.customer.longitude, 56.78);
     expect(state.customer.isPendingSync, true);
 
-    // Verify local storage
-    expect(salesRepo.customers.length, 1);
-    expect(salesRepo.customers.first.name, 'John Doe');
+    expect(salesRepo.customers, isEmpty);
 
     // Verify sync queue payload
     expect(salesRepo.queue.length, 1);

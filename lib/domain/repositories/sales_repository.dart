@@ -13,6 +13,7 @@ import '../models/sales_order.dart';
 import '../models/stock_transfer.dart';
 import '../models/warehouse.dart';
 import '../../data/models/sync_queue_item.dart';
+import '../models/submit_result.dart';
 
 /// Abstract contract managing local van sales data access and session tracking.
 ///
@@ -137,6 +138,36 @@ abstract class SalesRepository {
   /// item for [order]. Call after [saveLocalOrder]. Mapping to the queue
   /// payload lives in the data layer so UI/BLoCs stay on domain types.
   Future<void> enqueueSalesOrder(SalesOrder order, {required bool isUpdate});
+
+  /// Online-first submit: POST/PUT Zoho now; persist on success; queue on fail.
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item);
+
+  /// Builds the invoice queue item and [submitOrEnqueue]s it (no local save first).
+  Future<SubmitResult> submitInvoice(SalesInvoice invoice);
+
+  /// Builds the sales-order queue item and [submitOrEnqueue]s it.
+  Future<SubmitResult> submitSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  });
+
+  /// Builds the `convert_so` item (full invoice json) and [submitOrEnqueue]s it.
+  Future<SubmitResult> submitConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  });
+
+  /// Builds the receipt queue item and [submitOrEnqueue]s it.
+  Future<SubmitResult> submitReceipt(ReceiptVoucher voucher);
+
+  /// Builds the return queue item and [submitOrEnqueue]s it.
+  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn);
+
+  /// Builds the expense queue item and [submitOrEnqueue]s it.
+  Future<SubmitResult> submitExpense(ExpenseEntry expense);
+
+  /// Builds the stock-transfer queue item and [submitOrEnqueue]s it.
+  Future<SubmitResult> submitStockTransfer(StockTransfer transfer);
 
   /// Enqueues a create (`invoice`) sync item for [invoice].
   ///

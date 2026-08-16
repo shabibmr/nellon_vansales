@@ -8,6 +8,7 @@ import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
+import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/stock_rules.dart';
@@ -20,6 +21,7 @@ import 'sales_invoice_editor_state.dart';
 class SalesInvoiceEditorBloc
     extends Bloc<SalesInvoiceEditorEvent, SalesInvoiceEditorState> {
   final SalesRepository _salesRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
@@ -465,6 +467,16 @@ class SalesInvoiceEditorBloc
         invoiceNum = originalInvoice.invoiceNumber;
       }
 
+      if (isTempCustomerId(state.editingCustomer!.id)) {
+        emit(
+          state.copyWith(
+            isSaving: false,
+            errorMessage: 'Customer must sync to Zoho before invoicing',
+          ),
+        );
+        return;
+      }
+
       final invoice = SalesInvoice(
         id: tempId,
         invoiceNumber: invoiceNum,
@@ -479,8 +491,7 @@ class SalesInvoiceEditorBloc
         isPendingSync: true,
       );
 
-      await _salesRepository.saveLocalInvoice(invoice);
-
+      final SubmitResult result;
       final sourceOrderId = state.sourceOrderId;
       if (sourceOrderId != null) {
         final orders = _salesRepository.getLocalOrders();
@@ -488,22 +499,23 @@ class SalesInvoiceEditorBloc
           (o) => o.id == sourceOrderId,
           orElse: () => state.sourceOrder!,
         );
-        await _salesRepository.saveLocalOrder(
-          order.copyWith(
-            status: SalesOrderStatus.invoiced,
-            convertedInvoiceNumber: invoiceNum,
-          ),
-        );
-
-        await _salesRepository.enqueueConvertSalesOrder(
+        final zohoOrderId = order.zohoOrderId;
+        if (zohoOrderId == null || zohoOrderId.isEmpty) {
+          emit(
+            state.copyWith(
+              isSaving: false,
+              errorMessage: 'Order must sync to Zoho before converting',
+            ),
+          );
+          return;
+        }
+        result = await _salesRepository.submitConvertSalesOrder(
           order: order,
           invoice: invoice,
         );
       } else {
-        await _salesRepository.enqueueInvoice(invoice);
+        result = await _salesRepository.submitInvoice(invoice);
       }
-
-      unawaited(_syncRepository.triggerSync());
 
       emit(
         state.copyWith(
@@ -511,7 +523,7 @@ class SalesInvoiceEditorBloc
           editingInvoice: invoice,
           isEditingNew: false,
           isSaving: false,
-          successMessage: 'Invoice saved successfully',
+          successMessage: result.message('Invoice saved successfully'),
           clearSource: true,
         ),
       );

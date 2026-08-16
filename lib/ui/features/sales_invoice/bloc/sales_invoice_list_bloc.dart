@@ -19,6 +19,7 @@ import 'sales_invoice_list_state.dart';
 class SalesInvoiceListBloc
     extends Bloc<SalesInvoiceListEvent, SalesInvoiceListState> {
   final SalesRepository _salesRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
@@ -161,7 +162,6 @@ class SalesInvoiceListBloc
       }
     }
 
-    unawaited(_syncRepository.triggerSync());
     final updatedInvoices = _salesRepository.getLocalInvoices();
 
     if (successCount == 0) {
@@ -228,22 +228,13 @@ class SalesInvoiceListBloc
       isPendingSync: true,
     );
 
-    await _salesRepository.saveLocalInvoice(invoice);
+    final zohoOrderId = order.zohoOrderId;
+    if (zohoOrderId == null || zohoOrderId.isEmpty) {
+      throw Exception('Order must sync to Zoho before converting');
+    }
 
-    final orders = _salesRepository.getLocalOrders();
-    final localOrder = orders.firstWhere(
-      (o) => o.id == order.id,
-      orElse: () => order,
-    );
-    await _salesRepository.saveLocalOrder(
-      localOrder.copyWith(
-        status: SalesOrderStatus.invoiced,
-        convertedInvoiceNumber: invoiceNum,
-      ),
-    );
-
-    await _salesRepository.enqueueConvertSalesOrder(
-      order: localOrder,
+    await _salesRepository.submitConvertSalesOrder(
+      order: order,
       invoice: invoice,
     );
   }

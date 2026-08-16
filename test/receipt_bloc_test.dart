@@ -342,10 +342,8 @@ void main() {
 
       await bloc.stream.firstWhere((s) => s.successMessage != null);
 
-      expect(salesRepo.receipts, hasLength(1));
-      expect(salesRepo.receipts.single.amount, 150.0);
+      expect(salesRepo.receipts, isEmpty);
       expect(salesRepo.syncQueue, hasLength(1));
-      expect(syncRepo.triggerCount, 1);
       bloc.close();
     });
   });

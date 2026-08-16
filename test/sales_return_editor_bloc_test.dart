@@ -307,13 +307,8 @@ void main() {
 
     await bloc.stream.firstWhere((s) => s.successMessage != null);
 
-    expect(salesRepo.returns, hasLength(1));
-    final saved = salesRepo.returns.single;
-    expect(saved.creditNoteNumber, startsWith('SHB-CN-'));
-    expect(saved.customerId, 'c1');
-    expect(saved.reason, 'Expired stock');
-
+    expect(salesRepo.returns, isEmpty);
     expect(salesRepo.queue, hasLength(1));
-    expect(syncRepo.triggerCount, 1);
+    expect(salesRepo.queue.single.type, 'return');
   });
 }

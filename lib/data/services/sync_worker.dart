@@ -14,7 +14,18 @@ import '../models/payment_account_model.dart';
 import '../models/tax_model.dart';
 import '../models/expense_account_model.dart';
 import '../models/organization_model.dart';
+import '../models/sales_invoice_model.dart';
+import '../models/sales_order_model.dart';
+import '../models/receipt_voucher_model.dart';
+import '../models/sales_return_model.dart';
+import '../models/expense_entry_model.dart';
+import '../models/stock_transfer_model.dart';
 import '../../domain/models/route.dart';
+import '../../domain/models/sales_invoice.dart';
+import '../../domain/models/sales_order.dart';
+import '../../domain/models/stock_transfer.dart';
+import '../../domain/models/submit_result.dart';
+import '../../domain/utils/stock_rules.dart';
 
 /// Enumerates master/reference data configurations synced from the backend.
 ///
@@ -147,6 +158,103 @@ class SyncWorker {
   /// Disposes the periodic auto-retry timer, if one was started.
   void dispose() {
     _autoRetryTimer?.cancel();
+  }
+
+  /// Tries Zoho immediately. On success persists locally; on failure queues.
+  ///
+  /// Does not write history/master before the API call. Transient failures are
+  /// stored as `[Retryable]` so the existing backoff applies (avoids an instant
+  /// re-hit if a caller also triggers sync).
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    _assertStockOrThrow(item);
+
+    final connectivityResult = await _checkConnectivity();
+    if (connectivityResult.any((r) => r == ConnectivityResult.none)) {
+      await _dbService.enqueueSyncItem(
+        item.copyWith(status: SyncStatus.pending, timestamp: DateTime.now()),
+      );
+      _emitQueueCount();
+      return SubmitResult.queued;
+    }
+
+    try {
+      await _dispatchSync(item);
+      return SubmitResult.synced;
+    } catch (e) {
+      final category = classifySyncError(e);
+      final friendly = humanizeSyncError(e);
+      final tag = category == ErrorCategory.transient
+          ? '[Retryable]'
+          : '[Needs Attention]';
+      await _dbService.enqueueSyncItem(
+        item.copyWith(
+          status: SyncStatus.failed,
+          errorMessage: '$tag $friendly',
+          timestamp: DateTime.now(),
+          retryCount: 0,
+        ),
+      );
+      _emitQueueCount();
+      return SubmitResult.queued;
+    }
+  }
+
+  void _emitQueueCount() {
+    _syncCountController.add(
+      _dbService
+          .getSyncQueue()
+          .where((x) => x.status != SyncStatus.completed)
+          .length,
+    );
+  }
+
+  /// Validates van stock from the payload without writing. No-op when the
+  /// local item cache has no matching rows (tests / types without stock).
+  void _assertStockOrThrow(SyncQueueItem item) {
+    switch (item.type) {
+      case 'invoice':
+        _assertInvoiceStock(SalesInvoiceModel.fromJson(item.payload));
+      case 'convert_so':
+        final raw = item.payload['invoice'];
+        if (raw is Map) {
+          _assertInvoiceStock(
+            SalesInvoiceModel.fromJson(Map<String, dynamic>.from(raw)),
+          );
+        }
+      case 'stock_transfer':
+        _assertTransferStock(StockTransferModel.fromJson(item.payload));
+      default:
+        return;
+    }
+  }
+
+  void _assertInvoiceStock(SalesInvoiceModel invoice) {
+    final items = _dbService.getItems();
+    for (final line in invoice.items) {
+      final existing = items.where((it) => it.id == line.item.id).firstOrNull;
+      if (existing == null) continue;
+      deductStock(
+        itemId: existing.id,
+        itemName: existing.name,
+        available: existing.stock,
+        requested: line.quantityInBase,
+      );
+    }
+  }
+
+  void _assertTransferStock(StockTransferModel transfer) {
+    if (transfer.direction != StockTransferDirection.unload) return;
+    final items = _dbService.getItems();
+    for (final line in transfer.lines) {
+      final existing = items.where((it) => it.id == line.item.id).firstOrNull;
+      if (existing == null) continue;
+      deductStock(
+        itemId: existing.id,
+        itemName: existing.name,
+        available: existing.stock,
+        requested: line.quantity,
+      );
+    }
   }
 
   /// Exponential backoff delay for a failed item's [retryCount]-th retry:
@@ -330,6 +438,7 @@ class SyncWorker {
         final remoteId = await _apiClient.syncCustomer(item.payload);
         // CRITICAL: Replace temporary offline customer ID with permanent Zoho ID in all subsequent queue items!
         await _resolveTempCustomerIdsInQueue(item.id, remoteId);
+        await _persistCustomer(item, remoteId);
       case 'customer_gps_update':
         // Lightweight GPS enrichment update (contact must already exist in Zoho)
         final cid =
@@ -339,6 +448,7 @@ class SyncWorker {
         final lng = (item.payload['longitude'] as num?)?.toDouble();
         if (cid != null && lat != null && lng != null) {
           await _apiClient.updateCustomerGps(cid, lat, lng);
+          await _dbService.updateCustomerGps(cid, lat, lng);
         }
       case 'customer_contact_update':
         final contactId =
@@ -353,51 +463,53 @@ class SyncWorker {
           phone: phone,
           trn: trn,
         );
+        await _dbService.updateCustomerContactFields(
+          contactId,
+          phone: phone,
+          trn: trn,
+        );
       case 'invoice':
         final remoteId = await _apiClient.syncInvoice(
           _withResolvedInvoiceRefs(item.payload),
         );
-        await _persistInvoiceZohoId(item.id, remoteId);
+        await _persistInvoice(item, remoteId);
         await _resolveTempInvoiceIdsInQueue(item.id, remoteId);
       case 'sales_order':
         final remoteId = await _apiClient.syncSalesOrder(item.payload);
         // Persist the permanent Zoho salesorder_id on the local order and
         // patch any pending conversion so it can target the real id.
-        await _persistOrderZohoId(item.id, remoteId);
+        await _persistOrder(item, remoteId);
         await _resolveTempOrderIdsInQueue(item.id, remoteId);
       case 'update_sales_order':
         final remoteId = await _apiClient.updateSalesOrder(
           item.payload['salesorder_id'],
           item.payload,
         );
-        await _persistOrderZohoId(item.id, remoteId);
+        await _persistOrder(item, remoteId);
       case 'convert_so':
         final remoteId = await _apiClient.convertSalesOrderToInvoice(
           item.payload['salesorder_id'],
         );
+        await _persistConvertedInvoice(item, remoteId);
         final localInvoiceId =
             item.payload['local_invoice_id']?.toString() ?? item.id;
-        await _persistInvoiceZohoId(localInvoiceId, remoteId);
         await _resolveTempInvoiceIdsInQueue(localInvoiceId, remoteId);
       case 'receipt':
         final remoteId = await _apiClient.syncReceiptVoucher(
           _withResolvedInvoiceRefs(item.payload),
         );
-        await _persistReceiptZohoId(item.id, remoteId);
+        await _persistReceipt(item, remoteId);
       case 'return':
         final remoteId = await _apiClient.syncSalesReturn(
           _withResolvedInvoiceRefs(item.payload),
         );
-        await _persistReturnZohoId(item.id, remoteId);
+        await _persistReturn(item, remoteId);
       case 'expense':
         final remoteId = await _apiClient.syncExpense(item.payload);
-        await _persistExpenseZohoId(item.id, remoteId);
+        await _persistExpense(item, remoteId);
       case 'stock_transfer':
         final remoteId = await _apiClient.syncStockTransfer(item.payload);
-        // Persist the permanent Zoho transfer_order_id on the local record
-        // so saveRemoteStockTransfers can dedupe it against the matching
-        // remote row instead of accumulating a duplicate on every refresh.
-        await _persistStockTransferZohoId(item.id, remoteId);
+        await _persistStockTransfer(item, remoteId);
       default:
         throw Exception('Unsupported transaction sync type: ${item.type}');
     }
@@ -612,12 +724,16 @@ class SyncWorker {
     return changed ? updated : payload;
   }
 
-  Future<void> _persistInvoiceZohoId(
-    String localInvoiceId,
-    String zohoInvoiceId,
-  ) async {
+  Future<void> _persistCustomer(SyncQueueItem item, String remoteId) async {
+    final parsed = CustomerModel.fromJson(item.payload);
+    await _dbService.insertCustomer(
+      parsed.copyWith(id: remoteId, isPendingSync: false),
+    );
+  }
+
+  Future<void> _persistInvoice(SyncQueueItem item, String zohoInvoiceId) async {
     final invoices = _dbService.getAllLocalInvoicesUnfiltered();
-    final index = invoices.indexWhere((i) => i.id == localInvoiceId);
+    final index = invoices.indexWhere((i) => i.id == item.id);
     if (index >= 0) {
       await _dbService.updateInvoiceRecord(
         invoices[index].copyWith(
@@ -625,15 +741,18 @@ class SyncWorker {
           isPendingSync: false,
         ),
       );
+      return;
     }
+    final invoice = SalesInvoiceModel.fromJson(item.payload).copyWith(
+      zohoInvoiceId: zohoInvoiceId,
+      isPendingSync: false,
+    );
+    await _dbService.saveLocalInvoice(invoice);
   }
 
-  Future<void> _persistReceiptZohoId(
-    String localReceiptId,
-    String zohoPaymentId,
-  ) async {
+  Future<void> _persistReceipt(SyncQueueItem item, String zohoPaymentId) async {
     final receipts = _dbService.getAllLocalReceiptsUnfiltered();
-    final index = receipts.indexWhere((r) => r.id == localReceiptId);
+    final index = receipts.indexWhere((r) => r.id == item.id);
     if (index >= 0) {
       await _dbService.updateReceiptRecord(
         receipts[index].copyWith(
@@ -641,15 +760,21 @@ class SyncWorker {
           isPendingSync: false,
         ),
       );
+      return;
     }
+    final receipt = ReceiptVoucherModel.fromJson(item.payload).copyWith(
+      zohoPaymentId: zohoPaymentId,
+      isPendingSync: false,
+    );
+    await _dbService.saveLocalReceipt(receipt);
   }
 
-  Future<void> _persistReturnZohoId(
-    String localReturnId,
+  Future<void> _persistReturn(
+    SyncQueueItem item,
     String zohoCreditNoteId,
   ) async {
     final returns = _dbService.getAllLocalReturnsUnfiltered();
-    final index = returns.indexWhere((r) => r.id == localReturnId);
+    final index = returns.indexWhere((r) => r.id == item.id);
     if (index >= 0) {
       await _dbService.updateReturnRecord(
         returns[index].copyWith(
@@ -657,15 +782,18 @@ class SyncWorker {
           isPendingSync: false,
         ),
       );
+      return;
     }
+    final salesReturn = SalesReturnModel.fromJson(item.payload).copyWith(
+      zohoCreditNoteId: zohoCreditNoteId,
+      isPendingSync: false,
+    );
+    await _dbService.saveLocalReturn(salesReturn);
   }
 
-  Future<void> _persistExpenseZohoId(
-    String localExpenseId,
-    String zohoExpenseId,
-  ) async {
+  Future<void> _persistExpense(SyncQueueItem item, String zohoExpenseId) async {
     final expenses = _dbService.getAllLocalExpensesUnfiltered();
-    final index = expenses.indexWhere((e) => e.id == localExpenseId);
+    final index = expenses.indexWhere((e) => e.id == item.id);
     if (index >= 0) {
       await _dbService.updateExpenseRecord(
         expenses[index].copyWith(
@@ -673,7 +801,91 @@ class SyncWorker {
           isPendingSync: false,
         ),
       );
+      return;
     }
+    final expense = ExpenseEntryModel.fromJson(item.payload).copyWith(
+      zohoExpenseId: zohoExpenseId,
+      isPendingSync: false,
+    );
+    await _dbService.saveLocalExpense(expense);
+  }
+
+  Future<void> _persistOrder(SyncQueueItem item, String zohoOrderId) async {
+    final orders = _dbService.getAllLocalOrdersUnfiltered();
+    final index = orders.indexWhere((o) => o.id == item.id);
+    if (index >= 0) {
+      await _dbService.saveLocalOrder(
+        orders[index].copyWith(zohoOrderId: zohoOrderId, isPendingSync: false),
+      );
+      return;
+    }
+    final order = SalesOrderModel.fromJson(item.payload).copyWith(
+      zohoOrderId: zohoOrderId,
+      isPendingSync: false,
+    );
+    await _dbService.saveLocalOrder(order);
+  }
+
+  Future<void> _persistStockTransfer(
+    SyncQueueItem item,
+    String zohoTransferId,
+  ) async {
+    final transfers = _dbService.getAllLocalStockTransfersUnfiltered();
+    final index = transfers.indexWhere((t) => t.id == item.id);
+    if (index >= 0) {
+      await _dbService.updateStockTransferRecord(
+        transfers[index].copyWith(
+          zohoTransferId: zohoTransferId,
+          isPendingSync: false,
+        ),
+      );
+      return;
+    }
+    final transfer = StockTransferModel.fromJson(item.payload).copyWith(
+      zohoTransferId: zohoTransferId,
+      isPendingSync: false,
+    );
+    await _dbService.saveLocalStockTransfer(transfer);
+  }
+
+  Future<void> _persistConvertedInvoice(
+    SyncQueueItem item,
+    String zohoInvoiceId,
+  ) async {
+    final localInvoiceId =
+        item.payload['local_invoice_id']?.toString() ?? item.id;
+    final invoices = _dbService.getAllLocalInvoicesUnfiltered();
+    final index = invoices.indexWhere((i) => i.id == localInvoiceId);
+    SalesInvoice invoice;
+    if (index >= 0) {
+      invoice = invoices[index].copyWith(
+        zohoInvoiceId: zohoInvoiceId,
+        isPendingSync: false,
+      );
+      await _dbService.updateInvoiceRecord(invoice);
+    } else {
+      final raw = item.payload['invoice'];
+      final json = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : item.payload;
+      invoice = SalesInvoiceModel.fromJson(json).copyWith(
+        zohoInvoiceId: zohoInvoiceId,
+        isPendingSync: false,
+      );
+      await _dbService.saveLocalInvoice(invoice);
+    }
+
+    final sourceOrderId = item.payload['source_order_id']?.toString();
+    if (sourceOrderId == null || sourceOrderId.isEmpty) return;
+    final orders = _dbService.getAllLocalOrdersUnfiltered();
+    final orderIndex = orders.indexWhere((o) => o.id == sourceOrderId);
+    if (orderIndex < 0) return;
+    await _dbService.saveLocalOrder(
+      orders[orderIndex].copyWith(
+        status: SalesOrderStatus.invoiced,
+        convertedInvoiceNumber: invoice.invoiceNumber,
+      ),
+    );
   }
 
   /// Patches pending/failed receipt and return payloads whose invoice refs
@@ -713,40 +925,6 @@ class SyncWorker {
       if (modified) {
         await _dbService.updateSyncItem(item.copyWith(payload: updatedPayload));
       }
-    }
-  }
-
-  /// Stores the permanent Zoho `salesorder_id` on the local order record once synced,
-  /// so a later conversion can target the real id.
-  Future<void> _persistOrderZohoId(
-    String localOrderId,
-    String zohoOrderId,
-  ) async {
-    final orders = _dbService.getAllLocalOrdersUnfiltered();
-    final index = orders.indexWhere((o) => o.id == localOrderId);
-    if (index >= 0) {
-      await _dbService.saveLocalOrder(
-        orders[index].copyWith(zohoOrderId: zohoOrderId, isPendingSync: false),
-      );
-    }
-  }
-
-  /// Stores the permanent Zoho `transfer_order_id` on the local stock
-  /// transfer record once synced, so a later remote fetch can be
-  /// deduplicated against it instead of accumulating as a duplicate.
-  Future<void> _persistStockTransferZohoId(
-    String localTransferId,
-    String zohoTransferId,
-  ) async {
-    final transfers = _dbService.getAllLocalStockTransfersUnfiltered();
-    final index = transfers.indexWhere((t) => t.id == localTransferId);
-    if (index >= 0) {
-      await _dbService.updateStockTransferRecord(
-        transfers[index].copyWith(
-          zohoTransferId: zohoTransferId,
-          isPendingSync: false,
-        ),
-      );
     }
   }
 

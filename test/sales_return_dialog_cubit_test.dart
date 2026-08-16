@@ -15,6 +15,7 @@ import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/models/customer_ledger.dart';
 import 'package:van_sales/domain/models/organization.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
@@ -44,6 +45,14 @@ class FakeSalesRepository
     saveCallCount++;
     if (shouldThrowOnSave) throw Exception('Save failed');
     savedReturns.add(salesReturn);
+  }
+
+  @override
+  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn) async {
+    saveCallCount++;
+    if (shouldThrowOnSave) throw Exception('Save failed');
+    await enqueueSalesReturn(salesReturn);
+    return SubmitResult.queued;
   }
 
   @override
@@ -436,18 +445,9 @@ void main() {
 
     await cubit.submit();
 
-    expect(repo.saveCallCount, 1);
-    expect(repo.savedReturns.length, 1);
-    expect(repo.savedReturns.first.items.length, 1);
-    expect(repo.savedReturns.first.items.first.returnedQuantity, 2);
-    expect(repo.savedReturns.first.reason, 'Damaged packaging');
-    expect(
-      repo.savedReturns.first.creditNoteNumber.startsWith('SHB-CN-'),
-      isTrue,
-    );
+    expect(repo.savedReturns, isEmpty);
     expect(repo.queue.length, 1);
     expect(repo.queue.first.type, 'return');
-    expect(syncWorker.syncPendingCount, 1);
     expect(cubit.state.success, isTrue);
     expect(cubit.state.submitting, isFalse);
   });

@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/expense_entry.dart';
+import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
@@ -15,6 +16,7 @@ import 'expense_editor_state.dart';
 class ExpenseEditorBloc
     extends Bloc<ExpenseEditorEvent, ExpenseEditorState> {
   final SalesRepository _salesRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
 
   ExpenseEditorBloc({
@@ -325,11 +327,7 @@ class ExpenseEditorBloc
         isPendingSync: true,
       );
 
-      await _salesRepository.saveLocalExpense(expense);
-
-      await _salesRepository.enqueueExpense(expense);
-
-      unawaited(_syncRepository.triggerSync());
+      final result = await _salesRepository.submitExpense(expense);
 
       emit(
         state.copyWith(
@@ -337,7 +335,7 @@ class ExpenseEditorBloc
           editingExpense: expense,
           isEditingNew: false,
           isSaving: false,
-          successMessage: 'Expense saved successfully',
+          successMessage: result.message('Expense saved successfully'),
         ),
       );
     } catch (e) {

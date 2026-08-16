@@ -451,7 +451,6 @@ void main() {
     expect(queued.payload['salesorder_id'], 'so_9001');
     // The original number is kept — an update must not renumber the order.
     expect(queued.payload['salesorder_number'], 'SO-00042');
-    expect(syncRepo.triggerCount, 1);
   });
 
   test('saving a fetched order keeps its locationId', () async {
@@ -471,8 +470,7 @@ void main() {
     bloc.add(const SaveSalesOrder(notes: 'updated'));
     await bloc.stream.firstWhere((s) => s.successMessage != null);
 
-    expect(salesRepo.savedOrders, isNotEmpty);
-    expect(salesRepo.savedOrders.last.locationId, 'warehouse_van_7');
+    expect(salesRepo.queue.single.payload['location_id'], 'warehouse_van_7');
   });
 
   test('saving a new order queues a create with a document number', () async {
@@ -508,8 +506,6 @@ void main() {
     expect(queued.payload['salesorder_number'], 'SO-FAKE-00001');
     // Create path must not stamp a permanent Zoho id onto the payload.
     expect(queued.payload['salesorder_id'], isNot(equals('so_9001')));
-    expect(salesRepo.savedOrders, isNotEmpty);
-    expect(syncRepo.triggerCount, 1);
   });
 
   test('saving a converted order is rejected without enqueue', () async {

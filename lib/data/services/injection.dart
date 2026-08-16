@@ -70,7 +70,11 @@ Future<void> setupDependencyInjection() async {
     () => SyncRepositoryImpl(syncWorker: sl(), dbService: sl()),
   );
   sl.registerLazySingleton<SalesRepository>(
-    () => SalesRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => SalesRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<SalespersonRepository>(
     () => SalespersonRepositoryImpl(dbService: sl(), apiClient: sl()),

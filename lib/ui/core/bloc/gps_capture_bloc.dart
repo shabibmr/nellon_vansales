@@ -66,23 +66,8 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
           return;
         }
 
-        // A. Update local cache immediately
-        await salesRepository.updateCustomerGps(customer.id, lat, lng);
-
-        // B. Immediate remote update (best effort). Falls back to queue if it fails or if temp_ id.
-        bool remoteUpdated = false;
-        if (customer.id.isNotEmpty && !customer.id.startsWith('temp_')) {
-          try {
-            await salesRepository.pushCustomerGpsRemote(customer.id, lat, lng);
-            remoteUpdated = true;
-          } catch (_) {
-            // Remote failure is swallowed, fall back to sync queue
-          }
-        }
-
-        // C. Enqueue fallback + kick sync if remote didn't succeed right now
-        if (!remoteUpdated) {
-          final queueItem = SyncQueueItem(
+        await salesRepository.submitOrEnqueue(
+          SyncQueueItem(
             id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
             type: 'customer_gps_update',
             payload: {
@@ -92,10 +77,8 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
             },
             status: SyncStatus.pending,
             timestamp: DateTime.now(),
-          );
-          await salesRepository.enqueueSyncItem(queueItem);
-          unawaited(syncRepository.triggerSync());
-        }
+          ),
+        );
 
         final enrichedCustomer = customer.copyWith(latitude: lat, longitude: lng);
         emit(GpsCaptureSuccess(

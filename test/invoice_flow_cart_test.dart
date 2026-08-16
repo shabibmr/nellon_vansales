@@ -334,23 +334,9 @@ void main() {
       (s) => s.successMessage != null,
     );
 
-    expect(savedState.successMessage, 'Invoice saved successfully');
-    expect(salesRepo.invoices, hasLength(1));
-
-    final savedInvoice = salesRepo.invoices.single;
-    expect(savedInvoice.invoiceNumber, contains('INV-'));
-    expect(savedInvoice.customerId, 'c1');
-    expect(savedInvoice.items, hasLength(1));
-    expect(savedInvoice.subTotal, 30.0);
-    expect(savedInvoice.taxTotal, 1.5);
-    expect(savedInvoice.rawTotal, 31.5);
-    expect(savedInvoice.total, 32.0);
-
+    expect(savedState.successMessage, 'Saved to upload queue');
+    expect(salesRepo.invoices, isEmpty);
     expect(salesRepo.queue, hasLength(1));
-    final queueItem = salesRepo.queue.single;
-    expect(queueItem.type, 'invoice');
-    expect(queueItem.id, savedInvoice.id);
-
-    expect(syncRepo.triggerCount, 1);
+    expect(salesRepo.queue.single.type, 'invoice');
   });
 }

@@ -325,6 +325,20 @@ class HiveDatabaseService {
     await saveCustomers(newList);
   }
 
+  /// Inserts or replaces [customer] by id (used after a Zoho contact create).
+  Future<void> insertCustomer(Customer customer) async {
+    if (customer.id.isEmpty) return;
+    final current = getCustomers();
+    final index = current.indexWhere((c) => c.id == customer.id);
+    final newList = List<Customer>.from(current);
+    if (index >= 0) {
+      newList[index] = customer;
+    } else {
+      newList.add(customer);
+    }
+    await saveCustomers(newList);
+  }
+
   /// Updates latitude/longitude for a specific customer (by id) and persists.
   /// If the customer is not found, this is a no-op.
   Future<void> updateCustomerGps(

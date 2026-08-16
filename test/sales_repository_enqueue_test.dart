@@ -175,6 +175,11 @@ void main() {
     expect(item.type, 'convert_so');
     expect(item.payload['salesorder_id'], 'zoho_so_1');
     expect(item.payload['local_invoice_id'], 'temp_inv_from_so');
+    expect(item.payload['invoice'], isA<Map>());
+    expect(
+      (item.payload['invoice'] as Map)['invoice_number'],
+      'SHB-INV-00001',
+    );
   });
 
   test('enqueueExpense and enqueueStockTransfer write typed queue items',

@@ -40,13 +40,7 @@ class ExpenseLogCubit extends Cubit<ExpenseLogState> {
         isPendingSync: true,
       );
 
-      // Save local
-      await salesRepository.saveLocalExpense(expense);
-
-      await salesRepository.enqueueExpense(expense);
-
-      // Trigger background sync
-      unawaited(syncRepository.triggerSync());
+      await salesRepository.submitExpense(expense);
 
       emit(ExpenseLogSuccess(expense));
     } catch (e) {

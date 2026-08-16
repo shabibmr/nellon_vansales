@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/models/sync_queue_item.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/repositories/sales_repository.dart';
-import '../../../domain/repositories/sync_repository.dart';
 import '../bloc/gps_capture_bloc.dart';
 import '../bloc/gps_capture_event.dart';
 import '../bloc/gps_capture_state.dart';
@@ -158,91 +155,49 @@ class _CustomerMissingFieldsDialogState
     if (lat == null || lng == null) return customer;
 
     final sales = context.read<SalesRepository>();
-    final sync = context.read<SyncRepository>();
 
-    await sales.updateCustomerGps(customer.id, lat, lng);
-
-    var remoteUpdated = false;
-    if (customer.id.isNotEmpty && !customer.id.startsWith('temp_')) {
-      try {
-        await sales.pushCustomerGpsRemote(customer.id, lat, lng);
-        remoteUpdated = true;
-      } catch (_) {
-        // Fall back to the offline queue, same as contact persist.
-      }
-    }
-
-    if (!remoteUpdated) {
-      await sales.enqueueSyncItem(
-        SyncQueueItem(
-          id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
-          type: 'customer_gps_update',
-          payload: {
-            'contact_id': customer.id,
-            'latitude': lat,
-            'longitude': lng,
-          },
-          status: SyncStatus.pending,
-          timestamp: DateTime.now(),
-        ),
-      );
-      unawaited(sync.triggerSync());
-    }
+    await sales.submitOrEnqueue(
+      SyncQueueItem(
+        id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
+        type: 'customer_gps_update',
+        payload: {
+          'contact_id': customer.id,
+          'latitude': lat,
+          'longitude': lng,
+        },
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
 
     return customer;
   }
 
   Future<Customer> _persistContactFields(Customer customer) async {
     final sales = context.read<SalesRepository>();
-    final sync = context.read<SyncRepository>();
     final phone = widget.missing.phone ? _phoneController.text.trim() : null;
     final trn = widget.missing.trn
         ? _trnController.text.trim().replaceAll(RegExp(r'\D'), '')
         : null;
 
-    await sales.updateCustomerContactFields(
-      customer.id,
-      phone: phone,
-      trn: trn,
+    await sales.submitOrEnqueue(
+      SyncQueueItem(
+        id: 'contact_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
+        type: 'customer_contact_update',
+        payload: {
+          'contact_id': customer.id,
+          if (phone != null) 'phone': phone,
+          if (trn != null) 'tax_reg_no': trn,
+        },
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
     );
 
-    final enriched = customer.copyWith(
+    return customer.copyWith(
       phone: phone ?? customer.phone,
       trn: trn ?? customer.trn,
     );
-
-    var remoteUpdated = false;
-    if (customer.id.isNotEmpty && !customer.id.startsWith('temp_')) {
-      try {
-        await sales.pushCustomerContactFieldsRemote(
-          customer.id,
-          phone: phone,
-          trn: trn,
-        );
-        remoteUpdated = true;
-      } catch (_) {
-        // Fall back to the offline queue, same as GPS persist.
-      }
-    }
-
-    if (!remoteUpdated) {
-      await sales.enqueueSyncItem(
-        SyncQueueItem(
-          id: 'contact_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
-          type: 'customer_contact_update',
-          payload: {
-            'contact_id': customer.id,
-            if (phone != null) 'phone': phone,
-            if (trn != null) 'tax_reg_no': trn,
-          },
-          status: SyncStatus.pending,
-          timestamp: DateTime.now(),
-        ),
-      );
-      unawaited(sync.triggerSync());
-    }
-
-    return enriched;
   }
 
   @override

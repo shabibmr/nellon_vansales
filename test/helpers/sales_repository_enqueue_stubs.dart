@@ -5,6 +5,7 @@ import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 
 /// Satisfies the voucher enqueue helpers on [SalesRepository] fakes by
@@ -87,5 +88,59 @@ mixin SalesRepositoryEnqueueStubs implements SalesRepository {
         timestamp: DateTime.now(),
       ),
     );
+  }
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    await enqueueSyncItem(item);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitInvoice(SalesInvoice invoice) async {
+    await enqueueInvoice(invoice);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {
+    await enqueueSalesOrder(order, isUpdate: isUpdate);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) async {
+    await enqueueConvertSalesOrder(order: order, invoice: invoice);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitReceipt(ReceiptVoucher voucher) async {
+    await enqueueReceipt(voucher);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn) async {
+    await enqueueSalesReturn(salesReturn);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitExpense(ExpenseEntry expense) async {
+    await enqueueExpense(expense);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitStockTransfer(StockTransfer transfer) async {
+    await enqueueStockTransfer(transfer);
+    return SubmitResult.queued;
   }
 }

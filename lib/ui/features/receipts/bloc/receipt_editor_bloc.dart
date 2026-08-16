@@ -8,6 +8,7 @@ import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
+import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
@@ -18,6 +19,7 @@ import 'receipt_editor_state.dart';
 class ReceiptEditorBloc
     extends Bloc<ReceiptEditorEvent, ReceiptEditorState> {
   final SalesRepository _salesRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
@@ -427,6 +429,16 @@ class ReceiptEditorBloc
             : original.referenceNumber;
       }
 
+      if (isTempCustomerId(state.editingCustomer!.id)) {
+        emit(
+          state.copyWith(
+            isSaving: false,
+            errorMessage: 'Customer must sync to Zoho before collecting',
+          ),
+        );
+        return;
+      }
+
       final voucher = ReceiptVoucher(
         id: tempId,
         paymentNumber: paymentNum,
@@ -440,11 +452,7 @@ class ReceiptEditorBloc
         isPendingSync: true,
       );
 
-      await _salesRepository.saveLocalReceipt(voucher);
-
-      await _salesRepository.enqueueReceipt(voucher);
-
-      unawaited(_syncRepository.triggerSync());
+      final result = await _salesRepository.submitReceipt(voucher);
 
       emit(
         state.copyWith(
@@ -452,7 +460,7 @@ class ReceiptEditorBloc
           editingReceipt: voucher,
           isEditingNew: false,
           isSaving: false,
-          successMessage: 'Receipt saved successfully',
+          successMessage: result.message('Receipt saved successfully'),
         ),
       );
     } catch (e) {

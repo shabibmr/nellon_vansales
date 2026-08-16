@@ -235,15 +235,9 @@ void main() {
       receiptImagePath: '/path/to/receipt.jpg',
     );
 
-    expect(salesRepo.expenses.length, 1);
-    expect(salesRepo.expenses.first.lines.first.amount, 150.0);
-    expect(salesRepo.expenses.first.lines.first.category, 'Fuel');
-    expect(salesRepo.expenses.first.receiptImagePath, '/path/to/receipt.jpg');
-
+    expect(salesRepo.expenses, isEmpty);
     expect(salesRepo.syncQueue.length, 1);
     expect(salesRepo.syncQueue.first.type, 'expense');
-
-    expect(syncRepo.syncTriggered, true);
   });
 
   test('submitExpense handles exception and emits ExpenseLogFailure', () async {
@@ -264,6 +258,6 @@ void main() {
 
     final state = cubit.state;
     expect(state, isA<ExpenseLogFailure>());
-    expect((state as ExpenseLogFailure).message, contains('Database write failed'));
+    expect((state as ExpenseLogFailure).message, contains('Queue enqueue failed'));
   });
 }

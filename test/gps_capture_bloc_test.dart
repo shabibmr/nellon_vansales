@@ -331,17 +331,9 @@ void main() {
     expect(state.enrichedCustomer!.latitude, 12.3456);
     expect(state.enrichedCustomer!.longitude, 78.9012);
 
-    // Verify local cache updated
-    expect(salesRepo.lastCustomerId, 'cust_01');
-    expect(salesRepo.lastLatitude, 12.3456);
-
-    // Verify remote API updated directly
-    expect(salesRepo.lastRemoteCustomerId, 'cust_01');
-    expect(salesRepo.lastRemoteLatitude, 12.3456);
-
-    // Verify no sync queued
-    expect(salesRepo.queue.isEmpty, true);
-    expect(syncRepo.syncCount, 0);
+    expect(salesRepo.queue, hasLength(1));
+    expect(salesRepo.queue.first.type, 'customer_gps_update');
+    expect(salesRepo.lastRemoteCustomerId, isNull);
   });
 
   test('GpsCaptureRequested in persist mode enqueues sync item if Zoho API throws', () async {
@@ -352,18 +344,10 @@ void main() {
     final state = await future as GpsCaptureSuccess;
 
     expect(state.latitude, 12.3456);
-
-    // Verify local cache updated
-    expect(salesRepo.lastCustomerId, 'cust_01');
-
-    // Verify Zoho API did NOT complete
     expect(salesRepo.lastRemoteCustomerId, isNull);
-
-    // Verify sync was queued
     expect(salesRepo.queue.length, 1);
     expect(salesRepo.queue.first.type, 'customer_gps_update');
     expect(salesRepo.queue.first.payload['contact_id'], 'cust_01');
-    expect(syncRepo.syncCount, 1);
   });
 
   test('GpsCaptureRequested in persist mode enqueues sync item for temp_ customer automatically', () async {
@@ -374,16 +358,8 @@ void main() {
     final state = await future as GpsCaptureSuccess;
 
     expect(state.latitude, 12.3456);
-
-    // Verify local cache updated
-    expect(salesRepo.lastCustomerId, 'temp_cust_123');
-
-    // Verify Zoho API was NOT called for temp customer
     expect(salesRepo.lastRemoteCustomerId, isNull);
-
-    // Verify sync was queued
     expect(salesRepo.queue.length, 1);
     expect(salesRepo.queue.first.payload['contact_id'], 'temp_cust_123');
-    expect(syncRepo.syncCount, 1);
   });
 }

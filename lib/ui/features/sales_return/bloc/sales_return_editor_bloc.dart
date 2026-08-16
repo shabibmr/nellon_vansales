@@ -8,6 +8,7 @@ import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_return.dart';
+import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
@@ -18,6 +19,7 @@ import 'sales_return_editor_state.dart';
 class SalesReturnEditorBloc
     extends Bloc<SalesReturnEditorEvent, SalesReturnEditorState> {
   final SalesRepository _salesRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
@@ -399,6 +401,16 @@ class SalesReturnEditorBloc
         creditNoteNum = original.creditNoteNumber;
       }
 
+      if (isTempCustomerId(state.editingCustomer!.id)) {
+        emit(
+          state.copyWith(
+            isSaving: false,
+            errorMessage: 'Customer must sync to Zoho before a return',
+          ),
+        );
+        return;
+      }
+
       final salesReturn = SalesReturn(
         id: tempId,
         creditNoteNumber: creditNoteNum,
@@ -410,11 +422,7 @@ class SalesReturnEditorBloc
         isPendingSync: true,
       );
 
-      await _salesRepository.saveLocalReturn(salesReturn);
-
-      await _salesRepository.enqueueSalesReturn(salesReturn);
-
-      unawaited(_syncRepository.triggerSync());
+      final result = await _salesRepository.submitSalesReturn(salesReturn);
 
       emit(
         state.copyWith(
@@ -422,7 +430,7 @@ class SalesReturnEditorBloc
           editingReturn: salesReturn,
           isEditingNew: false,
           isSaving: false,
-          successMessage: 'Return saved successfully',
+          successMessage: result.message('Return saved successfully'),
         ),
       );
     } catch (e) {

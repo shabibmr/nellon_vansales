@@ -201,13 +201,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
         isPendingSync: true,
       );
 
-      // Save locally
-      await salesRepository.saveLocalReceipt(voucher);
-
-      await salesRepository.enqueueReceipt(voucher);
-
-      // Kick sync in background
-      unawaited(syncWorker.syncPendingItems());
+      await salesRepository.submitReceipt(voucher);
 
       emit(state.copyWith(
         submitting: false,

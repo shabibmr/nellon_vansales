@@ -27,7 +27,9 @@ import '../models/expense_entry_model.dart';
 import '../models/stock_transfer_model.dart';
 import '../models/open_invoice_model.dart';
 import '../services/hive_database_service.dart';
+import '../services/sync_worker.dart';
 import '../services/zoho_api_client.dart';
+import '../../domain/models/submit_result.dart';
 
 /// Concrete implementation of [SalesRepository] backed by a local Hive database cache.
 ///
@@ -35,9 +37,24 @@ import '../services/zoho_api_client.dart';
 class SalesRepositoryImpl implements SalesRepository {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final SyncWorker? _syncWorker;
 
   /// Creates a new [SalesRepositoryImpl] wrapping the Hive local database provider.
-  SalesRepositoryImpl({required this._dbService, required this._apiClient});
+  SalesRepositoryImpl({
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    SyncWorker? syncWorker,
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _syncWorker = syncWorker;
+
+  SyncWorker get _worker {
+    final worker = _syncWorker;
+    if (worker == null) {
+      throw StateError('submit* requires SyncWorker');
+    }
+    return worker;
+  }
 
   @override
   List<RouteModel> getRoutes() => _dbService.getRoutes();
@@ -364,11 +381,7 @@ class SalesRepositoryImpl implements SalesRepository {
   Future<void> saveLocalOrder(SalesOrder order) =>
       _dbService.saveLocalOrder(order);
 
-  @override
-  Future<void> enqueueSalesOrder(
-    SalesOrder order, {
-    required bool isUpdate,
-  }) async {
+  SyncQueueItem _salesOrderItem(SalesOrder order, {required bool isUpdate}) {
     final payload = SalesOrderModel.fromDomain(order).toJson();
     if (isUpdate) {
       final zohoId = order.zohoOrderId;
@@ -376,28 +389,96 @@ class SalesRepositoryImpl implements SalesRepository {
         payload['salesorder_id'] = zohoId;
       }
     }
+    return SyncQueueItem(
+      id: order.id,
+      type: isUpdate ? 'update_sales_order' : 'sales_order',
+      payload: payload,
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  SyncQueueItem _invoiceItem(SalesInvoice invoice) {
+    return SyncQueueItem(
+      id: invoice.id,
+      type: 'invoice',
+      payload: SalesInvoiceModel.fromDomain(invoice).toJson(),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  SyncQueueItem _convertSoItem({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) {
+    return SyncQueueItem(
+      id: invoice.id,
+      type: 'convert_so',
+      payload: {
+        'salesorder_id': order.zohoOrderId ?? order.id,
+        'source_order_id': order.id,
+        'local_invoice_id': invoice.id,
+        'invoice': SalesInvoiceModel.fromDomain(invoice).toJson(),
+      },
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  SyncQueueItem _receiptItem(ReceiptVoucher voucher) {
+    return SyncQueueItem(
+      id: voucher.id,
+      type: 'receipt',
+      payload: _receiptQueuePayload(voucher),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  SyncQueueItem _returnItem(SalesReturn salesReturn) {
+    return SyncQueueItem(
+      id: salesReturn.id,
+      type: 'return',
+      payload: _returnQueuePayload(salesReturn),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  SyncQueueItem _expenseItem(ExpenseEntry expense) {
+    return SyncQueueItem(
+      id: expense.id,
+      type: 'expense',
+      payload: ExpenseEntryModel.fromDomain(expense).toJson(),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  SyncQueueItem _stockTransferItem(StockTransfer transfer) {
+    return SyncQueueItem(
+      id: transfer.id,
+      type: 'stock_transfer',
+      payload: StockTransferModel.fromDomain(transfer).toJson(),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<void> enqueueSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {
     await _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: order.id,
-        type: isUpdate ? 'update_sales_order' : 'sales_order',
-        payload: payload,
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
+      _salesOrderItem(order, isUpdate: isUpdate),
     );
   }
 
   @override
   Future<void> enqueueInvoice(SalesInvoice invoice) {
-    return _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: invoice.id,
-        type: 'invoice',
-        payload: SalesInvoiceModel.fromDomain(invoice).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
-    );
+    return _dbService.enqueueSyncItem(_invoiceItem(invoice));
   }
 
   @override
@@ -406,70 +487,76 @@ class SalesRepositoryImpl implements SalesRepository {
     required SalesInvoice invoice,
   }) {
     return _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: invoice.id,
-        type: 'convert_so',
-        payload: {
-          'salesorder_id': order.zohoOrderId ?? order.id,
-          'source_order_id': order.id,
-          'local_invoice_id': invoice.id,
-        },
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
+      _convertSoItem(order: order, invoice: invoice),
     );
   }
 
   @override
   Future<void> enqueueReceipt(ReceiptVoucher voucher) {
-    return _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: voucher.id,
-        type: 'receipt',
-        payload: _receiptQueuePayload(voucher),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
-    );
+    return _dbService.enqueueSyncItem(_receiptItem(voucher));
   }
 
   @override
   Future<void> enqueueSalesReturn(SalesReturn salesReturn) {
-    return _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: salesReturn.id,
-        type: 'return',
-        payload: _returnQueuePayload(salesReturn),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
-    );
+    return _dbService.enqueueSyncItem(_returnItem(salesReturn));
   }
 
   @override
   Future<void> enqueueExpense(ExpenseEntry expense) {
-    return _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: expense.id,
-        type: 'expense',
-        payload: ExpenseEntryModel.fromDomain(expense).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
-    );
+    return _dbService.enqueueSyncItem(_expenseItem(expense));
   }
 
   @override
   Future<void> enqueueStockTransfer(StockTransfer transfer) {
-    return _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: transfer.id,
-        type: 'stock_transfer',
-        payload: StockTransferModel.fromDomain(transfer).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
+    return _dbService.enqueueSyncItem(_stockTransferItem(transfer));
+  }
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) {
+    return _worker.submitOrEnqueue(item);
+  }
+
+  @override
+  Future<SubmitResult> submitInvoice(SalesInvoice invoice) {
+    return _worker.submitOrEnqueue(_invoiceItem(invoice));
+  }
+
+  @override
+  Future<SubmitResult> submitSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) {
+    return _worker.submitOrEnqueue(_salesOrderItem(order, isUpdate: isUpdate));
+  }
+
+  @override
+  Future<SubmitResult> submitConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) {
+    return _worker.submitOrEnqueue(
+      _convertSoItem(order: order, invoice: invoice),
     );
+  }
+
+  @override
+  Future<SubmitResult> submitReceipt(ReceiptVoucher voucher) {
+    return _worker.submitOrEnqueue(_receiptItem(voucher));
+  }
+
+  @override
+  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn) {
+    return _worker.submitOrEnqueue(_returnItem(salesReturn));
+  }
+
+  @override
+  Future<SubmitResult> submitExpense(ExpenseEntry expense) {
+    return _worker.submitOrEnqueue(_expenseItem(expense));
+  }
+
+  @override
+  Future<SubmitResult> submitStockTransfer(StockTransfer transfer) {
+    return _worker.submitOrEnqueue(_stockTransferItem(transfer));
   }
 
   /// Receipt queue map with allocation invoice ids resolved to Zoho ids.

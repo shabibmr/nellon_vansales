@@ -130,11 +130,7 @@ class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
         isPendingSync: true,
       );
 
-      await salesRepository.saveLocalReturn(returnItem);
-
-      await salesRepository.enqueueSalesReturn(returnItem);
-
-      unawaited(syncWorker.syncPendingItems());
+      await salesRepository.submitSalesReturn(returnItem);
 
       emit(state.copyWith(
         submitting: false,

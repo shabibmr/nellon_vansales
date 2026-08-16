@@ -11,6 +11,7 @@ import 'package:van_sales/domain/models/receipt_voucher.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/item.dart';
+import 'package:van_sales/domain/models/customer.dart';
 
 /// Always reports "online" so [SyncWorker.syncPendingItems] proceeds past its
 /// connectivity gate without touching the real platform channel.
@@ -27,6 +28,9 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
   final Map<String, ReceiptVoucher> _receipts = {};
   final Map<String, SalesReturn> _returns = {};
   final Map<String, ExpenseEntry> _expenses = {};
+  final Map<String, StockTransfer> _transfers = {};
+  final Map<String, Customer> _customers = {};
+  final Map<String, Item> _items = {};
   final Map<String, int> _counters = {};
 
   @override
@@ -57,7 +61,66 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
   List<SalesReturn> getAllLocalReturnsUnfiltered() => _returns.values.toList();
 
   @override
-  List<StockTransfer> getAllLocalStockTransfersUnfiltered() => [];
+  List<StockTransfer> getAllLocalStockTransfersUnfiltered() =>
+      _transfers.values.toList();
+
+  @override
+  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {
+    _transfers[transfer.id] = transfer;
+  }
+
+  @override
+  List<Customer> getCustomers() => _customers.values.toList();
+
+  @override
+  Future<void> saveCustomers(List<Customer> customers) async {
+    _customers
+      ..clear()
+      ..addEntries(customers.map((c) => MapEntry(c.id, c)));
+  }
+
+  @override
+  Future<void> insertCustomer(Customer customer) async {
+    _customers[customer.id] = customer;
+  }
+
+  @override
+  Future<void> updateCustomerGps(
+    String customerId,
+    double latitude,
+    double longitude,
+  ) async {
+    final existing = _customers[customerId];
+    if (existing == null) return;
+    _customers[customerId] = existing.copyWith(
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
+
+  @override
+  Future<void> updateCustomerContactFields(
+    String customerId, {
+    String? phone,
+    String? trn,
+  }) async {
+    final existing = _customers[customerId];
+    if (existing == null) return;
+    _customers[customerId] = existing.copyWith(
+      phone: phone ?? existing.phone,
+      trn: trn ?? existing.trn,
+    );
+  }
+
+  @override
+  List<Item> getItems() => _items.values.toList();
+
+  @override
+  Future<void> saveItems(List<Item> items) async {
+    _items
+      ..clear()
+      ..addEntries(items.map((i) => MapEntry(i.id, i)));
+  }
 
   @override
   List<SalesInvoice> getAllLocalInvoicesUnfiltered() =>
@@ -180,6 +243,30 @@ class FakeZohoApiClient extends ZohoApiClient {
   @override
   Future<String> syncExpense(Map<String, dynamic> expenseJson) async =>
       'zoho_exp_PERMANENT';
+
+  @override
+  Future<String> syncStockTransfer(Map<String, dynamic> transferJson) async =>
+      'zoho_xfer_PERMANENT';
+
+  @override
+  Future<String> updateSalesOrder(
+    String salesOrderId,
+    Map<String, dynamic> salesOrderJson,
+  ) async => salesOrderId;
+
+  @override
+  Future<String> updateCustomerGps(
+    String contactId,
+    double latitude,
+    double longitude,
+  ) async => contactId;
+
+  @override
+  Future<String> updateCustomerContactFields(
+    String contactId, {
+    String? phone,
+    String? trn,
+  }) async => contactId;
 
   @override
   Future<String> convertSalesOrderToInvoice(

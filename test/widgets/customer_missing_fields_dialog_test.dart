@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/customer.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_bloc.dart';
@@ -16,6 +17,16 @@ class _FakeSalesRepository implements SalesRepository {
   bool remotePushed = false;
   String? remotePhone;
   String? remoteTrn;
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    savedId = item.payload['contact_id']?.toString();
+    if (item.type == 'customer_contact_update') {
+      savedPhone = item.payload['phone']?.toString();
+      savedTrn = item.payload['tax_reg_no']?.toString();
+    }
+    return SubmitResult.queued;
+  }
 
   @override
   Future<void> updateCustomerContactFields(
@@ -359,8 +370,6 @@ void main() {
     expect(sales.savedId, 'c1');
     expect(sales.savedPhone, '0501234567');
     expect(sales.savedTrn, isNull);
-    expect(sales.remotePushed, isTrue);
-    expect(sales.remotePhone, '0501234567');
     expect(selected?.phone, '0501234567');
     expect(find.byType(CustomerMissingFieldsDialog), findsNothing);
   });
