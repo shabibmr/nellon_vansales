@@ -34,8 +34,6 @@ Every outgoing request is intercepted via `InterceptorsWrapper` to append authen
 _dio.interceptors.add(
   InterceptorsWrapper(
     onRequest: (options, handler) async {
-      if (_isMockMode()) return handler.next(options);
-
       final accessToken = await _getOrRefreshAccessToken();
       if (accessToken != null) {
         options.headers['Authorization'] = 'Zoho-oauthtoken $accessToken';
@@ -45,7 +43,7 @@ _dio.interceptors.add(
       return handler.next(options);
     },
     onError: (DioException error, handler) async {
-      if (error.response?.statusCode == 401 && !_isMockMode()) {
+      if (error.response?.statusCode == 401) {
         // Force refresh token on 401 Unauthorized
         final newAccessToken = await _refreshAccessToken(force: true);
         if (newAccessToken != null) {
@@ -165,13 +163,13 @@ To enable offline operations, master data is periodically pulled from Zoho Books
 Use this workflow checklist when modifying or testing Zoho API integration.
 
 - [ ] **1. Credentials Verification**
-  Ensure actual OAuth credentials (`_clientId`, `_clientSecret`, `_organizationId`) are populated in `zoho_api_client.dart` when exiting Sandbox Mock Mode.
+  Ensure actual OAuth credentials (`_clientId`, `_clientSecret`, `_organizationId`) are populated in `zoho_api_client.dart` or injected via `ServerConfig`.
 
 - [ ] **2. Dependency Injection Wires**
   Verify `ZohoApiClient` and `SyncWorker` are registered as singletons in `injection.dart` and booted after `HiveDatabaseService`.
 
 - [ ] **3. Sync Test Guard**
-  When adding new Zoho REST methods, write corresponding mock tests utilizing `mockito` to evaluate HTTP timeouts and payload parsing.
+  When adding new Zoho REST methods, write unit tests with test doubles (`mockito` / fakes) for HTTP timeouts and payload parsing. Do not add an in-app mock transport.
 
 - [ ] **4. Check Queue Ordering**
   Ensure the customer-first sync sorting routine remains intact whenever changes are made to the `SyncWorker` class.

@@ -71,16 +71,11 @@ Data models in `data/models/` handle JSON serialization for Hive. Domain models 
 
 ### Zoho Books Sync
 
-`ZohoApiClient` talks to Zoho Books v3 REST API with OAuth 2.0 (access token auto-refresh via Dio interceptor). Credentials (`_clientId`, `_clientSecret`, `_refreshToken`, `_organizationId`) are set in `zoho_api_client.dart` and can be **overridden at runtime** via `updateCredentials()`, which `ServerConfigCubit` calls after loading remote server config. `_isMockMode()` falls back to a mock sandbox only if credentials are still `YOUR_...` placeholders.
+`ZohoApiClient` talks to Zoho Books v3 REST API with OAuth 2.0 (access token auto-refresh via Dio interceptor). Credentials start empty and are injected by `ServerConfigCubit` from Firestore `server_config/zoho` (`client_id`, `client_secret`, `code` = refresh token, `organization_id`), with a `FlutterSecureStorage` cache on `LocalStorageService` so fail-open / offline boots can still refresh. `updateCredentials()` ignores empty remotes so a blank doc cannot wipe a working cache. Changing the OAuth triple clears the Hive access-token cache.
 
-**Live and mock share one path until HTTP.** Public methods always run payload shaping (`ZohoPayloadMapper`, location inject, expense account resolve) and always call `_dio.get/post/put`. A `ZohoMockInterceptor` (registered first; see `lib/data/services/zoho_mock/`) short-circuits selected requests with Zoho-shaped envelopes (`contact` / `invoice` / list keys + `page_context`, etc.). Callers always parse the same response keys as live.
+All HTTP calls are live. Public methods always run payload shaping (`ZohoPayloadMapper`, location inject, expense account resolve) then `_dio.get/post/put`. Callers parse `response.data['contact'|'invoice'|…]`. There is no in-app Zoho sandbox.
 
-**Important gotcha — transactions are mostly mocked right now.** Three flags in `zoho_api_client.dart` decide which *writes* the mock interceptor claims (defaults shown; runtime-overridable via `updateMockFlags()`, driven by `ServerConfigCubit`/`ServerConfig`):
-- `_mockTransactions = true` → contacts, invoices, receipts, returns, expenses are mocked at the Dio layer (not pushed live).
-- `_mockSalesOrderTransactions = false` → only **sales orders** push live (still requires real credentials).
-- `_mockStockTransfers = true` → stock transfers (Issue-to-Van) are mocked.
-- Master-data downloads (customers, items, etc.) run live when credentials are real; under placeholder credentials the mock interceptor serves GET fixtures too.
-- `fetchRoutes()` stays app-local (no Zoho route entity).
+`fetchRoutes()` stays app-local (no Zoho route entity).
 
 `SyncWorker` manages the offline queue (`syncPendingItems()`):
 - Listens for network connectivity changes and triggers sync automatically
@@ -108,29 +103,29 @@ All 16 BLoCs/Cubits are provided globally at the `MaterialApp` level in `app.dar
 | `SalespersonCubit` | Salesperson selection/context |
 | `CustomerLedgerBloc` | Customer ledger; reads directly from `ZohoApiClient` |
 | `LicenseCubit` | Device license verification/provisioning |
-| `ServerConfigCubit` | Loads remote server config; injects Zoho credentials via `updateCredentials()` |
+| `ServerConfigCubit` | Hydrates cached Zoho credentials, then injects Firestore `server_config/zoho` via `updateCredentials()` |
+| `AppUpdateCubit` | Sideload APK updates from Firestore `server_config/app_version` |
 | `VoucherPdfBloc` | Drives PDF preview/print/export for vouchers |
 
 ### Navigation Flow
 
-`SessionGateway` in `app.dart` drives navigation through several gates:
+`AppUpdateGate` wraps `SessionGateway`. Then:
 1. `AuthLoading` → spinner
 2. `Unauthenticated` → `LoginPage`
 3. `Authenticated` → wrapped in `LicenseGate` (blocks if license disabled/expired)
 4. Inside the gate: if `SyncRepository.hasCoreMasters()` is false → `MastersSyncPage` (must download masters first)
-5. No active route selected → `RouteSelectionPage`
-6. Fully set up → `DashboardPage`
+5. Fully set up → `DashboardPage`
 
 ### Business Transactions
 
 Each transaction type has a sync-queue entry (`SyncQueueItem`) and a `ZohoApiClient` method; `SyncWorker.syncPendingItems()` dispatches by type:
 - `customer` → `syncCustomer` (always processed first)
-- `invoice` → `syncInvoice` *(mocked — see mock flags above)*
-- `sales_order` → `syncSalesOrder` *(pushed live)*
-- `receipt` → `syncReceiptVoucher` *(mocked)*
-- `return` → `syncSalesReturn` *(mocked)*
-- `expense` → `syncExpense` *(mocked)*
-- `stock_transfer` → `syncStockTransfer` *(mocked)*
+- `invoice` → `syncInvoice`
+- `sales_order` → `syncSalesOrder`
+- `receipt` → `syncReceiptVoucher`
+- `return` → `syncSalesReturn`
+- `expense` → `syncExpense`
+- `stock_transfer` → `syncStockTransfer`
 
 ### Licensing
 

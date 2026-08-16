@@ -643,7 +643,7 @@ class SyncWorker {
           );
           break;
         case MasterType.items:
-          final activeWarehouse = _dbService.assignedWarehouseId ?? 'van_wh_01';
+          final activeWarehouse = _dbService.assignedWarehouseId ?? '';
           final list = await _apiClient.fetchItems(activeWarehouse);
           // Multi-UOM (`unit_conversions`) is intentionally NOT downloaded here.
           // The /items LIST endpoint never returns it, so it is fetched lazily

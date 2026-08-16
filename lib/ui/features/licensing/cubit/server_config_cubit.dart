@@ -1,5 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/hive_database_service.dart';
+import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/server_config.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -7,131 +9,103 @@ import 'server_config_state.dart';
 
 /// Cubit managing app-wide server integration settings.
 ///
-/// Ensures active Zoho OAuth configurations are propagated app-wide and injected into
-/// [ZohoApiClient] dynamically on verified licensing login.
+/// Injects Zoho OAuth credentials into [ZohoApiClient] from Firestore
+/// `server_config/zoho` (via [setConfig]) and from the last-good secure cache
+/// (via [_hydrate] on construct).
 class ServerConfigCubit extends Cubit<ServerConfigState> {
-  final ZohoApiClient _apiClient;
-  final HiveDatabaseService _dbService;
+  final ZohoApiClient apiClient;
+  final LocalStorageService localStorage;
+
+  /// Completes when the constructor cache hydrate finishes. Tests await this.
+  late final Future<void> hydrateDone;
 
   ServerConfigCubit({
-    required ZohoApiClient apiClient,
-    required HiveDatabaseService dbService,
-  }) : _apiClient = apiClient,
-       _dbService = dbService,
-       super(
-         ServerConfigInitial(
-           isMockModeEnabled: _bootstrapMockMode(dbService, apiClient),
-         ),
-       );
+    required this.apiClient,
+    required this.localStorage,
+  }) : super(const ServerConfigInitial()) {
+    hydrateDone = _hydrate();
+  }
 
-  /// Whether active client credentials are placeholders.
-  bool get usesPlaceholderCredentials => _apiClient.usesPlaceholderCredentials;
+  Future<void> _hydrate() async {
+    try {
+      final cached = await localStorage.readZohoCredentials();
+      if (isClosed) return;
+      // Remote [setConfig] already won the race — do not overwrite it.
+      if (state is ServerConfigLoaded) return;
+      if (cached == null) return;
 
-  static bool _bootstrapMockMode(
-    HiveDatabaseService dbService,
-    ZohoApiClient apiClient,
-  ) {
-    final persisted = dbService.transactionMockModeEnabled;
-    // Default live (mock off) when the user has never set a preference.
-    final enabled = persisted ?? false;
-    apiClient.setAllMockFlags(enabled);
-    return enabled;
+      apiClient.updateCredentials(
+        clientId: cached.clientId,
+        clientSecret: cached.clientSecret,
+        refreshToken: cached.code,
+        organizationId: cached.organizationId,
+      );
+
+      if (isClosed) return;
+      if (state is ServerConfigLoaded) return;
+
+      emit(
+        ServerConfigLoaded(
+          clientId: cached.clientId,
+          clientSecret: cached.clientSecret,
+          code: cached.code,
+        ),
+      );
+    } catch (_) {
+      // Stay Initial; a later remote setConfig can still inject.
+    }
   }
 
   /// Configures the active server credentials mapping, updating [ZohoApiClient].
   void setConfig(ServerConfig? config) {
     if (config == null) {
-      emit(ServerConfigInitial(isMockModeEnabled: _apiClient.isMockModeEnabled));
+      emit(const ServerConfigInitial());
       return;
     }
 
     // An incomplete Firestore doc (empty client_id/client_secret/code) must
     // not wipe the client's current working credentials — empty strings pass
-    // the placeholder check and leave the app "live" but unable to
-    // authenticate, so every master fetch dies with a silent 401.
+    // through and leave the app unable to authenticate.
     if (config.clientId.isEmpty ||
         config.clientSecret.isEmpty ||
         config.code.isEmpty) {
       emit(
-        ServerConfigError(
+        const ServerConfigError(
           'Server configuration is incomplete (empty Zoho credentials in '
           'server_config/zoho). Keeping previously configured credentials.',
-          isMockModeEnabled: _apiClient.isMockModeEnabled,
         ),
       );
       return;
     }
 
     try {
-      _apiClient.updateCredentials(
+      apiClient.updateCredentials(
         clientId: config.clientId,
         clientSecret: config.clientSecret,
         refreshToken: config.code,
         organizationId: config.organizationId,
       );
 
-      final mockEnabled = _resolveMockMode(config);
-      _apiClient.setAllMockFlags(mockEnabled);
+      unawaited(localStorage.saveZohoCredentials(config));
 
       emit(
         ServerConfigLoaded(
           clientId: config.clientId,
           clientSecret: config.clientSecret,
           code: config.code,
-          isMockModeEnabled: mockEnabled,
         ),
       );
     } catch (e) {
       emit(
         ServerConfigError(
           'Failed to inject server configuration credentials: ${userFacingMessage(e)}',
-          isMockModeEnabled: _apiClient.isMockModeEnabled,
         ),
       );
     }
   }
 
-  /// Toggles all transaction mock flags together and persists the preference.
-  Future<void> setMockModeEnabled(bool enabled) async {
-    await _dbService.setTransactionMockModeEnabled(enabled);
-    _apiClient.setAllMockFlags(enabled);
-
-    final current = state;
-    switch (current) {
-      case ServerConfigLoaded():
-        emit(
-          ServerConfigLoaded(
-            clientId: current.clientId,
-            clientSecret: current.clientSecret,
-            code: current.code,
-            isMockModeEnabled: enabled,
-          ),
-        );
-      case ServerConfigError():
-        emit(
-          ServerConfigError(
-            current.message,
-            isMockModeEnabled: enabled,
-          ),
-        );
-      case ServerConfigInitial():
-        emit(ServerConfigInitial(isMockModeEnabled: enabled));
-    }
-  }
-
-  bool _resolveMockMode(ServerConfig config) {
-    final persisted = _dbService.transactionMockModeEnabled;
-    if (persisted != null) return persisted;
-
-    return config.mockTransactions ||
-        config.mockSalesOrderTransactions ||
-        config.mockStockTransfers;
-  }
-
   /// Resets server configurations to initial unconfigured states.
   void reset() {
-    emit(
-      ServerConfigInitial(isMockModeEnabled: _apiClient.isMockModeEnabled),
-    );
+    emit(const ServerConfigInitial());
   }
 }

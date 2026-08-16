@@ -1,5 +1,7 @@
 # Why "Live Mode" Does Not Mean Data Syncs to Zoho
 
+> **Historical.** The in-app mock/live switch, `ZohoMockInterceptor`, and mock flags have been removed. All Zoho HTTP is live. Keep this file only as a record of why queued items may still fail to upload (OAuth, classification, retry UI).
+
 ## Scope
 Code-only diagnosis of mock/live mode vs sync. No docs read.
 

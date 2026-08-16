@@ -10,45 +10,22 @@ class ServerConfig extends Equatable {
   /// (hardcoded) organization" — see `ZohoApiClient.updateCredentials`.
   final String organizationId;
 
-  /// Runtime toggle for simulating invoice/receipt/return/expense uploads
-  /// against a sandbox instead of pushing them live to Zoho. Replaces the
-  /// old compile-time `_mockTransactions` flag in `ZohoApiClient`.
-  final bool mockTransactions;
-
-  /// Runtime toggle for simulating sales order uploads specifically,
-  /// independent of [mockTransactions]. Replaces the old compile-time
-  /// `_mockSalesOrderTransactions` flag in `ZohoApiClient`.
-  final bool mockSalesOrderTransactions;
-
-  /// Runtime toggle for simulating stock transfer uploads (Issue to Van /
-  /// Stock Unloading) specifically, independent of [mockTransactions].
-  /// Mirrors [mockSalesOrderTransactions] in `ZohoApiClient`.
-  final bool mockStockTransfers;
-
   const ServerConfig({
     required this.clientId,
     required this.clientSecret,
     required this.code,
     this.organizationId = '',
-    this.mockTransactions = false,
-    this.mockSalesOrderTransactions = false,
-    this.mockStockTransfers = false,
   });
 
   /// Factory constructor to create a [ServerConfig] from a Firestore map.
   ///
-  /// Missing mock flags default to **live** (false). Remote config or a
-  /// device-persisted override can still enable mock mode.
+  /// Unknown extra keys (including retired mock flags) are ignored.
   factory ServerConfig.fromMap(Map<String, dynamic> map) {
     return ServerConfig(
       clientId: map['client_id'] as String? ?? '',
       clientSecret: map['client_secret'] as String? ?? '',
       code: map['code'] as String? ?? '',
       organizationId: map['organization_id'] as String? ?? '',
-      mockTransactions: map['mock_transactions'] as bool? ?? false,
-      mockSalesOrderTransactions:
-          map['mock_sales_order_transactions'] as bool? ?? false,
-      mockStockTransfers: map['mock_stock_transfers'] as bool? ?? false,
     );
   }
 
@@ -59,9 +36,6 @@ class ServerConfig extends Equatable {
       'client_secret': clientSecret,
       'code': code,
       'organization_id': organizationId,
-      'mock_transactions': mockTransactions,
-      'mock_sales_order_transactions': mockSalesOrderTransactions,
-      'mock_stock_transfers': mockStockTransfers,
     };
   }
 
@@ -71,8 +45,5 @@ class ServerConfig extends Equatable {
     clientSecret,
     code,
     organizationId,
-    mockTransactions,
-    mockSalesOrderTransactions,
-    mockStockTransfers,
   ];
 }

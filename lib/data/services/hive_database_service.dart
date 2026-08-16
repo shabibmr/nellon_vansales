@@ -113,16 +113,6 @@ class HiveDatabaseService {
   /// Gets the physical warehouse ID mapped to the van.
   String? get assignedWarehouseId => _masterBox.get('assigned_warehouse_id');
 
-  /// Runtime override for unified mock/live transaction sync.
-  /// When null, [ServerConfigCubit] derives mock mode from remote config.
-  bool? get transactionMockModeEnabled =>
-      _masterBox.get('transaction_mock_mode_enabled') as bool?;
-
-  /// Persists the unified mock/live transaction sync preference on device.
-  Future<void> setTransactionMockModeEnabled(bool enabled) async {
-    await _masterBox.put('transaction_mock_mode_enabled', enabled);
-  }
-
   /// Mapps a specific Zoho warehouse ID to this local van sales session.
   Future<void> setAssignedWarehouseId(String? warehouseId) async {
     await _masterBox.put('assigned_warehouse_id', warehouseId);

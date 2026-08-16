@@ -1,41 +1,39 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'app_logger.dart';
 import 'error_classification.dart';
 import 'hive_database_service.dart';
-import 'zoho_mock/zoho_mock_catalog.dart';
-import 'zoho_mock/zoho_mock_interceptor.dart';
 import 'zoho_payload_mapper.dart';
 import '../../domain/models/tax.dart';
 
 /// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
 ///
-/// Implements standard JSON mappings, handles Zoho OAuth 2.0 access token self-refreshing retries,
-/// and includes simulated sandbox datasets when running in mock credential modes.
-///
-/// **Live and mock share one path until HTTP**: payload shaping
-/// ([ZohoPayloadMapper], location inject, expense account resolve) always runs;
-/// [ZohoMockInterceptor] short-circuits selected Dio requests with Zoho-shaped
-/// responses. Callers always parse `response.data['contact'|'invoice'|…]`.
+/// Payload shaping ([ZohoPayloadMapper], location inject, expense account
+/// resolve) always runs, then `_dio.get/post/put` hits live Zoho. Callers
+/// parse `response.data['contact'|'invoice'|…]`.
 class ZohoApiClient {
   final Dio _dio = Dio();
   final HiveDatabaseService _dbService;
 
-  /// Mock transport catalog (fixtures + write envelopes). Exposed for tests.
-  late final ZohoMockCatalog mockCatalog;
-
-  /// Mock Dio interceptor. Exposed for tests (routing / last request).
-  late final ZohoMockInterceptor mockInterceptor;
-
-  // Zoho OAuth 2.0 credentials (read from secure build configurations or environments in production)
+  // Zoho OAuth 2.0 credentials. Start empty; ServerConfigCubit injects
+  // Firestore `server_config/zoho` (and the secure-storage cache) at runtime.
   final String _accountsUrl = 'https://accounts.zoho.com/oauth/v2/token';
   final String _apiUrl = 'https://www.zohoapis.com/books/v3';
 
-  String _clientId = '1000.45EI6FPO004OW9W6BTB7TUJ9L0C0YP';
-  String _clientSecret = '1d829f7ee3e1eb7debe6ed370ccc87ab45e7b36103';
-  String _refreshToken =
-      '1000.3d8170aff1fb3dfae0226035fb3d8d85.ed5c6198f2159770d21450c8912782d1';
-  String _organizationId = '783019958';
+  String _clientId = '';
+  String _clientSecret = '';
+  String _refreshToken = '';
+  String _organizationId = '';
+
+  /// True when client id, secret, and refresh token are all present.
+  bool get hasCredentials =>
+      _clientId.trim().isNotEmpty &&
+      _clientSecret.trim().isNotEmpty &&
+      _refreshToken.trim().isNotEmpty;
+
+  /// When true, ignore the Hive access-token cache and refresh.
+  bool _accessTokenInvalidated = false;
 
   /// Updates Zoho OAuth integration credentials on the fly (called upon loading server config).
   ///
@@ -43,109 +41,55 @@ class ZohoApiClient {
   /// incomplete remote config must never wipe usable credentials.
   /// [organizationId] is optional and updated independently of the OAuth
   /// triple, since older Firestore docs won't carry it.
+  ///
+  /// Changing the OAuth triple drops the cached access token so a client
+  /// rotation takes effect immediately, not after the previous token expires.
   void updateCredentials({
     required String clientId,
     required String clientSecret,
     required String refreshToken,
     String organizationId = '',
   }) {
-    if (clientId.trim().isNotEmpty &&
-        clientSecret.trim().isNotEmpty &&
-        refreshToken.trim().isNotEmpty) {
-      _clientId = clientId;
-      _clientSecret = clientSecret;
-      _refreshToken = refreshToken;
+    final nextId = clientId.trim();
+    final nextSecret = clientSecret.trim();
+    final nextRefresh = refreshToken.trim();
+    if (nextId.isNotEmpty && nextSecret.isNotEmpty && nextRefresh.isNotEmpty) {
+      final changed =
+          nextId != _clientId ||
+          nextSecret != _clientSecret ||
+          nextRefresh != _refreshToken;
+      _clientId = nextId;
+      _clientSecret = nextSecret;
+      _refreshToken = nextRefresh;
+      if (changed) {
+        _accessTokenInvalidated = true;
+        unawaited(_clearCachedAccessToken());
+      }
     }
     if (organizationId.trim().isNotEmpty) {
-      _organizationId = organizationId;
-      mockCatalog.organizationId = _organizationId;
+      _organizationId = organizationId.trim();
     }
   }
 
-  /// Runtime toggle for mocking transaction uploads (invoices, receipts, returns,
-  /// expenses) against a sandbox, preserving live connections for master downloads.
-  /// Set via [updateMockFlags], sourced from the remote `ServerConfig` — this used
-  /// to be a compile-time `static const` requiring a rebuild to flip.
-  bool _mockTransactions = false;
-
-  /// Sales Order uploads (create / update / convert) use this flag instead of
-  /// [_mockTransactions], so they can be pushed live to Zoho independently of all
-  /// other transaction types. Still requires real credentials (`!_isMockMode()`).
-  bool _mockSalesOrderTransactions = false;
-
-  /// Stock Transfer uploads (Issue to Van / Stock Unloading) use this flag
-  /// instead of [_mockTransactions], mirroring [_mockSalesOrderTransactions].
-  /// Still requires real credentials (`!_isMockMode()`).
-  bool _mockStockTransfers = false;
-
-  /// Updates the runtime mock-mode flags for transactions, sales orders, and
-  /// stock transfers (called upon loading server config, alongside [updateCredentials]).
-  void updateMockFlags({
-    required bool mockTransactions,
-    required bool mockSalesOrderTransactions,
-    required bool mockStockTransfers,
-  }) {
-    _mockTransactions = mockTransactions;
-    _mockSalesOrderTransactions = mockSalesOrderTransactions;
-    _mockStockTransfers = mockStockTransfers;
+  Future<void> _clearCachedAccessToken() async {
+    await _dbService.setOauthAccessToken(null);
+    await _dbService.setOauthTokenExpiry(null);
   }
-
-  /// True when every transaction type is being simulated rather than pushed live.
-  bool get isMockModeEnabled =>
-      _mockTransactions &&
-      _mockSalesOrderTransactions &&
-      _mockStockTransfers;
-
-  /// Flips all transaction mock flags together (mock on = all true, live = all false).
-  void setAllMockFlags(bool enabled) {
-    updateMockFlags(
-      mockTransactions: enabled,
-      mockSalesOrderTransactions: enabled,
-      mockStockTransfers: enabled,
-    );
-  }
-
-  /// True when OAuth credentials are still placeholder templates.
-  bool get usesPlaceholderCredentials => _isMockMode();
 
   /// Instantiates a new [ZohoApiClient].
   ///
-  /// Configures connect/receive timeouts and sets up:
-  /// 1. [ZohoMockInterceptor] (first) — re-routes selected calls to local fixtures.
-  /// 2. Auth interceptor — OAuth header + 401 refresh for live requests.
-  ///
-  /// [mockLatency] is applied only to mocked requests (use [Duration.zero] in tests).
-  // ignore: prefer_initializing_formals — keep public param name `dbService` for DI call sites
+  /// Configures connect/receive timeouts and an auth interceptor that
+  /// attaches the OAuth header and retries on 401.
   ZohoApiClient({
-    required HiveDatabaseService dbService,
-    Duration mockLatency = const Duration(milliseconds: 300),
+    required HiveDatabaseService dbService, // ignore: prefer_initializing_formals
   }) : _dbService = dbService {
     _dio.options.baseUrl = _apiUrl;
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
 
-    mockCatalog = ZohoMockCatalog(organizationId: _organizationId);
-    mockInterceptor = ZohoMockInterceptor(
-      catalog: mockCatalog,
-      flags: ZohoMockFlags(
-        isCredentialMockMode: _isMockMode,
-        mockTransactions: () => _mockTransactions,
-        mockSalesOrderTransactions: () => _mockSalesOrderTransactions,
-        mockStockTransfers: () => _mockStockTransfers,
-      ),
-      latency: mockLatency,
-    );
-    // Mock transport first so short-circuited requests never hit auth/network.
-    _dio.interceptors.add(mockInterceptor);
-
-    // Request & Refresh Token Interceptor (live path only)
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          if (_isMockMode()) {
-            return handler.next(options);
-          }
-
           final String accessToken;
           try {
             accessToken = await _getOrRefreshAccessToken();
@@ -166,7 +110,7 @@ class ZohoApiClient {
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
-          if (error.response?.statusCode == 401 && !_isMockMode()) {
+          if (error.response?.statusCode == 401) {
             // Force refresh token on 401 Unauthorized
             final String newAccessToken;
             try {
@@ -193,37 +137,26 @@ class ZohoApiClient {
     );
   }
 
-  /// Returns true if the client credentials remain the placeholder templates (forcing mock behavior).
-  bool _isMockMode() {
-    // Falls back to mock mode if credentials are still placeholder templates or empty
-    return _clientId.isEmpty || _clientId.contains('YOUR_CLIENT_ID');
-  }
-
-  /// True if any transaction type (invoices, receipts, returns, expenses, or
-  /// sales orders) is currently being simulated against a sandbox rather than
-  /// pushed live to Zoho — whether due to placeholder credentials or a mock flag.
-  bool get isAnyMockModeActive =>
-      _isMockMode() ||
-      _mockTransactions ||
-      _mockSalesOrderTransactions ||
-      _mockStockTransfers;
-
   // --- OAuth 2.0 Handlers ---
 
   /// Fetches the cached OAuth access token or triggers a refresh workflow if expired.
   ///
   /// Throws if the refresh workflow fails (see [_refreshAccessToken]).
   Future<String> _getOrRefreshAccessToken() async {
-    if (_isMockMode()) return 'mock_access_token';
+    if (!hasCredentials) {
+      throw Exception('Zoho credentials not configured');
+    }
 
-    final cachedToken = _dbService.oauthAccessToken;
-    final expiryMillis = _dbService.oauthTokenExpiry;
+    if (!_accessTokenInvalidated) {
+      final cachedToken = _dbService.oauthAccessToken;
+      final expiryMillis = _dbService.oauthTokenExpiry;
 
-    if (cachedToken != null && expiryMillis != null) {
-      final nowMillis = DateTime.now().millisecondsSinceEpoch;
-      // Use a 60-second buffer to ensure the token doesn't expire mid-request
-      if (nowMillis < (expiryMillis - 60000)) {
-        return cachedToken;
+      if (cachedToken != null && expiryMillis != null) {
+        final nowMillis = DateTime.now().millisecondsSinceEpoch;
+        // Use a 60-second buffer to ensure the token doesn't expire mid-request
+        if (nowMillis < (expiryMillis - 60000)) {
+          return cachedToken;
+        }
       }
     }
 
@@ -237,8 +170,9 @@ class ZohoApiClient {
   /// callers — e.g. the Masters Sync page — can show the real cause rather
   /// than a generic fetch failure.
   Future<String> _refreshAccessToken({bool force = false}) async {
-    if (_isMockMode()) return 'mock_access_token';
-
+    if (!hasCredentials) {
+      throw Exception('Zoho credentials not configured');
+    }
     final refreshToken = _refreshToken;
     try {
       final response = await Dio().post(
@@ -268,6 +202,7 @@ class ZohoApiClient {
       // Save newAccessToken and expire_in to local database
       await _dbService.setOauthAccessToken(newAccessToken);
       await _dbService.setOauthTokenExpiry(expiryMillis);
+      _accessTokenInvalidated = false;
 
       return newAccessToken;
     } catch (e) {
@@ -368,10 +303,8 @@ class ZohoApiClient {
   Future<List<Map<String, dynamic>>> fetchItems(String warehouseId) async {
     try {
       final queryParams = <String, dynamic>{};
-      // Only query by location_id if it is a real numeric Zoho location ID (not empty or mock prefix)
-      if (warehouseId.isNotEmpty &&
-          !warehouseId.startsWith('van_wh_') &&
-          RegExp(r'^\d+$').hasMatch(warehouseId)) {
+      // Only query by location_id if it is a real numeric Zoho location ID.
+      if (warehouseId.isNotEmpty && RegExp(r'^\d+$').hasMatch(warehouseId)) {
         queryParams['location_id'] = warehouseId;
       }
 
@@ -528,7 +461,7 @@ class ZohoApiClient {
   /// Update GPS (latitude/longitude) custom fields on an existing Zoho contact.
   ///
   /// Uses PUT /contacts/{contactId} sending only the custom_fields array to minimize
-  /// risk of overwriting other fields. Works for both live and (simulated) mock modes.
+  /// risk of overwriting other fields.
   /// Returns the contact_id on success.
   Future<String> updateCustomerGps(
     String contactId,
@@ -964,14 +897,10 @@ class ZohoApiClient {
       // real ledger account IDs and a paid-through (cash) account at the root.
       final zohoExpense = _buildZohoExpensePayload(expenseJson);
 
-      // Multi-part only when a receipt path is present. Mock transport still
-      // receives JSON when no file is attached; avoid reading missing files.
+      // Multi-part only when a receipt path is present.
       final receiptPath = expenseJson['receiptImagePath']?.toString();
       final dynamic dataPayload;
-      if (receiptPath != null &&
-          receiptPath.isNotEmpty &&
-          !_isMockMode() &&
-          !_mockTransactions) {
+      if (receiptPath != null && receiptPath.isNotEmpty) {
         dataPayload = FormData.fromMap({
           'JSONString': jsonEncode(zohoExpense),
           'attachment': await MultipartFile.fromFile(
@@ -1198,7 +1127,6 @@ class ZohoApiClient {
   // 13. Organization (GET /organizations/{org_id})
   Future<Map<String, dynamic>?> fetchOrganization() async {
     try {
-      mockCatalog.organizationId = _organizationId;
       final response = await _dio.get('/organizations/$_organizationId');
       if (response.statusCode == 200) {
         final org = response.data['organization'];
@@ -1226,8 +1154,6 @@ class ZohoApiClient {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    // Same composition path for live and mock — underlying GETs go through Dio
-    // (and the mock transport when credentials are placeholders).
     try {
       final from = startDate ?? DateTime(DateTime.now().year, 1, 1);
       final to = endDate ?? DateTime.now();

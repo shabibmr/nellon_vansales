@@ -59,9 +59,6 @@ class LicenseService {
         'client_secret': '',
         'code': '',
         'organization_id': '',
-        'mock_transactions': false,
-        'mock_sales_order_transactions': false,
-        'mock_stock_transfers': false,
       };
 
       if (!doc.exists || doc.data() == null) {
@@ -71,15 +68,30 @@ class LicenseService {
 
       final data = Map<String, dynamic>.from(doc.data()!);
       final missingUpdates = <String, dynamic>{};
-      
+
       for (final entry in defaultData.entries) {
         if (!data.containsKey(entry.key)) {
           missingUpdates[entry.key] = entry.value;
         }
       }
 
-      if (missingUpdates.isNotEmpty) {
-        await docRef.update(missingUpdates);
+      // DropMock leftovers — app no longer reads these flags.
+      const retiredMockKeys = [
+        'mock_transactions',
+        'mock_sales_order_transactions',
+        'mock_stock_transfers',
+      ];
+      final deletions = <String, dynamic>{};
+      for (final key in retiredMockKeys) {
+        if (data.containsKey(key)) {
+          deletions[key] = FieldValue.delete();
+          data.remove(key);
+        }
+      }
+
+      final updates = <String, dynamic>{...missingUpdates, ...deletions};
+      if (updates.isNotEmpty) {
+        await docRef.update(updates);
         data.addAll(missingUpdates);
       }
 
