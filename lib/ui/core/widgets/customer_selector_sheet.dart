@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/models/customer.dart';
-import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/customer_repository.dart';
 import '../../../domain/repositories/sync_repository.dart';
 import '../../../data/services/injection.dart';
 import '../theme/app_theme.dart';
@@ -66,7 +66,7 @@ class CustomerSelectorSheet extends StatelessWidget {
           ),
           BlocProvider<GpsCaptureBloc>(
             create: (_) => GpsCaptureBloc(
-              salesRepository: sl<SalesRepository>(),
+              customerRepository: sl<CustomerRepository>(),
               syncRepository: sl<SyncRepository>(),
             ),
           ),
@@ -135,7 +135,7 @@ class _CustomerSelectorSheetBodyState extends State<_CustomerSelectorSheetBody> 
     var offlineFallback = false;
     try {
       final result = await context
-          .read<SalesRepository>()
+          .read<CustomerRepository>()
           .resolveCustomerDetails(customer);
       resolved = result.customer;
       offlineFallback = result.offlineFallback;

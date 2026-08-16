@@ -9,7 +9,16 @@ import 'ui/core/theme/theme_cubit.dart';
 import 'ui/core/widgets/animated_glow_background.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/sync_repository.dart';
-import 'domain/repositories/sales_repository.dart';
+import 'domain/repositories/customer_repository.dart';
+import 'domain/repositories/session_repository.dart';
+import 'domain/repositories/cash_closing_repository.dart';
+import 'domain/repositories/stock_transfer_repository.dart';
+import 'domain/repositories/expense_repository.dart';
+import 'domain/repositories/receipt_repository.dart';
+import 'domain/repositories/sales_return_repository.dart';
+import 'domain/repositories/invoice_repository.dart';
+import 'domain/repositories/sales_order_repository.dart';
+import 'domain/repositories/item_repository.dart';
 import 'ui/features/auth/bloc/auth_bloc.dart';
 import 'ui/features/sync/bloc/sync_bloc.dart';
 import 'ui/features/route/bloc/route_bloc.dart';
@@ -66,14 +75,41 @@ class VanSalesApp extends StatelessWidget {
         RepositoryProvider<SyncRepository>(
           create: (context) => sl<SyncRepository>(),
         ),
-        RepositoryProvider<SalesRepository>(
-          create: (context) => sl<SalesRepository>(),
+        RepositoryProvider<CustomerRepository>(
+          create: (context) => sl<CustomerRepository>(),
+        ),
+        RepositoryProvider<SessionRepository>(
+          create: (context) => sl<SessionRepository>(),
+        ),
+        RepositoryProvider<CashClosingRepository>(
+          create: (context) => sl<CashClosingRepository>(),
         ),
         RepositoryProvider<SalespersonRepository>(
           create: (context) => sl<SalespersonRepository>(),
         ),
         RepositoryProvider<ReportRepository>(
           create: (context) => sl<ReportRepository>(),
+        ),
+        RepositoryProvider<StockTransferRepository>(
+          create: (context) => sl<StockTransferRepository>(),
+        ),
+        RepositoryProvider<ExpenseRepository>(
+          create: (context) => sl<ExpenseRepository>(),
+        ),
+        RepositoryProvider<ReceiptRepository>(
+          create: (context) => sl<ReceiptRepository>(),
+        ),
+        RepositoryProvider<SalesReturnRepository>(
+          create: (context) => sl<SalesReturnRepository>(),
+        ),
+        RepositoryProvider<InvoiceRepository>(
+          create: (context) => sl<InvoiceRepository>(),
+        ),
+        RepositoryProvider<SalesOrderRepository>(
+          create: (context) => sl<SalesOrderRepository>(),
+        ),
+        RepositoryProvider<ItemRepository>(
+          create: (context) => sl<ItemRepository>(),
         ),
         RepositoryProvider<VoucherPdfRepository>(
           create: (context) => sl<VoucherPdfRepository>(),
@@ -100,46 +136,48 @@ class VanSalesApp extends StatelessWidget {
                   ..add(SyncStarted()),
           ),
           BlocProvider<RouteBloc>(
-            create: (context) =>
-                RouteBloc(salesRepository: context.read<SalesRepository>())
-                  ..add(LoadRoutes()),
+            create: (context) => RouteBloc(
+              sessionRepository: context.read<SessionRepository>(),
+              customerRepository: context.read<CustomerRepository>(),
+            )..add(LoadRoutes()),
           ),
           BlocProvider<SalesInvoiceListBloc>(
             create: (context) => SalesInvoiceListBloc(
-              salesRepository: context.read<SalesRepository>(),
+              invoiceRepository: context.read<InvoiceRepository>(),
+              salesOrderRepository: context.read<SalesOrderRepository>(),
               syncRepository: context.read<SyncRepository>(),
               documentNumberService: sl<DocumentNumberService>(),
             ),
           ),
           BlocProvider<SalesOrderListBloc>(
             create: (context) => SalesOrderListBloc(
-              salesRepository: context.read<SalesRepository>(),
+              salesOrderRepository: context.read<SalesOrderRepository>(),
             ),
           ),
           BlocProvider<ExpenseListBloc>(
             create: (context) => ExpenseListBloc(
-              salesRepository: context.read<SalesRepository>(),
+              expenseRepository: context.read<ExpenseRepository>(),
             ),
           ),
           BlocProvider<ReceiptListBloc>(
             create: (context) => ReceiptListBloc(
-              salesRepository: context.read<SalesRepository>(),
+              receiptRepository: context.read<ReceiptRepository>(),
             ),
           ),
           BlocProvider<SalesReturnListBloc>(
             create: (context) => SalesReturnListBloc(
-              salesRepository: context.read<SalesRepository>(),
+              salesReturnRepository: context.read<SalesReturnRepository>(),
             ),
           ),
           BlocProvider<StockTransferBloc>(
             create: (context) => StockTransferBloc(
-              salesRepository: context.read<SalesRepository>(),
+              stockTransferRepository: context.read<StockTransferRepository>(),
               syncRepository: context.read<SyncRepository>(),
             ),
           ),
           BlocProvider<CustomerLedgerBloc>(
             create: (context) => CustomerLedgerBloc(
-              salesRepository: context.read<SalesRepository>(),
+              customerRepository: context.read<CustomerRepository>(),
             ),
           ),
           BlocProvider<LicenseCubit>(

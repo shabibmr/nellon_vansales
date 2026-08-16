@@ -2,7 +2,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/error_classification.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../core/utils/date_filter.dart';
 import 'sales_order_list_event.dart';
 import 'sales_order_list_state.dart';
@@ -13,13 +13,13 @@ import 'sales_order_list_state.dart';
 /// with a generation counter so only the latest request may emit results.
 class SalesOrderListBloc
     extends Bloc<SalesOrderListEvent, SalesOrderListState> {
-  final SalesRepository _salesRepository;
+  final SalesOrderRepository _salesOrderRepository;
 
   /// Bumped on every remote list request; stale completions must not emit.
   int _fetchGeneration = 0;
 
-  SalesOrderListBloc({required SalesRepository salesRepository})
-    : _salesRepository = salesRepository,
+  SalesOrderListBloc({required SalesOrderRepository salesOrderRepository})
+    : _salesOrderRepository = salesOrderRepository,
       super(
         SalesOrderListState(
           startDate: todayDate(),
@@ -56,7 +56,7 @@ class SalesOrderListBloc
     );
 
     try {
-      final loaded = await _salesRepository.fetchRemoteOrders(
+      final loaded = await _salesOrderRepository.fetchRemoteOrders(
         startDate: rangeStart,
         endDate: rangeEnd,
       );
@@ -66,7 +66,7 @@ class SalesOrderListBloc
       if (generation != _fetchGeneration) return;
       emit(
         state.copyWith(
-          orders: _salesRepository.getLocalOrders(),
+          orders: _salesOrderRepository.getLocalOrders(),
           isLoading: false,
           errorMessage: humanizeSyncError(e),
         ),
@@ -110,7 +110,7 @@ class SalesOrderListBloc
     ReloadSalesOrdersFromCache event,
     Emitter<SalesOrderListState> emit,
   ) {
-    emit(state.copyWith(orders: _salesRepository.getLocalOrders()));
+    emit(state.copyWith(orders: _salesOrderRepository.getLocalOrders()));
   }
 
   void _onClearMessages(

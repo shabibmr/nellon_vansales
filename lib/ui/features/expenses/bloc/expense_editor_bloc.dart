@@ -7,7 +7,7 @@ import '../../../../data/models/expense_entry_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/expense_entry.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'expense_editor_event.dart';
@@ -16,13 +16,13 @@ import 'expense_editor_state.dart';
 /// Manages a single expense form: open, edit fields, save, enqueue sync.
 class ExpenseEditorBloc
     extends Bloc<ExpenseEditorEvent, ExpenseEditorState> {
-  final SalesRepository _salesRepository;
+  final ExpenseRepository _expenseRepository;
   final SyncRepository _syncRepository;
 
   ExpenseEditorBloc({
-    required SalesRepository salesRepository,
+    required ExpenseRepository expenseRepository,
     required SyncRepository syncRepository,
-  }) : _salesRepository = salesRepository,
+  }) : _expenseRepository = expenseRepository,
        _syncRepository = syncRepository,
        super(const ExpenseEditorState()) {
     on<StartNewExpense>(_onStartNewExpense);
@@ -128,7 +128,7 @@ class ExpenseEditorBloc
 
     ExpenseEntry? fetched;
     try {
-      fetched = await _salesRepository.fetchExpenseById(
+      fetched = await _expenseRepository.fetchExpenseById(
         expenseId,
         forceRemote: true,
         allowOfflineFallback: false,
@@ -144,7 +144,7 @@ class ExpenseEditorBloc
         return;
       }
       try {
-        fetched = await _salesRepository.fetchExpenseById(
+        fetched = await _expenseRepository.fetchExpenseById(
           expenseId,
           forceRemote: false,
         );
@@ -173,7 +173,7 @@ class ExpenseEditorBloc
       if (!isRefresh) {
         ExpenseEntry? local;
         try {
-          local = await _salesRepository.fetchExpenseById(
+          local = await _expenseRepository.fetchExpenseById(
             expenseId,
             forceRemote: false,
           );
@@ -316,7 +316,7 @@ class ExpenseEditorBloc
         isPendingSync: true,
       );
 
-      await _salesRepository.saveLocalExpense(expense);
+      await _expenseRepository.saveLocalExpense(expense);
 
       final syncItem = SyncQueueItem(
         id: tempId,
@@ -325,7 +325,7 @@ class ExpenseEditorBloc
         status: SyncStatus.pending,
         timestamp: DateTime.now(),
       );
-      await _salesRepository.enqueueSyncItem(syncItem);
+      await _expenseRepository.enqueueSyncItem(syncItem);
 
       unawaited(_syncRepository.triggerSync());
 

@@ -2,7 +2,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/error_classification.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sales_return_repository.dart';
 import '../../../core/utils/date_filter.dart';
 import 'sales_return_list_event.dart';
 import 'sales_return_list_state.dart';
@@ -10,13 +10,13 @@ import 'sales_return_list_state.dart';
 /// Manages sales-return listing, date filtering, and live-first remote loads.
 class SalesReturnListBloc
     extends Bloc<SalesReturnListEvent, SalesReturnListState> {
-  final SalesRepository _salesRepository;
+  final SalesReturnRepository _salesReturnRepository;
 
   /// Bumped on every remote list request; stale completions must not emit.
   int _fetchGeneration = 0;
 
-  SalesReturnListBloc({required SalesRepository salesRepository})
-    : _salesRepository = salesRepository,
+  SalesReturnListBloc({required SalesReturnRepository salesReturnRepository})
+    : _salesReturnRepository = salesReturnRepository,
       super(
         SalesReturnListState(
           startDate: todayDate(),
@@ -47,7 +47,7 @@ class SalesReturnListBloc
     );
 
     try {
-      final loaded = await _salesRepository.fetchRemoteReturns(
+      final loaded = await _salesReturnRepository.fetchRemoteReturns(
         startDate: rangeStart,
         endDate: rangeEnd,
       );
@@ -57,7 +57,7 @@ class SalesReturnListBloc
       if (generation != _fetchGeneration) return;
       emit(
         state.copyWith(
-          returns: _salesRepository.getLocalReturns(),
+          returns: _salesReturnRepository.getLocalReturns(),
           isLoading: false,
           errorMessage: humanizeSyncError(e),
         ),

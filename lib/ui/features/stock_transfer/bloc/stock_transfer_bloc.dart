@@ -6,11 +6,8 @@ import 'package:equatable/equatable.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/stock_transfer.dart';
 import '../../../../domain/models/warehouse.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/stock_transfer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
-import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/models/stock_transfer_model.dart';
-import '../../../core/utils/date_filter.dart';
 import '../../../core/utils/error_mapper.dart';
 
 // --- Row model ---
@@ -271,13 +268,13 @@ class StockTransferState extends Equatable {
 /// Business Logic Component driving both the Issue-to-Van and Stock-Unloading
 /// planning grids and their submission as Zoho Transfer Orders.
 class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
-  final SalesRepository _salesRepository;
+  final StockTransferRepository _stockTransferRepository;
   final SyncRepository _syncRepository;
 
   StockTransferBloc({
-    required SalesRepository salesRepository,
+    required StockTransferRepository stockTransferRepository,
     required SyncRepository syncRepository,
-  }) : _salesRepository = salesRepository,
+  }) : _stockTransferRepository = stockTransferRepository,
        _syncRepository = syncRepository,
        super(const StockTransferState()) {
     on<LoadIssueGrid>(_onLoadIssueGrid);
@@ -291,56 +288,12 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     on<ClearMessages>(_onClearMessages);
   }
 
-  /// Resolves the organization's default (primary) warehouse location, falling
-  /// back to the first known warehouse if none is flagged primary.
-  Warehouse _resolveDefaultWarehouse() {
-    final warehouses = _salesRepository.getWarehouses();
-    if (warehouses.isEmpty) {
-      return const Warehouse(id: '', name: 'Default Warehouse', address: '');
-    }
-    final primaryId = _salesRepository.primaryWarehouseId;
-    if (primaryId != null && primaryId.isNotEmpty) {
-      for (final w in warehouses) {
-        if (w.id == primaryId) return w;
-      }
-    }
-    return warehouses.firstWhere(
-      (w) => w.isPrimary,
-      orElse: () => warehouses.first,
-    );
-  }
-
-  Warehouse _resolveCurrentLocation() {
-    final id = _salesRepository.assignedWarehouseId;
-    final warehouses = _salesRepository.getWarehouses();
-    return warehouses.firstWhere(
-      (w) => w.id == id,
-      orElse: () =>
-          Warehouse(id: id ?? '', name: 'Current Location', address: ''),
-    );
-  }
-
   Future<void> _onLoadIssueGrid(
     LoadIssueGrid event,
     Emitter<StockTransferState> emit,
   ) async {
-    // Today's invoiced quantities per item, scoped to the current location
-    // (getLocalInvoices() is already session-location scoped).
-    final today = DateTime.now();
-    final todaysInvoices = filterByDateRange(
-      _salesRepository.getLocalInvoices(),
-      (inv) => inv.date,
-      startDate: today,
-      endDate: today,
-    );
-    final invoiceQtyByItem = <String, double>{};
-    for (final inv in todaysInvoices) {
-      for (final line in inv.items) {
-        // Base-unit quantities — invoice lines may be in alternate units.
-        invoiceQtyByItem[line.item.id] =
-            (invoiceQtyByItem[line.item.id] ?? 0) + line.quantityInBase;
-      }
-    }
+    final invoiceQtyByItem =
+        _stockTransferRepository.getTodaysInvoicedQuantities();
     await _loadIssueGridWithQtyMap(emit, invoiceQtyByItem);
   }
 
@@ -368,23 +321,15 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
       ),
     );
     try {
-      final locationId = _salesRepository.assignedWarehouseId ?? '';
-      List<Item> currentItems;
-      var live = false;
-      try {
-        currentItems = await _salesRepository.fetchRemoteItems(
-          locationId: locationId,
-        );
-        live = true;
-      } catch (_) {
-        currentItems = _salesRepository.getItems();
-      }
+      final (:items, :live) =
+          await _stockTransferRepository.loadCurrentLocationItems();
+      final currentItems = items;
 
       // Union of fetched items and demand/invoiced items — a sold-out item
       // (stock 0) still appears when it has quantity to transfer. Catalog
       // items with neither stock nor demand stay off the grid.
       final itemsById = <String, Item>{for (final it in currentItems) it.id: it};
-      final cachedItems = _salesRepository.getItems();
+      final cachedItems = _stockTransferRepository.getItems();
       for (final itemId in qtyByItemId.keys) {
         itemsById.putIfAbsent(itemId, () {
           return cachedItems.firstWhere(
@@ -405,8 +350,8 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
 
       final rows = buildIssueToVanRows(itemsById.values, qtyByItemId);
 
-      final defaultWarehouse = _resolveDefaultWarehouse();
-      final currentLocation = _resolveCurrentLocation();
+      final (:defaultWarehouse, :currentLocation) =
+          _stockTransferRepository.resolveTransferLocations();
 
       emit(
         state.copyWith(
@@ -435,7 +380,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
       ),
     );
     try {
-      final vanItems = _salesRepository
+      final vanItems = _stockTransferRepository
           .getItems()
           .where((it) => it.stock > 0)
           .toList()
@@ -451,8 +396,8 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
           )
           .toList();
 
-      final defaultWarehouse = _resolveDefaultWarehouse();
-      final currentLocation = _resolveCurrentLocation();
+      final (:defaultWarehouse, :currentLocation) =
+          _stockTransferRepository.resolveTransferLocations();
 
       emit(
         state.copyWith(
@@ -551,7 +496,8 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
       return;
     }
 
-    final defaultWarehouse = _resolveDefaultWarehouse();
+    final (:defaultWarehouse, :currentLocation) =
+        _stockTransferRepository.resolveTransferLocations();
     if (defaultWarehouse.id.isEmpty) {
       emit(
         state.copyWith(
@@ -562,8 +508,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
       );
       return;
     }
-    final currentLocationId = _salesRepository.assignedWarehouseId;
-    if (currentLocationId == null || currentLocationId.isEmpty) {
+    if (currentLocation.id.isEmpty) {
       emit(
         state.copyWith(
           errorMessage:
@@ -576,8 +521,8 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     emit(state.copyWith(isLoading: true));
     try {
       final isLoad = state.direction == StockTransferDirection.load;
-      final fromLocationId = isLoad ? defaultWarehouse.id : currentLocationId;
-      final toLocationId = isLoad ? currentLocationId : defaultWarehouse.id;
+      final fromLocationId = isLoad ? defaultWarehouse.id : currentLocation.id;
+      final toLocationId = isLoad ? currentLocation.id : defaultWarehouse.id;
 
       final tempId = 'temp_to_${DateTime.now().millisecondsSinceEpoch}';
       final transfer = StockTransfer(
@@ -604,16 +549,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         isPendingSync: true,
       );
 
-      await _salesRepository.saveLocalStockTransfer(transfer);
-
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'stock_transfer',
-        payload: StockTransferModel.fromDomain(transfer).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await _salesRepository.enqueueSyncItem(syncItem);
+      await _stockTransferRepository.recordStockTransfer(transfer);
 
       unawaited(_syncRepository.triggerSync());
 

@@ -1,12 +1,25 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/receipt_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../../domain/repositories/sales_return_repository.dart';
 import 'daily_stats_state.dart';
 
 class DailyStatsCubit extends Cubit<DailyStatsState> {
-  final SalesRepository salesRepository;
+  final InvoiceRepository invoiceRepository;
+  final ExpenseRepository expenseRepository;
+  final ReceiptRepository receiptRepository;
+  final SalesReturnRepository salesReturnRepository;
+  final SalesOrderRepository salesOrderRepository;
 
-  DailyStatsCubit({required this.salesRepository})
-      : super(const DailyStatsState()) {
+  DailyStatsCubit({
+    required this.invoiceRepository,
+    required this.expenseRepository,
+    required this.receiptRepository,
+    required this.salesReturnRepository,
+    required this.salesOrderRepository,
+  }) : super(const DailyStatsState()) {
     refresh();
   }
 
@@ -22,11 +35,11 @@ class DailyStatsCubit extends Cubit<DailyStatsState> {
     try {
       final now = DateTime.now();
 
-      final allInvoices = salesRepository.getLocalInvoices();
-      final allReceipts = salesRepository.getLocalReceipts();
-      final allExpenses = salesRepository.getLocalExpenses();
-      final allReturns = salesRepository.getLocalReturns();
-      final allOrders = salesRepository.getLocalOrders();
+      final allInvoices = invoiceRepository.getLocalInvoices();
+      final allReceipts = receiptRepository.getLocalReceipts();
+      final allExpenses = expenseRepository.getLocalExpenses();
+      final allReturns = salesReturnRepository.getLocalReturns();
+      final allOrders = salesOrderRepository.getLocalOrders();
 
       final todaysInvoices =
           allInvoices.where((inv) => _isSameDay(inv.date, now)).toList();

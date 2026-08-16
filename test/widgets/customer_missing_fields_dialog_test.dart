@@ -4,12 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/customer.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_bloc.dart';
 import 'package:van_sales/ui/core/widgets/customer_missing_fields_dialog.dart';
 
-class _FakeSalesRepository implements SalesRepository {
+class _FakeSalesRepository implements CustomerRepository {
   String? savedPhone;
   String? savedTrn;
   String? savedId;
@@ -140,13 +140,13 @@ void main() {
     await tester.pumpWidget(
       MultiRepositoryProvider(
         providers: [
-          RepositoryProvider<SalesRepository>.value(value: sales),
+          RepositoryProvider<CustomerRepository>.value(value: sales),
           RepositoryProvider<SyncRepository>.value(value: sync),
         ],
         child: MaterialApp(
           home: BlocProvider(
             create: (_) => GpsCaptureBloc(
-              salesRepository: sales,
+              customerRepository: sales,
               syncRepository: sync,
             ),
             child: Builder(
@@ -314,13 +314,13 @@ void main() {
     await tester.pumpWidget(
       MultiRepositoryProvider(
         providers: [
-          RepositoryProvider<SalesRepository>.value(value: sales),
+          RepositoryProvider<CustomerRepository>.value(value: sales),
           RepositoryProvider<SyncRepository>.value(value: sync),
         ],
         child: MaterialApp(
           home: BlocProvider(
             create: (_) => GpsCaptureBloc(
-              salesRepository: sales,
+              customerRepository: sales,
               syncRepository: sync,
             ),
             child: Builder(

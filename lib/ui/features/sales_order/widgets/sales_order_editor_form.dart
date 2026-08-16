@@ -3,7 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_order.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/item_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/currency.dart';
@@ -51,7 +52,7 @@ class SalesOrderEditorForm extends StatelessWidget {
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final repo = context.read<SalesRepository>();
+    final repo = context.read<CustomerRepository>();
     final allCustomers = repo.getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
@@ -76,7 +77,7 @@ class SalesOrderEditorForm extends StatelessWidget {
     BuildContext context,
     List<OrderLineItem> editingItems,
   ) async {
-    final repo = context.read<SalesRepository>();
+    final repo = context.read<ItemRepository>();
     final excludedIds = editingItems.map((line) => line.item.id).toList();
     final items = repo
         .getItems()
@@ -124,7 +125,7 @@ class SalesOrderEditorForm extends StatelessWidget {
   Future<Item> _resolveUnits(BuildContext context, Item item) async {
     if (item.unitConversions.isNotEmpty) return item;
     final result =
-        await context.read<SalesRepository>().resolveItemUnitConversions(item);
+        await context.read<ItemRepository>().resolveItemUnitConversions(item);
     if (result.offlineFallback && context.mounted) {
       showErrorSnackBar(
         context,

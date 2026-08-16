@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../domain/models/expense_entry.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
@@ -26,7 +26,7 @@ class ExpenseEditorPage extends StatefulWidget {
     ExpenseEntry? expense,
     bool readOnly = false,
   }) {
-    final salesRepo = context.read<SalesRepository>();
+    final expenseRepo = context.read<ExpenseRepository>();
     final syncRepo = context.read<SyncRepository>();
 
     return Navigator.push<T>(
@@ -35,7 +35,7 @@ class ExpenseEditorPage extends StatefulWidget {
         builder: (_) => BlocProvider(
           create: (_) {
             final bloc = ExpenseEditorBloc(
-              salesRepository: salesRepo,
+              expenseRepository: expenseRepo,
               syncRepository: syncRepo,
             );
             if (expense != null) {

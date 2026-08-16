@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/services/injection.dart';
-import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/cash_closing_repository.dart';
 import 'bloc/auth_bloc.dart';
 
 /// Signs the user out unless today's cash closing is still pending.
@@ -14,7 +14,7 @@ Future<void> attemptLogout(
   bool? hasPendingCashClosing,
 }) async {
   final pending = hasPendingCashClosing ??
-      sl<SalesRepository>().hasPendingCashClosingForToday();
+      sl<CashClosingRepository>().hasPendingCashClosingForToday();
   if (!pending) {
     context.read<AuthBloc>().add(LogoutRequested());
     return;

@@ -2,21 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/models/sales_order_model.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
-import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/customer_ledger.dart';
-import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/item.dart';
-import 'package:van_sales/domain/models/open_invoice.dart';
-import 'package:van_sales/domain/models/organization.dart';
-import 'package:van_sales/domain/models/receipt_voucher.dart';
-import 'package:van_sales/domain/models/route.dart';
-import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
-import 'package:van_sales/domain/models/sales_return.dart';
-import 'package:van_sales/domain/models/stock_transfer.dart';
-import 'package:van_sales/domain/models/warehouse.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/sales_order_repository.dart';
+import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/ui/features/sales_order/bloc/sales_order_editor_bloc.dart';
@@ -24,7 +15,7 @@ import 'package:van_sales/ui/features/sales_order/bloc/sales_order_editor_event.
 
 /// Records what the bloc asked for, so the tests can assert that opening a
 /// saved order reads Zoho and never the local cache.
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository implements CustomerRepository, SalesOrderRepository {
   final List<String> fetchedOrderIds = [];
   final List<SyncQueueItem> queue = [];
   final List<SalesOrder> savedOrders = [];
@@ -86,34 +77,6 @@ class FakeSalesRepository implements SalesRepository {
   }) async => [];
 
   // --- Unused by these tests -------------------------------------------------
-  @override
-  List<SalesInvoice> getLocalInvoices() => [];
-  @override
-  Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
-  @override
-  Future<SalesInvoice?> fetchInvoiceById(
-    String invoiceId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
-  @override
-  Future<ReceiptVoucher?> fetchReceiptById(
-    String paymentId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
-  @override
-  Future<SalesReturn?> fetchSalesReturnById(
-    String creditNoteId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
-  @override
-  Future<ExpenseEntry?> fetchExpenseById(
-    String expenseId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
   List<Customer> customers = [];
 
   @override
@@ -122,28 +85,6 @@ class FakeSalesRepository implements SalesRepository {
   Future<void> saveCustomers(List<Customer> customers) async {
     this.customers = List.of(customers);
   }
-  @override
-  List<SyncQueueItem> getSyncQueue() => queue;
-  @override
-  List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
-  @override
-  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({
-    String? customerId,
-  }) async => [];
-  @override
-  List<ReceiptVoucher> getLocalReceipts() => [];
-  @override
-  Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
-  @override
-  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  Future<List<SalesInvoice>> fetchRemoteInvoices({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
   @override
   Future<void> updateCustomerGps(
     String customerId,
@@ -162,57 +103,12 @@ class FakeSalesRepository implements SalesRepository {
     String? phone,
     String? trn,
   }) async {}
-  @override
-  List<RouteModel> getRoutes() => [];
-  @override
-  String? get activeRouteId => null;
-  @override
-  Future<void> setActiveRouteId(String? routeId) async {}
-  @override
-  List<Item> getItems() => [];
-  @override
-  Future<void> saveItems(List<Item> items) async {}
-  @override
-  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(
-    Item item,
-  ) async => (item: item, offlineFallback: false);
 
   @override
   Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(
     Customer customer,
   ) async =>
       (customer: customer, offlineFallback: false);
-  @override
-  List<SalesReturn> getLocalReturns() => [];
-  @override
-  Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
-  @override
-  Future<List<SalesReturn>> fetchRemoteReturns({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  List<ExpenseEntry> getLocalExpenses() => [];
-  @override
-  Future<void> saveLocalExpense(ExpenseEntry expense) async {}
-  @override
-  Future<List<ExpenseEntry>> fetchRemoteExpenses({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  CashClosing? getLocalCashClosing() => null;
-  @override
-  Future<void> saveLocalCashClosing(CashClosing closing) async {}
-  @override
-  List<StockTransfer> getLocalStockTransfers() => [];
-  @override
-  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
-  @override
-  Future<List<StockTransfer>> fetchRemoteStockTransfers({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
   @override
   Future<CustomerLedger> fetchCustomerLedger(
     String customerId, {
@@ -221,18 +117,6 @@ class FakeSalesRepository implements SalesRepository {
   }) => throw UnimplementedError();
   @override
   Customer? getCustomerById(String id) => null;
-  @override
-  Organization? getOrganization() => null;
-  @override
-  String? get assignedWarehouseId => null;
-  @override
-  String? get primaryWarehouseId => null;
-  @override
-  List<Warehouse> getWarehouses() => [];
-  @override
-  bool hasPendingCashClosingForToday() => false;
-  @override
-  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
   @override
   Future<void> pushCustomerGpsRemote(
     String customerId,
@@ -327,7 +211,8 @@ void main() {
     syncRepo = FakeSyncRepository();
     docNumbers = FakeDocumentNumberService();
     bloc = SalesOrderEditorBloc(
-      salesRepository: salesRepo,
+      salesOrderRepository: salesRepo,
+      customerRepository: salesRepo,
       syncRepository: syncRepo,
       documentNumberService: docNumbers,
     );

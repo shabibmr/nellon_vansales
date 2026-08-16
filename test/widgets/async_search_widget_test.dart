@@ -5,7 +5,8 @@ import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/organization.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/item_repository.dart';
+import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/core/cubit/organization_cubit.dart';
 import 'package:van_sales/ui/core/widgets/async_search_widget.dart';
@@ -27,7 +28,7 @@ class _FakeOrgCubit extends Cubit<Organization?> implements OrganizationCubit {
   void refresh() {}
 }
 
-class _FakeSalesRepository implements SalesRepository {
+class _FakeSalesRepository implements CustomerRepository, ItemRepository {
   List<Customer> customers = [];
   String? savedPhone;
   String? savedTrn;
@@ -159,7 +160,8 @@ void main() {
     await tester.pumpWidget(
       MultiRepositoryProvider(
         providers: [
-          RepositoryProvider<SalesRepository>.value(value: sales),
+          RepositoryProvider<CustomerRepository>.value(value: sales),
+          RepositoryProvider<ItemRepository>.value(value: sales),
           RepositoryProvider<SyncRepository>.value(value: sync),
         ],
         child: MaterialApp(

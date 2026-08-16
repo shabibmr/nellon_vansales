@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../domain/models/sales_return.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
@@ -49,7 +49,7 @@ class SalesReturnEditorForm extends StatelessWidget {
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final allCustomers = context.read<SalesRepository>().getCustomers()
+    final allCustomers = context.read<CustomerRepository>().getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,

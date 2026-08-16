@@ -2,20 +2,20 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/error_classification.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
 import '../../../core/utils/date_filter.dart';
 import 'expense_list_event.dart';
 import 'expense_list_state.dart';
 
 /// Manages van-expense listing, date filtering, and live-first remote loads.
 class ExpenseListBloc extends Bloc<ExpenseListEvent, ExpenseListState> {
-  final SalesRepository _salesRepository;
+  final ExpenseRepository _expenseRepository;
 
   /// Bumped on every remote list request; stale completions must not emit.
   int _fetchGeneration = 0;
 
-  ExpenseListBloc({required SalesRepository salesRepository})
-    : _salesRepository = salesRepository,
+  ExpenseListBloc({required ExpenseRepository expenseRepository})
+    : _expenseRepository = expenseRepository,
       super(
         ExpenseListState(
           startDate: todayDate(),
@@ -46,7 +46,7 @@ class ExpenseListBloc extends Bloc<ExpenseListEvent, ExpenseListState> {
     );
 
     try {
-      final loaded = await _salesRepository.fetchRemoteExpenses(
+      final loaded = await _expenseRepository.fetchRemoteExpenses(
         startDate: rangeStart,
         endDate: rangeEnd,
       );
@@ -56,7 +56,7 @@ class ExpenseListBloc extends Bloc<ExpenseListEvent, ExpenseListState> {
       if (generation != _fetchGeneration) return;
       emit(
         state.copyWith(
-          expenses: _salesRepository.getLocalExpenses(),
+          expenses: _expenseRepository.getLocalExpenses(),
           isLoading: false,
           errorMessage: humanizeSyncError(e),
         ),

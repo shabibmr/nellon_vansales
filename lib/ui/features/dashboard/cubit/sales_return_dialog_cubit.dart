@@ -4,7 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_return.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/item_repository.dart';
+import '../../../../domain/repositories/sales_return_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/models/sales_return_model.dart';
 import '../../../../data/services/document_number_service.dart';
@@ -15,20 +17,24 @@ import 'sales_return_dialog_state.dart';
 
 class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
   final Customer customer;
-  final SalesRepository salesRepository;
+  final SalesReturnRepository salesReturnRepository;
+  final InvoiceRepository invoiceRepository;
+  final ItemRepository itemRepository;
   final SyncWorker syncWorker;
   final DocumentNumberService documentNumberService;
 
   SalesReturnDialogCubit({
     required this.customer,
-    required this.salesRepository,
+    required this.salesReturnRepository,
+    required this.invoiceRepository,
+    required this.itemRepository,
     required this.syncWorker,
     required this.documentNumberService,
   }) : super(const SalesReturnDialogState());
 
   void loadEligibleItems() {
-    final invoices = salesRepository.getLocalInvoices();
-    final catalog = salesRepository.getItems();
+    final invoices = invoiceRepository.getLocalInvoices();
+    final catalog = itemRepository.getItems();
     final eligible = eligibleReturnItems(
       allInvoices: invoices,
       catalog: catalog,
@@ -46,7 +52,7 @@ class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
   }
 
   void selectItem(Item item) {
-    final invoices = salesRepository.getLocalInvoices();
+    final invoices = invoiceRepository.getLocalInvoices();
     final matching = invoicesContainingItem(
       allInvoices: invoices,
       customerId: customer.id,
@@ -132,7 +138,7 @@ class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
         isPendingSync: true,
       );
 
-      await salesRepository.saveLocalReturn(returnItem);
+      await salesReturnRepository.saveLocalReturn(returnItem);
 
       final syncItem = SyncQueueItem(
         id: tempId,
@@ -141,7 +147,7 @@ class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
         status: SyncStatus.pending,
         timestamp: DateTime.now(),
       );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await salesReturnRepository.enqueueSyncItem(syncItem);
 
       unawaited(syncWorker.syncPendingItems());
 

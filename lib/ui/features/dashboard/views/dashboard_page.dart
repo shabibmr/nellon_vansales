@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/receipt_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../../domain/repositories/sales_return_repository.dart';
 import '../cubit/daily_stats_cubit.dart';
 import '../cubit/dashboard_nav_cubit.dart';
 import '../cubit/list_layout_cubit.dart';
@@ -22,7 +26,11 @@ class DashboardPage extends StatelessWidget {
         ),
         BlocProvider<DailyStatsCubit>(
           create: (context) => DailyStatsCubit(
-            salesRepository: context.read<SalesRepository>(),
+            invoiceRepository: context.read<InvoiceRepository>(),
+            expenseRepository: context.read<ExpenseRepository>(),
+            receiptRepository: context.read<ReceiptRepository>(),
+            salesReturnRepository: context.read<SalesReturnRepository>(),
+            salesOrderRepository: context.read<SalesOrderRepository>(),
           ),
         ),
         BlocProvider<ListLayoutCubit>(

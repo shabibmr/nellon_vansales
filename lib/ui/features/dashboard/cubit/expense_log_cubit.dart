@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/expense_entry.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/expense_entry_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
@@ -9,11 +9,11 @@ import '../../../../ui/core/utils/error_mapper.dart';
 import 'expense_log_state.dart';
 
 class ExpenseLogCubit extends Cubit<ExpenseLogState> {
-  final SalesRepository salesRepository;
+  final ExpenseRepository expenseRepository;
   final SyncRepository syncRepository;
 
   ExpenseLogCubit({
-    required this.salesRepository,
+    required this.expenseRepository,
     required this.syncRepository,
   }) : super(ExpenseLogInitial());
 
@@ -43,7 +43,7 @@ class ExpenseLogCubit extends Cubit<ExpenseLogState> {
       );
 
       // Save local
-      await salesRepository.saveLocalExpense(expense);
+      await expenseRepository.saveLocalExpense(expense);
 
       // Enqueue sync item
       final syncItem = SyncQueueItem(
@@ -53,7 +53,7 @@ class ExpenseLogCubit extends Cubit<ExpenseLogState> {
         status: SyncStatus.pending,
         timestamp: DateTime.now(),
       );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await expenseRepository.enqueueSyncItem(syncItem);
 
       // Trigger background sync
       unawaited(syncRepository.triggerSync());

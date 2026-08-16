@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../domain/models/item.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/item_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/date_filter.dart';
 import '../../../../ui/core/utils/quantity_format.dart';
@@ -51,7 +51,7 @@ class _IssueToVanPageState extends State<IssueToVanPage> {
     final bloc = pageContext.read<StockTransferBloc>();
     final excludedIds = bloc.state.rows.map((r) => r.item.id).toSet();
     final items = pageContext
-        .read<SalesRepository>()
+        .read<ItemRepository>()
         .getItems()
         .where((it) => !excludedIds.contains(it.id))
         .toList();

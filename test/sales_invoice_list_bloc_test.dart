@@ -3,14 +3,16 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/invoice_repository.dart';
+import 'package:van_sales/domain/repositories/sales_order_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_bloc.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_event.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_state.dart';
 
 /// Minimal recording repo: only invoice list methods are real; others noSuchMethod.
-class RecordingSalesRepository implements SalesRepository {
+class RecordingSalesRepository
+    implements InvoiceRepository, SalesOrderRepository {
   final List<({DateTime? start, DateTime? end})> fetchCalls = [];
   List<SalesInvoice> remoteInvoices = [];
   List<SalesInvoice> localInvoices = [];
@@ -106,7 +108,8 @@ void main() {
     repo = RecordingSalesRepository();
     syncRepo = FakeSyncRepository();
     bloc = SalesInvoiceListBloc(
-      salesRepository: repo,
+      invoiceRepository: repo,
+      salesOrderRepository: repo,
       syncRepository: syncRepo,
       documentNumberService: FakeDocumentNumberService(),
     );

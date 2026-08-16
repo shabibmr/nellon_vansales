@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:van_sales/data/repositories/sales_repository_impl.dart';
+import 'package:van_sales/data/repositories/customer_repository_impl.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/customer.dart';
@@ -119,12 +119,12 @@ void main() {
 
   late _FakeDb db;
   late _FakeApi api;
-  late SalesRepositoryImpl repo;
+  late CustomerRepositoryImpl repo;
 
   setUp(() {
     db = _FakeDb();
     api = _FakeApi(db);
-    repo = SalesRepositoryImpl(dbService: db, apiClient: api);
+    repo = CustomerRepositoryImpl(dbService: db, apiClient: api);
   });
 
   test('non-empty TRN skips the network', () async {

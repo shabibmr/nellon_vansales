@@ -4,7 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../domain/repositories/report_repository.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../core/widgets/customer_selector_sheet.dart';
@@ -89,7 +89,7 @@ class _AgingReceivablesReportViewState
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final allCustomers = context.read<SalesRepository>().getCustomers()
+    final allCustomers = context.read<CustomerRepository>().getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/receipt_repository.dart';
 import '../../../../data/models/receipt_voucher_model.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/document_number_service.dart';
@@ -12,12 +12,12 @@ import 'receipt_allocation_event.dart';
 import 'receipt_allocation_state.dart';
 
 class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocationState> {
-  final SalesRepository salesRepository;
+  final ReceiptRepository receiptRepository;
   final SyncWorker syncWorker;
   final DocumentNumberService documentNumberService;
 
   ReceiptAllocationBloc({
-    required this.salesRepository,
+    required this.receiptRepository,
     required this.syncWorker,
     required this.documentNumberService,
   }) : super(const ReceiptAllocationState()) {
@@ -34,7 +34,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
     Emitter<ReceiptAllocationState> emit,
   ) {
     // Show cached open invoices immediately
-    final cachedInvoices = salesRepository.getOpenInvoices(customerId: event.customer.id)
+    final cachedInvoices = receiptRepository.getOpenInvoices(customerId: event.customer.id)
       ..sort((a, b) => a.date.compareTo(b.date));
 
     emit(ReceiptAllocationState(
@@ -58,12 +58,12 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
     try {
       // Always pull open invoices live from Zoho — never rely on master sync.
       freshInvoices =
-          await salesRepository.fetchRemoteOpenInvoices(customerId: customer.id)
+          await receiptRepository.fetchRemoteOpenInvoices(customerId: customer.id)
             ..sort((a, b) => a.date.compareTo(b.date));
     } catch (_) {
       // Offline/failure: fall back to last cached snapshot.
       freshInvoices =
-          salesRepository.getOpenInvoices(customerId: customer.id)
+          receiptRepository.getOpenInvoices(customerId: customer.id)
             ..sort((a, b) => a.date.compareTo(b.date));
     }
 
@@ -204,7 +204,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
       );
 
       // Save locally
-      await salesRepository.saveLocalReceipt(voucher);
+      await receiptRepository.saveLocalReceipt(voucher);
 
       // Enqueue sync item
       final syncItem = SyncQueueItem(
@@ -214,7 +214,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
         status: SyncStatus.pending,
         timestamp: DateTime.now(),
       );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await receiptRepository.enqueueSyncItem(syncItem);
 
       // Kick sync in background
       unawaited(syncWorker.syncPendingItems());

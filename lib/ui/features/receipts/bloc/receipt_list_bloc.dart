@@ -2,20 +2,20 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/error_classification.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/receipt_repository.dart';
 import '../../../core/utils/date_filter.dart';
 import 'receipt_list_event.dart';
 import 'receipt_list_state.dart';
 
 /// Manages receipt-voucher listing, date filtering, and live-first remote loads.
 class ReceiptListBloc extends Bloc<ReceiptListEvent, ReceiptListState> {
-  final SalesRepository _salesRepository;
+  final ReceiptRepository _receiptRepository;
 
   /// Bumped on every remote list request; stale completions must not emit.
   int _fetchGeneration = 0;
 
-  ReceiptListBloc({required SalesRepository salesRepository})
-    : _salesRepository = salesRepository,
+  ReceiptListBloc({required ReceiptRepository receiptRepository})
+    : _receiptRepository = receiptRepository,
       super(
         ReceiptListState(
           startDate: todayDate(),
@@ -46,7 +46,7 @@ class ReceiptListBloc extends Bloc<ReceiptListEvent, ReceiptListState> {
     );
 
     try {
-      final loaded = await _salesRepository.fetchRemoteReceipts(
+      final loaded = await _receiptRepository.fetchRemoteReceipts(
         startDate: rangeStart,
         endDate: rangeEnd,
       );
@@ -56,7 +56,7 @@ class ReceiptListBloc extends Bloc<ReceiptListEvent, ReceiptListState> {
       if (generation != _fetchGeneration) return;
       emit(
         state.copyWith(
-          receipts: _salesRepository.getLocalReceipts(),
+          receipts: _receiptRepository.getLocalReceipts(),
           isLoading: false,
           errorMessage: humanizeSyncError(e),
         ),

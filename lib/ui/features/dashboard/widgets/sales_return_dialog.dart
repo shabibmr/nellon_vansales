@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/item_repository.dart';
+import '../../../../domain/repositories/sales_return_repository.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
@@ -38,7 +40,9 @@ class SalesReturnDialog extends StatelessWidget {
     return BlocProvider(
       create: (ctx) => SalesReturnDialogCubit(
         customer: customer,
-        salesRepository: ctx.read<SalesRepository>(),
+        salesReturnRepository: ctx.read<SalesReturnRepository>(),
+        invoiceRepository: ctx.read<InvoiceRepository>(),
+        itemRepository: ctx.read<ItemRepository>(),
         syncWorker: sl<SyncWorker>(),
         documentNumberService: sl<DocumentNumberService>(),
       )..loadEligibleItems(),

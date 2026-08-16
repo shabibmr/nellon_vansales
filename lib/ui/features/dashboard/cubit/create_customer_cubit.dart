@@ -1,18 +1,21 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import 'create_customer_state.dart';
 
 class CreateCustomerCubit extends Cubit<CreateCustomerState> {
-  final SalesRepository salesRepository;
+  final CustomerRepository customerRepository;
+  final SessionRepository sessionRepository;
   final SyncRepository syncRepository;
 
   CreateCustomerCubit({
-    required this.salesRepository,
+    required this.customerRepository,
+    required this.sessionRepository,
     required this.syncRepository,
   }) : super(CreateCustomerInitial());
 
@@ -32,8 +35,8 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
 
     try {
       final routeId =
-          activeRouteId ?? salesRepository.activeRouteId ?? 'route_default';
-      final localCustomers = salesRepository.getCustomers();
+          activeRouteId ?? sessionRepository.activeRouteId ?? 'route_default';
+      final localCustomers = customerRepository.getCustomers();
       final tempId = 'temp_cust_${DateTime.now().millisecondsSinceEpoch}';
 
       final newCustomer = Customer(
@@ -53,7 +56,7 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
       );
 
       // 1. Persist locally via repository
-      await salesRepository.saveCustomers([...localCustomers, newCustomer]);
+      await customerRepository.saveCustomers([...localCustomers, newCustomer]);
 
       // 2. Build Zoho payload
       final customerPayload = <String, dynamic>{
@@ -82,7 +85,7 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
         status: SyncStatus.pending,
         timestamp: DateTime.now(),
       );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await customerRepository.enqueueSyncItem(syncItem);
 
       // 4. Trigger background sync
       unawaited(syncRepository.triggerSync());

@@ -7,7 +7,8 @@ import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_order.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'sales_order_editor_event.dart';
@@ -16,15 +17,18 @@ import 'sales_order_editor_state.dart';
 /// Manages a single sales-order form: open, edit lines, save, enqueue sync.
 class SalesOrderEditorBloc
     extends Bloc<SalesOrderEditorEvent, SalesOrderEditorState> {
-  final SalesRepository _salesRepository;
+  final SalesOrderRepository _salesOrderRepository;
+  final CustomerRepository _customerRepository;
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   SalesOrderEditorBloc({
-    required SalesRepository salesRepository,
+    required SalesOrderRepository salesOrderRepository,
+    required CustomerRepository customerRepository,
     required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
-  }) : _salesRepository = salesRepository,
+  }) : _salesOrderRepository = salesOrderRepository,
+       _customerRepository = customerRepository,
        _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const SalesOrderEditorState()) {
@@ -150,7 +154,7 @@ class SalesOrderEditorBloc
 
   /// Local-only resolve (no network) for offline open fallback.
   SalesOrder? _localOrderById(String orderId) {
-    for (final o in _salesRepository.getLocalOrders()) {
+    for (final o in _salesOrderRepository.getLocalOrders()) {
       if (o.id == orderId || o.zohoOrderId == orderId) return o;
     }
     return null;
@@ -168,7 +172,7 @@ class SalesOrderEditorBloc
 
     SalesOrder? fetched;
     try {
-      fetched = await _salesRepository.fetchRemoteOrder(
+      fetched = await _salesOrderRepository.fetchRemoteOrder(
         orderId,
         allowOfflineFallback: false,
       );
@@ -253,7 +257,7 @@ class SalesOrderEditorBloc
   /// Prefer the master-data customer when present so credit/route/contact
   /// fields are real; fall back to a name-only stub for offline orphans.
   Customer _customerForOrder(SalesOrder order) {
-    for (final c in _salesRepository.getCustomers()) {
+    for (final c in _customerRepository.getCustomers()) {
       if (c.id == order.customerId) return c;
     }
     return Customer(
@@ -418,11 +422,11 @@ class SalesOrderEditorBloc
         locationId: state.editingOrder?.locationId,
       );
 
-      await _salesRepository.saveLocalOrder(order);
+      await _salesOrderRepository.saveLocalOrder(order);
 
       final isUpdate =
           existingZohoOrderId != null && existingZohoOrderId.isNotEmpty;
-      await _salesRepository.enqueueSalesOrder(order, isUpdate: isUpdate);
+      await _salesOrderRepository.enqueueSalesOrder(order, isUpdate: isUpdate);
 
       unawaited(_syncRepository.triggerSync());
 

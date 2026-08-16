@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/models/sync_queue_item.dart';
 import '../../../domain/models/customer.dart';
-import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/customer_repository.dart';
 import '../../../domain/repositories/sync_repository.dart';
 import '../bloc/gps_capture_bloc.dart';
 import '../bloc/gps_capture_event.dart';
@@ -157,15 +157,15 @@ class _CustomerMissingFieldsDialogState
     final lng = customer.longitude;
     if (lat == null || lng == null) return customer;
 
-    final sales = context.read<SalesRepository>();
+    final customers = context.read<CustomerRepository>();
     final sync = context.read<SyncRepository>();
 
-    await sales.updateCustomerGps(customer.id, lat, lng);
+    await customers.updateCustomerGps(customer.id, lat, lng);
 
     var remoteUpdated = false;
     if (customer.id.isNotEmpty && !customer.id.startsWith('temp_')) {
       try {
-        await sales.pushCustomerGpsRemote(customer.id, lat, lng);
+        await customers.pushCustomerGpsRemote(customer.id, lat, lng);
         remoteUpdated = true;
       } catch (_) {
         // Fall back to the offline queue, same as contact persist.
@@ -173,7 +173,7 @@ class _CustomerMissingFieldsDialogState
     }
 
     if (!remoteUpdated) {
-      await sales.enqueueSyncItem(
+      await customers.enqueueSyncItem(
         SyncQueueItem(
           id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
           type: 'customer_gps_update',
@@ -193,14 +193,14 @@ class _CustomerMissingFieldsDialogState
   }
 
   Future<Customer> _persistContactFields(Customer customer) async {
-    final sales = context.read<SalesRepository>();
+    final customers = context.read<CustomerRepository>();
     final sync = context.read<SyncRepository>();
     final phone = widget.missing.phone ? _phoneController.text.trim() : null;
     final trn = widget.missing.trn
         ? _trnController.text.trim().replaceAll(RegExp(r'\D'), '')
         : null;
 
-    await sales.updateCustomerContactFields(
+    await customers.updateCustomerContactFields(
       customer.id,
       phone: phone,
       trn: trn,
@@ -214,7 +214,7 @@ class _CustomerMissingFieldsDialogState
     var remoteUpdated = false;
     if (customer.id.isNotEmpty && !customer.id.startsWith('temp_')) {
       try {
-        await sales.pushCustomerContactFieldsRemote(
+        await customers.pushCustomerContactFieldsRemote(
           customer.id,
           phone: phone,
           trn: trn,
@@ -226,7 +226,7 @@ class _CustomerMissingFieldsDialogState
     }
 
     if (!remoteUpdated) {
-      await sales.enqueueSyncItem(
+      await customers.enqueueSyncItem(
         SyncQueueItem(
           id: 'contact_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
           type: 'customer_contact_update',

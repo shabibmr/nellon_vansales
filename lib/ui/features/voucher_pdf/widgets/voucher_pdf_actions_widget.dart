@@ -7,7 +7,8 @@ import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/sales_return.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../core/cubit/salesperson_cubit.dart';
 import '../../../core/extensions/org_context_extension.dart';
@@ -47,7 +48,8 @@ class VoucherPdfActionsWidget extends StatelessWidget {
     return BlocProvider<VoucherPdfBloc>(
       create: (ctx) => VoucherPdfBloc(
         pdfService: ctx.read<VoucherPdfRepository>(),
-        salesRepository: ctx.read<SalesRepository>(),
+        customerRepository: ctx.read<CustomerRepository>(),
+        sessionRepository: ctx.read<SessionRepository>(),
       ),
       child: _VoucherPdfActionsBody(
         type: type,
@@ -95,7 +97,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       return null;
     }
     final customerId = _customerIdFor(type, voucher);
-    final customers = context.read<SalesRepository>().getCustomers();
+    final customers = context.read<CustomerRepository>().getCustomers();
     final customer = customerId != null
         ? customers.where((c) => c.id == customerId).firstOrNull
         : null;

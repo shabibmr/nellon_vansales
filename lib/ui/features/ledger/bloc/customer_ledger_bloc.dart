@@ -2,7 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/customer_ledger.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../core/utils/error_mapper.dart';
 
 // --- Events ---
@@ -102,11 +102,11 @@ class CustomerLedgerState extends Equatable {
 
 class CustomerLedgerBloc
     extends Bloc<CustomerLedgerEvent, CustomerLedgerState> {
-  final SalesRepository _salesRepository;
+  final CustomerRepository _customerRepository;
 
   CustomerLedgerBloc({
-    required SalesRepository salesRepository,
-  }) : _salesRepository = salesRepository,
+    required CustomerRepository customerRepository,
+  }) : _customerRepository = customerRepository,
        super(CustomerLedgerState()) {
     on<SetLedgerCustomer>(_onSetCustomer);
     on<SetLedgerStartDate>(_onSetStartDate);
@@ -117,7 +117,7 @@ class CustomerLedgerBloc
 
   // expose local customer list for the selector UI
   List<Customer> get customers =>
-      _salesRepository.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
+      _customerRepository.getCustomers()..sort((a, b) => a.name.compareTo(b.name));
 
   void _onSetCustomer(
     SetLedgerCustomer event,
@@ -154,7 +154,7 @@ class CustomerLedgerBloc
 
     emit(state.copyWith(isLoading: true, clearError: true, clearLedger: true));
     try {
-      final ledger = await _salesRepository.fetchCustomerLedger(
+      final ledger = await _customerRepository.fetchCustomerLedger(
         state.selectedCustomer!.id,
         startDate: state.startDate,
         endDate: state.endDate,

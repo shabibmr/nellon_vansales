@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../domain/models/sales_order.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../data/services/injection.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -37,7 +37,7 @@ class ShipmentOrdersReportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportBlocHost<SalesOrder>(
       create: (_) => ReportBloc<SalesOrder>(
-        fetchRemote: () => sl<SalesRepository>().fetchRemoteOrders(),
+        fetchRemote: () => sl<SalesOrderRepository>().fetchRemoteOrders(),
       ),
       builder: (context, reportState) {
         return BlocProvider(

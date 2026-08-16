@@ -1,7 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdf/pdf.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
@@ -15,10 +16,14 @@ import 'voucher_pdf_state.dart';
 /// Central BLoC orchestrating document serialization and platform action integrations.
 class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
   final VoucherPdfRepository pdfService;
-  final SalesRepository salesRepository;
+  final CustomerRepository customerRepository;
+  final SessionRepository sessionRepository;
 
-  VoucherPdfBloc({required this.pdfService, required this.salesRepository})
-    : super(VoucherPdfInitial()) {
+  VoucherPdfBloc({
+    required this.pdfService,
+    required this.customerRepository,
+    required this.sessionRepository,
+  }) : super(VoucherPdfInitial()) {
     on<GenerateVoucherPdfPreviewRequested>(_onPreviewRequested);
     on<PrintVoucherPdfRequested>(_onPrintRequested);
     on<ShareVoucherPdfRequested>(_onShareRequested);
@@ -43,7 +48,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
   Customer? _getCustomer(VoucherType type, dynamic voucher) {
     final customerId = _customerIdFor(type, voucher);
     if (customerId == null) return null;
-    return salesRepository.getCustomerById(customerId);
+    return customerRepository.getCustomerById(customerId);
   }
 
   /// Builds PDF bytes asynchronously.
@@ -52,7 +57,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
     dynamic voucher, {
     PdfPageFormat pageFormat = PdfPageFormat.a4,
   }) async {
-    final org = salesRepository.getOrganization();
+    final org = sessionRepository.getOrganization();
     if (org == null) {
       throw Exception('Organization data not loaded — please sync first');
     }

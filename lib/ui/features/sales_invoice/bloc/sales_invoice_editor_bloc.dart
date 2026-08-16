@@ -10,7 +10,9 @@ import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/stock_rules.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
@@ -21,15 +23,21 @@ import 'sales_invoice_editor_state.dart';
 /// Manages a single sales-invoice form: open, edit lines, save, enqueue sync.
 class SalesInvoiceEditorBloc
     extends Bloc<SalesInvoiceEditorEvent, SalesInvoiceEditorState> {
-  final SalesRepository _salesRepository;
+  final InvoiceRepository _invoiceRepository;
+  final SalesOrderRepository _salesOrderRepository;
+  final CustomerRepository _customerRepository;
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   SalesInvoiceEditorBloc({
-    required SalesRepository salesRepository,
+    required InvoiceRepository invoiceRepository,
+    required SalesOrderRepository salesOrderRepository,
+    required CustomerRepository customerRepository,
     required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
-  }) : _salesRepository = salesRepository,
+  }) : _invoiceRepository = invoiceRepository,
+       _salesOrderRepository = salesOrderRepository,
+       _customerRepository = customerRepository,
        _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const SalesInvoiceEditorState()) {
@@ -156,7 +164,7 @@ class SalesInvoiceEditorBloc
     // Prefer remote; on open/retry fall back to local with a soft notice.
     SalesInvoice? fetched;
     try {
-      fetched = await _salesRepository.fetchInvoiceById(
+      fetched = await _invoiceRepository.fetchInvoiceById(
         invoiceId,
         forceRemote: true,
         allowOfflineFallback: false,
@@ -172,7 +180,7 @@ class SalesInvoiceEditorBloc
         return;
       }
       try {
-        fetched = await _salesRepository.fetchInvoiceById(
+        fetched = await _invoiceRepository.fetchInvoiceById(
           invoiceId,
           forceRemote: false,
         );
@@ -201,7 +209,7 @@ class SalesInvoiceEditorBloc
       if (!isRefresh) {
         SalesInvoice? local;
         try {
-          local = await _salesRepository.fetchInvoiceById(
+          local = await _invoiceRepository.fetchInvoiceById(
             invoiceId,
             forceRemote: false,
           );
@@ -294,7 +302,7 @@ class SalesInvoiceEditorBloc
   }
 
   Customer _customerForId(String customerId, String nameFallback) {
-    for (final c in _salesRepository.getCustomers()) {
+    for (final c in _customerRepository.getCustomers()) {
       if (c.id == customerId) return c;
     }
     return Customer(
@@ -470,16 +478,16 @@ class SalesInvoiceEditorBloc
         isPendingSync: true,
       );
 
-      await _salesRepository.saveLocalInvoice(invoice);
+      await _invoiceRepository.saveLocalInvoice(invoice);
 
       final sourceOrderId = state.sourceOrderId;
       if (sourceOrderId != null) {
-        final orders = _salesRepository.getLocalOrders();
+        final orders = _salesOrderRepository.getLocalOrders();
         final order = orders.firstWhere(
           (o) => o.id == sourceOrderId,
           orElse: () => state.sourceOrder!,
         );
-        await _salesRepository.saveLocalOrder(
+        await _salesOrderRepository.saveLocalOrder(
           order.copyWith(
             status: SalesOrderStatus.invoiced,
             convertedInvoiceNumber: invoiceNum,
@@ -497,7 +505,7 @@ class SalesInvoiceEditorBloc
           status: SyncStatus.pending,
           timestamp: DateTime.now(),
         );
-        await _salesRepository.enqueueSyncItem(convertItem);
+        await _invoiceRepository.enqueueSyncItem(convertItem);
       } else {
         final syncItem = SyncQueueItem(
           id: tempId,
@@ -506,7 +514,7 @@ class SalesInvoiceEditorBloc
           status: SyncStatus.pending,
           timestamp: DateTime.now(),
         );
-        await _salesRepository.enqueueSyncItem(syncItem);
+        await _invoiceRepository.enqueueSyncItem(syncItem);
       }
 
       unawaited(_syncRepository.triggerSync());

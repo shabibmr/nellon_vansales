@@ -3,7 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/item_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
@@ -51,7 +52,7 @@ class SalesInvoiceEditorForm extends StatelessWidget {
   }
 
   void _showCustomerSelector(BuildContext context) {
-    final allCustomers = context.read<SalesRepository>().getCustomers()
+    final allCustomers = context.read<CustomerRepository>().getCustomers()
       ..sort((a, b) => a.name.compareTo(b.name));
     CustomerSelectorSheet.show(
       context,
@@ -77,7 +78,7 @@ class SalesInvoiceEditorForm extends StatelessWidget {
   ) async {
     final excludedIds = editingItems.map((line) => line.item.id).toList();
     final items = context
-        .read<SalesRepository>()
+        .read<ItemRepository>()
         .getItems()
         .where((item) => !excludedIds.contains(item.id))
         .toList();
@@ -122,7 +123,7 @@ class SalesInvoiceEditorForm extends StatelessWidget {
   Future<Item> _resolveUnits(BuildContext context, Item item) async {
     if (item.unitConversions.isNotEmpty) return item;
     final result =
-        await context.read<SalesRepository>().resolveItemUnitConversions(item);
+        await context.read<ItemRepository>().resolveItemUnitConversions(item);
     if (result.offlineFallback && context.mounted) {
       showErrorSnackBar(
         context,

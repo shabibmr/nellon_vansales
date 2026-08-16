@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
@@ -39,13 +40,14 @@ class CreateCustomerDialog extends StatefulWidget {
         providers: [
           BlocProvider<GpsCaptureBloc>(
             create: (_) => GpsCaptureBloc(
-              salesRepository: sl<SalesRepository>(),
+              customerRepository: sl<CustomerRepository>(),
               syncRepository: sl<SyncRepository>(),
             ),
           ),
           BlocProvider<CreateCustomerCubit>(
             create: (_) => CreateCustomerCubit(
-              salesRepository: sl<SalesRepository>(),
+              customerRepository: sl<CustomerRepository>(),
+              sessionRepository: sl<SessionRepository>(),
               syncRepository: sl<SyncRepository>(),
             ),
           ),
