@@ -1,8 +1,11 @@
 import '../../domain/models/sales_invoice.dart';
+import '../../domain/models/sales_order.dart';
+import '../../domain/models/submit_result.dart';
 import '../../domain/repositories/invoice_repository.dart';
 import '../models/sales_invoice_model.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
+import '../services/sync_worker.dart';
 import '../services/zoho_api_client.dart';
 
 /// Concrete implementation of [InvoiceRepository] backed by a local Hive
@@ -10,8 +13,23 @@ import '../services/zoho_api_client.dart';
 class InvoiceRepositoryImpl implements InvoiceRepository {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final SyncWorker? _syncWorker;
 
-  InvoiceRepositoryImpl({required this._dbService, required this._apiClient});
+  InvoiceRepositoryImpl({
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    SyncWorker? syncWorker,
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _syncWorker = syncWorker;
+
+  SyncWorker get _worker {
+    final worker = _syncWorker;
+    if (worker == null) {
+      throw StateError('submit* requires SyncWorker');
+    }
+    return worker;
+  }
 
   @override
   List<SalesInvoice> getLocalInvoices() => _dbService.getLocalInvoices();
@@ -82,4 +100,62 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) =>
       _dbService.enqueueSyncItem(item);
+
+  SyncQueueItem _invoiceItem(SalesInvoice invoice) {
+    return SyncQueueItem(
+      id: invoice.id,
+      type: 'invoice',
+      payload: SalesInvoiceModel.fromDomain(invoice).toJson(),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  SyncQueueItem _convertSoItem({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) {
+    return SyncQueueItem(
+      id: invoice.id,
+      type: 'convert_so',
+      payload: {
+        'salesorder_id': order.zohoOrderId ?? order.id,
+        'source_order_id': order.id,
+        'local_invoice_id': invoice.id,
+        'invoice': SalesInvoiceModel.fromDomain(invoice).toJson(),
+      },
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<void> enqueueInvoice(SalesInvoice invoice) {
+    return _dbService.enqueueSyncItem(_invoiceItem(invoice));
+  }
+
+  @override
+  Future<void> enqueueConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) {
+    return _dbService.enqueueSyncItem(
+      _convertSoItem(order: order, invoice: invoice),
+    );
+  }
+
+  @override
+  Future<SubmitResult> submitInvoice(SalesInvoice invoice) {
+    return _worker.submitOrEnqueue(_invoiceItem(invoice));
+  }
+
+  @override
+  Future<SubmitResult> submitConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) {
+    return _worker.submitOrEnqueue(
+      _convertSoItem(order: order, invoice: invoice),
+    );
+  }
 }

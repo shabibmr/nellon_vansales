@@ -8,10 +8,13 @@ import 'package:van_sales/domain/models/open_invoice.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
 import 'package:van_sales/domain/repositories/receipt_repository.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/dashboard/bloc/receipt_allocation_bloc.dart';
 import 'package:van_sales/ui/features/dashboard/bloc/receipt_allocation_event.dart';
 
-class FakeSalesRepository implements ReceiptRepository {
+class FakeSalesRepository
+    with ReceiptRepositorySubmitStubs
+    implements ReceiptRepository {
   List<OpenInvoice> openInvoices = [];
   List<ReceiptVoucher> receipts = [];
   List<SyncQueueItem> queue = [];

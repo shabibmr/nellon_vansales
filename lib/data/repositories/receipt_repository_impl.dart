@@ -1,10 +1,12 @@
 import '../../domain/models/open_invoice.dart';
 import '../../domain/models/receipt_voucher.dart';
+import '../../domain/models/submit_result.dart';
 import '../../domain/repositories/receipt_repository.dart';
 import '../models/open_invoice_model.dart';
 import '../models/receipt_voucher_model.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
+import '../services/sync_worker.dart';
 import '../services/zoho_api_client.dart';
 
 /// Concrete implementation of [ReceiptRepository] backed by a local Hive
@@ -12,8 +14,23 @@ import '../services/zoho_api_client.dart';
 class ReceiptRepositoryImpl implements ReceiptRepository {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final SyncWorker? _syncWorker;
 
-  ReceiptRepositoryImpl({required this._dbService, required this._apiClient});
+  ReceiptRepositoryImpl({
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    SyncWorker? syncWorker,
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _syncWorker = syncWorker;
+
+  SyncWorker get _worker {
+    final worker = _syncWorker;
+    if (worker == null) {
+      throw StateError('submit* requires SyncWorker');
+    }
+    return worker;
+  }
 
   @override
   List<ReceiptVoucher> getLocalReceipts() =>
@@ -127,4 +144,52 @@ class ReceiptRepositoryImpl implements ReceiptRepository {
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) =>
       _dbService.enqueueSyncItem(item);
+
+  SyncQueueItem _receiptItem(ReceiptVoucher voucher) {
+    return SyncQueueItem(
+      id: voucher.id,
+      type: 'receipt',
+      payload: _receiptQueuePayload(voucher),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> _receiptQueuePayload(ReceiptVoucher voucher) {
+    final payload = ReceiptVoucherModel.fromDomain(voucher).toJson();
+    final invoices = payload['invoices'];
+    if (invoices is! List) return payload;
+    payload['invoices'] = invoices.map((entry) {
+      if (entry is! Map) return entry;
+      final map = Map<String, dynamic>.from(entry);
+      final resolved = _resolvedInvoiceId(map['invoice_id']?.toString());
+      if (resolved != null) map['invoice_id'] = resolved;
+      return map;
+    }).toList();
+    return payload;
+  }
+
+  String? _resolvedInvoiceId(String? localOrRemoteId) {
+    if (localOrRemoteId == null || localOrRemoteId.isEmpty) {
+      return localOrRemoteId;
+    }
+    for (final inv in _dbService.getAllLocalInvoicesUnfiltered()) {
+      if (inv.id == localOrRemoteId) {
+        final zohoId = inv.zohoInvoiceId;
+        if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+        return localOrRemoteId;
+      }
+    }
+    return localOrRemoteId;
+  }
+
+  @override
+  Future<void> enqueueReceipt(ReceiptVoucher voucher) {
+    return _dbService.enqueueSyncItem(_receiptItem(voucher));
+  }
+
+  @override
+  Future<SubmitResult> submitReceipt(ReceiptVoucher voucher) {
+    return _worker.submitOrEnqueue(_receiptItem(voucher));
+  }
 }

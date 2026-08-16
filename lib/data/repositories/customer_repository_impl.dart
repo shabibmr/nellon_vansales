@@ -1,18 +1,35 @@
 import '../../domain/models/customer.dart';
 import '../models/customer_model.dart';
 import '../../domain/models/customer_ledger.dart';
+import '../../domain/models/submit_result.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../models/sync_queue_item.dart';
 import '../services/app_logger.dart';
 import '../services/hive_database_service.dart';
+import '../services/sync_worker.dart';
 import '../services/zoho_api_client.dart';
 
 /// Concrete implementation of [CustomerRepository] backed by a local Hive database cache.
 class CustomerRepositoryImpl implements CustomerRepository {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final SyncWorker? _syncWorker;
 
-  CustomerRepositoryImpl({required this._dbService, required this._apiClient});
+  CustomerRepositoryImpl({
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    SyncWorker? syncWorker,
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _syncWorker = syncWorker;
+
+  SyncWorker get _worker {
+    final worker = _syncWorker;
+    if (worker == null) {
+      throw StateError('submit* requires SyncWorker');
+    }
+    return worker;
+  }
 
   @override
   List<Customer> getCustomers() => _dbService.getCustomers();
@@ -138,4 +155,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) =>
       _dbService.enqueueSyncItem(item);
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) {
+    return _worker.submitOrEnqueue(item);
+  }
 }

@@ -1,4 +1,5 @@
 import '../models/sales_order.dart';
+import '../models/submit_result.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract for local sales-order logging and Zoho sales-order sync.
@@ -36,4 +37,10 @@ abstract class SalesOrderRepository {
   /// queue. Used for cross-cutting sync items (e.g. `convert_so`) that don't
   /// fit [enqueueSalesOrder]'s create/update shape.
   Future<void> enqueueSyncItem(SyncQueueItem item);
+
+  /// Builds the sales-order queue item and submits it online-first.
+  Future<SubmitResult> submitSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  });
 }

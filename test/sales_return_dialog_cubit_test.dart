@@ -13,8 +13,10 @@ import 'package:van_sales/domain/repositories/invoice_repository.dart';
 import 'package:van_sales/domain/repositories/item_repository.dart';
 import 'package:van_sales/domain/repositories/sales_return_repository.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/sales_return_dialog_cubit.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 
 class FakeSalesRepository
+    with SalesReturnRepositorySubmitStubs, InvoiceRepositorySubmitStubs
     implements
         SalesReturnRepository,
         InvoiceRepository,
@@ -57,6 +59,7 @@ class FakeSalesRepository
 
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) async {
+    if (shouldThrowOnSave) throw Exception('Save failed');
     queue.add(item);
   }
 
@@ -272,18 +275,10 @@ void main() {
 
     await cubit.submit();
 
-    expect(repo.saveCallCount, 1);
-    expect(repo.savedReturns.length, 1);
-    expect(repo.savedReturns.first.items.length, 1);
-    expect(repo.savedReturns.first.items.first.returnedQuantity, 2);
-    expect(repo.savedReturns.first.reason, 'Damaged packaging');
-    expect(
-      repo.savedReturns.first.creditNoteNumber.startsWith('SHB-CN-'),
-      isTrue,
-    );
+    expect(repo.saveCallCount, 0);
+    expect(repo.savedReturns, isEmpty);
     expect(repo.queue.length, 1);
     expect(repo.queue.first.type, 'return');
-    expect(syncWorker.syncPendingCount, 1);
     expect(cubit.state.success, isTrue);
     expect(cubit.state.submitting, isFalse);
   });
@@ -297,7 +292,7 @@ void main() {
     await cubit.submit();
     await first;
 
-    expect(repo.saveCallCount, 1);
+    expect(repo.queue, hasLength(1));
   });
 
   test('submit failure clears submitting and sets errorMessage', () async {

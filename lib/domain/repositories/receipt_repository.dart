@@ -1,5 +1,6 @@
 import '../models/open_invoice.dart';
 import '../models/receipt_voucher.dart';
+import '../models/submit_result.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract for local receipt/collection logging, Zoho receipt sync,
@@ -46,4 +47,10 @@ abstract class ReceiptRepository {
 
   /// Appends an unsynced transaction item to the local offline synchronization queue.
   Future<void> enqueueSyncItem(SyncQueueItem item);
+
+  /// Enqueues a create (`receipt`) sync item for [voucher].
+  Future<void> enqueueReceipt(ReceiptVoucher voucher);
+
+  /// Builds the receipt queue item and submits it online-first.
+  Future<SubmitResult> submitReceipt(ReceiptVoucher voucher);
 }

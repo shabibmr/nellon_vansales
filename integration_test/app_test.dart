@@ -9,19 +9,7 @@ import 'package:van_sales/ui/features/auth/views/login_page.dart';
 import 'package:van_sales/domain/models/phone_auth_event.dart';
 import 'package:van_sales/domain/repositories/auth_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
-import 'package:van_sales/domain/models/open_invoice.dart';
 import 'package:van_sales/domain/models/user.dart';
-import 'package:van_sales/domain/models/route.dart';
-import 'package:van_sales/domain/models/customer.dart';
-import 'package:van_sales/domain/models/item.dart';
-import 'package:van_sales/domain/models/sales_invoice.dart';
-import 'package:van_sales/domain/models/receipt_voucher.dart';
-import 'package:van_sales/domain/models/sales_return.dart';
-import 'package:van_sales/domain/models/sales_order.dart';
-import 'package:van_sales/domain/models/expense_entry.dart';
-import 'package:van_sales/domain/models/cash_closing.dart';
-import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:get_it/get_it.dart';
@@ -109,176 +97,6 @@ class FakeSyncRepository implements SyncRepository {
   int getMasterRecordCount(MasterType type) => 0;
 }
 
-class FakeSalesRepository implements SalesRepository {
-  @override
-  List<RouteModel> getRoutes() => [
-    const RouteModel(
-      id: 'rt_01',
-      name: 'Downtown Route Sequence A',
-      description: 'Downtown route sequence',
-    ),
-  ];
-
-  @override
-  String? get activeRouteId => 'rt_01';
-
-  @override
-  Future<void> setActiveRouteId(String? routeId) async {}
-
-  @override
-  List<Customer> getCustomers() => [];
-
-  @override
-  Future<void> saveCustomers(List<Customer> customers) async {}
-
-  @override
-  List<Item> getItems() => [];
-
-  @override
-  Future<void> saveItems(List<Item> items) async {}
-
-  @override
-  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(
-    Item item,
-  ) async =>
-      (item: item, offlineFallback: false);
-
-  @override
-  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(
-    Customer customer,
-  ) async =>
-      (customer: customer, offlineFallback: false);
-
-  @override
-  List<SalesInvoice> getLocalInvoices() => [];
-
-  @override
-  Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
-
-  @override
-  Future<SalesInvoice?> fetchInvoiceById(String invoiceId) async => null;
-
-  @override
-  Future<List<SalesInvoice>> fetchRemoteInvoices({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  Future<ReceiptVoucher?> fetchReceiptById(String paymentId) async => null;
-
-  @override
-  Future<SalesReturn?> fetchSalesReturnById(String creditNoteId) async => null;
-
-  @override
-  List<SalesOrder> getLocalOrders() => [];
-
-  @override
-  Future<void> saveLocalOrder(SalesOrder order) async {}
-
-  @override
-  Future<List<SalesOrder>> fetchRemoteOrders({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  Future<SalesOrder?> fetchRemoteOrder(String zohoOrderId) async => null;
-
-  @override
-  List<ReceiptVoucher> getLocalReceipts() => [];
-
-  @override
-  Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
-
-  @override
-  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  List<SalesReturn> getLocalReturns() => [];
-
-  @override
-  Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
-
-  @override
-  Future<List<SalesReturn>> fetchRemoteReturns({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  List<ExpenseEntry> getLocalExpenses() => [];
-
-  @override
-  Future<void> saveLocalExpense(ExpenseEntry expense) async {}
-
-  @override
-  Future<List<ExpenseEntry>> fetchRemoteExpenses({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  CashClosing? getLocalCashClosing() => null;
-
-  @override
-  Future<void> saveLocalCashClosing(CashClosing closing) async {}
-
-  @override
-  List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
-  @override
-  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async =>
-      [];
-
-  @override
-  Future<void> enqueueSyncItem(SyncQueueItem item) async {}
-
-  @override
-  Future<void> enqueueSalesOrder(
-    SalesOrder order, {
-    required bool isUpdate,
-  }) async {}
-
-  @override
-  List<SyncQueueItem> getSyncQueue() => [];
-
-  @override
-  Future<void> updateCustomerGps(
-    String customerId,
-    double latitude,
-    double longitude,
-  ) async {}
-
-  @override
-  Future<void> updateCustomerContactFields(
-    String customerId, {
-    String? phone,
-    String? trn,
-  }) async {}
-
-  @override
-  Future<void> pushCustomerContactFieldsRemote(
-    String customerId, {
-    String? phone,
-    String? trn,
-  }) async {}
-
-  @override
-  List<StockTransfer> getLocalStockTransfers() => [];
-
-  @override
-  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
-
-  @override
-  Future<List<StockTransfer>> fetchRemoteStockTransfers({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-}
-
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -288,7 +106,6 @@ void main() {
       // Register Fakes inside Service Locator container prior to application loading
       sl.registerLazySingleton<AuthRepository>(() => FakeAuthRepository());
       sl.registerLazySingleton<SyncRepository>(() => FakeSyncRepository());
-      sl.registerLazySingleton<SalesRepository>(() => FakeSalesRepository());
     });
 
     testWidgets(

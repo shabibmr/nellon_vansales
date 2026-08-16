@@ -16,8 +16,15 @@ import 'package:van_sales/domain/repositories/receipt_repository.dart';
 import 'package:van_sales/domain/repositories/sales_order_repository.dart';
 import 'package:van_sales/domain/repositories/sales_return_repository.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 
 class FakeSalesRepository
+    with
+        ExpenseRepositorySubmitStubs,
+        InvoiceRepositorySubmitStubs,
+        ReceiptRepositorySubmitStubs,
+        SalesOrderRepositorySubmitStubs,
+        SalesReturnRepositorySubmitStubs
     implements
         ExpenseRepository,
         InvoiceRepository,

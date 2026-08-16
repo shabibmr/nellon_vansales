@@ -67,6 +67,7 @@ class ExpenseEntryModel extends ExpenseEntry {
     required super.lines,
     super.receiptImagePath,
     super.isPendingSync,
+    super.zohoExpenseId,
     super.locationId,
     super.listedTotal,
     super.listedCategory,
@@ -95,6 +96,8 @@ class ExpenseEntryModel extends ExpenseEntry {
           [],
       receiptImagePath: json['receiptImagePath'] as String?,
       isPendingSync: (json['isPendingSync'] as bool?) ?? false,
+      zohoExpenseId: (json['zoho_expense_id'] ?? json['zohoExpenseId'])
+          ?.toString(),
       locationId: json['location_id'] as String?,
       listedTotal: listedTotal,
       listedCategory: (json['listedCategory'] ??
@@ -148,6 +151,7 @@ class ExpenseEntryModel extends ExpenseEntry {
       'date': date.toIso8601String().split('T')[0],
       'receiptImagePath': receiptImagePath,
       'isPendingSync': isPendingSync,
+      'zoho_expense_id': zohoExpenseId,
       'location_id': locationId,
       'amount': amount,
       if (listedTotal != null) 'total': listedTotal,
@@ -169,6 +173,7 @@ class ExpenseEntryModel extends ExpenseEntry {
       lines: expense.lines,
       receiptImagePath: expense.receiptImagePath,
       isPendingSync: expense.isPendingSync,
+      zohoExpenseId: expense.zohoExpenseId,
       locationId: expense.locationId,
       listedTotal: expense.listedTotal,
       listedCategory: expense.listedCategory,

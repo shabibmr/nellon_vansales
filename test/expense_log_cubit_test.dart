@@ -3,12 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/repositories/expense_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/expense_log_cubit.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/expense_log_state.dart';
 
-class FakeSalesRepository implements ExpenseRepository {
+class FakeSalesRepository
+    with ExpenseRepositorySubmitStubs
+    implements ExpenseRepository {
   List<ExpenseEntry> expenses = [];
   List<SyncQueueItem> syncQueue = [];
   bool shouldThrow = false;
@@ -100,15 +103,9 @@ void main() {
       receiptImagePath: '/path/to/receipt.jpg',
     );
 
-    expect(salesRepo.expenses.length, 1);
-    expect(salesRepo.expenses.first.lines.first.amount, 150.0);
-    expect(salesRepo.expenses.first.lines.first.category, 'Fuel');
-    expect(salesRepo.expenses.first.receiptImagePath, '/path/to/receipt.jpg');
-
+    expect(salesRepo.expenses, isEmpty);
     expect(salesRepo.syncQueue.length, 1);
     expect(salesRepo.syncQueue.first.type, 'expense');
-
-    expect(syncRepo.syncTriggered, true);
   });
 
   test('submitExpense handles exception and emits ExpenseLogFailure', () async {
@@ -129,6 +126,6 @@ void main() {
 
     final state = cubit.state;
     expect(state, isA<ExpenseLogFailure>());
-    expect((state as ExpenseLogFailure).message, contains('Database write failed'));
+    expect((state as ExpenseLogFailure).message, contains('Queue enqueue failed'));
   });
 }

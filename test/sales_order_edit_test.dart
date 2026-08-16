@@ -10,12 +10,15 @@ import 'package:van_sales/domain/repositories/sales_order_repository.dart';
 import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/sales_order/bloc/sales_order_editor_bloc.dart';
 import 'package:van_sales/ui/features/sales_order/bloc/sales_order_editor_event.dart';
 
 /// Records what the bloc asked for, so the tests can assert that opening a
 /// saved order reads Zoho and never the local cache.
-class FakeSalesRepository implements CustomerRepository, SalesOrderRepository {
+class FakeSalesRepository
+    with CustomerRepositorySubmitStubs, SalesOrderRepositorySubmitStubs
+    implements CustomerRepository, SalesOrderRepository {
   final List<String> fetchedOrderIds = [];
   final List<SyncQueueItem> queue = [];
   final List<SalesOrder> savedOrders = [];
@@ -333,7 +336,6 @@ void main() {
     expect(queued.payload['salesorder_id'], 'so_9001');
     // The original number is kept — an update must not renumber the order.
     expect(queued.payload['salesorder_number'], 'SO-00042');
-    expect(syncRepo.triggerCount, 1);
   });
 
   test('saving a fetched order keeps its locationId', () async {
@@ -353,8 +355,8 @@ void main() {
     bloc.add(const SaveSalesOrder(notes: 'updated'));
     await bloc.stream.firstWhere((s) => s.successMessage != null);
 
-    expect(salesRepo.savedOrders, isNotEmpty);
-    expect(salesRepo.savedOrders.last.locationId, 'warehouse_van_7');
+    expect(salesRepo.savedOrders, isEmpty);
+    expect(salesRepo.queue.single.payload['location_id'], 'warehouse_van_7');
   });
 
   test('saving a new order queues a create with a document number', () async {
@@ -390,8 +392,7 @@ void main() {
     expect(queued.payload['salesorder_number'], 'SO-FAKE-00001');
     // Create path must not stamp a permanent Zoho id onto the payload.
     expect(queued.payload['salesorder_id'], isNot(equals('so_9001')));
-    expect(salesRepo.savedOrders, isNotEmpty);
-    expect(syncRepo.triggerCount, 1);
+    expect(salesRepo.savedOrders, isEmpty);
   });
 
   test('saving a converted order is rejected without enqueue', () async {

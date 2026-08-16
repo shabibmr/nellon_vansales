@@ -1,11 +1,13 @@
 import '../../domain/models/item.dart';
 import '../../domain/models/stock_transfer.dart';
+import '../../domain/models/submit_result.dart';
 import '../../domain/models/warehouse.dart';
 import '../../domain/repositories/stock_transfer_repository.dart';
 import '../models/item_model.dart';
 import '../models/stock_transfer_model.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
+import '../services/sync_worker.dart';
 import '../services/zoho_api_client.dart';
 
 /// Concrete implementation of [StockTransferRepository] backed by
@@ -13,8 +15,23 @@ import '../services/zoho_api_client.dart';
 class StockTransferRepositoryImpl implements StockTransferRepository {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final SyncWorker? _syncWorker;
 
-  StockTransferRepositoryImpl({required this._dbService, required this._apiClient});
+  StockTransferRepositoryImpl({
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    SyncWorker? syncWorker,
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _syncWorker = syncWorker;
+
+  SyncWorker get _worker {
+    final worker = _syncWorker;
+    if (worker == null) {
+      throw StateError('submit* requires SyncWorker');
+    }
+    return worker;
+  }
 
   @override
   Future<({List<Item> items, bool live})> loadCurrentLocationItems() async {
@@ -91,17 +108,29 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
     );
   }
 
+  SyncQueueItem _stockTransferItem(StockTransfer transfer) {
+    return SyncQueueItem(
+      id: transfer.id,
+      type: 'stock_transfer',
+      payload: StockTransferModel.fromDomain(transfer).toJson(),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
   @override
   Future<void> recordStockTransfer(StockTransfer transfer) async {
     await _dbService.saveLocalStockTransfer(transfer);
-    await _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: transfer.id,
-        type: 'stock_transfer',
-        payload: StockTransferModel.fromDomain(transfer).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
-    );
+    await enqueueStockTransfer(transfer);
+  }
+
+  @override
+  Future<void> enqueueStockTransfer(StockTransfer transfer) {
+    return _dbService.enqueueSyncItem(_stockTransferItem(transfer));
+  }
+
+  @override
+  Future<SubmitResult> submitStockTransfer(StockTransfer transfer) {
+    return _worker.submitOrEnqueue(_stockTransferItem(transfer));
   }
 }

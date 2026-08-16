@@ -1,8 +1,10 @@
 import '../../domain/models/expense_entry.dart';
+import '../../domain/models/submit_result.dart';
 import '../../domain/repositories/expense_repository.dart';
 import '../models/expense_entry_model.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
+import '../services/sync_worker.dart';
 import '../services/zoho_api_client.dart';
 
 /// Concrete implementation of [ExpenseRepository] backed by a local Hive
@@ -10,8 +12,23 @@ import '../services/zoho_api_client.dart';
 class ExpenseRepositoryImpl implements ExpenseRepository {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final SyncWorker? _syncWorker;
 
-  ExpenseRepositoryImpl({required this._dbService, required this._apiClient});
+  ExpenseRepositoryImpl({
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    SyncWorker? syncWorker,
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _syncWorker = syncWorker;
+
+  SyncWorker get _worker {
+    final worker = _syncWorker;
+    if (worker == null) {
+      throw StateError('submit* requires SyncWorker');
+    }
+    return worker;
+  }
 
   @override
   List<ExpenseEntry> getLocalExpenses() => _dbService.getLocalExpenses();
@@ -91,4 +108,24 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) =>
       _dbService.enqueueSyncItem(item);
+
+  SyncQueueItem _expenseItem(ExpenseEntry expense) {
+    return SyncQueueItem(
+      id: expense.id,
+      type: 'expense',
+      payload: ExpenseEntryModel.fromDomain(expense).toJson(),
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<void> enqueueExpense(ExpenseEntry expense) {
+    return _dbService.enqueueSyncItem(_expenseItem(expense));
+  }
+
+  @override
+  Future<SubmitResult> submitExpense(ExpenseEntry expense) {
+    return _worker.submitOrEnqueue(_expenseItem(expense));
+  }
 }

@@ -58,6 +58,7 @@ void main() {
         'due_date': '2026-07-20',
         'notes': 'thanks',
         'isPendingSync': true,
+        'zoho_invoice_id': 'zoho_inv_1',
         'round_off': 0.0,
         'location_id': 'loc_1',
         'line_items': [
@@ -86,6 +87,7 @@ void main() {
       expect(out.containsKey('invoice_id'), isFalse);
       expect(out.containsKey('customer_name'), isFalse);
       expect(out.containsKey('isPendingSync'), isFalse);
+      expect(out.containsKey('zoho_invoice_id'), isFalse);
       expect(out.containsKey('round_off'), isFalse);
 
       final line = (out['line_items'] as List).first as Map;

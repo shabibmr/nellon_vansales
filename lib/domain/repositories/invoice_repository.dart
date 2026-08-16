@@ -1,4 +1,6 @@
 import '../models/sales_invoice.dart';
+import '../models/sales_order.dart';
+import '../models/submit_result.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract for local sales-invoice logging and Zoho invoice sync.
@@ -33,4 +35,22 @@ abstract class InvoiceRepository {
 
   /// Appends an unsynced transaction item to the local offline synchronization queue.
   Future<void> enqueueSyncItem(SyncQueueItem item);
+
+  /// Enqueues a create (`invoice`) sync item for [invoice].
+  Future<void> enqueueInvoice(SalesInvoice invoice);
+
+  /// Enqueues a `convert_so` item that turns [order] into [invoice] in Zoho.
+  Future<void> enqueueConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  });
+
+  /// Builds the invoice queue item and submits it online-first (no local save first).
+  Future<SubmitResult> submitInvoice(SalesInvoice invoice);
+
+  /// Builds the `convert_so` item (full invoice json) and submits it online-first.
+  Future<SubmitResult> submitConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  });
 }

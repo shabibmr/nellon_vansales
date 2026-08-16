@@ -8,8 +8,11 @@ import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/ui/core/bloc/async_search_bloc.dart';
 import 'package:van_sales/ui/core/bloc/async_search_event.dart';
 import 'package:van_sales/ui/core/bloc/async_search_state.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 
-class FakeSalesRepository implements CustomerRepository, ItemRepository {
+class FakeSalesRepository
+    with CustomerRepositorySubmitStubs
+    implements CustomerRepository, ItemRepository {
   List<Customer> customers = [];
   List<Item> items = [];
 

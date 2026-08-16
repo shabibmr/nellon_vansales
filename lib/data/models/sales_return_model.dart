@@ -84,6 +84,7 @@ class SalesReturnModel extends SalesReturn {
     required super.items,
     required super.reason,
     super.isPendingSync,
+    super.zohoCreditNoteId,
     super.locationId,
     super.listedTotal,
   });
@@ -118,6 +119,7 @@ class SalesReturnModel extends SalesReturn {
           json['notes'] ??
           '',
       isPendingSync: json['isPendingSync'] ?? false,
+      zohoCreditNoteId: json['zoho_credit_note_id'] ?? json['zohoCreditNoteId'],
       locationId: json['location_id'],
       listedTotal: listedTotal,
     );
@@ -137,6 +139,7 @@ class SalesReturnModel extends SalesReturn {
           .toList(),
       'reason': reason,
       'isPendingSync': isPendingSync,
+      'zoho_credit_note_id': zohoCreditNoteId,
       'location_id': locationId,
       if (listedTotal != null) 'total': listedTotal,
     };
@@ -153,6 +156,7 @@ class SalesReturnModel extends SalesReturn {
       items: salesReturn.items,
       reason: salesReturn.reason,
       isPendingSync: salesReturn.isPendingSync,
+      zohoCreditNoteId: salesReturn.zohoCreditNoteId,
       locationId: salesReturn.locationId,
       listedTotal: salesReturn.listedTotal,
     );

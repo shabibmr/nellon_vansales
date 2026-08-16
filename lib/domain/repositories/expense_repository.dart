@@ -1,4 +1,5 @@
 import '../models/expense_entry.dart';
+import '../models/submit_result.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract for local expense logging and Zoho expense sync.
@@ -33,4 +34,10 @@ abstract class ExpenseRepository {
 
   /// Appends an unsynced transaction item to the local offline synchronization queue.
   Future<void> enqueueSyncItem(SyncQueueItem item);
+
+  /// Enqueues a create (`expense`) sync item for [expense].
+  Future<void> enqueueExpense(ExpenseEntry expense);
+
+  /// Builds the expense queue item and submits it online-first.
+  Future<SubmitResult> submitExpense(ExpenseEntry expense);
 }

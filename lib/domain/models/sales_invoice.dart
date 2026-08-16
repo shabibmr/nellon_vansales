@@ -113,6 +113,9 @@ class SalesInvoice extends Equatable {
   /// Flag indicating if the invoice is pending synchronization with Zoho Books.
   final bool isPendingSync;
 
+  /// The permanent Zoho `invoice_id`, populated once the invoice syncs.
+  final String? zohoInvoiceId;
+
   /// The Zoho Location ID of the salesperson/van that created this invoice.
   final String? locationId;
 
@@ -135,6 +138,7 @@ class SalesInvoice extends Equatable {
     required this.items,
     required this.notes,
     this.isPendingSync = false,
+    this.zohoInvoiceId,
     this.locationId,
     this.status = '',
     this.listedTotal,
@@ -180,6 +184,7 @@ class SalesInvoice extends Equatable {
     List<InvoiceLineItem>? items,
     String? notes,
     bool? isPendingSync,
+    String? zohoInvoiceId,
     String? locationId,
     String? status,
     double? listedTotal,
@@ -195,6 +200,7 @@ class SalesInvoice extends Equatable {
       items: items ?? this.items,
       notes: notes ?? this.notes,
       isPendingSync: isPendingSync ?? this.isPendingSync,
+      zohoInvoiceId: zohoInvoiceId ?? this.zohoInvoiceId,
       locationId: locationId ?? this.locationId,
       status: status ?? this.status,
       listedTotal: clearListedTotal ? null : (listedTotal ?? this.listedTotal),
@@ -212,6 +218,7 @@ class SalesInvoice extends Equatable {
     items,
     notes,
     isPendingSync,
+    zohoInvoiceId,
     locationId,
     status,
     listedTotal,

@@ -1,5 +1,6 @@
 import '../models/item.dart';
 import '../models/stock_transfer.dart';
+import '../models/submit_result.dart';
 import '../models/warehouse.dart';
 
 /// Abstract contract for the Issue-to-Van / Stock-Unloading transfer workflow.
@@ -23,4 +24,10 @@ abstract class StockTransferRepository {
 
   /// Persists [transfer] locally and enqueues it for sync.
   Future<void> recordStockTransfer(StockTransfer transfer);
+
+  /// Enqueues a create (`stock_transfer`) sync item for [transfer].
+  Future<void> enqueueStockTransfer(StockTransfer transfer);
+
+  /// Builds the stock-transfer queue item and submits it online-first.
+  Future<SubmitResult> submitStockTransfer(StockTransfer transfer);
 }

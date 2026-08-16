@@ -55,7 +55,7 @@ class _FakeDb extends HiveDatabaseService {
 
 class _FakeApi extends ZohoApiClient {
   _FakeApi(HiveDatabaseService db)
-    : super(dbService: db, mockLatency: Duration.zero);
+    : super(dbService: db);
 
   bool throwOnDetail = false;
   Map<String, dynamic> detailResponse = {};

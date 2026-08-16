@@ -3,13 +3,12 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/models/sales_return_model.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_return.dart';
+import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sales_return_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
@@ -22,6 +21,7 @@ class SalesReturnEditorBloc
     extends Bloc<SalesReturnEditorEvent, SalesReturnEditorState> {
   final SalesReturnRepository _salesReturnRepository;
   final CustomerRepository _customerRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
@@ -77,7 +77,12 @@ class SalesReturnEditorBloc
     OpenSalesReturn event,
     Emitter<SalesReturnEditorState> emit,
   ) async {
-    if (event.salesReturn.isPendingSync || _isLocalReturnId(event.salesReturn.id)) {
+    if (event.salesReturn.isPendingSync) {
+      emit(_openedFrom(event.salesReturn));
+      return;
+    }
+    final remoteId = event.salesReturn.zohoCreditNoteId ?? event.salesReturn.id;
+    if (_isLocalReturnId(remoteId)) {
       emit(_openedFrom(event.salesReturn));
       return;
     }
@@ -96,14 +101,14 @@ class SalesReturnEditorBloc
         isSaving: false,
       ),
     );
-    await _loadEditingReturnFromZoho(event.salesReturn.id, emit);
+    await _loadEditingReturnFromZoho(remoteId, emit);
   }
 
   Future<void> _onRetryLoadSalesReturn(
     RetryLoadSalesReturn event,
     Emitter<SalesReturnEditorState> emit,
   ) async {
-    final returnId = state.editingReturnId;
+    final returnId = _remoteReturnIdForLoad();
     if (returnId == null || returnId.isEmpty) return;
     emit(state.copyWith(isEditorLoading: true, clearEditorError: true));
     await _loadEditingReturnFromZoho(returnId, emit);
@@ -113,7 +118,7 @@ class SalesReturnEditorBloc
     RefreshSalesReturnFromZoho event,
     Emitter<SalesReturnEditorState> emit,
   ) async {
-    final returnId = state.editingReturnId ?? state.editingReturn?.id;
+    final returnId = _remoteReturnIdForLoad();
     if (returnId == null ||
         returnId.isEmpty ||
         _isLocalReturnId(returnId) ||
@@ -135,6 +140,12 @@ class SalesReturnEditorBloc
       isRefresh: true,
       forceDirty: event.forceDirty,
     );
+  }
+
+  String? _remoteReturnIdForLoad() {
+    final zohoId = state.editingReturn?.zohoCreditNoteId;
+    if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+    return state.editingReturnId ?? state.editingReturn?.id;
   }
 
   void _onUpdateReturnReason(
@@ -394,6 +405,16 @@ class SalesReturnEditorBloc
         creditNoteNum = original.creditNoteNumber;
       }
 
+      if (isTempCustomerId(state.editingCustomer!.id)) {
+        emit(
+          state.copyWith(
+            isSaving: false,
+            errorMessage: 'Customer must sync to Zoho before a return',
+          ),
+        );
+        return;
+      }
+
       final salesReturn = SalesReturn(
         id: tempId,
         creditNoteNumber: creditNoteNum,
@@ -405,18 +426,7 @@ class SalesReturnEditorBloc
         isPendingSync: true,
       );
 
-      await _salesReturnRepository.saveLocalReturn(salesReturn);
-
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'return',
-        payload: SalesReturnModel.fromDomain(salesReturn).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await _salesReturnRepository.enqueueSyncItem(syncItem);
-
-      unawaited(_syncRepository.triggerSync());
+      final result = await _salesReturnRepository.submitSalesReturn(salesReturn);
 
       emit(
         state.copyWith(
@@ -424,7 +434,7 @@ class SalesReturnEditorBloc
           editingReturn: salesReturn,
           isEditingNew: false,
           isSaving: false,
-          successMessage: 'Return saved successfully',
+          successMessage: result.message('Return saved successfully'),
         ),
       );
     } catch (e) {

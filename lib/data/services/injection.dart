@@ -88,7 +88,11 @@ Future<void> setupDependencyInjection() async {
     () => SyncRepositoryImpl(syncWorker: sl(), dbService: sl()),
   );
   sl.registerLazySingleton<CustomerRepository>(
-    () => CustomerRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => CustomerRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<SessionRepository>(
     () => SessionRepositoryImpl(dbService: sl(), apiClient: sl()),
@@ -103,22 +107,46 @@ Future<void> setupDependencyInjection() async {
     () => ReportRepositoryImpl(apiClient: sl(), dbService: sl()),
   );
   sl.registerLazySingleton<StockTransferRepository>(
-    () => StockTransferRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => StockTransferRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<ExpenseRepository>(
-    () => ExpenseRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => ExpenseRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<ReceiptRepository>(
-    () => ReceiptRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => ReceiptRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<SalesReturnRepository>(
-    () => SalesReturnRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => SalesReturnRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<InvoiceRepository>(
-    () => InvoiceRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => InvoiceRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<SalesOrderRepository>(
-    () => SalesOrderRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => SalesOrderRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
   );
   sl.registerLazySingleton<ItemRepository>(
     () => ItemRepositoryImpl(dbService: sl(), apiClient: sl()),

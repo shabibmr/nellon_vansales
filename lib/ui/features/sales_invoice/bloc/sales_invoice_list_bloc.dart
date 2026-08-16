@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/invoice_repository.dart';
@@ -21,7 +20,9 @@ import 'sales_invoice_list_state.dart';
 class SalesInvoiceListBloc
     extends Bloc<SalesInvoiceListEvent, SalesInvoiceListState> {
   final InvoiceRepository _invoiceRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SalesOrderRepository _salesOrderRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
@@ -166,7 +167,6 @@ class SalesInvoiceListBloc
       }
     }
 
-    unawaited(_syncRepository.triggerSync());
     final updatedInvoices = _invoiceRepository.getLocalInvoices();
 
     if (successCount == 0) {
@@ -233,31 +233,14 @@ class SalesInvoiceListBloc
       isPendingSync: true,
     );
 
-    await _invoiceRepository.saveLocalInvoice(invoice);
+    final zohoOrderId = order.zohoOrderId;
+    if (zohoOrderId == null || zohoOrderId.isEmpty) {
+      throw Exception('Order must sync to Zoho before converting');
+    }
 
-    final orders = _salesOrderRepository.getLocalOrders();
-    final localOrder = orders.firstWhere(
-      (o) => o.id == order.id,
-      orElse: () => order,
+    await _invoiceRepository.submitConvertSalesOrder(
+      order: order,
+      invoice: invoice,
     );
-    await _salesOrderRepository.saveLocalOrder(
-      localOrder.copyWith(
-        status: SalesOrderStatus.invoiced,
-        convertedInvoiceNumber: invoiceNum,
-      ),
-    );
-
-    final convertItem = SyncQueueItem(
-      id: tempId,
-      type: 'convert_so',
-      payload: {
-        'salesorder_id': localOrder.zohoOrderId ?? localOrder.id,
-        'source_order_id': localOrder.id,
-        'local_invoice_id': invoice.id,
-      },
-      status: SyncStatus.pending,
-      timestamp: DateTime.now(),
-    );
-    await _invoiceRepository.enqueueSyncItem(convertItem);
   }
 }

@@ -11,6 +11,7 @@ import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/core/cubit/organization_cubit.dart';
 import 'package:van_sales/ui/core/widgets/async_search_widget.dart';
 import 'package:van_sales/ui/core/widgets/customer_missing_fields_dialog.dart';
+import '../helpers/sales_repository_enqueue_stubs.dart';
 
 class _FakeOrgCubit extends Cubit<Organization?> implements OrganizationCubit {
   _FakeOrgCubit() : super(null);
@@ -28,11 +29,19 @@ class _FakeOrgCubit extends Cubit<Organization?> implements OrganizationCubit {
   void refresh() {}
 }
 
-class _FakeSalesRepository implements CustomerRepository, ItemRepository {
+class _FakeSalesRepository
+    with CustomerRepositorySubmitStubs
+    implements CustomerRepository, ItemRepository {
   List<Customer> customers = [];
   String? savedPhone;
   String? savedTrn;
   bool remotePushed = false;
+  final List<SyncQueueItem> queue = [];
+
+  @override
+  Future<void> enqueueSyncItem(SyncQueueItem item) async {
+    queue.add(item);
+  }
 
   @override
   List<Customer> getCustomers() => customers;

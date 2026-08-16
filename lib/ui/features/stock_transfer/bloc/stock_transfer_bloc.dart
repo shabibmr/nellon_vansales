@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/stock_transfer.dart';
+import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/models/warehouse.dart';
 import '../../../../domain/repositories/stock_transfer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
@@ -269,6 +270,7 @@ class StockTransferState extends Equatable {
 /// planning grids and their submission as Zoho Transfer Orders.
 class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
   final StockTransferRepository _stockTransferRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
 
   StockTransferBloc({
@@ -549,16 +551,16 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         isPendingSync: true,
       );
 
-      await _stockTransferRepository.recordStockTransfer(transfer);
-
-      unawaited(_syncRepository.triggerSync());
+      final result = await _stockTransferRepository.submitStockTransfer(transfer);
 
       emit(
         state.copyWith(
           isLoading: false,
-          successMessage: isLoad
-              ? 'Stock issued to van successfully'
-              : 'Stock unloaded successfully',
+          successMessage: result.message(
+            isLoad
+                ? 'Stock issued to van successfully'
+                : 'Stock unloaded successfully',
+          ),
         ),
       );
     } catch (e) {

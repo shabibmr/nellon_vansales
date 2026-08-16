@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
@@ -55,10 +56,6 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
         isPendingSync: true,
       );
 
-      // 1. Persist locally via repository
-      await customerRepository.saveCustomers([...localCustomers, newCustomer]);
-
-      // 2. Build Zoho payload
       final customerPayload = <String, dynamic>{
         'contact_name': name,
         'company_name': company,
@@ -77,20 +74,26 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
         ];
       }
 
-      // 3. Enqueue for Zoho sync
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'customer',
-        payload: customerPayload,
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
+      final result = await customerRepository.submitOrEnqueue(
+        SyncQueueItem(
+          id: tempId,
+          type: 'customer',
+          payload: customerPayload,
+          status: SyncStatus.pending,
+          timestamp: DateTime.now(),
+        ),
       );
-      await customerRepository.enqueueSyncItem(syncItem);
 
-      // 4. Trigger background sync
-      unawaited(syncRepository.triggerSync());
-
-      emit(CreateCustomerSuccess(newCustomer));
+      var saved = newCustomer;
+      if (result == SubmitResult.synced) {
+        for (final c in customerRepository.getCustomers()) {
+          if (c.name == name) {
+            saved = c;
+            break;
+          }
+        }
+      }
+      emit(CreateCustomerSuccess(saved));
     } catch (e) {
       emit(CreateCustomerFailure(userFacingMessage(e)));
     }

@@ -12,6 +12,7 @@ import 'package:van_sales/domain/models/customer_ledger.dart';
 import 'package:van_sales/domain/repositories/receipt_repository.dart';
 import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/receipts/bloc/receipt_editor_bloc.dart';
 import 'package:van_sales/ui/features/receipts/bloc/receipt_editor_event.dart';
 import 'package:van_sales/ui/features/receipts/bloc/receipt_list_bloc.dart';
@@ -43,7 +44,9 @@ class _FakeZohoApi extends ZohoApiClient {
   _FakeZohoApi() : super(dbService: _FakeDocDb());
 }
 
-class FakeSalesRepository implements CustomerRepository, ReceiptRepository {
+class FakeSalesRepository
+    with CustomerRepositorySubmitStubs, ReceiptRepositorySubmitStubs
+    implements CustomerRepository, ReceiptRepository {
   List<OpenInvoice> openInvoices = [];
   List<Customer> customers = [];
   List<ReceiptVoucher> receipts = [];
@@ -261,10 +264,9 @@ void main() {
 
       await bloc.stream.firstWhere((s) => s.successMessage != null);
 
-      expect(salesRepo.receipts, hasLength(1));
-      expect(salesRepo.receipts.single.amount, 150.0);
+      expect(salesRepo.receipts, isEmpty);
       expect(salesRepo.syncQueue, hasLength(1));
-      expect(syncRepo.triggerCount, 1);
+      expect(salesRepo.syncQueue.single.type, 'receipt');
       bloc.close();
     });
   });

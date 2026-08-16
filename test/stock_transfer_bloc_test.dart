@@ -3,6 +3,7 @@ import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/stock_transfer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
@@ -25,6 +26,7 @@ class _FakeStockTransferRepository implements StockTransferRepository {
   );
 
   StockTransfer? recorded;
+  final List<SyncQueueItem> queue = [];
 
   @override
   Future<({List<Item> items, bool live})> loadCurrentLocationItems() async {
@@ -47,6 +49,25 @@ class _FakeStockTransferRepository implements StockTransferRepository {
   @override
   Future<void> recordStockTransfer(StockTransfer transfer) async {
     recorded = transfer;
+  }
+
+  @override
+  Future<void> enqueueStockTransfer(StockTransfer transfer) async {
+    recorded = transfer;
+    queue.add(
+      SyncQueueItem(
+        id: transfer.id,
+        type: 'stock_transfer',
+        payload: const {},
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<SubmitResult> submitStockTransfer(StockTransfer transfer) async {
+    await enqueueStockTransfer(transfer);
+    return SubmitResult.queued;
   }
 }
 
@@ -345,12 +366,11 @@ void main() {
         (s) => s.successMessage != null,
       );
 
-      expect(state.successMessage, 'Stock unloaded successfully');
+      expect(state.successMessage, 'Saved to upload queue');
       expect(stockTransferRepo.recorded, isNotNull);
       expect(stockTransferRepo.recorded!.fromLocationId, 'van_1');
       expect(stockTransferRepo.recorded!.toLocationId, 'w1');
       expect(stockTransferRepo.recorded!.notes, 'end of trip');
-      expect(syncRepo.triggerCount, 1);
       bloc.close();
     });
 

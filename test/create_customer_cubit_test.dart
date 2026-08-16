@@ -3,15 +3,19 @@ import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/customer_ledger.dart';
 import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/session_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/create_customer_cubit.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/create_customer_state.dart';
 
-class FakeCustomerRepository implements CustomerRepository {
+class FakeCustomerRepository
+    with CustomerRepositorySubmitStubs
+    implements CustomerRepository {
   List<Customer> customers = [];
   List<SyncQueueItem> queue = [];
   bool shouldThrow = false;
@@ -28,6 +32,13 @@ class FakeCustomerRepository implements CustomerRepository {
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) async {
     queue.add(item);
+  }
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    if (shouldThrow) throw Exception('Database error');
+    await enqueueSyncItem(item);
+    return SubmitResult.queued;
   }
 
   @override
@@ -152,9 +163,7 @@ void main() {
     expect(state.customer.longitude, 56.78);
     expect(state.customer.isPendingSync, true);
 
-    // Verify local storage
-    expect(customerRepo.customers.length, 1);
-    expect(customerRepo.customers.first.name, 'John Doe');
+    expect(customerRepo.customers, isEmpty);
 
     // Verify sync queue payload
     expect(customerRepo.queue.length, 1);

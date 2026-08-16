@@ -1,8 +1,10 @@
 import '../../domain/models/sales_order.dart';
+import '../../domain/models/submit_result.dart';
 import '../../domain/repositories/sales_order_repository.dart';
 import '../models/sales_order_model.dart';
 import '../models/sync_queue_item.dart';
 import '../services/hive_database_service.dart';
+import '../services/sync_worker.dart';
 import '../services/zoho_api_client.dart';
 
 /// Concrete implementation of [SalesOrderRepository] backed by a local Hive
@@ -10,11 +12,23 @@ import '../services/zoho_api_client.dart';
 class SalesOrderRepositoryImpl implements SalesOrderRepository {
   final HiveDatabaseService _dbService;
   final ZohoApiClient _apiClient;
+  final SyncWorker? _syncWorker;
 
   SalesOrderRepositoryImpl({
-    required this._dbService,
-    required this._apiClient,
-  });
+    required HiveDatabaseService dbService,
+    required ZohoApiClient apiClient,
+    SyncWorker? syncWorker,
+  }) : _dbService = dbService,
+       _apiClient = apiClient,
+       _syncWorker = syncWorker;
+
+  SyncWorker get _worker {
+    final worker = _syncWorker;
+    if (worker == null) {
+      throw StateError('submit* requires SyncWorker');
+    }
+    return worker;
+  }
 
   @override
   List<SalesOrder> getLocalOrders() => _dbService.getLocalOrders();
@@ -23,11 +37,7 @@ class SalesOrderRepositoryImpl implements SalesOrderRepository {
   Future<void> saveLocalOrder(SalesOrder order) =>
       _dbService.saveLocalOrder(order);
 
-  @override
-  Future<void> enqueueSalesOrder(
-    SalesOrder order, {
-    required bool isUpdate,
-  }) async {
+  SyncQueueItem _salesOrderItem(SalesOrder order, {required bool isUpdate}) {
     final payload = SalesOrderModel.fromDomain(order).toJson();
     if (isUpdate) {
       final zohoId = order.zohoOrderId;
@@ -35,15 +45,31 @@ class SalesOrderRepositoryImpl implements SalesOrderRepository {
         payload['salesorder_id'] = zohoId;
       }
     }
-    await _dbService.enqueueSyncItem(
-      SyncQueueItem(
-        id: order.id,
-        type: isUpdate ? 'update_sales_order' : 'sales_order',
-        payload: payload,
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
+    return SyncQueueItem(
+      id: order.id,
+      type: isUpdate ? 'update_sales_order' : 'sales_order',
+      payload: payload,
+      status: SyncStatus.pending,
+      timestamp: DateTime.now(),
     );
+  }
+
+  @override
+  Future<void> enqueueSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {
+    await _dbService.enqueueSyncItem(
+      _salesOrderItem(order, isUpdate: isUpdate),
+    );
+  }
+
+  @override
+  Future<SubmitResult> submitSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) {
+    return _worker.submitOrEnqueue(_salesOrderItem(order, isUpdate: isUpdate));
   }
 
   @override

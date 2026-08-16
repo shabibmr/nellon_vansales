@@ -1,5 +1,6 @@
 import '../models/customer.dart';
 import '../models/customer_ledger.dart';
+import '../models/submit_result.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract for customer master data, contact-field enrichment, and ledger lookups.
@@ -61,4 +62,7 @@ abstract class CustomerRepository {
 
   /// Appends an unsynced transaction item to the local offline synchronization queue.
   Future<void> enqueueSyncItem(SyncQueueItem item);
+
+  /// Online-first submit for customer create / GPS / contact updates.
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item);
 }

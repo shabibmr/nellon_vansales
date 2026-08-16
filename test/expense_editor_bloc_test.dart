@@ -4,10 +4,13 @@ import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/repositories/expense_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/expenses/bloc/expense_editor_bloc.dart';
 import 'package:van_sales/ui/features/expenses/bloc/expense_editor_event.dart';
 
-class FakeSalesRepository implements ExpenseRepository {
+class FakeSalesRepository
+    with ExpenseRepositorySubmitStubs
+    implements ExpenseRepository {
   List<ExpenseEntry> expenses = [];
   List<SyncQueueItem> queue = [];
 
@@ -89,7 +92,7 @@ void main() {
     expect(state.editingAmount, 0.0);
   });
 
-  test('SaveExpense saves local expense entry and enqueues sync queue item', () async {
+  test('SaveExpense submits without writing local history first', () async {
     bloc.add(const StartNewExpense());
     bloc.add(const SetEditingExpenseAmount(120.0));
     bloc.add(const SetEditingExpenseCategory('Maintenance'));
@@ -98,13 +101,9 @@ void main() {
 
     await bloc.stream.firstWhere((s) => s.successMessage != null);
 
-    expect(salesRepo.expenses, hasLength(1));
-    final saved = salesRepo.expenses.single;
-    expect(saved.amount, 120.0);
-    expect(saved.lines.single.category, 'Maintenance');
-    expect(saved.lines.single.description, 'Engine Oil');
-
+    expect(salesRepo.expenses, isEmpty);
     expect(salesRepo.queue, hasLength(1));
-    expect(syncRepo.triggerCount, 1);
+    expect(salesRepo.queue.single.type, 'expense');
+    expect(bloc.state.successMessage, 'Saved to upload queue');
   });
 }

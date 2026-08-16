@@ -325,6 +325,20 @@ class HiveDatabaseService {
     await saveCustomers(newList);
   }
 
+  /// Inserts or replaces [customer] by id (used after a Zoho contact create).
+  Future<void> insertCustomer(Customer customer) async {
+    if (customer.id.isEmpty) return;
+    final current = getCustomers();
+    final index = current.indexWhere((c) => c.id == customer.id);
+    final newList = List<Customer>.from(current);
+    if (index >= 0) {
+      newList[index] = customer;
+    } else {
+      newList.add(customer);
+    }
+    await saveCustomers(newList);
+  }
+
   /// Updates latitude/longitude for a specific customer (by id) and persists.
   /// If the customer is not found, this is a no-op.
   Future<void> updateCustomerGps(
@@ -744,6 +758,13 @@ class HiveDatabaseService {
   List<SalesInvoice> getLocalInvoices() =>
       _filterByActiveLocation(_getAllLocalInvoices(), (inv) => inv.locationId);
 
+  /// Every locally-cached invoice regardless of session location.
+  ///
+  /// Used for post-sync bookkeeping (Zoho id / pending flag / doc number)
+  /// so a write never silently no-ops when the record's location does not
+  /// match the current van session.
+  List<SalesInvoice> getAllLocalInvoicesUnfiltered() => _getAllLocalInvoices();
+
   /// Caches a newly created sales invoice locally and immediately updates corresponding item stock level in the van.
   ///
   /// Validates stock *before* persisting anything: if any line would drive an
@@ -803,54 +824,128 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
+  /// Upserts [invoice] into the local invoice cache without touching item
+  /// stock — for post-sync bookkeeping only (Zoho id / pending flag / number).
+  /// Creating or editing an invoice must go through [saveLocalInvoice].
+  Future<void> updateInvoiceRecord(SalesInvoice invoice) async {
+    final current = _getAllLocalInvoices();
+    final index = current.indexWhere((i) => i.id == invoice.id);
+    if (index < 0) return;
+    current[index] = SalesInvoiceModel.fromDomain(invoice);
+
+    final serialized = current
+        .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
+        .toList();
+    await _localHistoryBox.put('invoices', serialized);
+  }
+
   /// Merges a freshly downloaded set of remote invoices into the local cache.
   ///
-  /// Upsert, not replace: a local invoice survives untouched unless remote
-  /// carries a record with the same `id`. [SalesInvoice] has no separate
-  /// zoho-id field to match a still-pending local record against its synced
-  /// remote counterpart (unlike sales orders' `zohoOrderId`), so a locally
-  /// created invoice (`temp_inv_...` id) is simply kept until Zoho's list
-  /// happens to be re-fetched under that same id.
+  /// Upsert, not replace: a local invoice survives unless remote carries the
+  /// same `id` **or** confirms a previously-pending local row via
+  /// [SalesInvoice.zohoInvoiceId] (the sales-order `zohoOrderId` pattern).
   ///
   /// Header-only remote rows (`items` empty) preserve any existing local line
   /// items so list refreshes do not wipe a previously cached full detail.
   Future<void> saveRemoteInvoices(List<SalesInvoice> remote) async {
     final current = _getAllLocalInvoices();
-    final byId = {for (final inv in current) inv.id: inv};
+    final queuedInvoiceIds = getSyncQueue()
+        .where((q) => q.type == 'invoice' && q.status != SyncStatus.completed)
+        .map((q) => q.id)
+        .toSet();
+
+    final merged = mergeRemoteInvoices(
+      current: current,
+      remote: remote,
+      queuedInvoiceIds: queuedInvoiceIds,
+    );
+    final serialized = merged
+        .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
+        .toList();
+    await _localHistoryBox.put('invoices', serialized);
+  }
+
+  /// Pure merge step behind [saveRemoteInvoices] — same contract as
+  /// [mergeRemoteOrders], matching pending locals by `zohoInvoiceId`.
+  @visibleForTesting
+  static List<SalesInvoice> mergeRemoteInvoices({
+    required List<SalesInvoice> current,
+    required List<SalesInvoice> remote,
+    required Set<String> queuedInvoiceIds,
+  }) {
+    SalesInvoice? localFor(SalesInvoice remoteInv) {
+      for (final local in current) {
+        if (local.id == remoteInv.id) return local;
+        final zohoId = local.zohoInvoiceId;
+        if (zohoId != null &&
+            zohoId.isNotEmpty &&
+            (zohoId == remoteInv.id || zohoId == remoteInv.zohoInvoiceId)) {
+          return local;
+        }
+      }
+      return null;
+    }
 
     final mergedRemote = <SalesInvoice>[];
     for (final remoteInv in remote) {
-      final local = byId[remoteInv.id];
+      final local = localFor(remoteInv);
+      if (local != null &&
+          local.isPendingSync &&
+          queuedInvoiceIds.contains(local.id)) {
+        continue;
+      }
       if (remoteInv.items.isEmpty &&
           local != null &&
           local.items.isNotEmpty) {
         mergedRemote.add(
           remoteInv.copyWith(
             items: local.items,
-            // Prefer van stamp over Zoho primary header location.
             locationId: local.locationId ?? remoteInv.locationId,
             notes: remoteInv.notes.isNotEmpty ? remoteInv.notes : local.notes,
+            zohoInvoiceId: remoteInv.zohoInvoiceId ?? local.zohoInvoiceId,
+            isPendingSync: false,
           ),
         );
       } else if (local != null &&
           local.locationId != null &&
           remoteInv.locationId == null) {
-        mergedRemote.add(remoteInv.copyWith(locationId: local.locationId));
+        mergedRemote.add(
+          remoteInv.copyWith(
+            locationId: local.locationId,
+            zohoInvoiceId: remoteInv.zohoInvoiceId ?? local.zohoInvoiceId,
+            isPendingSync: false,
+          ),
+        );
       } else {
-        mergedRemote.add(remoteInv);
+        mergedRemote.add(
+          remoteInv.isPendingSync
+              ? remoteInv.copyWith(
+                  isPendingSync: false,
+                  zohoInvoiceId:
+                      remoteInv.zohoInvoiceId ?? local?.zohoInvoiceId,
+                )
+              : remoteInv.copyWith(
+                  zohoInvoiceId:
+                      remoteInv.zohoInvoiceId ?? local?.zohoInvoiceId,
+                ),
+        );
       }
     }
 
     final remoteIds = remote.map((i) => i.id).toSet();
-    final keptLocal = current
-        .where((i) => !remoteIds.contains(i.id))
-        .toList();
+    final keptLocal = current.where((i) {
+      if (i.isPendingSync) {
+        if (queuedInvoiceIds.contains(i.id)) return true;
+        return i.zohoInvoiceId == null || !remoteIds.contains(i.zohoInvoiceId);
+      }
+      if (remoteIds.contains(i.id)) return false;
+      if (i.zohoInvoiceId != null && remoteIds.contains(i.zohoInvoiceId)) {
+        return false;
+      }
+      return true;
+    }).toList();
 
-    final merged = [...keptLocal, ...mergedRemote];
-    final serialized = merged
-        .map((inv) => jsonEncode(SalesInvoiceModel.fromDomain(inv).toJson()))
-        .toList();
-    await _localHistoryBox.put('invoices', serialized);
+    return [...keptLocal, ...mergedRemote];
   }
 
   /// Retrieves the full, unfiltered list of sales orders recorded locally (for internal read-modify-write use).
@@ -1203,6 +1298,10 @@ class HiveDatabaseService {
   List<ReceiptVoucher> getLocalReceipts() =>
       _filterByActiveLocation(_getAllLocalReceipts(), (rec) => rec.locationId);
 
+  /// Every locally-cached receipt regardless of session location.
+  List<ReceiptVoucher> getAllLocalReceiptsUnfiltered() =>
+      _getAllLocalReceipts();
+
   /// Caches a newly created receipt locally and instantly decrements the matching customer's outstanding balance in memory.
   Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {
     var stamped = voucher.locationId == null && assignedWarehouseId != null
@@ -1244,18 +1343,53 @@ class HiveDatabaseService {
     await saveCustomers(localCustomers);
   }
 
+  /// Upserts [voucher] without adjusting customer outstanding — post-sync
+  /// bookkeeping only. Creating a receipt must go through [saveLocalReceipt].
+  Future<void> updateReceiptRecord(ReceiptVoucher voucher) async {
+    final current = _getAllLocalReceipts();
+    final index = current.indexWhere((r) => r.id == voucher.id);
+    if (index < 0) return;
+    current[index] = ReceiptVoucherModel.fromDomain(voucher);
+
+    final serialized = current
+        .map((rec) => jsonEncode(ReceiptVoucherModel.fromDomain(rec).toJson()))
+        .toList();
+    await _localHistoryBox.put('receipts', serialized);
+  }
+
   /// Merges a freshly downloaded set of remote receipts into the local cache.
-  /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  /// Upsert, not replace — matches pending locals by [ReceiptVoucher.zohoPaymentId].
   ///
   /// Header-only remote rows (empty allocations) preserve any existing local
   /// invoice allocations so list refreshes do not wipe a cached full detail.
   Future<void> saveRemoteReceipts(List<ReceiptVoucher> remote) async {
     final current = _getAllLocalReceipts();
-    final byId = {for (final r in current) r.id: r};
+    final queuedIds = getSyncQueue()
+        .where((q) => q.type == 'receipt' && q.status != SyncStatus.completed)
+        .map((q) => q.id)
+        .toSet();
+
+    ReceiptVoucher? localFor(ReceiptVoucher remoteRec) {
+      for (final local in current) {
+        if (local.id == remoteRec.id) return local;
+        final zohoId = local.zohoPaymentId;
+        if (zohoId != null &&
+            zohoId.isNotEmpty &&
+            (zohoId == remoteRec.id || zohoId == remoteRec.zohoPaymentId)) {
+          return local;
+        }
+      }
+      return null;
+    }
 
     final mergedRemote = <ReceiptVoucher>[];
     for (final remoteRec in remote) {
-      final local = byId[remoteRec.id];
+      final local = localFor(remoteRec);
+      if (local != null &&
+          local.isPendingSync &&
+          queuedIds.contains(local.id)) {
+        continue;
+      }
       if (remoteRec.allocations.isEmpty &&
           local != null &&
           local.allocations.isNotEmpty) {
@@ -1269,17 +1403,32 @@ class HiveDatabaseService {
             referenceNumber: remoteRec.referenceNumber.isNotEmpty
                 ? remoteRec.referenceNumber
                 : local.referenceNumber,
+            zohoPaymentId: remoteRec.zohoPaymentId ?? local.zohoPaymentId,
+            isPendingSync: false,
           ),
         );
       } else {
-        mergedRemote.add(remoteRec);
+        mergedRemote.add(
+          remoteRec.copyWith(
+            zohoPaymentId: remoteRec.zohoPaymentId ?? local?.zohoPaymentId,
+            isPendingSync: false,
+          ),
+        );
       }
     }
 
     final remoteIds = remote.map((r) => r.id).toSet();
-    final keptLocal = current
-        .where((r) => !remoteIds.contains(r.id))
-        .toList();
+    final keptLocal = current.where((r) {
+      if (r.isPendingSync) {
+        if (queuedIds.contains(r.id)) return true;
+        return r.zohoPaymentId == null || !remoteIds.contains(r.zohoPaymentId);
+      }
+      if (remoteIds.contains(r.id)) return false;
+      if (r.zohoPaymentId != null && remoteIds.contains(r.zohoPaymentId)) {
+        return false;
+      }
+      return true;
+    }).toList();
 
     final merged = [...keptLocal, ...mergedRemote];
     final serialized = merged
@@ -1303,6 +1452,9 @@ class HiveDatabaseService {
   /// Retrieves list of sales returns recorded locally, scoped to the active session location.
   List<SalesReturn> getLocalReturns() =>
       _filterByActiveLocation(_getAllLocalReturns(), (ret) => ret.locationId);
+
+  /// Every locally-cached sales return regardless of session location.
+  List<SalesReturn> getAllLocalReturnsUnfiltered() => _getAllLocalReturns();
 
   /// Caches a sales return locally and immediately restores returned product stock levels back in the local inventory.
   Future<void> saveLocalReturn(SalesReturn salesReturn) async {
@@ -1341,18 +1493,52 @@ class HiveDatabaseService {
     await saveItems(localItems);
   }
 
+  /// Upserts [salesReturn] without restoring stock — post-sync bookkeeping only.
+  Future<void> updateReturnRecord(SalesReturn salesReturn) async {
+    final current = _getAllLocalReturns();
+    final index = current.indexWhere((r) => r.id == salesReturn.id);
+    if (index < 0) return;
+    current[index] = SalesReturnModel.fromDomain(salesReturn);
+
+    final serialized = current
+        .map((ret) => jsonEncode(SalesReturnModel.fromDomain(ret).toJson()))
+        .toList();
+    await _localHistoryBox.put('returns', serialized);
+  }
+
   /// Merges a freshly downloaded set of remote sales returns into the local cache.
-  /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  /// Upsert, not replace — matches pending locals by [SalesReturn.zohoCreditNoteId].
   ///
   /// Header-only remote rows (`items` empty) preserve any existing local line
   /// items so list refreshes do not wipe a previously cached full detail.
   Future<void> saveRemoteReturns(List<SalesReturn> remote) async {
     final current = _getAllLocalReturns();
-    final byId = {for (final r in current) r.id: r};
+    final queuedIds = getSyncQueue()
+        .where((q) => q.type == 'return' && q.status != SyncStatus.completed)
+        .map((q) => q.id)
+        .toSet();
+
+    SalesReturn? localFor(SalesReturn remoteRet) {
+      for (final local in current) {
+        if (local.id == remoteRet.id) return local;
+        final zohoId = local.zohoCreditNoteId;
+        if (zohoId != null &&
+            zohoId.isNotEmpty &&
+            (zohoId == remoteRet.id || zohoId == remoteRet.zohoCreditNoteId)) {
+          return local;
+        }
+      }
+      return null;
+    }
 
     final mergedRemote = <SalesReturn>[];
     for (final remoteRet in remote) {
-      final local = byId[remoteRet.id];
+      final local = localFor(remoteRet);
+      if (local != null &&
+          local.isPendingSync &&
+          queuedIds.contains(local.id)) {
+        continue;
+      }
       if (remoteRet.items.isEmpty &&
           local != null &&
           local.items.isNotEmpty) {
@@ -1361,17 +1547,36 @@ class HiveDatabaseService {
             items: local.items,
             locationId: remoteRet.locationId ?? local.locationId,
             reason: remoteRet.reason.isNotEmpty ? remoteRet.reason : local.reason,
+            zohoCreditNoteId:
+                remoteRet.zohoCreditNoteId ?? local.zohoCreditNoteId,
+            isPendingSync: false,
           ),
         );
       } else {
-        mergedRemote.add(remoteRet);
+        mergedRemote.add(
+          remoteRet.copyWith(
+            zohoCreditNoteId:
+                remoteRet.zohoCreditNoteId ?? local?.zohoCreditNoteId,
+            isPendingSync: false,
+          ),
+        );
       }
     }
 
     final remoteIds = remote.map((r) => r.id).toSet();
-    final keptLocal = current
-        .where((r) => !remoteIds.contains(r.id))
-        .toList();
+    final keptLocal = current.where((r) {
+      if (r.isPendingSync) {
+        if (queuedIds.contains(r.id)) return true;
+        return r.zohoCreditNoteId == null ||
+            !remoteIds.contains(r.zohoCreditNoteId);
+      }
+      if (remoteIds.contains(r.id)) return false;
+      if (r.zohoCreditNoteId != null &&
+          remoteIds.contains(r.zohoCreditNoteId)) {
+        return false;
+      }
+      return true;
+    }).toList();
 
     final merged = [...keptLocal, ...mergedRemote];
     final serialized = merged
@@ -1396,6 +1601,9 @@ class HiveDatabaseService {
   List<ExpenseEntry> getLocalExpenses() =>
       _filterByActiveLocation(_getAllLocalExpenses(), (exp) => exp.locationId);
 
+  /// Every locally-cached expense regardless of session location.
+  List<ExpenseEntry> getAllLocalExpensesUnfiltered() => _getAllLocalExpenses();
+
   /// Caches a new expense voucher locally.
   Future<void> saveLocalExpense(ExpenseEntry expense) async {
     final stamped = expense.locationId == null && assignedWarehouseId != null
@@ -1417,18 +1625,52 @@ class HiveDatabaseService {
     await _localHistoryBox.put('expenses', serialized);
   }
 
+  /// Upserts [expense] in place — post-sync bookkeeping (Zoho id / pending).
+  Future<void> updateExpenseRecord(ExpenseEntry expense) async {
+    final current = _getAllLocalExpenses();
+    final index = current.indexWhere((e) => e.id == expense.id);
+    if (index < 0) return;
+    current[index] = ExpenseEntryModel.fromDomain(expense);
+
+    final serialized = current
+        .map((exp) => jsonEncode(ExpenseEntryModel.fromDomain(exp).toJson()))
+        .toList();
+    await _localHistoryBox.put('expenses', serialized);
+  }
+
   /// Merges a freshly downloaded set of remote expenses into the local cache.
-  /// Upsert, not replace — see [saveRemoteInvoices] for the id-matching rationale.
+  /// Upsert, not replace — matches pending locals by [ExpenseEntry.zohoExpenseId].
   ///
   /// Header-only remote rows (`lines` empty) preserve any existing local line
   /// items so list refreshes do not wipe a previously cached full detail.
   Future<void> saveRemoteExpenses(List<ExpenseEntry> remote) async {
     final current = _getAllLocalExpenses();
-    final byId = {for (final e in current) e.id: e};
+    final queuedIds = getSyncQueue()
+        .where((q) => q.type == 'expense' && q.status != SyncStatus.completed)
+        .map((q) => q.id)
+        .toSet();
+
+    ExpenseEntry? localFor(ExpenseEntry remoteExp) {
+      for (final local in current) {
+        if (local.id == remoteExp.id) return local;
+        final zohoId = local.zohoExpenseId;
+        if (zohoId != null &&
+            zohoId.isNotEmpty &&
+            (zohoId == remoteExp.id || zohoId == remoteExp.zohoExpenseId)) {
+          return local;
+        }
+      }
+      return null;
+    }
 
     final mergedRemote = <ExpenseEntry>[];
     for (final remoteExp in remote) {
-      final local = byId[remoteExp.id];
+      final local = localFor(remoteExp);
+      if (local != null &&
+          local.isPendingSync &&
+          queuedIds.contains(local.id)) {
+        continue;
+      }
       if (remoteExp.lines.isEmpty &&
           local != null &&
           local.lines.isNotEmpty) {
@@ -1438,17 +1680,32 @@ class HiveDatabaseService {
             locationId: remoteExp.locationId ?? local.locationId,
             receiptImagePath:
                 remoteExp.receiptImagePath ?? local.receiptImagePath,
+            zohoExpenseId: remoteExp.zohoExpenseId ?? local.zohoExpenseId,
+            isPendingSync: false,
           ),
         );
       } else {
-        mergedRemote.add(remoteExp);
+        mergedRemote.add(
+          remoteExp.copyWith(
+            zohoExpenseId: remoteExp.zohoExpenseId ?? local?.zohoExpenseId,
+            isPendingSync: false,
+          ),
+        );
       }
     }
 
     final remoteIds = remote.map((e) => e.id).toSet();
-    final keptLocal = current
-        .where((e) => !remoteIds.contains(e.id))
-        .toList();
+    final keptLocal = current.where((e) {
+      if (e.isPendingSync) {
+        if (queuedIds.contains(e.id)) return true;
+        return e.zohoExpenseId == null || !remoteIds.contains(e.zohoExpenseId);
+      }
+      if (remoteIds.contains(e.id)) return false;
+      if (e.zohoExpenseId != null && remoteIds.contains(e.zohoExpenseId)) {
+        return false;
+      }
+      return true;
+    }).toList();
 
     final merged = [...keptLocal, ...mergedRemote];
     final serialized = merged

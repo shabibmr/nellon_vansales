@@ -4,13 +4,16 @@ import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/customer_ledger.dart';
 import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_bloc.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_event.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_state.dart';
 
-class FakeSalesRepository implements CustomerRepository {
+class FakeSalesRepository
+    with CustomerRepositorySubmitStubs
+    implements CustomerRepository {
   String? lastCustomerId;
   double? lastLatitude;
   double? lastLongitude;
@@ -210,17 +213,9 @@ void main() {
     expect(state.enrichedCustomer!.latitude, 12.3456);
     expect(state.enrichedCustomer!.longitude, 78.9012);
 
-    // Verify local cache updated
-    expect(salesRepo.lastCustomerId, 'cust_01');
-    expect(salesRepo.lastLatitude, 12.3456);
-
-    // Verify remote API updated directly
-    expect(salesRepo.lastRemoteCustomerId, 'cust_01');
-    expect(salesRepo.lastRemoteLatitude, 12.3456);
-
-    // Verify no sync queued
-    expect(salesRepo.queue.isEmpty, true);
-    expect(syncRepo.syncCount, 0);
+    expect(salesRepo.queue, hasLength(1));
+    expect(salesRepo.queue.first.type, 'customer_gps_update');
+    expect(salesRepo.lastRemoteCustomerId, isNull);
   });
 
   test('GpsCaptureRequested in persist mode enqueues sync item if Zoho API throws', () async {
@@ -232,17 +227,10 @@ void main() {
 
     expect(state.latitude, 12.3456);
 
-    // Verify local cache updated
-    expect(salesRepo.lastCustomerId, 'cust_01');
-
-    // Verify Zoho API did NOT complete
     expect(salesRepo.lastRemoteCustomerId, isNull);
-
-    // Verify sync was queued
     expect(salesRepo.queue.length, 1);
     expect(salesRepo.queue.first.type, 'customer_gps_update');
     expect(salesRepo.queue.first.payload['contact_id'], 'cust_01');
-    expect(syncRepo.syncCount, 1);
   });
 
   test('GpsCaptureRequested in persist mode enqueues sync item for temp_ customer automatically', () async {
@@ -254,15 +242,8 @@ void main() {
 
     expect(state.latitude, 12.3456);
 
-    // Verify local cache updated
-    expect(salesRepo.lastCustomerId, 'temp_cust_123');
-
-    // Verify Zoho API was NOT called for temp customer
     expect(salesRepo.lastRemoteCustomerId, isNull);
-
-    // Verify sync was queued
     expect(salesRepo.queue.length, 1);
     expect(salesRepo.queue.first.payload['contact_id'], 'temp_cust_123');
-    expect(syncRepo.syncCount, 1);
   });
 }

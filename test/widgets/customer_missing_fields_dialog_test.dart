@@ -4,18 +4,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/customer.dart';
+import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_bloc.dart';
 import 'package:van_sales/ui/core/widgets/customer_missing_fields_dialog.dart';
+import '../helpers/sales_repository_enqueue_stubs.dart';
 
-class _FakeSalesRepository implements CustomerRepository {
+class _FakeSalesRepository
+    with CustomerRepositorySubmitStubs
+    implements CustomerRepository {
   String? savedPhone;
   String? savedTrn;
   String? savedId;
   bool remotePushed = false;
   String? remotePhone;
   String? remoteTrn;
+  final List<SyncQueueItem> queue = [];
+
+  @override
+  Future<void> enqueueSyncItem(SyncQueueItem item) async {
+    queue.add(item);
+  }
+
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    savedId = item.payload['contact_id']?.toString();
+    if (item.type == 'customer_contact_update') {
+      savedPhone = item.payload['phone']?.toString();
+      savedTrn = item.payload['tax_reg_no']?.toString();
+    }
+    await enqueueSyncItem(item);
+    return SubmitResult.queued;
+  }
 
   @override
   Future<void> updateCustomerContactFields(
@@ -359,8 +380,9 @@ void main() {
     expect(sales.savedId, 'c1');
     expect(sales.savedPhone, '0501234567');
     expect(sales.savedTrn, isNull);
-    expect(sales.remotePushed, isTrue);
-    expect(sales.remotePhone, '0501234567');
+    expect(sales.queue, hasLength(1));
+    expect(sales.queue.single.type, 'customer_contact_update');
+    expect(sales.remotePushed, isFalse);
     expect(selected?.phone, '0501234567');
     expect(find.byType(CustomerMissingFieldsDialog), findsNothing);
   });

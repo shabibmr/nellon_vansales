@@ -1,4 +1,5 @@
 import '../models/sales_return.dart';
+import '../models/submit_result.dart';
 import '../../data/models/sync_queue_item.dart';
 
 /// Abstract contract for local sales-return (credit note) logging and Zoho sync.
@@ -33,4 +34,10 @@ abstract class SalesReturnRepository {
 
   /// Appends an unsynced transaction item to the local offline synchronization queue.
   Future<void> enqueueSyncItem(SyncQueueItem item);
+
+  /// Enqueues a create (`return`) sync item for [salesReturn].
+  Future<void> enqueueSalesReturn(SalesReturn salesReturn);
+
+  /// Builds the return queue item and submits it online-first.
+  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn);
 }
