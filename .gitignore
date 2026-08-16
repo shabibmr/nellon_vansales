@@ -1,5 +1,7 @@
 # Environment / secrets
 .env
+.env*
+.env_zoho
 zoho_endpoints/responses/
 
 # Antigravity CLI tool artifacts

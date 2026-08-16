@@ -19,10 +19,13 @@ import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/dashboard/bloc/receipt_allocation_bloc.dart';
 import 'package:van_sales/ui/features/dashboard/bloc/receipt_allocation_event.dart';
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   List<OpenInvoice> openInvoices = [];
   List<ReceiptVoucher> receipts = [];
   List<SyncQueueItem> queue = [];

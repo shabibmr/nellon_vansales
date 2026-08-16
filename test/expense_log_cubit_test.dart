@@ -16,12 +16,15 @@ import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/expense_log_cubit.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/expense_log_state.dart';
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   List<ExpenseEntry> expenses = [];
   List<SyncQueueItem> syncQueue = [];
   bool shouldThrow = false;

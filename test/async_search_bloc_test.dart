@@ -15,11 +15,14 @@ import 'package:van_sales/domain/models/organization.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/core/bloc/async_search_bloc.dart';
 import 'package:van_sales/ui/core/bloc/async_search_event.dart';
 import 'package:van_sales/ui/core/bloc/async_search_state.dart';
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   List<Customer> customers = [];
   List<Item> items = [];
 

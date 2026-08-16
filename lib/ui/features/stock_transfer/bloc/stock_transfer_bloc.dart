@@ -8,8 +8,6 @@ import '../../../../domain/models/stock_transfer.dart';
 import '../../../../domain/models/warehouse.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
-import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/models/stock_transfer_model.dart';
 import '../../../core/utils/date_filter.dart';
 import '../../../core/utils/error_mapper.dart';
 
@@ -606,14 +604,7 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
 
       await _salesRepository.saveLocalStockTransfer(transfer);
 
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'stock_transfer',
-        payload: StockTransferModel.fromDomain(transfer).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await _salesRepository.enqueueSyncItem(syncItem);
+      await _salesRepository.enqueueStockTransfer(transfer);
 
       unawaited(_syncRepository.triggerSync());
 

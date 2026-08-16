@@ -24,6 +24,7 @@ import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
+import '../test/helpers/sales_repository_enqueue_stubs.dart';
 import 'package:get_it/get_it.dart';
 
 // Fake implementations to isolate E2E UI rendering from disk/network IO
@@ -109,7 +110,9 @@ class FakeSyncRepository implements SyncRepository {
   int getMasterRecordCount(MasterType type) => 0;
 }
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   @override
   List<RouteModel> getRoutes() => [
     const RouteModel(

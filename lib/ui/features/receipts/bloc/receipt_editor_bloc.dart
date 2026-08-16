@@ -3,8 +3,6 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/models/receipt_voucher_model.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
@@ -75,7 +73,12 @@ class ReceiptEditorBloc
     OpenReceiptVoucher event,
     Emitter<ReceiptEditorState> emit,
   ) async {
-    if (event.receipt.isPendingSync || _isLocalReceiptId(event.receipt.id)) {
+    if (event.receipt.isPendingSync) {
+      emit(_openedFrom(event.receipt));
+      return;
+    }
+    final remoteId = event.receipt.zohoPaymentId ?? event.receipt.id;
+    if (_isLocalReceiptId(remoteId)) {
       emit(_openedFrom(event.receipt));
       return;
     }
@@ -93,14 +96,14 @@ class ReceiptEditorBloc
         isSaving: false,
       ),
     );
-    await _loadEditingReceiptFromZoho(event.receipt.id, emit);
+    await _loadEditingReceiptFromZoho(remoteId, emit);
   }
 
   Future<void> _onRetryLoadReceiptVoucher(
     RetryLoadReceiptVoucher event,
     Emitter<ReceiptEditorState> emit,
   ) async {
-    final receiptId = state.editingId;
+    final receiptId = _remoteReceiptIdForLoad();
     if (receiptId == null || receiptId.isEmpty) return;
     emit(state.copyWith(isEditorLoading: true, clearEditorError: true));
     await _loadEditingReceiptFromZoho(receiptId, emit);
@@ -110,7 +113,7 @@ class ReceiptEditorBloc
     RefreshReceiptVoucherFromZoho event,
     Emitter<ReceiptEditorState> emit,
   ) async {
-    final receiptId = state.editingId ?? state.editingReceipt?.id;
+    final receiptId = _remoteReceiptIdForLoad();
     if (receiptId == null ||
         receiptId.isEmpty ||
         _isLocalReceiptId(receiptId) ||
@@ -127,6 +130,12 @@ class ReceiptEditorBloc
       ),
     );
     await _loadEditingReceiptFromZoho(receiptId, emit, isRefresh: true);
+  }
+
+  String? _remoteReceiptIdForLoad() {
+    final zohoId = state.editingReceipt?.zohoPaymentId;
+    if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+    return state.editingId ?? state.editingReceipt?.id;
   }
 
   Future<void> _loadEditingReceiptFromZoho(
@@ -433,14 +442,7 @@ class ReceiptEditorBloc
 
       await _salesRepository.saveLocalReceipt(voucher);
 
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'receipt',
-        payload: ReceiptVoucherModel.fromDomain(voucher).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await _salesRepository.enqueueSyncItem(syncItem);
+      await _salesRepository.enqueueReceipt(voucher);
 
       unawaited(_syncRepository.triggerSync());
 

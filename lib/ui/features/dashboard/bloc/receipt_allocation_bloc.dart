@@ -3,8 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/repositories/sales_repository.dart';
-import '../../../../data/models/receipt_voucher_model.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -206,15 +204,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
       // Save locally
       await salesRepository.saveLocalReceipt(voucher);
 
-      // Enqueue sync item
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'receipt',
-        payload: ReceiptVoucherModel.fromDomain(voucher).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await salesRepository.enqueueReceipt(voucher);
 
       // Kick sync in background
       unawaited(syncWorker.syncPendingItems());

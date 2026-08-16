@@ -74,6 +74,26 @@ void main() {
       expect(again.listedTotal, 200);
       expect(again.total, 200);
     });
+
+    test('toJson/fromJson round-trips zohoInvoiceId without using it as id', () {
+      final original = SalesInvoiceModel.fromJson({
+        'id': 'temp_inv_9',
+        'invoice_id': 'temp_inv_9',
+        'invoice_number': 'INV-009',
+        'customer_id': 'c1',
+        'customer_name': 'Acme',
+        'date': '2026-03-01',
+        'due_date': '2026-03-08',
+        'zoho_invoice_id': 'zoho_inv_9',
+        'isPendingSync': false,
+      });
+      expect(original.id, 'temp_inv_9');
+      expect(original.zohoInvoiceId, 'zoho_inv_9');
+
+      final again = SalesInvoiceModel.fromJson(original.toJson());
+      expect(again.id, 'temp_inv_9');
+      expect(again.zohoInvoiceId, 'zoho_inv_9');
+    });
   });
 
   group('InvoiceLineItemModel numeric field parsing', () {

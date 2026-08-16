@@ -42,6 +42,9 @@ class ExpenseEntry extends Equatable {
   /// Flag indicating if the expense voucher has been uploaded/synchronized with the server.
   final bool isPendingSync;
 
+  /// The permanent Zoho `expense_id`, populated once the expense syncs.
+  final String? zohoExpenseId;
+
   /// The Zoho Location ID of the salesperson/van that logged this expense.
   final String? locationId;
 
@@ -61,6 +64,7 @@ class ExpenseEntry extends Equatable {
     required this.lines,
     this.receiptImagePath,
     this.isPendingSync = false,
+    this.zohoExpenseId,
     this.locationId,
     this.listedTotal,
     this.listedCategory = '',
@@ -96,6 +100,7 @@ class ExpenseEntry extends Equatable {
     List<ExpenseLineItem>? lines,
     String? receiptImagePath,
     bool? isPendingSync,
+    String? zohoExpenseId,
     String? locationId,
     double? listedTotal,
     bool clearListedTotal = false,
@@ -108,6 +113,7 @@ class ExpenseEntry extends Equatable {
       lines: lines ?? this.lines,
       receiptImagePath: receiptImagePath ?? this.receiptImagePath,
       isPendingSync: isPendingSync ?? this.isPendingSync,
+      zohoExpenseId: zohoExpenseId ?? this.zohoExpenseId,
       locationId: locationId ?? this.locationId,
       listedTotal: clearListedTotal ? null : (listedTotal ?? this.listedTotal),
       listedCategory: listedCategory ?? this.listedCategory,
@@ -122,6 +128,7 @@ class ExpenseEntry extends Equatable {
     lines,
     receiptImagePath,
     isPendingSync,
+    zohoExpenseId,
     locationId,
     listedTotal,
     listedCategory,

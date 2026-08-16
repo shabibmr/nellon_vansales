@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/sales_repository.dart';
@@ -243,17 +242,9 @@ class SalesInvoiceListBloc
       ),
     );
 
-    final convertItem = SyncQueueItem(
-      id: tempId,
-      type: 'convert_so',
-      payload: {
-        'salesorder_id': localOrder.zohoOrderId ?? localOrder.id,
-        'source_order_id': localOrder.id,
-        'local_invoice_id': invoice.id,
-      },
-      status: SyncStatus.pending,
-      timestamp: DateTime.now(),
+    await _salesRepository.enqueueConvertSalesOrder(
+      order: localOrder,
+      invoice: invoice,
     );
-    await _salesRepository.enqueueSyncItem(convertItem);
   }
 }

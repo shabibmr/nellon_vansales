@@ -150,6 +150,9 @@ class SalesReturn extends Equatable {
   /// Flag indicating if the return is pending synchronization with Zoho Books.
   final bool isPendingSync;
 
+  /// The permanent Zoho `creditnote_id`, populated once the return syncs.
+  final String? zohoCreditNoteId;
+
   /// The Zoho Location ID of the salesperson/van that created this return.
   final String? locationId;
 
@@ -166,6 +169,7 @@ class SalesReturn extends Equatable {
     required this.items,
     required this.reason,
     this.isPendingSync = false,
+    this.zohoCreditNoteId,
     this.locationId,
     this.listedTotal,
   });
@@ -189,6 +193,7 @@ class SalesReturn extends Equatable {
     List<SalesReturnLineItem>? items,
     String? reason,
     bool? isPendingSync,
+    String? zohoCreditNoteId,
     String? locationId,
     double? listedTotal,
     bool clearListedTotal = false,
@@ -202,6 +207,7 @@ class SalesReturn extends Equatable {
       items: items ?? this.items,
       reason: reason ?? this.reason,
       isPendingSync: isPendingSync ?? this.isPendingSync,
+      zohoCreditNoteId: zohoCreditNoteId ?? this.zohoCreditNoteId,
       locationId: locationId ?? this.locationId,
       listedTotal: clearListedTotal ? null : (listedTotal ?? this.listedTotal),
     );
@@ -217,6 +223,7 @@ class SalesReturn extends Equatable {
     items,
     reason,
     isPendingSync,
+    zohoCreditNoteId,
     locationId,
     listedTotal,
   ];

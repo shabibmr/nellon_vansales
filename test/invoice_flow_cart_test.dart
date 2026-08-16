@@ -21,6 +21,7 @@ import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_editor_bloc.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_editor_event.dart';
 
@@ -50,7 +51,9 @@ class _FakeZohoApi extends ZohoApiClient {
   _FakeZohoApi() : super(dbService: _FakeDocDb());
 }
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   final List<SalesInvoice> invoices = [];
   final List<SyncQueueItem> queue = [];
   bool throwOnSave = false;

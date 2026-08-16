@@ -51,6 +51,8 @@ class ReceiptEditorState extends Equatable {
     if (isEditingNew || editorError != null) return false;
     final rec = editingReceipt;
     if (rec == null || rec.isPendingSync) return false;
+    final zohoId = rec.zohoPaymentId;
+    if (zohoId != null && zohoId.isNotEmpty) return true;
     final id = editingId ?? rec.id;
     if (id.isEmpty || id.startsWith('temp_pay_')) return false;
     return true;

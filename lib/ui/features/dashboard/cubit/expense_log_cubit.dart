@@ -3,8 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/repositories/sales_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
-import '../../../../data/models/expense_entry_model.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import 'expense_log_state.dart';
 
@@ -45,15 +43,7 @@ class ExpenseLogCubit extends Cubit<ExpenseLogState> {
       // Save local
       await salesRepository.saveLocalExpense(expense);
 
-      // Enqueue sync item
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'expense',
-        payload: ExpenseEntryModel.fromDomain(expense).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await salesRepository.enqueueExpense(expense);
 
       // Trigger background sync
       unawaited(syncRepository.triggerSync());

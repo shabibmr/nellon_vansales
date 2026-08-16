@@ -18,13 +18,16 @@ import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/ui/features/sales_order/bloc/sales_order_editor_bloc.dart';
 import 'package:van_sales/ui/features/sales_order/bloc/sales_order_editor_event.dart';
 
 /// Records what the bloc asked for, so the tests can assert that opening a
 /// saved order reads Zoho and never the local cache.
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   final List<String> fetchedOrderIds = [];
   final List<SyncQueueItem> queue = [];
   final List<SalesOrder> savedOrders = [];

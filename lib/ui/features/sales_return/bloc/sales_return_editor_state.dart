@@ -47,6 +47,8 @@ class SalesReturnEditorState extends Equatable {
     if (isEditingNew || editorError != null) return false;
     final ret = editingReturn;
     if (ret == null || ret.isPendingSync) return false;
+    final zohoId = ret.zohoCreditNoteId;
+    if (zohoId != null && zohoId.isNotEmpty) return true;
     final id = editingReturnId ?? ret.id;
     if (id.isEmpty || id.startsWith('temp_ret_')) return false;
     return true;

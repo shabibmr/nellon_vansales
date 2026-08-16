@@ -51,6 +51,8 @@ class ExpenseEditorState extends Equatable {
     if (isEditingNew || editorError != null) return false;
     final exp = editingExpense;
     if (exp == null || exp.isPendingSync) return false;
+    final zohoId = exp.zohoExpenseId;
+    if (zohoId != null && zohoId.isNotEmpty) return true;
     final id = editingId ?? exp.id;
     if (id.isEmpty || id.startsWith('temp_exp_')) return false;
     return true;

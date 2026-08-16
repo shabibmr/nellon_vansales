@@ -17,10 +17,13 @@ import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/expenses/bloc/expense_editor_bloc.dart';
 import 'package:van_sales/ui/features/expenses/bloc/expense_editor_event.dart';
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   List<ExpenseEntry> expenses = [];
   List<SyncQueueItem> queue = [];
 

@@ -3,8 +3,6 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/models/expense_entry_model.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/repositories/sales_repository.dart';
@@ -66,7 +64,12 @@ class ExpenseEditorBloc
     OpenExpenseEntry event,
     Emitter<ExpenseEditorState> emit,
   ) async {
-    if (event.expense.isPendingSync || _isLocalExpenseId(event.expense.id)) {
+    if (event.expense.isPendingSync) {
+      emit(_openedFrom(event.expense));
+      return;
+    }
+    final remoteId = event.expense.zohoExpenseId ?? event.expense.id;
+    if (_isLocalExpenseId(remoteId)) {
       emit(_openedFrom(event.expense));
       return;
     }
@@ -82,14 +85,14 @@ class ExpenseEditorBloc
         isSaving: false,
       ),
     );
-    await _loadEditingExpenseFromZoho(event.expense.id, emit);
+    await _loadEditingExpenseFromZoho(remoteId, emit);
   }
 
   Future<void> _onRetryLoadExpenseEntry(
     RetryLoadExpenseEntry event,
     Emitter<ExpenseEditorState> emit,
   ) async {
-    final expenseId = state.editingId;
+    final expenseId = _remoteExpenseIdForLoad();
     if (expenseId == null || expenseId.isEmpty) return;
     emit(state.copyWith(isEditorLoading: true, clearEditorError: true));
     await _loadEditingExpenseFromZoho(expenseId, emit);
@@ -99,7 +102,7 @@ class ExpenseEditorBloc
     RefreshExpenseEntryFromZoho event,
     Emitter<ExpenseEditorState> emit,
   ) async {
-    final expenseId = state.editingId ?? state.editingExpense?.id;
+    final expenseId = _remoteExpenseIdForLoad();
     if (expenseId == null ||
         expenseId.isEmpty ||
         _isLocalExpenseId(expenseId) ||
@@ -116,6 +119,12 @@ class ExpenseEditorBloc
       ),
     );
     await _loadEditingExpenseFromZoho(expenseId, emit, isRefresh: true);
+  }
+
+  String? _remoteExpenseIdForLoad() {
+    final zohoId = state.editingExpense?.zohoExpenseId;
+    if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+    return state.editingId ?? state.editingExpense?.id;
   }
 
   Future<void> _loadEditingExpenseFromZoho(
@@ -318,14 +327,7 @@ class ExpenseEditorBloc
 
       await _salesRepository.saveLocalExpense(expense);
 
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'expense',
-        payload: ExpenseEntryModel.fromDomain(expense).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await _salesRepository.enqueueSyncItem(syncItem);
+      await _salesRepository.enqueueExpense(expense);
 
       unawaited(_syncRepository.triggerSync());
 

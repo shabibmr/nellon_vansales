@@ -5,8 +5,6 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/sales_repository.dart';
-import '../../../../data/models/sync_queue_item.dart';
-import '../../../../data/models/sales_return_model.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -134,14 +132,7 @@ class SalesReturnDialogCubit extends Cubit<SalesReturnDialogState> {
 
       await salesRepository.saveLocalReturn(returnItem);
 
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'return',
-        payload: SalesReturnModel.fromDomain(returnItem).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await salesRepository.enqueueSalesReturn(returnItem);
 
       unawaited(syncWorker.syncPendingItems());
 

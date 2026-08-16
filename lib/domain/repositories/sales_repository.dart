@@ -138,6 +138,39 @@ abstract class SalesRepository {
   /// payload lives in the data layer so UI/BLoCs stay on domain types.
   Future<void> enqueueSalesOrder(SalesOrder order, {required bool isUpdate});
 
+  /// Enqueues a create (`invoice`) sync item for [invoice].
+  ///
+  /// Call after [saveLocalInvoice]. Mapping to the queue payload lives in the
+  /// data layer so UI/BLoCs stay on domain types.
+  Future<void> enqueueInvoice(SalesInvoice invoice);
+
+  /// Enqueues a `convert_so` item that turns [order] into [invoice] in Zoho.
+  ///
+  /// [invoice] must already be saved locally. Targets [SalesOrder.zohoOrderId]
+  /// when present so the conversion does not send a `temp_so_…` id.
+  Future<void> enqueueConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  });
+
+  /// Enqueues a create (`receipt`) sync item for [voucher].
+  ///
+  /// Allocation `invoice_id`s are rewritten to the matching local invoice's
+  /// [SalesInvoice.zohoInvoiceId] when that invoice has already synced.
+  Future<void> enqueueReceipt(ReceiptVoucher voucher);
+
+  /// Enqueues a create (`return`) sync item for [salesReturn].
+  ///
+  /// Line `invoice_id`s are rewritten to the matching local invoice's
+  /// [SalesInvoice.zohoInvoiceId] when that invoice has already synced.
+  Future<void> enqueueSalesReturn(SalesReturn salesReturn);
+
+  /// Enqueues a create (`expense`) sync item for [expense].
+  Future<void> enqueueExpense(ExpenseEntry expense);
+
+  /// Enqueues a create (`stock_transfer`) sync item for [transfer].
+  Future<void> enqueueStockTransfer(StockTransfer transfer);
+
   /// Downloads sales order **headers** from Zoho Books (list endpoint only —
   /// no per-order detail), merges them into the local cache, and returns the
   /// resulting local list. Line items load via [fetchRemoteOrder] on open.

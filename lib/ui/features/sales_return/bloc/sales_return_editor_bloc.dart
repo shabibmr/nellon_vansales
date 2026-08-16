@@ -3,8 +3,6 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/models/sales_return_model.dart';
-import '../../../../data/models/sync_queue_item.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/customer.dart';
@@ -73,7 +71,12 @@ class SalesReturnEditorBloc
     OpenSalesReturn event,
     Emitter<SalesReturnEditorState> emit,
   ) async {
-    if (event.salesReturn.isPendingSync || _isLocalReturnId(event.salesReturn.id)) {
+    if (event.salesReturn.isPendingSync) {
+      emit(_openedFrom(event.salesReturn));
+      return;
+    }
+    final remoteId = event.salesReturn.zohoCreditNoteId ?? event.salesReturn.id;
+    if (_isLocalReturnId(remoteId)) {
       emit(_openedFrom(event.salesReturn));
       return;
     }
@@ -92,14 +95,14 @@ class SalesReturnEditorBloc
         isSaving: false,
       ),
     );
-    await _loadEditingReturnFromZoho(event.salesReturn.id, emit);
+    await _loadEditingReturnFromZoho(remoteId, emit);
   }
 
   Future<void> _onRetryLoadSalesReturn(
     RetryLoadSalesReturn event,
     Emitter<SalesReturnEditorState> emit,
   ) async {
-    final returnId = state.editingReturnId;
+    final returnId = _remoteReturnIdForLoad();
     if (returnId == null || returnId.isEmpty) return;
     emit(state.copyWith(isEditorLoading: true, clearEditorError: true));
     await _loadEditingReturnFromZoho(returnId, emit);
@@ -109,7 +112,7 @@ class SalesReturnEditorBloc
     RefreshSalesReturnFromZoho event,
     Emitter<SalesReturnEditorState> emit,
   ) async {
-    final returnId = state.editingReturnId ?? state.editingReturn?.id;
+    final returnId = _remoteReturnIdForLoad();
     if (returnId == null ||
         returnId.isEmpty ||
         _isLocalReturnId(returnId) ||
@@ -131,6 +134,12 @@ class SalesReturnEditorBloc
       isRefresh: true,
       forceDirty: event.forceDirty,
     );
+  }
+
+  String? _remoteReturnIdForLoad() {
+    final zohoId = state.editingReturn?.zohoCreditNoteId;
+    if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+    return state.editingReturnId ?? state.editingReturn?.id;
   }
 
   void _onUpdateReturnReason(
@@ -403,14 +412,7 @@ class SalesReturnEditorBloc
 
       await _salesRepository.saveLocalReturn(salesReturn);
 
-      final syncItem = SyncQueueItem(
-        id: tempId,
-        type: 'return',
-        payload: SalesReturnModel.fromDomain(salesReturn).toJson(),
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      );
-      await _salesRepository.enqueueSyncItem(syncItem);
+      await _salesRepository.enqueueSalesReturn(salesReturn);
 
       unawaited(_syncRepository.triggerSync());
 

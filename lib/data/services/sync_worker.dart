@@ -216,10 +216,12 @@ class SyncWorker {
     _syncCountController.add(pendingItems.length);
 
     try {
-      // 1. Sort queue so "customers" sync first (relational dependency)
+      // 1. Sort so relational parents land first: customers, then
+      // invoices/sales orders (receipts/returns/convert_so depend on them).
       pendingItems.sort((a, b) {
-        if (a.type == 'customer' && b.type != 'customer') return -1;
-        if (a.type != 'customer' && b.type == 'customer') return 1;
+        final rankA = _syncRank(a.type);
+        final rankB = _syncRank(b.type);
+        if (rankA != rankB) return rankA.compareTo(rankB);
         return a.timestamp.compareTo(b.timestamp);
       });
 
@@ -352,7 +354,11 @@ class SyncWorker {
           trn: trn,
         );
       case 'invoice':
-        await _apiClient.syncInvoice(item.payload);
+        final remoteId = await _apiClient.syncInvoice(
+          _withResolvedInvoiceRefs(item.payload),
+        );
+        await _persistInvoiceZohoId(item.id, remoteId);
+        await _resolveTempInvoiceIdsInQueue(item.id, remoteId);
       case 'sales_order':
         final remoteId = await _apiClient.syncSalesOrder(item.payload);
         // Persist the permanent Zoho salesorder_id on the local order and
@@ -366,15 +372,26 @@ class SyncWorker {
         );
         await _persistOrderZohoId(item.id, remoteId);
       case 'convert_so':
-        await _apiClient.convertSalesOrderToInvoice(
+        final remoteId = await _apiClient.convertSalesOrderToInvoice(
           item.payload['salesorder_id'],
         );
+        final localInvoiceId =
+            item.payload['local_invoice_id']?.toString() ?? item.id;
+        await _persistInvoiceZohoId(localInvoiceId, remoteId);
+        await _resolveTempInvoiceIdsInQueue(localInvoiceId, remoteId);
       case 'receipt':
-        await _apiClient.syncReceiptVoucher(item.payload);
+        final remoteId = await _apiClient.syncReceiptVoucher(
+          _withResolvedInvoiceRefs(item.payload),
+        );
+        await _persistReceiptZohoId(item.id, remoteId);
       case 'return':
-        await _apiClient.syncSalesReturn(item.payload);
+        final remoteId = await _apiClient.syncSalesReturn(
+          _withResolvedInvoiceRefs(item.payload),
+        );
+        await _persistReturnZohoId(item.id, remoteId);
       case 'expense':
-        await _apiClient.syncExpense(item.payload);
+        final remoteId = await _apiClient.syncExpense(item.payload);
+        await _persistExpenseZohoId(item.id, remoteId);
       case 'stock_transfer':
         final remoteId = await _apiClient.syncStockTransfer(item.payload);
         // Persist the permanent Zoho transfer_order_id on the local record
@@ -472,10 +489,10 @@ class SyncWorker {
   ) async {
     switch (type) {
       case 'invoice':
-        final invoices = _dbService.getLocalInvoices();
+        final invoices = _dbService.getAllLocalInvoicesUnfiltered();
         final index = invoices.indexWhere((i) => i.id == localId);
         if (index >= 0) {
-          await _dbService.saveLocalInvoice(
+          await _dbService.updateInvoiceRecord(
             invoices[index].copyWith(invoiceNumber: newNumber),
           );
         }
@@ -488,18 +505,18 @@ class SyncWorker {
           );
         }
       case 'receipt':
-        final receipts = _dbService.getLocalReceipts();
+        final receipts = _dbService.getAllLocalReceiptsUnfiltered();
         final index = receipts.indexWhere((r) => r.id == localId);
         if (index >= 0) {
-          await _dbService.saveLocalReceipt(
+          await _dbService.updateReceiptRecord(
             receipts[index].copyWith(paymentNumber: newNumber),
           );
         }
       case 'return':
-        final returns = _dbService.getLocalReturns();
+        final returns = _dbService.getAllLocalReturnsUnfiltered();
         final index = returns.indexWhere((r) => r.id == localId);
         if (index >= 0) {
-          await _dbService.saveLocalReturn(
+          await _dbService.updateReturnRecord(
             returns[index].copyWith(creditNoteNumber: newNumber),
           );
         }
@@ -533,6 +550,168 @@ class SyncWorker {
             item.copyWith(payload: updatedPayload),
           );
         }
+      }
+    }
+  }
+
+  /// Customers first, then invoices/sales orders, then dependents
+  /// (receipts, returns, convert_so, updates, expenses, transfers).
+  static int _syncRank(String type) {
+    switch (type) {
+      case 'customer':
+      case 'customer_gps_update':
+      case 'customer_contact_update':
+        return 0;
+      case 'invoice':
+      case 'sales_order':
+        return 1;
+      default:
+        return 2;
+    }
+  }
+
+  /// Rewrites receipt `invoices[].invoice_id` and return `line_items[].invoice_id`
+  /// from a local `temp_inv_…` id to the permanent Zoho invoice id when the
+  /// matching local invoice has already been synced.
+  Map<String, dynamic> _withResolvedInvoiceRefs(Map<String, dynamic> payload) {
+    final invoices = _dbService.getAllLocalInvoicesUnfiltered();
+    if (invoices.isEmpty) return payload;
+
+    String resolve(String? id) {
+      if (id == null || id.isEmpty) return id ?? '';
+      for (final inv in invoices) {
+        final zohoId = inv.zohoInvoiceId;
+        if (inv.id == id && zohoId != null && zohoId.isNotEmpty) {
+          return zohoId;
+        }
+      }
+      return id;
+    }
+
+    final updated = Map<String, dynamic>.from(payload);
+    var changed = false;
+
+    void rewriteList(String key, String idField) {
+      final raw = updated[key];
+      if (raw is! List) return;
+      updated[key] = raw.map((entry) {
+        if (entry is! Map) return entry;
+        final map = Map<String, dynamic>.from(entry);
+        final current = map[idField]?.toString();
+        final resolved = resolve(current);
+        if (current != null && resolved != current) {
+          map[idField] = resolved;
+          changed = true;
+        }
+        return map;
+      }).toList();
+    }
+
+    rewriteList('invoices', 'invoice_id');
+    rewriteList('line_items', 'invoice_id');
+    return changed ? updated : payload;
+  }
+
+  Future<void> _persistInvoiceZohoId(
+    String localInvoiceId,
+    String zohoInvoiceId,
+  ) async {
+    final invoices = _dbService.getAllLocalInvoicesUnfiltered();
+    final index = invoices.indexWhere((i) => i.id == localInvoiceId);
+    if (index >= 0) {
+      await _dbService.updateInvoiceRecord(
+        invoices[index].copyWith(
+          zohoInvoiceId: zohoInvoiceId,
+          isPendingSync: false,
+        ),
+      );
+    }
+  }
+
+  Future<void> _persistReceiptZohoId(
+    String localReceiptId,
+    String zohoPaymentId,
+  ) async {
+    final receipts = _dbService.getAllLocalReceiptsUnfiltered();
+    final index = receipts.indexWhere((r) => r.id == localReceiptId);
+    if (index >= 0) {
+      await _dbService.updateReceiptRecord(
+        receipts[index].copyWith(
+          zohoPaymentId: zohoPaymentId,
+          isPendingSync: false,
+        ),
+      );
+    }
+  }
+
+  Future<void> _persistReturnZohoId(
+    String localReturnId,
+    String zohoCreditNoteId,
+  ) async {
+    final returns = _dbService.getAllLocalReturnsUnfiltered();
+    final index = returns.indexWhere((r) => r.id == localReturnId);
+    if (index >= 0) {
+      await _dbService.updateReturnRecord(
+        returns[index].copyWith(
+          zohoCreditNoteId: zohoCreditNoteId,
+          isPendingSync: false,
+        ),
+      );
+    }
+  }
+
+  Future<void> _persistExpenseZohoId(
+    String localExpenseId,
+    String zohoExpenseId,
+  ) async {
+    final expenses = _dbService.getAllLocalExpensesUnfiltered();
+    final index = expenses.indexWhere((e) => e.id == localExpenseId);
+    if (index >= 0) {
+      await _dbService.updateExpenseRecord(
+        expenses[index].copyWith(
+          zohoExpenseId: zohoExpenseId,
+          isPendingSync: false,
+        ),
+      );
+    }
+  }
+
+  /// Patches pending/failed receipt and return payloads whose invoice refs
+  /// still point at [tempInvoiceId], swapping in the permanent Zoho id.
+  Future<void> _resolveTempInvoiceIdsInQueue(
+    String tempInvoiceId,
+    String permanentZohoId,
+  ) async {
+    final currentQueue = _dbService.getSyncQueue();
+    for (final item in currentQueue) {
+      if (item.type != 'receipt' && item.type != 'return') continue;
+      if (item.status != SyncStatus.pending &&
+          item.status != SyncStatus.failed) {
+        continue;
+      }
+
+      bool modified = false;
+      final updatedPayload = Map<String, dynamic>.from(item.payload);
+
+      void rewriteList(String key) {
+        final raw = updatedPayload[key];
+        if (raw is! List) return;
+        updatedPayload[key] = raw.map((entry) {
+          if (entry is! Map) return entry;
+          final map = Map<String, dynamic>.from(entry);
+          if (map['invoice_id'] == tempInvoiceId) {
+            map['invoice_id'] = permanentZohoId;
+            modified = true;
+          }
+          return map;
+        }).toList();
+      }
+
+      rewriteList('invoices');
+      rewriteList('line_items');
+
+      if (modified) {
+        await _dbService.updateSyncItem(item.copyWith(payload: updatedPayload));
       }
     }
   }

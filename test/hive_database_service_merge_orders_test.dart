@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/domain/models/item.dart';
+import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 
 /// Regression coverage for the race between an editor save (which enqueues a
@@ -269,5 +270,76 @@ void main() {
     expect(merged.single.locationId, 'van_wh_7');
     expect(merged.single.listedTotal, 170);
     expect(merged.single.items, hasLength(1));
+  });
+
+  group('mergeRemoteInvoices', () {
+    InvoiceLineItem invLine() => InvoiceLineItem(
+      item: item,
+      quantity: 1,
+      rate: 10,
+      taxPercentage: 5,
+    );
+
+    SalesInvoice invoice({
+      required String id,
+      bool isPendingSync = false,
+      String? zohoInvoiceId,
+      List<InvoiceLineItem>? items,
+    }) => SalesInvoice(
+      id: id,
+      invoiceNumber: 'INV-1',
+      customerId: 'c1',
+      customerName: 'Acme',
+      date: DateTime(2026, 7, 1),
+      dueDate: DateTime(2026, 7, 8),
+      items: items ?? [invLine()],
+      notes: '',
+      isPendingSync: isPendingSync,
+      zohoInvoiceId: zohoInvoiceId,
+    );
+
+    test(
+      'a synced local temp_inv is dropped once remote confirms zohoInvoiceId',
+      () {
+        final current = [
+          invoice(
+            id: 'temp_inv_1',
+            zohoInvoiceId: 'zoho_inv_1',
+          ),
+        ];
+        final remote = [
+          invoice(id: 'zoho_inv_1', items: const [], zohoInvoiceId: 'zoho_inv_1'),
+        ];
+
+        final merged = HiveDatabaseService.mergeRemoteInvoices(
+          current: current,
+          remote: remote,
+          queuedInvoiceIds: const {},
+        );
+
+        expect(merged, hasLength(1));
+        expect(merged.single.id, 'zoho_inv_1');
+        expect(merged.single.zohoInvoiceId, 'zoho_inv_1');
+        expect(merged.single.isPendingSync, isFalse);
+        expect(merged.single.items, hasLength(1));
+      },
+    );
+
+    test('a still-queued local invoice is kept and remote is not duplicated', () {
+      final current = [
+        invoice(id: 'temp_inv_1', isPendingSync: true),
+      ];
+      final remote = [
+        invoice(id: 'zoho_other', zohoInvoiceId: 'zoho_other'),
+      ];
+
+      final merged = HiveDatabaseService.mergeRemoteInvoices(
+        current: current,
+        remote: remote,
+        queuedInvoiceIds: const {'temp_inv_1'},
+      );
+
+      expect(merged.map((i) => i.id), containsAll(['temp_inv_1', 'zoho_other']));
+    });
   });
 }

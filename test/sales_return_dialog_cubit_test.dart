@@ -21,8 +21,11 @@ import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/sales_return_dialog_cubit.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   List<SalesInvoice> invoices = [];
   List<Item> items = [];
   List<SalesReturn> savedReturns = [];

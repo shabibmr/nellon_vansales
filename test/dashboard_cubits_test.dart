@@ -20,8 +20,11 @@ import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   List<SalesInvoice> invoices = [];
   List<ReceiptVoucher> receipts = [];
   List<ExpenseEntry> expenses = [];

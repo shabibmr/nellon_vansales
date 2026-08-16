@@ -21,6 +21,7 @@ import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/receipts/bloc/receipt_editor_bloc.dart';
 import 'package:van_sales/ui/features/receipts/bloc/receipt_editor_event.dart';
 import 'package:van_sales/ui/features/receipts/bloc/receipt_list_bloc.dart';
@@ -52,7 +53,9 @@ class _FakeZohoApi extends ZohoApiClient {
   _FakeZohoApi() : super(dbService: _FakeDocDb());
 }
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   List<OpenInvoice> openInvoices = [];
   List<Customer> customers = [];
   List<ReceiptVoucher> receipts = [];

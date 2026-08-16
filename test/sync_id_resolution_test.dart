@@ -8,6 +8,7 @@ import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
+import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/item.dart';
 
@@ -22,6 +23,10 @@ Future<List<ConnectivityResult>> fakeCheckConnectivity() async => [
 class FakeHiveDatabaseService extends HiveDatabaseService {
   final Map<String, SyncQueueItem> _queue = {};
   final Map<String, SalesOrder> _orders = {};
+  final Map<String, SalesInvoice> _invoices = {};
+  final Map<String, ReceiptVoucher> _receipts = {};
+  final Map<String, SalesReturn> _returns = {};
+  final Map<String, ExpenseEntry> _expenses = {};
   final Map<String, int> _counters = {};
 
   @override
@@ -49,20 +54,74 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
   List<SalesOrder> getAllLocalOrdersUnfiltered() => _orders.values.toList();
 
   @override
-  List<SalesReturn> getAllLocalReturnsUnfiltered() => [];
+  List<SalesReturn> getAllLocalReturnsUnfiltered() => _returns.values.toList();
 
   @override
   List<StockTransfer> getAllLocalStockTransfersUnfiltered() => [];
 
   @override
-  List<SalesInvoice> getAllLocalInvoicesUnfiltered() => [];
+  List<SalesInvoice> getAllLocalInvoicesUnfiltered() =>
+      _invoices.values.toList();
 
   @override
-  List<ReceiptVoucher> getAllLocalReceiptsUnfiltered() => [];
+  List<ReceiptVoucher> getAllLocalReceiptsUnfiltered() =>
+      _receipts.values.toList();
+
+  @override
+  List<ExpenseEntry> getAllLocalExpensesUnfiltered() =>
+      _expenses.values.toList();
 
   @override
   Future<void> saveLocalOrder(SalesOrder order) async {
     _orders[order.id] = order;
+  }
+
+  @override
+  Future<void> saveLocalInvoice(SalesInvoice invoice) async {
+    _invoices[invoice.id] = invoice;
+  }
+
+  @override
+  Future<void> updateInvoiceRecord(SalesInvoice invoice) async {
+    if (_invoices.containsKey(invoice.id)) {
+      _invoices[invoice.id] = invoice;
+    }
+  }
+
+  @override
+  Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {
+    _receipts[voucher.id] = voucher;
+  }
+
+  @override
+  Future<void> updateReceiptRecord(ReceiptVoucher voucher) async {
+    if (_receipts.containsKey(voucher.id)) {
+      _receipts[voucher.id] = voucher;
+    }
+  }
+
+  @override
+  Future<void> saveLocalReturn(SalesReturn salesReturn) async {
+    _returns[salesReturn.id] = salesReturn;
+  }
+
+  @override
+  Future<void> updateReturnRecord(SalesReturn salesReturn) async {
+    if (_returns.containsKey(salesReturn.id)) {
+      _returns[salesReturn.id] = salesReturn;
+    }
+  }
+
+  @override
+  Future<void> saveLocalExpense(ExpenseEntry expense) async {
+    _expenses[expense.id] = expense;
+  }
+
+  @override
+  Future<void> updateExpenseRecord(ExpenseEntry expense) async {
+    if (_expenses.containsKey(expense.id)) {
+      _expenses[expense.id] = expense;
+    }
   }
 
   @override
@@ -88,6 +147,8 @@ class FakeZohoApiClient extends ZohoApiClient {
   bool failNextInvoiceSync = false;
   Object failureToThrow = Exception('generic failure');
   Map<String, dynamic>? lastInvoicePayload;
+  Map<String, dynamic>? lastReceiptPayload;
+  Map<String, dynamic>? lastReturnPayload;
 
   @override
   Future<String> syncCustomer(Map<String, dynamic> customerJson) async =>
@@ -103,6 +164,22 @@ class FakeZohoApiClient extends ZohoApiClient {
     if (failNextInvoiceSync) throw failureToThrow;
     return 'zoho_inv_PERMANENT';
   }
+
+  @override
+  Future<String> syncReceiptVoucher(Map<String, dynamic> paymentJson) async {
+    lastReceiptPayload = paymentJson;
+    return 'zoho_pay_PERMANENT';
+  }
+
+  @override
+  Future<String> syncSalesReturn(Map<String, dynamic> creditNoteJson) async {
+    lastReturnPayload = creditNoteJson;
+    return 'zoho_cn_PERMANENT';
+  }
+
+  @override
+  Future<String> syncExpense(Map<String, dynamic> expenseJson) async =>
+      'zoho_exp_PERMANENT';
 
   @override
   Future<String> convertSalesOrderToInvoice(
@@ -231,6 +308,197 @@ void main() {
           db.getSyncQueue().any((i) => i.id == 'temp_convert_1'),
           isFalse,
         ); // synced successfully -> dequeued
+      },
+    );
+
+    test(
+      'invoice sync persists zohoInvoiceId and rewrites a queued receipt '
+      'allocation to the permanent invoice id',
+      () async {
+        final db = FakeHiveDatabaseService();
+        final api = FakeZohoApiClient();
+        final worker = SyncWorker(
+          dbService: db,
+          apiClient: api,
+          checkConnectivity: fakeCheckConnectivity,
+        );
+
+        await db.saveLocalInvoice(
+          SalesInvoice(
+            id: 'temp_inv_1',
+            invoiceNumber: 'SHB-INV-00001',
+            customerId: 'cust_1',
+            customerName: 'Acme',
+            date: DateTime.now(),
+            dueDate: DateTime.now(),
+            items: const [
+              InvoiceLineItem(
+                item: testItem,
+                quantity: 1,
+                rate: 10,
+                taxPercentage: 0,
+              ),
+            ],
+            notes: '',
+            isPendingSync: true,
+          ),
+        );
+        await db.saveLocalReceipt(
+          ReceiptVoucher(
+            id: 'temp_pay_1',
+            paymentNumber: 'SHB-RCT-00001',
+            customerId: 'cust_1',
+            customerName: 'Acme',
+            allocations: const [
+              PaymentAllocation(
+                invoiceId: 'temp_inv_1',
+                invoiceNumber: 'SHB-INV-00001',
+                amountApplied: 10,
+              ),
+            ],
+            amount: 10,
+            paymentMode: 'Cash',
+            referenceNumber: 'SHB-RCT-00001',
+            date: DateTime.now(),
+            isPendingSync: true,
+          ),
+        );
+
+        await db.enqueueSyncItem(
+          SyncQueueItem(
+            id: 'temp_inv_1',
+            type: 'invoice',
+            payload: const {'customer_id': 'cust_1', 'line_items': []},
+            timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
+          ),
+        );
+        await db.enqueueSyncItem(
+          SyncQueueItem(
+            id: 'temp_pay_1',
+            type: 'receipt',
+            payload: const {
+              'customer_id': 'cust_1',
+              'invoices': [
+                {'invoice_id': 'temp_inv_1', 'amount_applied': 10},
+              ],
+            },
+            timestamp: DateTime.now(),
+          ),
+        );
+
+        await worker.syncPendingItems();
+
+        final invoice = db.getAllLocalInvoicesUnfiltered().firstWhere(
+          (i) => i.id == 'temp_inv_1',
+        );
+        expect(invoice.zohoInvoiceId, 'zoho_inv_PERMANENT');
+        expect(invoice.isPendingSync, isFalse);
+
+        final receipt = db.getAllLocalReceiptsUnfiltered().firstWhere(
+          (r) => r.id == 'temp_pay_1',
+        );
+        expect(receipt.zohoPaymentId, 'zoho_pay_PERMANENT');
+        expect(receipt.isPendingSync, isFalse);
+
+        expect(
+          api.lastReceiptPayload?['invoices']?[0]?['invoice_id'],
+          'zoho_inv_PERMANENT',
+        );
+        expect(db.getSyncQueue(), isEmpty);
+      },
+    );
+
+    test(
+      'return line invoice_id is rewritten from a previously synced local invoice',
+      () async {
+        final db = FakeHiveDatabaseService();
+        final api = FakeZohoApiClient();
+        final worker = SyncWorker(
+          dbService: db,
+          apiClient: api,
+          checkConnectivity: fakeCheckConnectivity,
+        );
+
+        await db.saveLocalInvoice(
+          SalesInvoice(
+            id: 'temp_inv_1',
+            invoiceNumber: 'SHB-INV-00001',
+            customerId: 'cust_1',
+            customerName: 'Acme',
+            date: DateTime.now(),
+            dueDate: DateTime.now(),
+            items: const [],
+            notes: '',
+            isPendingSync: false,
+            zohoInvoiceId: 'zoho_inv_PERMANENT',
+          ),
+        );
+        await db.enqueueSyncItem(
+          SyncQueueItem(
+            id: 'temp_ret_1',
+            type: 'return',
+            payload: const {
+              'customer_id': 'cust_1',
+              'line_items': [
+                {'item_id': 'item_1', 'invoice_id': 'temp_inv_1', 'quantity': 1},
+              ],
+            },
+            timestamp: DateTime.now(),
+          ),
+        );
+
+        await worker.syncPendingItems();
+
+        expect(
+          api.lastReturnPayload?['line_items']?[0]?['invoice_id'],
+          'zoho_inv_PERMANENT',
+        );
+      },
+    );
+
+    test(
+      'convert_so persists the returned invoice id on the local invoice',
+      () async {
+        final db = FakeHiveDatabaseService();
+        final api = FakeZohoApiClient();
+        final worker = SyncWorker(
+          dbService: db,
+          apiClient: api,
+          checkConnectivity: fakeCheckConnectivity,
+        );
+
+        await db.saveLocalInvoice(
+          SalesInvoice(
+            id: 'temp_inv_from_so',
+            invoiceNumber: 'SHB-INV-00002',
+            customerId: 'cust_1',
+            customerName: 'Acme',
+            date: DateTime.now(),
+            dueDate: DateTime.now(),
+            items: const [],
+            notes: '',
+            isPendingSync: true,
+          ),
+        );
+        await db.enqueueSyncItem(
+          SyncQueueItem(
+            id: 'temp_inv_from_so',
+            type: 'convert_so',
+            payload: const {
+              'salesorder_id': 'zoho_so_PERMANENT',
+              'local_invoice_id': 'temp_inv_from_so',
+            },
+            timestamp: DateTime.now(),
+          ),
+        );
+
+        await worker.syncPendingItems();
+
+        final invoice = db.getAllLocalInvoicesUnfiltered().firstWhere(
+          (i) => i.id == 'temp_inv_from_so',
+        );
+        expect(invoice.zohoInvoiceId, 'zoho_invoice_from_so');
+        expect(invoice.isPendingSync, isFalse);
       },
     );
   });

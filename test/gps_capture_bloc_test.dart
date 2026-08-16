@@ -16,13 +16,16 @@ import 'package:van_sales/domain/models/organization.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/sales_repository.dart';
 import 'package:van_sales/domain/repositories/sync_repository.dart';
+import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_bloc.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_event.dart';
 import 'package:van_sales/ui/core/bloc/gps_capture_state.dart';
 
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository
+    with SalesRepositoryEnqueueStubs
+    implements SalesRepository {
   String? lastCustomerId;
   double? lastLatitude;
   double? lastLongitude;

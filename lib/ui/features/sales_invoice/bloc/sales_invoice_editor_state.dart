@@ -56,6 +56,8 @@ class SalesInvoiceEditorState extends Equatable {
     if (isEditingNew || editorError != null) return false;
     final inv = editingInvoice;
     if (inv == null || inv.isPendingSync) return false;
+    final zohoId = inv.zohoInvoiceId;
+    if (zohoId != null && zohoId.isNotEmpty) return true;
     final id = editingInvoiceId ?? inv.id;
     if (id.isEmpty || id.startsWith('temp_inv_')) return false;
     return true;

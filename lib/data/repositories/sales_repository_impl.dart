@@ -170,16 +170,22 @@ class SalesRepositoryImpl implements SalesRepository {
   }) async {
     if (invoiceId.isEmpty) return null;
     SalesInvoice? local;
-    for (final inv in _dbService.getLocalInvoices()) {
-      if (inv.id == invoiceId) {
+    for (final inv in _dbService.getAllLocalInvoicesUnfiltered()) {
+      if (inv.id == invoiceId || inv.zohoInvoiceId == invoiceId) {
         local = inv;
         break;
       }
     }
     if (!forceRemote && local != null) return local;
 
+    final remoteId = _remoteVoucherId(invoiceId, local?.zohoInvoiceId);
+    if (remoteId == null) {
+      if (allowOfflineFallback && local != null) return local;
+      return local;
+    }
+
     try {
-      final json = await _apiClient.fetchInvoiceDetail(invoiceId);
+      final json = await _apiClient.fetchInvoiceDetail(remoteId);
       if (json.isEmpty) {
         if (allowOfflineFallback && local != null) return local;
         return null;
@@ -218,8 +224,17 @@ class SalesRepositoryImpl implements SalesRepository {
   /// [_orderFromZoho].
   SalesInvoice _invoiceFromZoho(Map<String, dynamic> json) {
     final map = Map<String, dynamic>.from(json);
+    map['zoho_invoice_id'] = json['invoice_id'];
     map.remove('location_id');
     return SalesInvoiceModel.fromJson(map);
+  }
+
+  /// Zoho never accepts a local `temp_*` id. Prefer the persisted Zoho id,
+  /// then a non-temp requested id; otherwise the caller must stay offline.
+  String? _remoteVoucherId(String requestedId, String? zohoId) {
+    if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+    if (requestedId.startsWith('temp_')) return null;
+    return requestedId;
   }
 
   @override
@@ -230,16 +245,22 @@ class SalesRepositoryImpl implements SalesRepository {
   }) async {
     if (paymentId.isEmpty) return null;
     ReceiptVoucher? local;
-    for (final rec in _dbService.getLocalReceipts()) {
-      if (rec.id == paymentId) {
+    for (final rec in _dbService.getAllLocalReceiptsUnfiltered()) {
+      if (rec.id == paymentId || rec.zohoPaymentId == paymentId) {
         local = rec;
         break;
       }
     }
     if (!forceRemote && local != null) return local;
 
+    final remoteId = _remoteVoucherId(paymentId, local?.zohoPaymentId);
+    if (remoteId == null) {
+      if (allowOfflineFallback && local != null) return local;
+      return local;
+    }
+
     try {
-      final json = await _apiClient.fetchReceiptDetail(paymentId);
+      final json = await _apiClient.fetchReceiptDetail(remoteId);
       if (json.isEmpty) {
         if (allowOfflineFallback && local != null) return local;
         return null;
@@ -261,21 +282,27 @@ class SalesRepositoryImpl implements SalesRepository {
   }) async {
     if (creditNoteId.isEmpty) return null;
     SalesReturn? local;
-    for (final ret in _dbService.getLocalReturns()) {
-      if (ret.id == creditNoteId) {
+    for (final ret in _dbService.getAllLocalReturnsUnfiltered()) {
+      if (ret.id == creditNoteId || ret.zohoCreditNoteId == creditNoteId) {
         local = ret;
         break;
       }
     }
     if (!forceRemote && local != null) return local;
 
+    final remoteId = _remoteVoucherId(creditNoteId, local?.zohoCreditNoteId);
+    if (remoteId == null) {
+      if (allowOfflineFallback && local != null) return local;
+      return local;
+    }
+
     try {
-      final json = await _apiClient.fetchSalesReturnDetail(creditNoteId);
+      final json = await _apiClient.fetchSalesReturnDetail(remoteId);
       if (json.isEmpty) {
         if (allowOfflineFallback && local != null) return local;
         return null;
       }
-      final remote = SalesReturnModel.fromJson(json);
+      final remote = _returnFromZoho(json);
       await _dbService.saveRemoteReturns([remote]);
       return remote;
     } catch (_) {
@@ -292,16 +319,22 @@ class SalesRepositoryImpl implements SalesRepository {
   }) async {
     if (expenseId.isEmpty) return null;
     ExpenseEntry? local;
-    for (final exp in _dbService.getLocalExpenses()) {
-      if (exp.id == expenseId) {
+    for (final exp in _dbService.getAllLocalExpensesUnfiltered()) {
+      if (exp.id == expenseId || exp.zohoExpenseId == expenseId) {
         local = exp;
         break;
       }
     }
     if (!forceRemote && local != null) return local;
 
+    final remoteId = _remoteVoucherId(expenseId, local?.zohoExpenseId);
+    if (remoteId == null) {
+      if (allowOfflineFallback && local != null) return local;
+      return local;
+    }
+
     try {
-      final json = await _apiClient.fetchExpenseDetail(expenseId);
+      final json = await _apiClient.fetchExpenseDetail(remoteId);
       if (json.isEmpty) {
         if (allowOfflineFallback && local != null) return local;
         return null;
@@ -319,6 +352,7 @@ class SalesRepositoryImpl implements SalesRepository {
   /// [_orderFromZoho].
   ExpenseEntry _expenseFromZoho(Map<String, dynamic> json) {
     final map = Map<String, dynamic>.from(json);
+    map['zoho_expense_id'] = json['expense_id'];
     map.remove('location_id');
     return ExpenseEntryModel.fromZohoJson(map);
   }
@@ -351,6 +385,137 @@ class SalesRepositoryImpl implements SalesRepository {
         timestamp: DateTime.now(),
       ),
     );
+  }
+
+  @override
+  Future<void> enqueueInvoice(SalesInvoice invoice) {
+    return _dbService.enqueueSyncItem(
+      SyncQueueItem(
+        id: invoice.id,
+        type: 'invoice',
+        payload: SalesInvoiceModel.fromDomain(invoice).toJson(),
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> enqueueConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) {
+    return _dbService.enqueueSyncItem(
+      SyncQueueItem(
+        id: invoice.id,
+        type: 'convert_so',
+        payload: {
+          'salesorder_id': order.zohoOrderId ?? order.id,
+          'source_order_id': order.id,
+          'local_invoice_id': invoice.id,
+        },
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> enqueueReceipt(ReceiptVoucher voucher) {
+    return _dbService.enqueueSyncItem(
+      SyncQueueItem(
+        id: voucher.id,
+        type: 'receipt',
+        payload: _receiptQueuePayload(voucher),
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> enqueueSalesReturn(SalesReturn salesReturn) {
+    return _dbService.enqueueSyncItem(
+      SyncQueueItem(
+        id: salesReturn.id,
+        type: 'return',
+        payload: _returnQueuePayload(salesReturn),
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> enqueueExpense(ExpenseEntry expense) {
+    return _dbService.enqueueSyncItem(
+      SyncQueueItem(
+        id: expense.id,
+        type: 'expense',
+        payload: ExpenseEntryModel.fromDomain(expense).toJson(),
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> enqueueStockTransfer(StockTransfer transfer) {
+    return _dbService.enqueueSyncItem(
+      SyncQueueItem(
+        id: transfer.id,
+        type: 'stock_transfer',
+        payload: StockTransferModel.fromDomain(transfer).toJson(),
+        status: SyncStatus.pending,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Receipt queue map with allocation invoice ids resolved to Zoho ids.
+  Map<String, dynamic> _receiptQueuePayload(ReceiptVoucher voucher) {
+    final payload = ReceiptVoucherModel.fromDomain(voucher).toJson();
+    final invoices = payload['invoices'];
+    if (invoices is! List) return payload;
+    payload['invoices'] = invoices.map((entry) {
+      if (entry is! Map) return entry;
+      final map = Map<String, dynamic>.from(entry);
+      final resolved = _resolvedInvoiceId(map['invoice_id']?.toString());
+      if (resolved != null) map['invoice_id'] = resolved;
+      return map;
+    }).toList();
+    return payload;
+  }
+
+  /// Credit-note queue map with line invoice ids resolved to Zoho ids.
+  Map<String, dynamic> _returnQueuePayload(SalesReturn salesReturn) {
+    final payload = SalesReturnModel.fromDomain(salesReturn).toJson();
+    final lines = payload['line_items'];
+    if (lines is! List) return payload;
+    payload['line_items'] = lines.map((entry) {
+      if (entry is! Map) return entry;
+      final map = Map<String, dynamic>.from(entry);
+      final resolved = _resolvedInvoiceId(map['invoice_id']?.toString());
+      if (resolved != null) map['invoice_id'] = resolved;
+      return map;
+    }).toList();
+    return payload;
+  }
+
+  /// Permanent Zoho invoice id when [localOrRemoteId] is a local temp id
+  /// whose invoice has already synced; otherwise the original value.
+  String? _resolvedInvoiceId(String? localOrRemoteId) {
+    if (localOrRemoteId == null || localOrRemoteId.isEmpty) {
+      return localOrRemoteId;
+    }
+    for (final inv in _dbService.getAllLocalInvoicesUnfiltered()) {
+      if (inv.id == localOrRemoteId) {
+        final zohoId = inv.zohoInvoiceId;
+        if (zohoId != null && zohoId.isNotEmpty) return zohoId;
+        return localOrRemoteId;
+      }
+    }
+    return localOrRemoteId;
   }
 
   @override
@@ -470,6 +635,7 @@ class SalesRepositoryImpl implements SalesRepository {
   /// [_orderFromZoho].
   ReceiptVoucher _receiptFromZoho(Map<String, dynamic> json) {
     final map = Map<String, dynamic>.from(json);
+    map['zoho_payment_id'] = json['payment_id'];
     map.remove('location_id');
     return ReceiptVoucherModel.fromJson(map);
   }
@@ -522,6 +688,7 @@ class SalesRepositoryImpl implements SalesRepository {
   /// [_orderFromZoho].
   SalesReturn _returnFromZoho(Map<String, dynamic> json) {
     final map = Map<String, dynamic>.from(json);
+    map['zoho_credit_note_id'] = json['creditnote_id'];
     map.remove('location_id');
     return SalesReturnModel.fromJson(map);
   }
