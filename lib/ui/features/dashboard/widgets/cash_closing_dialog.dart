@@ -67,20 +67,34 @@ class CashClosingDialog extends StatefulWidget {
 class _CashClosingDialogState extends State<CashClosingDialog> {
   final _physicalCashController = TextEditingController();
   final _notesController = TextEditingController();
+  late final TextEditingController _openingBalanceController;
+
+  @override
+  void initState() {
+    super.initState();
+    final lastClosing = sl<SalesRepository>().getLocalCashClosing();
+    final opening = lastClosing?.closingBalance ?? 0.0;
+    _openingBalanceController = TextEditingController(
+      text: opening == 0 ? '' : opening.toStringAsFixed(2),
+    );
+  }
 
   @override
   void dispose() {
     _physicalCashController.dispose();
     _notesController.dispose();
+    _openingBalanceController.dispose();
     super.dispose();
   }
+
+  double get _openingBalance =>
+      double.tryParse(_openingBalanceController.text.trim()) ?? 0.0;
 
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
-    const openingBalance = 1000.00; // Mock opening morning float in the van
     final expectedClosing =
-        openingBalance + widget.todayPayments - widget.todayExpenses;
+        _openingBalance + widget.todayPayments - widget.todayExpenses;
 
     return BlocListener<CashClosingCubit, CashClosingState>(
       listener: (context, state) {
@@ -127,9 +141,18 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
                     style: TextStyle(fontSize: 12),
                   ),
                   const Divider(height: 24, color: Color(0xFF334155)),
-                  Text(
-                    'Morning Cash Float: $cs${openingBalance.toStringAsFixed(2)}',
+                  TextFormField(
+                    controller: _openingBalanceController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Morning cash float ($cs)',
+                      hintText: 'Enter opening cash in the van',
+                    ),
                   ),
+                  const SizedBox(height: 12),
                   Text(
                     'Total Invoiced Sales: $cs${widget.todaySales.toStringAsFixed(2)}',
                   ),
@@ -188,7 +211,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
                               todayExpenses: widget.todayExpenses,
                               physicalCashCounted: counted,
                               notes: notes,
-                              openingBalance: openingBalance,
+                              openingBalance: _openingBalance,
                             );
                       },
                 child: isSubmitting

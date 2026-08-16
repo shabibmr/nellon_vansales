@@ -1,51 +1,87 @@
-# Script to build Flutter APK in release mode and deploy to the isolated TEST folder.
-$ErrorActionPreference = "Stop"
+# Build a release APK from this repo and deploy it to the VPS test folder.
+#
+# Paths are relative to this script, so it works from any clone (nellon, nell_2, …).
+# Override host / remote dir / APK name / channel when needed:
+#   pwsh -File test_deploy.ps1
+#   pwsh -File test_deploy.ps1 -SshHost gm1 -RemoteDir /var/www/html/algo_cloud/nellon/test
+#   pwsh -File test_deploy.ps1 -SkipBuild
 
-# Define paths
-$apkPath = "E:\work\nellon\build\app\outputs\apk\release\app-nellon-release.apk"
-$destination = "gm1:/var/www/html/algo_cloud/nellon/test/app-nellon-release.apk"
+[CmdletBinding()]
+param(
+    [string]$SshHost = 'gm1',
+    [string]$RemoteDir = '/var/www/html/algo_cloud/nellon/test',
+    [string]$ApkName = 'app-nellon-release.apk',
+    [ValidateSet('beta', 'test', 'production')]
+    [string]$Channel = 'beta',
+    [switch]$SkipBuild
+)
 
-Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "Building Test APK in release mode..." -ForegroundColor Cyan
-Write-Host "==============================================" -ForegroundColor Cyan
+$ErrorActionPreference = 'Stop'
+$repoRoot = $PSScriptRoot
+Set-Location $repoRoot
 
-# Ensure test folder exists on VPS
-Write-Host "Verifying remote test directory on gm1..." -ForegroundColor DarkGray
-& ssh gm1 "mkdir -p /var/www/html/algo_cloud/nellon/test"
+function Find-ReleaseApk {
+    param([string]$Name)
 
-# Run Flutter build apk --release
-& flutter build apk --release
+    $candidates = @(
+        (Join-Path $repoRoot "build\app\outputs\apk\release\$Name"),
+        (Join-Path $repoRoot "build\app\outputs\flutter-apk\$Name"),
+        (Join-Path $repoRoot 'build\app\outputs\flutter-apk\app-release.apk'),
+        (Join-Path $repoRoot 'build\app\outputs\apk\release\app-release.apk')
+    )
+    foreach ($path in $candidates) {
+        if (Test-Path -LiteralPath $path) {
+            return (Resolve-Path -LiteralPath $path).Path
+        }
+    }
+    return $null
+}
 
+$destination = "${SshHost}:${RemoteDir}/${ApkName}"
+$remoteDirQuoted = $RemoteDir.Replace("'", "'\''")
+
+Write-Host '==============================================' -ForegroundColor Cyan
+Write-Host "Repo: $repoRoot" -ForegroundColor Cyan
+Write-Host "Target: $destination" -ForegroundColor Cyan
+Write-Host '==============================================' -ForegroundColor Cyan
+
+Write-Host "Verifying remote test directory on $SshHost..." -ForegroundColor DarkGray
+& ssh $SshHost "mkdir -p '$remoteDirQuoted'"
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Flutter build failed with exit code $LASTEXITCODE"
+    Write-Error "ssh mkdir failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
-Write-Host "`n==============================================" -ForegroundColor Green
-Write-Host "Flutter build completed successfully." -ForegroundColor Green
-Write-Host "==============================================" -ForegroundColor Green
-
-# Verify APK exists
-if (Test-Path -Path $apkPath) {
-    Write-Host "`nFound release APK at: $apkPath" -ForegroundColor Green
-    Write-Host "Preparing to copy APK via scp to $destination..." -ForegroundColor Cyan
-    
-    # Run scp command
-    & scp $apkPath $destination
-    
+if (-not $SkipBuild) {
+    Write-Host 'Building Test APK in release mode...' -ForegroundColor Cyan
+    & flutter build apk --release
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "scp transfer failed with exit code $LASTEXITCODE"
+        Write-Error "Flutter build failed with exit code $LASTEXITCODE"
         exit $LASTEXITCODE
     }
-    
-    Write-Host "`n==============================================" -ForegroundColor Green
-    Write-Host "Test APK successfully deployed to $destination" -ForegroundColor Green
-    Write-Host "==============================================" -ForegroundColor Green
+    Write-Host "`nFlutter build completed successfully." -ForegroundColor Green
+}
 
-    # Automatically update BETA version metadata in Firestore
-    Write-Host "`nUpdating BETA channel version metadata in Firebase Firestore..." -ForegroundColor Cyan
-    & node scripts/update_firestore_version.js --channel=beta
-} else {
-    Write-Error "Expected APK file not found at: $apkPath"
+$apkPath = Find-ReleaseApk -Name $ApkName
+if (-not $apkPath) {
+    Write-Error "No release APK found under $repoRoot\build\app\outputs. Run without -SkipBuild, or pass a built tree."
     exit 1
+}
+
+Write-Host "`nFound release APK at: $apkPath" -ForegroundColor Green
+Write-Host "Copying via scp to $destination..." -ForegroundColor Cyan
+& scp $apkPath $destination
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "scp transfer failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+Write-Host "`nTest APK deployed to $destination" -ForegroundColor Green
+
+$updater = Join-Path $repoRoot 'scripts\update_firestore_version.js'
+Write-Host "`nUpdating $Channel channel version metadata in Firestore..." -ForegroundColor Cyan
+& node $updater "--channel=$Channel" "--apk=$apkPath"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Firestore version update failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
 }

@@ -1,5 +1,7 @@
 # Root Cause Analysis & Plan: Why the App Does Not Sync Data After Turning to Live Mode
 
+> **Historical.** The in-app mock/live switch and `ZohoMockInterceptor` have been removed. All Zoho HTTP is live. Queue/OAuth notes below may still apply.
+
 ## Goal Description
 This document provides a comprehensive root-cause analysis deduced directly from the codebase explaining why transactions created while the app is in **Mock Mode** do not sync to Zoho Books after switching the app to **Live Mode**. It includes a complete **Mermaid workflow diagram** tracing the lifecycle of a transaction through the local queue, mock interceptor, and sync worker, as well as concrete architectural proposals to fix this behavior.
 

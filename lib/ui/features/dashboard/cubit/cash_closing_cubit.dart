@@ -22,7 +22,7 @@ class CashClosingCubit extends Cubit<CashClosingState> {
     required double todayExpenses,
     required double physicalCashCounted,
     required String notes,
-    double openingBalance = 1000.00,
+    required double openingBalance,
   }) async {
     if (state is CashClosingSubmitting) return;
     emit(CashClosingSubmitting());

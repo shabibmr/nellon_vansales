@@ -1,5 +1,7 @@
 # Fix: "Live mode" doesn't sync
 
+> **Historical.** The mock/live toggle (`setMockModeEnabled`, `MockLiveSwitchTile`, `ZohoMockInterceptor`) has been removed. All Zoho HTTP is live. Auth-classification and retry-UI notes below may still apply to the live queue.
+
 ## Context
 
 APK was built and installed. After flipping **Transaction Sync** to Live in the dashboard drawer, nothing syncs. Traced through the code, this is not one bug — it's a chain of four independent defects that each break the live path, plus a UI dead-end that makes recovery impossible without reinstalling.

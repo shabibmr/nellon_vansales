@@ -231,6 +231,7 @@ void main() {
       todayExpenses: 200.0,
       physicalCashCounted: 3800.0, // Expected: 1000 + 3000 - 200 = 3800 => 0 diff
       notes: 'All balanced',
+      openingBalance: 1000.0,
     );
 
     expect(salesRepo.savedCashClosing, isNotNull);
@@ -264,6 +265,7 @@ void main() {
       todayExpenses: 50.0,
       physicalCashCounted: 1450.0,
       notes: 'Failed test',
+      openingBalance: 0,
     );
 
     final state = cubit.state;
