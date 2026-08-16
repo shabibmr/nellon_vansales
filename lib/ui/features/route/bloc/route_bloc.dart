@@ -2,7 +2,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../domain/models/route.dart';
 import '../../../../domain/models/customer.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/session_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../core/utils/error_mapper.dart';
 
 // --- Events ---
@@ -107,10 +108,16 @@ class RouteState extends Equatable {
 ///
 /// Gates route locking parameters, triggers sequential customer loading, and coordinates customer searching.
 class RouteBloc extends Bloc<RouteEvent, RouteState> {
-  final SalesRepository _salesRepository;
+  final SessionRepository _sessionRepository;
+  final CustomerRepository _customerRepository;
 
-  /// Instantiates a new [RouteBloc] utilizing the provided sales repository.
-  RouteBloc({required this._salesRepository}) : super(const RouteState()) {
+  /// Instantiates a new [RouteBloc] utilizing the provided session and customer repositories.
+  RouteBloc({
+    required SessionRepository sessionRepository,
+    required CustomerRepository customerRepository,
+  }) : _sessionRepository = sessionRepository,
+       _customerRepository = customerRepository,
+       super(const RouteState()) {
     on<LoadRoutes>(_onLoadRoutes);
     on<SelectActiveRoute>(_onSelectActiveRoute);
     on<SearchCustomers>(_onSearchCustomers);
@@ -119,10 +126,10 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
   Future<void> _onLoadRoutes(LoadRoutes event, Emitter<RouteState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
-      final routes = _salesRepository.getRoutes();
-      final activeRouteId = _salesRepository.activeRouteId;
+      final routes = _sessionRepository.getRoutes();
+      final activeRouteId = _sessionRepository.activeRouteId;
 
-      final allCustomers = _salesRepository.getCustomers();
+      final allCustomers = _customerRepository.getCustomers();
       allCustomers.sort((a, b) => a.name.compareTo(b.name));
 
       emit(
@@ -145,9 +152,9 @@ class RouteBloc extends Bloc<RouteEvent, RouteState> {
   ) async {
     emit(state.copyWith(isLoading: true));
     try {
-      await _salesRepository.setActiveRouteId(event.routeId);
+      await _sessionRepository.setActiveRouteId(event.routeId);
 
-      final allCustomers = _salesRepository.getCustomers();
+      final allCustomers = _customerRepository.getCustomers();
       allCustomers.sort((a, b) => a.name.compareTo(b.name));
 
       emit(

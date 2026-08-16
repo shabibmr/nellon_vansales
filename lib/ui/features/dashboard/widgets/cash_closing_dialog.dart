@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/cash_closing_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
@@ -47,7 +47,7 @@ class CashClosingDialog extends StatefulWidget {
       context: context,
       builder: (_) => BlocProvider<CashClosingCubit>(
         create: (_) => CashClosingCubit(
-          salesRepository: sl<SalesRepository>(),
+          cashClosingRepository: sl<CashClosingRepository>(),
           syncRepository: sl<SyncRepository>(),
         ),
         child: CashClosingDialog(
@@ -72,7 +72,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
   @override
   void initState() {
     super.initState();
-    final lastClosing = sl<SalesRepository>().getLocalCashClosing();
+    final lastClosing = sl<CashClosingRepository>().getLocalCashClosing();
     final opening = lastClosing?.closingBalance ?? 0.0;
     _openingBalanceController = TextEditingController(
       text: opening == 0 ? '' : opening.toStringAsFixed(2),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/models/item.dart';
-import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/item_repository.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
@@ -125,7 +125,7 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
     var offlineFallback = false;
     try {
       final result =
-          await context.read<SalesRepository>().resolveItemUnitConversions(item);
+          await context.read<ItemRepository>().resolveItemUnitConversions(item);
       resolved = result.item;
       offlineFallback = result.offlineFallback;
     } finally {

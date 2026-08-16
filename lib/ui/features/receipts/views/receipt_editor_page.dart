@@ -5,7 +5,8 @@ import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/receipt_voucher.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/receipt_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
@@ -30,7 +31,8 @@ class ReceiptEditorPage extends StatefulWidget {
     Customer? prefillCustomer,
     bool readOnly = false,
   }) {
-    final salesRepo = context.read<SalesRepository>();
+    final receiptRepo = context.read<ReceiptRepository>();
+    final customerRepo = context.read<CustomerRepository>();
     final syncRepo = context.read<SyncRepository>();
     final docNumbers = sl<DocumentNumberService>();
 
@@ -40,7 +42,8 @@ class ReceiptEditorPage extends StatefulWidget {
         builder: (_) => BlocProvider(
           create: (_) {
             final bloc = ReceiptEditorBloc(
-              salesRepository: salesRepo,
+              receiptRepository: receiptRepo,
+              customerRepository: customerRepo,
               syncRepository: syncRepo,
               documentNumberService: docNumbers,
             );

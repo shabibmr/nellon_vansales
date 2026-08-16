@@ -2,17 +2,19 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/models/item.dart';
-import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/item_repository.dart';
+import '../../../domain/repositories/customer_repository.dart';
 import 'async_search_event.dart';
 import 'async_search_state.dart';
 
 class AsyncSearchBloc extends Bloc<AsyncSearchEvent, AsyncSearchState> {
-  final SalesRepository salesRepository;
+  final CustomerRepository customerRepository;
+  final ItemRepository itemRepository;
   Timer? _debounceTimer;
 
   static const _debounceDuration = Duration(milliseconds: 400);
 
-  AsyncSearchBloc({required this.salesRepository})
+  AsyncSearchBloc({required this.customerRepository, required this.itemRepository})
       : super(const AsyncSearchState()) {
     on<SearchTypeChanged>(_onSearchTypeChanged);
     on<SearchQueryChanged>(_onSearchQueryChanged);
@@ -114,7 +116,7 @@ class AsyncSearchBloc extends Bloc<AsyncSearchEvent, AsyncSearchState> {
 
   List<Customer> _filterCustomers(String query) {
     final lowercaseQuery = query.toLowerCase();
-    return salesRepository.getCustomers().where((cust) {
+    return customerRepository.getCustomers().where((cust) {
       return cust.name.toLowerCase().contains(lowercaseQuery) ||
           cust.companyName.toLowerCase().contains(lowercaseQuery) ||
           cust.phone.contains(query);
@@ -123,7 +125,7 @@ class AsyncSearchBloc extends Bloc<AsyncSearchEvent, AsyncSearchState> {
 
   List<Item> _filterItems(String query) {
     final lowercaseQuery = query.toLowerCase();
-    return salesRepository.getItems().where((item) {
+    return itemRepository.getItems().where((item) {
       return item.name.toLowerCase().contains(lowercaseQuery) ||
           item.sku.toLowerCase().contains(lowercaseQuery);
     }).toList();

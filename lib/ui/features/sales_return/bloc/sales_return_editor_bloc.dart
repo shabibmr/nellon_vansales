@@ -9,7 +9,8 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/models/submit_result.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/sales_return_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'sales_return_editor_event.dart';
@@ -18,16 +19,19 @@ import 'sales_return_editor_state.dart';
 /// Manages a single sales-return form: open, edit lines, save, enqueue sync.
 class SalesReturnEditorBloc
     extends Bloc<SalesReturnEditorEvent, SalesReturnEditorState> {
-  final SalesRepository _salesRepository;
+  final SalesReturnRepository _salesReturnRepository;
+  final CustomerRepository _customerRepository;
   // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   SalesReturnEditorBloc({
-    required SalesRepository salesRepository,
+    required SalesReturnRepository salesReturnRepository,
+    required CustomerRepository customerRepository,
     required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
-  }) : _salesRepository = salesRepository,
+  }) : _salesReturnRepository = salesReturnRepository,
+       _customerRepository = customerRepository,
        _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const SalesReturnEditorState()) {
@@ -162,7 +166,7 @@ class SalesReturnEditorBloc
 
     SalesReturn? fetched;
     try {
-      fetched = await _salesRepository.fetchSalesReturnById(
+      fetched = await _salesReturnRepository.fetchSalesReturnById(
         returnId,
         forceRemote: true,
         allowOfflineFallback: false,
@@ -178,7 +182,7 @@ class SalesReturnEditorBloc
         return;
       }
       try {
-        fetched = await _salesRepository.fetchSalesReturnById(
+        fetched = await _salesReturnRepository.fetchSalesReturnById(
           returnId,
           forceRemote: false,
         );
@@ -207,7 +211,7 @@ class SalesReturnEditorBloc
       if (!isRefresh) {
         SalesReturn? local;
         try {
-          local = await _salesRepository.fetchSalesReturnById(
+          local = await _salesReturnRepository.fetchSalesReturnById(
             returnId,
             forceRemote: false,
           );
@@ -261,7 +265,7 @@ class SalesReturnEditorBloc
   }
 
   Customer _customerForId(String customerId, String nameFallback) {
-    for (final c in _salesRepository.getCustomers()) {
+    for (final c in _customerRepository.getCustomers()) {
       if (c.id == customerId) return c;
     }
     return Customer(
@@ -422,7 +426,7 @@ class SalesReturnEditorBloc
         isPendingSync: true,
       );
 
-      final result = await _salesRepository.submitSalesReturn(salesReturn);
+      final result = await _salesReturnRepository.submitSalesReturn(salesReturn);
 
       emit(
         state.copyWith(

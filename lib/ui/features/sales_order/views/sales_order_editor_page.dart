@@ -5,7 +5,8 @@ import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_order.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -35,7 +36,8 @@ class SalesOrderEditorPage extends StatefulWidget {
     Customer? prefillCustomer,
     bool readOnly = false,
   }) {
-    final salesRepo = context.read<SalesRepository>();
+    final salesOrderRepo = context.read<SalesOrderRepository>();
+    final customerRepo = context.read<CustomerRepository>();
     final syncRepo = context.read<SyncRepository>();
     final docNumbers = sl<DocumentNumberService>();
 
@@ -45,7 +47,8 @@ class SalesOrderEditorPage extends StatefulWidget {
         builder: (_) => BlocProvider(
           create: (_) {
             final bloc = SalesOrderEditorBloc(
-              salesRepository: salesRepo,
+              salesOrderRepository: salesOrderRepo,
+              customerRepository: customerRepo,
               syncRepository: syncRepo,
               documentNumberService: docNumbers,
             );

@@ -5,28 +5,22 @@ import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
-import 'package:van_sales/domain/models/cash_closing.dart';
 import 'package:van_sales/domain/models/customer.dart';
-import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/item.dart';
-import 'package:van_sales/domain/models/open_invoice.dart';
-import 'package:van_sales/domain/models/receipt_voucher.dart';
-import 'package:van_sales/domain/models/route.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
-import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
-import 'package:van_sales/domain/models/submit_result.dart';
-import 'package:van_sales/domain/models/customer_ledger.dart';
-import 'package:van_sales/domain/models/organization.dart';
-import 'package:van_sales/domain/models/warehouse.dart';
-import 'package:van_sales/domain/models/stock_transfer.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/invoice_repository.dart';
+import 'package:van_sales/domain/repositories/item_repository.dart';
+import 'package:van_sales/domain/repositories/sales_return_repository.dart';
 import 'package:van_sales/ui/features/dashboard/cubit/sales_return_dialog_cubit.dart';
 import 'helpers/sales_repository_enqueue_stubs.dart';
 
 class FakeSalesRepository
-    with SalesRepositoryEnqueueStubs
-    implements SalesRepository {
+    with SalesReturnRepositorySubmitStubs, InvoiceRepositorySubmitStubs
+    implements
+        SalesReturnRepository,
+        InvoiceRepository,
+        ItemRepository {
   List<SalesInvoice> invoices = [];
   List<Item> items = [];
   List<SalesReturn> savedReturns = [];
@@ -36,101 +30,6 @@ class FakeSalesRepository
 
   @override
   List<SalesInvoice> getLocalInvoices() => invoices;
-
-  @override
-  List<Item> getItems() => items;
-
-  @override
-  Future<void> saveLocalReturn(SalesReturn salesReturn) async {
-    saveCallCount++;
-    if (shouldThrowOnSave) throw Exception('Save failed');
-    savedReturns.add(salesReturn);
-  }
-
-  @override
-  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn) async {
-    saveCallCount++;
-    if (shouldThrowOnSave) throw Exception('Save failed');
-    await enqueueSalesReturn(salesReturn);
-    return SubmitResult.queued;
-  }
-
-  @override
-  Future<void> enqueueSyncItem(SyncQueueItem item) async {
-    queue.add(item);
-  }
-
-  @override
-  Future<void> enqueueSalesOrder(
-    SalesOrder order, {
-    required bool isUpdate,
-  }) async {}
-
-  @override
-  Future<void> updateCustomerGps(
-    String customerId,
-    double latitude,
-    double longitude,
-  ) async {}
-
-  @override
-  Future<void> updateCustomerContactFields(
-    String customerId, {
-    String? phone,
-    String? trn,
-  }) async {}
-
-  @override
-  Future<void> pushCustomerContactFieldsRemote(
-    String customerId, {
-    String? phone,
-    String? trn,
-  }) async {}
-
-  @override
-  List<Customer> getCustomers() => [];
-
-  @override
-  Future<void> saveCustomers(List<Customer> customers) async {}
-
-  @override
-  List<SyncQueueItem> getSyncQueue() => queue;
-
-  @override
-  List<OpenInvoice> getOpenInvoices({String? customerId}) => [];
-  @override
-  Future<List<OpenInvoice>> fetchRemoteOpenInvoices({String? customerId}) async =>
-      [];
-
-  @override
-  List<ReceiptVoucher> getLocalReceipts() => [];
-
-  @override
-  Future<void> saveLocalReceipt(ReceiptVoucher voucher) async {}
-
-  @override
-  Future<List<ReceiptVoucher>> fetchRemoteReceipts({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  List<RouteModel> getRoutes() => [];
-
-  @override
-  String? get activeRouteId => null;
-
-  @override
-  Future<void> setActiveRouteId(String? routeId) async {}
-
-  @override
-  Future<void> saveItems(List<Item> items) async {}
-
-  @override
-  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
-
-  @override
-  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(Customer customer) async => (customer: customer, offlineFallback: false);
 
   @override
   Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
@@ -149,11 +48,24 @@ class FakeSalesRepository
   }) async => [];
 
   @override
-  Future<ReceiptVoucher?> fetchReceiptById(
-    String paymentId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
+  List<Item> getItems() => items;
+
+  @override
+  Future<void> saveLocalReturn(SalesReturn salesReturn) async {
+    saveCallCount++;
+    if (shouldThrowOnSave) throw Exception('Save failed');
+    savedReturns.add(salesReturn);
+  }
+
+  @override
+  Future<void> enqueueSyncItem(SyncQueueItem item) async {
+    if (shouldThrowOnSave) throw Exception('Save failed');
+    queue.add(item);
+  }
+
+
+  @override
+  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
 
   @override
   Future<SalesReturn?> fetchSalesReturnById(
@@ -162,30 +74,10 @@ class FakeSalesRepository
     bool allowOfflineFallback = true,
   }) async => null;
 
-  @override
-  Future<ExpenseEntry?> fetchExpenseById(
-    String expenseId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
 
-  @override
-  List<SalesOrder> getLocalOrders() => [];
 
-  @override
-  Future<void> saveLocalOrder(SalesOrder order) async {}
 
-  @override
-  Future<List<SalesOrder>> fetchRemoteOrders({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
 
-  @override
-  Future<SalesOrder?> fetchRemoteOrder(
-    String zohoOrderId, {
-    bool allowOfflineFallback = false,
-  }) async => null;
 
   @override
   List<SalesReturn> getLocalReturns() => savedReturns;
@@ -196,70 +88,6 @@ class FakeSalesRepository
     DateTime? endDate,
   }) async => [];
 
-  @override
-  List<ExpenseEntry> getLocalExpenses() => [];
-
-  @override
-  Future<void> saveLocalExpense(ExpenseEntry expense) async {}
-
-  @override
-  Future<List<ExpenseEntry>> fetchRemoteExpenses({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  CashClosing? getLocalCashClosing() => null;
-
-  @override
-  Future<void> saveLocalCashClosing(CashClosing closing) async {}
-
-  @override
-  List<StockTransfer> getLocalStockTransfers() => [];
-
-  @override
-  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
-
-  @override
-  Future<List<StockTransfer>> fetchRemoteStockTransfers({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-
-  @override
-  Future<CustomerLedger> fetchCustomerLedger(
-    String customerId, {
-    DateTime? startDate,
-    DateTime? endDate,
-  }) => throw UnimplementedError();
-
-  @override
-  Customer? getCustomerById(String id) => null;
-
-  @override
-  Organization? getOrganization() => null;
-
-  @override
-  String? get assignedWarehouseId => null;
-
-  @override
-  String? get primaryWarehouseId => null;
-
-  @override
-  List<Warehouse> getWarehouses() => [];
-
-  @override
-  bool hasPendingCashClosingForToday() => false;
-
-  @override
-  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
-
-  @override
-  Future<void> pushCustomerGpsRemote(
-    String customerId,
-    double latitude,
-    double longitude,
-  ) => throw UnimplementedError();
 }
 
 class FakeHiveDatabaseService extends HiveDatabaseService {
@@ -376,7 +204,9 @@ void main() {
     syncWorker = FakeSyncWorker();
     cubit = SalesReturnDialogCubit(
       customer: customer,
-      salesRepository: repo,
+      salesReturnRepository: repo,
+      invoiceRepository: repo,
+      itemRepository: repo,
       syncWorker: syncWorker,
       documentNumberService: docService,
     );
@@ -445,6 +275,7 @@ void main() {
 
     await cubit.submit();
 
+    expect(repo.saveCallCount, 0);
     expect(repo.savedReturns, isEmpty);
     expect(repo.queue.length, 1);
     expect(repo.queue.first.type, 'return');
@@ -461,7 +292,7 @@ void main() {
     await cubit.submit();
     await first;
 
-    expect(repo.saveCallCount, 1);
+    expect(repo.queue, hasLength(1));
   });
 
   test('submit failure clears submitting and sets errorMessage', () async {

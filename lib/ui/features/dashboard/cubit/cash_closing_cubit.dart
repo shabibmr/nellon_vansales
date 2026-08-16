@@ -1,18 +1,18 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/cash_closing.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/cash_closing_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import 'cash_closing_state.dart';
 
 class CashClosingCubit extends Cubit<CashClosingState> {
-  final SalesRepository salesRepository;
+  final CashClosingRepository cashClosingRepository;
   final SyncRepository syncRepository;
 
   CashClosingCubit({
-    required this.salesRepository,
+    required this.cashClosingRepository,
     required this.syncRepository,
   }) : super(CashClosingInitial());
 
@@ -43,7 +43,7 @@ class CashClosingCubit extends Cubit<CashClosingState> {
         isPendingSync: true,
       );
 
-      await salesRepository.saveLocalCashClosing(closing);
+      await cashClosingRepository.saveLocalCashClosing(closing);
 
       // Generate sync packet
       final syncItem = SyncQueueItem(
@@ -60,7 +60,7 @@ class CashClosingCubit extends Cubit<CashClosingState> {
         status: SyncStatus.pending,
         timestamp: DateTime.now(),
       );
-      await salesRepository.enqueueSyncItem(syncItem);
+      await cashClosingRepository.enqueueSyncItem(syncItem);
 
       // Trigger background sync
       unawaited(syncRepository.triggerSync());

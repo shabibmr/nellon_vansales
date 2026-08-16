@@ -7,7 +7,8 @@ import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/stock_rules.dart';
 import '../../../core/utils/date_filter.dart';
@@ -18,7 +19,9 @@ import 'sales_invoice_list_state.dart';
 /// Manages sales-invoice listing, date filtering, live-first remote loads, and batch conversions.
 class SalesInvoiceListBloc
     extends Bloc<SalesInvoiceListEvent, SalesInvoiceListState> {
-  final SalesRepository _salesRepository;
+  final InvoiceRepository _invoiceRepository;
+  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
+  final SalesOrderRepository _salesOrderRepository;
   // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
@@ -27,10 +30,12 @@ class SalesInvoiceListBloc
   int _fetchGeneration = 0;
 
   SalesInvoiceListBloc({
-    required SalesRepository salesRepository,
+    required InvoiceRepository invoiceRepository,
+    required SalesOrderRepository salesOrderRepository,
     required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
-  }) : _salesRepository = salesRepository,
+  }) : _invoiceRepository = invoiceRepository,
+       _salesOrderRepository = salesOrderRepository,
        _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(
@@ -64,7 +69,7 @@ class SalesInvoiceListBloc
     );
 
     try {
-      final loaded = await _salesRepository.fetchRemoteInvoices(
+      final loaded = await _invoiceRepository.fetchRemoteInvoices(
         startDate: rangeStart,
         endDate: rangeEnd,
       );
@@ -79,7 +84,7 @@ class SalesInvoiceListBloc
       if (generation != _fetchGeneration) return;
       emit(
         state.copyWith(
-          invoices: _salesRepository.getLocalInvoices(),
+          invoices: _invoiceRepository.getLocalInvoices(),
           status: SalesInvoiceListStatus.failure,
           errorMessage: humanizeSyncError(e),
         ),
@@ -162,7 +167,7 @@ class SalesInvoiceListBloc
       }
     }
 
-    final updatedInvoices = _salesRepository.getLocalInvoices();
+    final updatedInvoices = _invoiceRepository.getLocalInvoices();
 
     if (successCount == 0) {
       emit(
@@ -233,7 +238,7 @@ class SalesInvoiceListBloc
       throw Exception('Order must sync to Zoho before converting');
     }
 
-    await _salesRepository.submitConvertSalesOrder(
+    await _invoiceRepository.submitConvertSalesOrder(
       order: order,
       invoice: invoice,
     );

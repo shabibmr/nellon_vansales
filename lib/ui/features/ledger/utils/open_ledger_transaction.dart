@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer_ledger.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/receipt_repository.dart';
+import '../../../../domain/repositories/sales_return_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -69,12 +71,10 @@ Future<void> openLedgerTransaction(
   }
 
   try {
-    final repo = sl<SalesRepository>();
-
     switch (type) {
       case 'invoice':
       case 'debit_note':
-        final invoice = await repo.fetchInvoiceById(id);
+        final invoice = await sl<InvoiceRepository>().fetchInvoiceById(id);
         dismissLoading();
         if (!context.mounted) return;
         if (invoice == null) {
@@ -89,7 +89,7 @@ Future<void> openLedgerTransaction(
         break;
 
       case 'payment':
-        final receipt = await repo.fetchReceiptById(id);
+        final receipt = await sl<ReceiptRepository>().fetchReceiptById(id);
         dismissLoading();
         if (!context.mounted) return;
         if (receipt == null) {
@@ -104,7 +104,8 @@ Future<void> openLedgerTransaction(
         break;
 
       case 'credit_note':
-        final salesReturn = await repo.fetchSalesReturnById(id);
+        final salesReturn = await sl<SalesReturnRepository>()
+            .fetchSalesReturnById(id);
         dismissLoading();
         if (!context.mounted) return;
         if (salesReturn == null) {

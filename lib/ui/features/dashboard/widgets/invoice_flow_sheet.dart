@@ -6,7 +6,10 @@ import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/item_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../ui/core/cubit/list_filter_cubit.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
@@ -34,11 +37,13 @@ class InvoiceFlowSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = context.read<SalesRepository>().getItems();
+    final items = context.read<ItemRepository>().getItems();
 
     return BlocProvider<SalesInvoiceEditorBloc>(
       create: (ctx) => SalesInvoiceEditorBloc(
-        salesRepository: ctx.read<SalesRepository>(),
+        invoiceRepository: ctx.read<InvoiceRepository>(),
+        salesOrderRepository: ctx.read<SalesOrderRepository>(),
+        customerRepository: ctx.read<CustomerRepository>(),
         syncRepository: ctx.read<SyncRepository>(),
         documentNumberService: sl<DocumentNumberService>(),
       )..add(StartNewInvoice(customer: customer)),
@@ -106,7 +111,7 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
       setState(() => _resolvingItemId = item.id);
       try {
         final result =
-            await context.read<SalesRepository>().resolveItemUnitConversions(item);
+            await context.read<ItemRepository>().resolveItemUnitConversions(item);
         resolved = result.item;
         offlineFallback = result.offlineFallback;
       } finally {
@@ -127,7 +132,7 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
         setState(() => _resolvingItemId = item.id);
         try {
           final result =
-              await context.read<SalesRepository>().resolveItemUnitConversions(resolved);
+              await context.read<ItemRepository>().resolveItemUnitConversions(resolved);
           resolved = result.item;
           offlineFallback = result.offlineFallback;
         } finally {

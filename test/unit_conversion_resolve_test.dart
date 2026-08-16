@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:van_sales/data/repositories/sales_repository_impl.dart';
+import 'package:van_sales/data/repositories/item_repository_impl.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/item.dart';
@@ -79,12 +79,12 @@ void main() {
 
   late _FakeDb db;
   late _FakeApi api;
-  late SalesRepositoryImpl repo;
+  late ItemRepositoryImpl repo;
 
   setUp(() {
     db = _FakeDb();
     api = _FakeApi(db);
-    repo = SalesRepositoryImpl(dbService: db, apiClient: api);
+    repo = ItemRepositoryImpl(dbService: db, apiClient: api);
   });
 
   test('item already carrying conversions is returned without a fetch',

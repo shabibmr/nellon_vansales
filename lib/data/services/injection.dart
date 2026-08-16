@@ -9,16 +9,34 @@ import 'voucher_pdf_service.dart';
 import 'thermal_printer_service.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/sync_repository.dart';
-import '../../domain/repositories/sales_repository.dart';
+import '../../domain/repositories/customer_repository.dart';
+import '../../domain/repositories/session_repository.dart';
+import '../../domain/repositories/cash_closing_repository.dart';
 import '../../domain/repositories/salesperson_repository.dart';
 import '../../domain/repositories/report_repository.dart';
 import '../../domain/repositories/voucher_pdf_repository.dart';
 import '../../domain/repositories/thermal_printer_repository.dart';
+import '../../domain/repositories/stock_transfer_repository.dart';
+import '../../domain/repositories/expense_repository.dart';
+import '../../domain/repositories/receipt_repository.dart';
+import '../../domain/repositories/sales_return_repository.dart';
+import '../../domain/repositories/invoice_repository.dart';
+import '../../domain/repositories/sales_order_repository.dart';
+import '../../domain/repositories/item_repository.dart';
 import '../repositories/auth_repository_impl.dart';
 import '../repositories/sync_repository_impl.dart';
-import '../repositories/sales_repository_impl.dart';
+import '../repositories/customer_repository_impl.dart';
+import '../repositories/session_repository_impl.dart';
+import '../repositories/cash_closing_repository_impl.dart';
 import '../repositories/salesperson_repository_impl.dart';
 import '../repositories/report_repository_impl.dart';
+import '../repositories/stock_transfer_repository_impl.dart';
+import '../repositories/expense_repository_impl.dart';
+import '../repositories/receipt_repository_impl.dart';
+import '../repositories/sales_return_repository_impl.dart';
+import '../repositories/invoice_repository_impl.dart';
+import '../repositories/sales_order_repository_impl.dart';
+import '../repositories/item_repository_impl.dart';
 import 'local_storage_service.dart';
 import 'device_info_service.dart';
 import 'license_service.dart';
@@ -69,18 +87,69 @@ Future<void> setupDependencyInjection() async {
   sl.registerLazySingleton<SyncRepository>(
     () => SyncRepositoryImpl(syncWorker: sl(), dbService: sl()),
   );
-  sl.registerLazySingleton<SalesRepository>(
-    () => SalesRepositoryImpl(
+  sl.registerLazySingleton<CustomerRepository>(
+    () => CustomerRepositoryImpl(
       dbService: sl(),
       apiClient: sl(),
       syncWorker: sl(),
     ),
+  );
+  sl.registerLazySingleton<SessionRepository>(
+    () => SessionRepositoryImpl(dbService: sl(), apiClient: sl()),
+  );
+  sl.registerLazySingleton<CashClosingRepository>(
+    () => CashClosingRepositoryImpl(dbService: sl(), apiClient: sl()),
   );
   sl.registerLazySingleton<SalespersonRepository>(
     () => SalespersonRepositoryImpl(dbService: sl(), apiClient: sl()),
   );
   sl.registerLazySingleton<ReportRepository>(
     () => ReportRepositoryImpl(apiClient: sl(), dbService: sl()),
+  );
+  sl.registerLazySingleton<StockTransferRepository>(
+    () => StockTransferRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
+  );
+  sl.registerLazySingleton<ExpenseRepository>(
+    () => ExpenseRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
+  );
+  sl.registerLazySingleton<ReceiptRepository>(
+    () => ReceiptRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
+  );
+  sl.registerLazySingleton<SalesReturnRepository>(
+    () => SalesReturnRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
+  );
+  sl.registerLazySingleton<InvoiceRepository>(
+    () => InvoiceRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
+  );
+  sl.registerLazySingleton<SalesOrderRepository>(
+    () => SalesOrderRepositoryImpl(
+      dbService: sl(),
+      apiClient: sl(),
+      syncWorker: sl(),
+    ),
+  );
+  sl.registerLazySingleton<ItemRepository>(
+    () => ItemRepositoryImpl(dbService: sl(), apiClient: sl()),
   );
 
   // 6. Licensing, Device & Update Services

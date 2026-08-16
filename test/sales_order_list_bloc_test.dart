@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/sales_order_repository.dart';
 import 'package:van_sales/ui/features/sales_order/bloc/sales_order_list_bloc.dart';
 import 'package:van_sales/ui/features/sales_order/bloc/sales_order_list_event.dart';
 
 /// Minimal recording repo: order list methods only; others noSuchMethod.
-class RecordingSalesRepository implements SalesRepository {
+class RecordingSalesRepository implements SalesOrderRepository {
   final List<({DateTime? start, DateTime? end})> fetchCalls = [];
   List<SalesOrder> remoteOrders = [];
   List<SalesOrder> localOrders = [];
@@ -69,7 +69,7 @@ void main() {
 
   setUp(() {
     repo = RecordingSalesRepository();
-    bloc = SalesOrderListBloc(salesRepository: repo);
+    bloc = SalesOrderListBloc(salesOrderRepository: repo);
   });
 
   tearDown(() async => bloc.close());

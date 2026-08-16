@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../utils/error_mapper.dart';
@@ -10,11 +10,11 @@ import 'gps_capture_event.dart';
 import 'gps_capture_state.dart';
 
 class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
-  final SalesRepository salesRepository;
+  final CustomerRepository customerRepository;
   final SyncRepository syncRepository;
 
   GpsCaptureBloc({
-    required this.salesRepository,
+    required this.customerRepository,
     required this.syncRepository,
   }) : super(GpsCaptureIdle()) {
     on<GpsCaptureRequested>(_onGpsCaptureRequested);
@@ -66,7 +66,7 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
           return;
         }
 
-        await salesRepository.submitOrEnqueue(
+        await customerRepository.submitOrEnqueue(
           SyncQueueItem(
             id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
             type: 'customer_gps_update',

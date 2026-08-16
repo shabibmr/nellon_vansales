@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/models/sync_queue_item.dart';
 import '../../../domain/models/customer.dart';
-import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/customer_repository.dart';
 import '../bloc/gps_capture_bloc.dart';
 import '../bloc/gps_capture_event.dart';
 import '../bloc/gps_capture_state.dart';
@@ -154,9 +154,9 @@ class _CustomerMissingFieldsDialogState
     final lng = customer.longitude;
     if (lat == null || lng == null) return customer;
 
-    final sales = context.read<SalesRepository>();
+    final customers = context.read<CustomerRepository>();
 
-    await sales.submitOrEnqueue(
+    await customers.submitOrEnqueue(
       SyncQueueItem(
         id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
         type: 'customer_gps_update',
@@ -174,13 +174,13 @@ class _CustomerMissingFieldsDialogState
   }
 
   Future<Customer> _persistContactFields(Customer customer) async {
-    final sales = context.read<SalesRepository>();
+    final customers = context.read<CustomerRepository>();
     final phone = widget.missing.phone ? _phoneController.text.trim() : null;
     final trn = widget.missing.trn
         ? _trnController.text.trim().replaceAll(RegExp(r'\D'), '')
         : null;
 
-    await sales.submitOrEnqueue(
+    await customers.submitOrEnqueue(
       SyncQueueItem(
         id: 'contact_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
         type: 'customer_contact_update',

@@ -2,18 +2,21 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/submit_result.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import 'create_customer_state.dart';
 
 class CreateCustomerCubit extends Cubit<CreateCustomerState> {
-  final SalesRepository salesRepository;
+  final CustomerRepository customerRepository;
+  final SessionRepository sessionRepository;
   final SyncRepository syncRepository;
 
   CreateCustomerCubit({
-    required this.salesRepository,
+    required this.customerRepository,
+    required this.sessionRepository,
     required this.syncRepository,
   }) : super(CreateCustomerInitial());
 
@@ -33,8 +36,8 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
 
     try {
       final routeId =
-          activeRouteId ?? salesRepository.activeRouteId ?? 'route_default';
-      final localCustomers = salesRepository.getCustomers();
+          activeRouteId ?? sessionRepository.activeRouteId ?? 'route_default';
+      final localCustomers = customerRepository.getCustomers();
       final tempId = 'temp_cust_${DateTime.now().millisecondsSinceEpoch}';
 
       final newCustomer = Customer(
@@ -71,7 +74,7 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
         ];
       }
 
-      final result = await salesRepository.submitOrEnqueue(
+      final result = await customerRepository.submitOrEnqueue(
         SyncQueueItem(
           id: tempId,
           type: 'customer',
@@ -83,7 +86,7 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
 
       var saved = newCustomer;
       if (result == SubmitResult.synced) {
-        for (final c in salesRepository.getCustomers()) {
+        for (final c in customerRepository.getCustomers()) {
           if (c.name == name) {
             saved = c;
             break;

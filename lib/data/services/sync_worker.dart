@@ -1005,7 +1005,7 @@ class SyncWorker {
           // Multi-UOM (`unit_conversions`) is intentionally NOT downloaded here.
           // The /items LIST endpoint never returns it, so it is fetched lazily
           // and cached per-item the first time an item is selected from Item
-          // Search (see SalesRepository.resolveItemUnitConversions).
+          // Search (see ItemRepository.resolveItemUnitConversions).
           // Drop the UOM cache so the next selection re-fetches after a masters
           // refresh (conversions may have been added/changed in Zoho).
           await _dbService.saveItems(

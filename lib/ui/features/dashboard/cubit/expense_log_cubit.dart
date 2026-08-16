@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/expense_entry.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import 'expense_log_state.dart';
 
 class ExpenseLogCubit extends Cubit<ExpenseLogState> {
-  final SalesRepository salesRepository;
+  final ExpenseRepository expenseRepository;
   final SyncRepository syncRepository;
 
   ExpenseLogCubit({
-    required this.salesRepository,
+    required this.expenseRepository,
     required this.syncRepository,
   }) : super(ExpenseLogInitial());
 
@@ -40,7 +40,7 @@ class ExpenseLogCubit extends Cubit<ExpenseLogState> {
         isPendingSync: true,
       );
 
-      await salesRepository.submitExpense(expense);
+      await expenseRepository.submitExpense(expense);
 
       emit(ExpenseLogSuccess(expense));
     } catch (e) {

@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/expense_repository.dart';
 import 'package:van_sales/ui/features/expenses/bloc/expense_list_bloc.dart';
 import 'package:van_sales/ui/features/expenses/bloc/expense_list_event.dart';
 
 /// Minimal fake: expense list methods only; others noSuchMethod.
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository implements ExpenseRepository {
   List<ExpenseEntry> expenses = [];
 
   @override
@@ -48,7 +48,7 @@ void main() {
 
   setUp(() {
     salesRepo = FakeSalesRepository();
-    bloc = ExpenseListBloc(salesRepository: salesRepo);
+    bloc = ExpenseListBloc(expenseRepository: salesRepo);
   });
 
   tearDown(() async => bloc.close());

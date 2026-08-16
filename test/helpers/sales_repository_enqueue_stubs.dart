@@ -6,11 +6,15 @@ import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/submit_result.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/customer_repository.dart';
+import 'package:van_sales/domain/repositories/expense_repository.dart';
+import 'package:van_sales/domain/repositories/invoice_repository.dart';
+import 'package:van_sales/domain/repositories/receipt_repository.dart';
+import 'package:van_sales/domain/repositories/sales_order_repository.dart';
+import 'package:van_sales/domain/repositories/sales_return_repository.dart';
+import 'package:van_sales/domain/repositories/stock_transfer_repository.dart';
 
-/// Satisfies the voucher enqueue helpers on [SalesRepository] fakes by
-/// forwarding to [enqueueSyncItem] (empty payload — tests assert type/id).
-mixin SalesRepositoryEnqueueStubs implements SalesRepository {
+mixin InvoiceRepositorySubmitStubs implements InvoiceRepository {
   @override
   Future<void> enqueueInvoice(SalesInvoice invoice) {
     return enqueueSyncItem(
@@ -43,6 +47,34 @@ mixin SalesRepositoryEnqueueStubs implements SalesRepository {
   }
 
   @override
+  Future<SubmitResult> submitInvoice(SalesInvoice invoice) async {
+    await enqueueInvoice(invoice);
+    return SubmitResult.queued;
+  }
+
+  @override
+  Future<SubmitResult> submitConvertSalesOrder({
+    required SalesOrder order,
+    required SalesInvoice invoice,
+  }) async {
+    await enqueueConvertSalesOrder(order: order, invoice: invoice);
+    return SubmitResult.queued;
+  }
+}
+
+mixin SalesOrderRepositorySubmitStubs implements SalesOrderRepository {
+  @override
+  Future<SubmitResult> submitSalesOrder(
+    SalesOrder order, {
+    required bool isUpdate,
+  }) async {
+    await enqueueSalesOrder(order, isUpdate: isUpdate);
+    return SubmitResult.queued;
+  }
+}
+
+mixin ReceiptRepositorySubmitStubs implements ReceiptRepository {
+  @override
   Future<void> enqueueReceipt(ReceiptVoucher voucher) {
     return enqueueSyncItem(
       SyncQueueItem(
@@ -54,6 +86,14 @@ mixin SalesRepositoryEnqueueStubs implements SalesRepository {
     );
   }
 
+  @override
+  Future<SubmitResult> submitReceipt(ReceiptVoucher voucher) async {
+    await enqueueReceipt(voucher);
+    return SubmitResult.queued;
+  }
+}
+
+mixin SalesReturnRepositorySubmitStubs implements SalesReturnRepository {
   @override
   Future<void> enqueueSalesReturn(SalesReturn salesReturn) {
     return enqueueSyncItem(
@@ -67,6 +107,14 @@ mixin SalesRepositoryEnqueueStubs implements SalesRepository {
   }
 
   @override
+  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn) async {
+    await enqueueSalesReturn(salesReturn);
+    return SubmitResult.queued;
+  }
+}
+
+mixin ExpenseRepositorySubmitStubs implements ExpenseRepository {
+  @override
   Future<void> enqueueExpense(ExpenseEntry expense) {
     return enqueueSyncItem(
       SyncQueueItem(
@@ -79,68 +127,24 @@ mixin SalesRepositoryEnqueueStubs implements SalesRepository {
   }
 
   @override
-  Future<void> enqueueStockTransfer(StockTransfer transfer) {
-    return enqueueSyncItem(
-      SyncQueueItem(
-        id: transfer.id,
-        type: 'stock_transfer',
-        payload: const {},
-        timestamp: DateTime.now(),
-      ),
-    );
-  }
-
-  @override
-  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
-    await enqueueSyncItem(item);
-    return SubmitResult.queued;
-  }
-
-  @override
-  Future<SubmitResult> submitInvoice(SalesInvoice invoice) async {
-    await enqueueInvoice(invoice);
-    return SubmitResult.queued;
-  }
-
-  @override
-  Future<SubmitResult> submitSalesOrder(
-    SalesOrder order, {
-    required bool isUpdate,
-  }) async {
-    await enqueueSalesOrder(order, isUpdate: isUpdate);
-    return SubmitResult.queued;
-  }
-
-  @override
-  Future<SubmitResult> submitConvertSalesOrder({
-    required SalesOrder order,
-    required SalesInvoice invoice,
-  }) async {
-    await enqueueConvertSalesOrder(order: order, invoice: invoice);
-    return SubmitResult.queued;
-  }
-
-  @override
-  Future<SubmitResult> submitReceipt(ReceiptVoucher voucher) async {
-    await enqueueReceipt(voucher);
-    return SubmitResult.queued;
-  }
-
-  @override
-  Future<SubmitResult> submitSalesReturn(SalesReturn salesReturn) async {
-    await enqueueSalesReturn(salesReturn);
-    return SubmitResult.queued;
-  }
-
-  @override
   Future<SubmitResult> submitExpense(ExpenseEntry expense) async {
     await enqueueExpense(expense);
     return SubmitResult.queued;
   }
+}
 
+mixin StockTransferRepositorySubmitStubs implements StockTransferRepository {
   @override
   Future<SubmitResult> submitStockTransfer(StockTransfer transfer) async {
     await enqueueStockTransfer(transfer);
+    return SubmitResult.queued;
+  }
+}
+
+mixin CustomerRepositorySubmitStubs implements CustomerRepository {
+  @override
+  Future<SubmitResult> submitOrEnqueue(SyncQueueItem item) async {
+    await enqueueSyncItem(item);
     return SubmitResult.queued;
   }
 }

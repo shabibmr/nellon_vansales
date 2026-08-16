@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/expense_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
@@ -41,7 +41,7 @@ class ExpenseLogDialog extends StatefulWidget {
       context: context,
       builder: (_) => BlocProvider<ExpenseLogCubit>(
         create: (_) => ExpenseLogCubit(
-          salesRepository: sl<SalesRepository>(),
+          expenseRepository: sl<ExpenseRepository>(),
           syncRepository: sl<SyncRepository>(),
         ),
         child: ExpenseLogDialog(

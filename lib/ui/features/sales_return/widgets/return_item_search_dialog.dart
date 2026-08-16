@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/sales_return.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/item_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/widgets/item_search_sheet.dart';
 import 'return_invoice_selector_dialog.dart';
@@ -14,9 +16,11 @@ class ReturnItemSearchDialog {
     required String customerId,
     List<String> excludedItemIds = const [],
   }) async {
-    final sales = context.read<SalesRepository>();
+    final customerRepo = context.read<CustomerRepository>();
+    final invoiceRepo = context.read<InvoiceRepository>();
+    final itemRepo = context.read<ItemRepository>();
 
-    final invoices = sales
+    final invoices = invoiceRepo
         .getLocalInvoices()
         .where((inv) => inv.customerId == customerId)
         .toList();
@@ -25,7 +29,7 @@ class ReturnItemSearchDialog {
         .map((line) => line.item.id)
         .toSet();
 
-    final items = sales
+    final items = itemRepo
         .getItems()
         .where((item) => purchasedItemIds.contains(item.id))
         .where((item) => !excludedItemIds.contains(item.id))
@@ -40,7 +44,7 @@ class ReturnItemSearchDialog {
       emptyMessage: 'No items found for this customer',
       accentColor: AppTheme.warningAmber,
       onSelected: (item, sheetContext) async {
-        final customer = sales.getCustomers().firstWhere(
+        final customer = customerRepo.getCustomers().firstWhere(
           (c) => c.id == customerId,
         );
         final lines = await showDialog<List<SalesReturnLineItem>>(

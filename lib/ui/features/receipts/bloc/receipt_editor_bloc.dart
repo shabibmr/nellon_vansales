@@ -9,7 +9,8 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/submit_result.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/receipt_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'receipt_editor_event.dart';
@@ -18,16 +19,19 @@ import 'receipt_editor_state.dart';
 /// Manages a single receipt-voucher form: open, auto-allocation, save, enqueue sync.
 class ReceiptEditorBloc
     extends Bloc<ReceiptEditorEvent, ReceiptEditorState> {
-  final SalesRepository _salesRepository;
+  final ReceiptRepository _receiptRepository;
+  final CustomerRepository _customerRepository;
   // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
   final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   ReceiptEditorBloc({
-    required SalesRepository salesRepository,
+    required ReceiptRepository receiptRepository,
+    required CustomerRepository customerRepository,
     required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
-  }) : _salesRepository = salesRepository,
+  }) : _receiptRepository = receiptRepository,
+       _customerRepository = customerRepository,
        _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const ReceiptEditorState()) {
@@ -150,7 +154,7 @@ class ReceiptEditorBloc
 
     ReceiptVoucher? fetched;
     try {
-      fetched = await _salesRepository.fetchReceiptById(
+      fetched = await _receiptRepository.fetchReceiptById(
         receiptId,
         forceRemote: true,
         allowOfflineFallback: false,
@@ -166,7 +170,7 @@ class ReceiptEditorBloc
         return;
       }
       try {
-        fetched = await _salesRepository.fetchReceiptById(
+        fetched = await _receiptRepository.fetchReceiptById(
           receiptId,
           forceRemote: false,
         );
@@ -195,7 +199,7 @@ class ReceiptEditorBloc
       if (!isRefresh) {
         ReceiptVoucher? local;
         try {
-          local = await _salesRepository.fetchReceiptById(
+          local = await _receiptRepository.fetchReceiptById(
             receiptId,
             forceRemote: false,
           );
@@ -249,7 +253,7 @@ class ReceiptEditorBloc
   }
 
   Customer _customerForId(String customerId, String nameFallback) {
-    for (final c in _salesRepository.getCustomers()) {
+    for (final c in _customerRepository.getCustomers()) {
       if (c.id == customerId) return c;
     }
     return Customer(
@@ -291,7 +295,7 @@ class ReceiptEditorBloc
     Emitter<ReceiptEditorState> emit,
   ) async {
     try {
-      await _salesRepository.fetchRemoteOpenInvoices(
+      await _receiptRepository.fetchRemoteOpenInvoices(
         customerId: event.customer.id,
       );
     } catch (_) {
@@ -353,7 +357,7 @@ class ReceiptEditorBloc
   List<PaymentAllocation> _autoAllocate(String customerId, double amount) {
     if (amount <= 0) return const [];
     try {
-      final openInvoices = _salesRepository.getOpenInvoices(
+      final openInvoices = _receiptRepository.getOpenInvoices(
         customerId: customerId,
       );
       final sortedInvoices = List<OpenInvoice>.from(openInvoices)
@@ -452,7 +456,7 @@ class ReceiptEditorBloc
         isPendingSync: true,
       );
 
-      final result = await _salesRepository.submitReceipt(voucher);
+      final result = await _receiptRepository.submitReceipt(voucher);
 
       emit(
         state.copyWith(

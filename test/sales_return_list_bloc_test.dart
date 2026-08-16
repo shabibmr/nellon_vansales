@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/sales_return_repository.dart';
 import 'package:van_sales/ui/features/sales_return/bloc/sales_return_list_bloc.dart';
 import 'package:van_sales/ui/features/sales_return/bloc/sales_return_list_event.dart';
 
 /// Minimal fake: return list methods only; others noSuchMethod.
-class FakeSalesRepository implements SalesRepository {
+class FakeSalesRepository implements SalesReturnRepository {
   List<SalesReturn> returns = [];
 
   @override
@@ -48,7 +48,7 @@ void main() {
 
   setUp(() {
     salesRepo = FakeSalesRepository();
-    bloc = SalesReturnListBloc(salesRepository: salesRepo);
+    bloc = SalesReturnListBloc(salesReturnRepository: salesRepo);
   });
 
   tearDown(() async => bloc.close());

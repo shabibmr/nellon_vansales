@@ -6,7 +6,7 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_return.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/quantity_format.dart';
@@ -75,7 +75,7 @@ class _ReturnInvoiceSelectorDialogState
     super.initState();
     // Get all local invoices for the customer containing the selected item
     final customerInvoices = context
-        .read<SalesRepository>()
+        .read<InvoiceRepository>()
         .getLocalInvoices()
         .where((inv) => inv.customerId == widget.customer.id)
         .toList();

@@ -6,7 +6,9 @@ import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
-import '../../../../domain/repositories/sales_repository.dart';
+import '../../../../domain/repositories/invoice_repository.dart';
+import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
@@ -36,7 +38,9 @@ class SalesInvoiceEditorPage extends StatefulWidget {
     Customer? prefillCustomer,
     bool readOnly = false,
   }) {
-    final salesRepo = context.read<SalesRepository>();
+    final invoiceRepo = context.read<InvoiceRepository>();
+    final salesOrderRepo = context.read<SalesOrderRepository>();
+    final customerRepo = context.read<CustomerRepository>();
     final syncRepo = context.read<SyncRepository>();
     final docNumbers = sl<DocumentNumberService>();
 
@@ -46,7 +50,9 @@ class SalesInvoiceEditorPage extends StatefulWidget {
         builder: (_) => BlocProvider(
           create: (_) {
             final bloc = SalesInvoiceEditorBloc(
-              salesRepository: salesRepo,
+              invoiceRepository: invoiceRepo,
+              salesOrderRepository: salesOrderRepo,
+              customerRepository: customerRepo,
               syncRepository: syncRepo,
               documentNumberService: docNumbers,
             );

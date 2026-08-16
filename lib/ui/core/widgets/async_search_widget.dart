@@ -6,7 +6,8 @@ import 'customer_missing_fields_dialog.dart';
 import 'empty_state.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/models/item.dart';
-import '../../../domain/repositories/sales_repository.dart';
+import '../../../domain/repositories/item_repository.dart';
+import '../../../domain/repositories/customer_repository.dart';
 import '../../../domain/repositories/sync_repository.dart';
 import '../bloc/async_search_bloc.dart';
 import '../bloc/async_search_event.dart';
@@ -36,12 +37,14 @@ class AsyncSearchWidget extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (ctx) =>
-              AsyncSearchBloc(salesRepository: ctx.read<SalesRepository>()),
+          create: (ctx) => AsyncSearchBloc(
+            customerRepository: ctx.read<CustomerRepository>(),
+            itemRepository: ctx.read<ItemRepository>(),
+          ),
         ),
         BlocProvider(
           create: (ctx) => GpsCaptureBloc(
-            salesRepository: ctx.read<SalesRepository>(),
+            customerRepository: ctx.read<CustomerRepository>(),
             syncRepository: ctx.read<SyncRepository>(),
           ),
         ),
@@ -84,7 +87,7 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
     var resolved = customer;
     try {
       final result = await context
-          .read<SalesRepository>()
+          .read<CustomerRepository>()
           .resolveCustomerDetails(customer);
       resolved = result.customer;
     } finally {

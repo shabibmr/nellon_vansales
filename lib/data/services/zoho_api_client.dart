@@ -317,7 +317,7 @@ class ZohoApiClient {
 
   // 3b. Single item detail (GET /items/{id}) — the list endpoint does NOT
   // return `unit_conversions`, so multi-UOM data is fetched per-item on demand
-  // (see SalesRepository.resolveItemUnitConversions).
+  // (see ItemRepository.resolveItemUnitConversions).
   Future<Map<String, dynamic>> fetchItemDetail(String itemId) async {
     final response = await _dio.get('/items/$itemId');
     if (response.statusCode != 200) {

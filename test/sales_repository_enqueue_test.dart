@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
-import 'package:van_sales/data/repositories/sales_repository_impl.dart';
+import 'package:van_sales/data/repositories/expense_repository_impl.dart';
+import 'package:van_sales/data/repositories/invoice_repository_impl.dart';
+import 'package:van_sales/data/repositories/receipt_repository_impl.dart';
+import 'package:van_sales/data/repositories/sales_return_repository_impl.dart';
+import 'package:van_sales/data/repositories/stock_transfer_repository_impl.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
@@ -68,17 +72,26 @@ SalesInvoice _invoice({
 
 void main() {
   late _FakeDb db;
-  late SalesRepositoryImpl repo;
+  late InvoiceRepositoryImpl invoices;
+  late ReceiptRepositoryImpl receipts;
+  late SalesReturnRepositoryImpl returns;
+  late ExpenseRepositoryImpl expenses;
+  late StockTransferRepositoryImpl transfers;
 
   setUp(() {
     db = _FakeDb();
-    repo = SalesRepositoryImpl(dbService: db, apiClient: _FakeApi(db));
+    final api = _FakeApi(db);
+    invoices = InvoiceRepositoryImpl(dbService: db, apiClient: api);
+    receipts = ReceiptRepositoryImpl(dbService: db, apiClient: api);
+    returns = SalesReturnRepositoryImpl(dbService: db, apiClient: api);
+    expenses = ExpenseRepositoryImpl(dbService: db, apiClient: api);
+    transfers = StockTransferRepositoryImpl(dbService: db, apiClient: api);
   });
 
   test('enqueueInvoice stores a typed invoice payload from the domain model',
       () async {
     final invoice = _invoice(id: 'temp_inv_1');
-    await repo.enqueueInvoice(invoice);
+    await invoices.enqueueInvoice(invoice);
 
     final item = db.queue['temp_inv_1']!;
     expect(item.type, 'invoice');
@@ -92,7 +105,7 @@ void main() {
       db.invoices.add(
         _invoice(id: 'temp_inv_1', zohoInvoiceId: 'zoho_inv_1'),
       );
-      await repo.enqueueReceipt(
+      await receipts.enqueueReceipt(
         ReceiptVoucher(
           id: 'temp_pay_1',
           paymentNumber: 'SHB-RCT-00001',
@@ -124,7 +137,7 @@ void main() {
       db.invoices.add(
         _invoice(id: 'temp_inv_1', zohoInvoiceId: 'zoho_inv_1'),
       );
-      await repo.enqueueSalesReturn(
+      await returns.enqueueSalesReturn(
         SalesReturn(
           id: 'temp_ret_1',
           creditNoteNumber: 'SHB-CN-00001',
@@ -156,7 +169,7 @@ void main() {
 
   test('enqueueConvertSalesOrder prefers zohoOrderId over the local id',
       () async {
-    await repo.enqueueConvertSalesOrder(
+    await invoices.enqueueConvertSalesOrder(
       order: SalesOrder(
         id: 'temp_so_1',
         orderNumber: 'SHB-SO-00001',
@@ -184,7 +197,7 @@ void main() {
 
   test('enqueueExpense and enqueueStockTransfer write typed queue items',
       () async {
-    await repo.enqueueExpense(
+    await expenses.enqueueExpense(
       ExpenseEntry(
         id: 'temp_exp_1',
         date: DateTime(2026, 8, 1),
@@ -198,7 +211,7 @@ void main() {
         isPendingSync: true,
       ),
     );
-    await repo.enqueueStockTransfer(
+    await transfers.enqueueStockTransfer(
       StockTransfer(
         id: 'temp_to_1',
         transferNumber: 'TO-TEMP-1',

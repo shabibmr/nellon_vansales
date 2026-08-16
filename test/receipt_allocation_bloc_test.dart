@@ -6,26 +6,15 @@ import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/open_invoice.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
-import 'package:van_sales/domain/models/route.dart';
-import 'package:van_sales/domain/models/item.dart';
-import 'package:van_sales/domain/models/sales_invoice.dart';
-import 'package:van_sales/domain/models/sales_order.dart';
-import 'package:van_sales/domain/models/sales_return.dart';
-import 'package:van_sales/domain/models/expense_entry.dart';
-import 'package:van_sales/domain/models/cash_closing.dart';
-import 'package:van_sales/domain/models/customer_ledger.dart';
-import 'package:van_sales/domain/models/organization.dart';
-import 'package:van_sales/domain/models/warehouse.dart';
-import 'package:van_sales/domain/models/stock_transfer.dart';
-import 'package:van_sales/domain/repositories/sales_repository.dart';
+import 'package:van_sales/domain/repositories/receipt_repository.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
 import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/dashboard/bloc/receipt_allocation_bloc.dart';
 import 'package:van_sales/ui/features/dashboard/bloc/receipt_allocation_event.dart';
 
 class FakeSalesRepository
-    with SalesRepositoryEnqueueStubs
-    implements SalesRepository {
+    with ReceiptRepositorySubmitStubs
+    implements ReceiptRepository {
   List<OpenInvoice> openInvoices = [];
   List<ReceiptVoucher> receipts = [];
   List<SyncQueueItem> queue = [];
@@ -53,68 +42,11 @@ class FakeSalesRepository
     queue.add(item);
   }
 
-  @override
-  Future<void> enqueueSalesOrder(
-    SalesOrder order, {
-    required bool isUpdate,
-  }) async {}
 
-  // Stub other methods
-  @override
-  List<Customer> getCustomers() => [];
-  @override
-  Future<void> saveCustomers(List<Customer> customers) async {}
-  @override
-  List<SyncQueueItem> getSyncQueue() => queue;
   @override
   List<ReceiptVoucher> getLocalReceipts() => receipts;
   @override
   Future<List<ReceiptVoucher>> fetchRemoteReceipts({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  Future<void> updateCustomerGps(String customerId, double latitude, double longitude) async {}
-  @override
-  Future<void> updateCustomerContactFields(
-    String customerId, {
-    String? phone,
-    String? trn,
-  }) async {}
-  @override
-  Future<void> pushCustomerContactFieldsRemote(
-    String customerId, {
-    String? phone,
-    String? trn,
-  }) async {}
-  @override
-  List<RouteModel> getRoutes() => [];
-  @override
-  String? get activeRouteId => null;
-  @override
-  Future<void> setActiveRouteId(String? routeId) async {}
-  @override
-  List<Item> getItems() => [];
-  @override
-  Future<void> saveItems(List<Item> items) async {}
-
-  @override
-  Future<({Item item, bool offlineFallback})> resolveItemUnitConversions(Item item) async => (item: item, offlineFallback: false);
-
-  @override
-  Future<({Customer customer, bool offlineFallback})> resolveCustomerDetails(Customer customer) async => (customer: customer, offlineFallback: false);
-  @override
-  List<SalesInvoice> getLocalInvoices() => [];
-  @override
-  Future<void> saveLocalInvoice(SalesInvoice invoice) async {}
-  @override
-  Future<SalesInvoice?> fetchInvoiceById(
-    String invoiceId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
-  @override
-  Future<List<SalesInvoice>> fetchRemoteInvoices({
     DateTime? startDate,
     DateTime? endDate,
   }) async => [];
@@ -124,89 +56,6 @@ class FakeSalesRepository
     bool forceRemote = false,
     bool allowOfflineFallback = true,
   }) async => null;
-  @override
-  Future<SalesReturn?> fetchSalesReturnById(
-    String creditNoteId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
-  @override
-  Future<ExpenseEntry?> fetchExpenseById(
-    String expenseId, {
-    bool forceRemote = false,
-    bool allowOfflineFallback = true,
-  }) async => null;
-  @override
-  List<SalesOrder> getLocalOrders() => [];
-  @override
-  Future<void> saveLocalOrder(SalesOrder order) async {}
-  @override
-  Future<List<SalesOrder>> fetchRemoteOrders({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  Future<SalesOrder?> fetchRemoteOrder(
-    String zohoOrderId, {
-    bool allowOfflineFallback = false,
-  }) async => null;
-  @override
-  List<SalesReturn> getLocalReturns() => [];
-  @override
-  Future<void> saveLocalReturn(SalesReturn salesReturn) async {}
-  @override
-  Future<List<SalesReturn>> fetchRemoteReturns({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  List<ExpenseEntry> getLocalExpenses() => [];
-  @override
-  Future<void> saveLocalExpense(ExpenseEntry expense) async {}
-  @override
-  Future<List<ExpenseEntry>> fetchRemoteExpenses({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  CashClosing? getLocalCashClosing() => null;
-  @override
-  Future<void> saveLocalCashClosing(CashClosing closing) async {}
-  @override
-  List<StockTransfer> getLocalStockTransfers() => [];
-  @override
-  Future<void> saveLocalStockTransfer(StockTransfer transfer) async {}
-  @override
-  Future<List<StockTransfer>> fetchRemoteStockTransfers({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => [];
-  @override
-  Future<CustomerLedger> fetchCustomerLedger(
-    String customerId, {
-    DateTime? startDate,
-    DateTime? endDate,
-  }) => throw UnimplementedError();
-  @override
-  Customer? getCustomerById(String id) => null;
-  @override
-  Organization? getOrganization() => null;
-  @override
-  String? get assignedWarehouseId => null;
-  @override
-  String? get primaryWarehouseId => null;
-  @override
-  List<Warehouse> getWarehouses() => [];
-  @override
-  bool hasPendingCashClosingForToday() => false;
-  @override
-  Future<List<Item>> fetchRemoteItems({String? locationId}) async => [];
-  @override
-  Future<void> pushCustomerGpsRemote(
-    String customerId,
-    double latitude,
-    double longitude,
-  ) => throw UnimplementedError();
 }
 
 class FakeHiveDatabaseService extends HiveDatabaseService {
@@ -307,7 +156,7 @@ void main() {
       apiClient: FakeZohoApiClient(),
     );
     bloc = ReceiptAllocationBloc(
-      salesRepository: salesRepo,
+      receiptRepository: salesRepo,
       syncWorker: syncWorker,
       documentNumberService: docService,
     );
