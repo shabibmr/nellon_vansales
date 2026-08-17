@@ -1,5 +1,5 @@
 {
-  "name": "Van Sales Flutter",
+  "name": "Van Sales Android",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "."

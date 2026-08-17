@@ -15,7 +15,10 @@ if [[ ! -f "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" ]]; then
   mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
 fi
 
-yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+set +o pipefail
+yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+set -o pipefail
+
 "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
   "platform-tools" \
   "platforms;android-34" \
@@ -28,7 +31,7 @@ if [[ -d "${ANDROID_HOME}/platforms/android-37.0" && ! -e "${ANDROID_HOME}/platf
 fi
 
 flutter config --android-sdk "${ANDROID_HOME}" --no-analytics
-flutter precache --linux --android
+flutter precache --android
 
 cd /workspace
 flutter pub get
