@@ -133,4 +133,44 @@ void main() {
     expect(find.text('Later'), findsNothing);
     expect(find.text('Update Now'), findsNothing);
   });
+
+  testWidgets('optional dialog cannot be dismissed while downloading', (
+    tester,
+  ) async {
+    service.mockUpdateInfo = _info(force: false);
+
+    await _pumpGate(tester, cubit: cubit);
+    await tester.tap(find.text('Update Now'));
+    await tester.pump();
+    service.emitOtaEvent(const OtaEvent(OtaStatus.downloading, '20'));
+    await tester.pump();
+
+    expect(find.text('Downloading update: 20%'), findsOneWidget);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump();
+    expect(find.text('Downloading update: 20%'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Downloading update: 20%'), findsOneWidget);
+    expect(find.text('CHILD_CONTENT'), findsOneWidget);
+  });
+
+  testWidgets('in-flight download without a dialog shows the blocking screen', (
+    tester,
+  ) async {
+    await _pumpGate(tester, cubit: cubit);
+    expect(find.text('CHILD_CONTENT'), findsOneWidget);
+
+    cubit.startDownloadAndInstall(_info(force: false));
+    await tester.pump();
+    service.emitOtaEvent(const OtaEvent(OtaStatus.downloading, '30'));
+    await tester.pump();
+
+    expect(find.text('CHILD_CONTENT'), findsNothing);
+    expect(find.byType(AppUpdateForceScreen), findsOneWidget);
+    expect(find.text('Downloading update: 30%'), findsOneWidget);
+    expect(find.text('Later'), findsNothing);
+  });
 }

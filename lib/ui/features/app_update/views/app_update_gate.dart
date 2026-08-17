@@ -53,13 +53,23 @@ class _AppUpdateGateState extends State<AppUpdateGate>
             !_optionalDialogShowing) {
           _optionalDialogShowing = true;
           AppUpdateDialog.show(context, state.updateInfo).then((_) {
-            _optionalDialogShowing = false;
+            if (!mounted) {
+              _optionalDialogShowing = false;
+              return;
+            }
+            setState(() => _optionalDialogShowing = false);
           });
         }
       },
       builder: (context, state) {
-        if (state.isForceBlocking) {
-          return AppUpdateForceScreen(updateInfo: state.updateInfo!);
+        final info = state.updateInfo;
+        // Force updates always replace the app. Optional downloads that lost
+        // their dialog (e.g. route pop) keep running on a full-screen gate so
+        // the user cannot return to sales screens mid-download.
+        if (info != null &&
+            (state.isForceBlocking ||
+                (state.isInFlight && !_optionalDialogShowing))) {
+          return AppUpdateForceScreen(updateInfo: info);
         }
         return widget.child;
       },
