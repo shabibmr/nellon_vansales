@@ -27,9 +27,6 @@ flutter test
 # Run a single test file
 flutter test test/widget_test.dart
 
-# Run integration tests
-flutter test integration_test/app_test.dart --driver test_driver/integration_test.dart
-
 ```
 
 `analysis_options.yaml` excludes `scratch/**` and `test/test_org_sync.dart` from the analyzer — `scratch/` holds ad-hoc, uncompiled debugging scripts and isn't part of the app.

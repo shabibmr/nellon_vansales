@@ -112,10 +112,7 @@ StockTransfer _transfer() {
 
 class _FakeVoucherPdfRepo extends Fake implements VoucherPdfRepository {}
 class _FakeCustomerRepo extends Fake implements CustomerRepository {}
-class _FakeSessionRepo extends Fake implements SessionRepository {
-  @override
-  bool isCashClosingPending() => false;
-}
+class _FakeSessionRepo extends Fake implements SessionRepository {}
 class _FakeThermalPrinterRepo extends Fake implements ThermalPrinterRepository {
   @override
   ThermalPaperSize get paperSize => ThermalPaperSize.inch4;
