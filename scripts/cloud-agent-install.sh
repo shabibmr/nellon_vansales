@@ -3,7 +3,17 @@ set -euo pipefail
 
 ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
 export ANDROID_HOME
-export PATH="/opt/flutter/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+
+if [[ -x /opt/flutter/bin/flutter ]]; then
+  export PATH="/opt/flutter/bin:${PATH}"
+elif [[ -x "${HOME}/flutter/bin/flutter" ]]; then
+  export PATH="${HOME}/flutter/bin:${PATH}"
+else
+  echo "Flutter SDK not found at /opt/flutter or ${HOME}/flutter" >&2
+  exit 1
+fi
+
+export PATH="${ANDROID_HOME}/platform-tools:${PATH}"
 
 if [[ ! -f "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" ]]; then
   mkdir -p "${ANDROID_HOME}/cmdline-tools"
