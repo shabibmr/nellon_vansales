@@ -1,0 +1,9 @@
+{
+  "name": "Van Sales Flutter",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "user": "ubuntu",
+  "install": "./scripts/cloud-agent-install.sh"
+}
