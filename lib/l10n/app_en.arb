@@ -5,11 +5,11 @@
     "description": "Application title string"
   },
   "dashboardTitle": "Dashboard",
-  "operationsTitle": "Operations",
+  "operationsTitle": "Transactions",
   "reportsTitle": "Reports",
   "customersAndRoutes": "Customers & Routes",
   "analyticsDashboardTitle": "Analytics & Dashboard",
-  "operationsPanelTitle": "Operations Panel",
+  "operationsPanelTitle": "Transactions Panel",
   "reportsStatementsTitle": "Reports & Statements",
   "loginWelcome": "Welcome to Van Sales",
   "enterPhoneNumber": "Enter phone number to receive OTP",

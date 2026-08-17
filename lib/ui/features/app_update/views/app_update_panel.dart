@@ -69,7 +69,7 @@ class AppUpdatePanel extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'v${updateInfo.currentVersionName} ➔ v${updateInfo.latestVersionName}',
+                        'v${updateInfo.currentVersionName}+${updateInfo.currentBuildNumber} ➔ v${updateInfo.latestVersionName}+${updateInfo.latestBuildNumber}',
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppTheme.infoSky,

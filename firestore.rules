@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Device trial/license records. Reads are public so LicenseGate can
+    // recover after a failed write. Creates require a signed-in user (phone
+    // OTP). The previous `user_id == request.auth.uid` check denied first
+    // login on some devices (type/field mismatch) and the app fail-opened
+    // into a Zoho bind with no credentials.
+    match /app_licenses/{licenseId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
+    }
+
+    // Zoho OAuth triple (`zoho`) and APK channel docs (`app_version`).
+    // Public read: AppUpdateGate runs before auth; a fresh phone must be able
+    // to load `zoho` immediately after OTP. Clients must never write — any
+    // authenticated van user used to be able to overwrite the refresh token.
+    match /server_config/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

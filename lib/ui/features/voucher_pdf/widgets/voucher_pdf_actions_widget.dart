@@ -78,6 +78,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       VoucherType.salesReturn => (voucher as SalesReturn).customerId,
       VoucherType.paymentReceipt => (voucher as ReceiptVoucher).customerId,
       VoucherType.expenseVoucher => null,
+      VoucherType.stockTransfer => null,
     };
   }
 

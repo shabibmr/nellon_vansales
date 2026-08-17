@@ -24,6 +24,7 @@ import 'domain/repositories/sales_return_repository.dart';
 import 'domain/repositories/invoice_repository.dart';
 import 'domain/repositories/sales_order_repository.dart';
 import 'domain/repositories/item_repository.dart';
+import 'domain/repositories/server_config_repository.dart';
 import 'ui/features/auth/bloc/auth_bloc.dart';
 import 'ui/features/sync/bloc/sync_bloc.dart';
 import 'ui/features/route/bloc/route_bloc.dart';
@@ -117,6 +118,9 @@ class VanSalesApp extends StatelessWidget {
         RepositoryProvider<ItemRepository>(
           create: (context) => sl<ItemRepository>(),
         ),
+        RepositoryProvider<ServerConfigRepository>(
+          create: (context) => sl<ServerConfigRepository>(),
+        ),
         RepositoryProvider<VoucherPdfRepository>(
           create: (context) => sl<VoucherPdfRepository>(),
         ),
@@ -140,6 +144,7 @@ class VanSalesApp extends StatelessWidget {
             create: (context) => AuthBloc(
               authRepository: context.read<AuthRepository>(),
               salespersonRepository: context.read<SalespersonRepository>(),
+              serverConfigRepository: context.read<ServerConfigRepository>(),
               documentNumberService: context.read<DocumentNumberService>(),
             )..add(AppStarted()),
           ),

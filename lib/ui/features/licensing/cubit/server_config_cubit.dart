@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../data/services/app_logger.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/zoho_api_client.dart';
 import '../../../../domain/models/server_config.dart';
@@ -34,6 +36,11 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
       if (state is ServerConfigLoaded) return;
       if (cached == null) return;
 
+      debugPrint(
+        '[ServerConfigCubit] 💧 Hydrating Zoho credentials from storage: '
+        'clientId="${cached.clientId}", orgId="${cached.organizationId}"',
+      );
+
       apiClient.updateCredentials(
         clientId: cached.clientId,
         clientSecret: cached.clientSecret,
@@ -51,7 +58,8 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
           code: cached.code,
         ),
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ServerConfigCubit] ⚠️ Cache hydration warning: $e');
       // Stay Initial; a later remote setConfig can still inject.
     }
   }
@@ -59,9 +67,18 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
   /// Configures the active server credentials mapping, updating [ZohoApiClient].
   void setConfig(ServerConfig? config) {
     if (config == null) {
+      debugPrint('[ServerConfigCubit] ℹ️ setConfig called with null config.');
       emit(const ServerConfigInitial());
       return;
     }
+
+    debugPrint(
+      '[ServerConfigCubit] ⚙️ setConfig received: '
+      'clientId="${config.clientId}", '
+      'orgId="${config.organizationId}", '
+      'hasSecret=${config.clientSecret.isNotEmpty}, '
+      'hasCode=${config.code.isNotEmpty}',
+    );
 
     // An incomplete Firestore doc (empty client_id/client_secret/code) must
     // not wipe the client's current working credentials — empty strings pass
@@ -69,6 +86,11 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
     if (config.clientId.isEmpty ||
         config.clientSecret.isEmpty ||
         config.code.isEmpty) {
+      debugPrint('[ServerConfigCubit] ⚠️ setConfig: Server configuration is INCOMPLETE.');
+      AppLogger.warning(
+        'ServerConfigCubit',
+        'Server configuration incomplete in setConfig',
+      );
       emit(
         const ServerConfigError(
           'Server configuration is incomplete (empty Zoho credentials in '
@@ -88,6 +110,9 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
 
       unawaited(localStorage.saveZohoCredentials(config));
 
+      debugPrint('[ServerConfigCubit] ✅ ServerConfig injected and saved to storage.');
+      AppLogger.info('ServerConfigCubit', 'ServerConfig successfully applied.');
+
       emit(
         ServerConfigLoaded(
           clientId: config.clientId,
@@ -96,6 +121,7 @@ class ServerConfigCubit extends Cubit<ServerConfigState> {
         ),
       );
     } catch (e) {
+      debugPrint('[ServerConfigCubit] ❌ Failed to inject server config credentials: $e');
       emit(
         ServerConfigError(
           'Failed to inject server configuration credentials: ${userFacingMessage(e)}',

@@ -200,9 +200,9 @@ class DashboardScaffold extends StatelessWidget {
                                   label: 'Dashboard',
                                 ),
                                 BottomNavigationBarItem(
-                                  icon: Icon(Icons.settings_suggest_outlined),
-                                  activeIcon: Icon(Icons.settings_suggest),
-                                  label: 'Operations',
+                                  icon: Icon(Icons.receipt_long_outlined),
+                                  activeIcon: Icon(Icons.receipt_long),
+                                  label: 'Transactions',
                                 ),
                                 BottomNavigationBarItem(
                                   icon: Icon(Icons.assessment_outlined),

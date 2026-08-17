@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/stock_transfer.dart';
 import '../../../../domain/repositories/item_repository.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_filter.dart';
 import '../../../core/utils/quantity_format.dart';
@@ -12,6 +13,7 @@ import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/editor_footer.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/item_search_sheet.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/stock_transfer_bloc.dart';
 import '../widgets/stock_transfer_line_tile.dart';
 import '../widgets/stock_transfer_qty_dialog.dart';
@@ -291,21 +293,38 @@ class _StockTransferEditorViewState extends State<StockTransferEditorView> {
                             SubmitTransfer(notes: _notesController.text),
                           );
                         },
-                  trailing: widget.isLoad && !readOnly
-                      ? SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _openAddItemSheet,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Item'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.primaryIndigo,
-                              side: const BorderSide(
-                                color: AppTheme.primaryIndigo,
+                  trailing: (widget.isLoad && !readOnly) ||
+                          widget.existingTransfer != null
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.isLoad && !readOnly)
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _openAddItemSheet,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Add Item'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryIndigo,
+                                    side: const BorderSide(
+                                      color: AppTheme.primaryIndigo,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
+                            if (widget.existingTransfer != null) ...[
+                              if (widget.isLoad && !readOnly)
+                                const SizedBox(height: 12),
+                              VoucherPdfActionsWidget(
+                                type: VoucherType.stockTransfer,
+                                voucher: widget.existingTransfer!,
+                              ),
+                            ],
+                          ],
                         )
                       : null,
                 ),

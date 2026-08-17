@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../data/services/app_logger.dart';
 import '../../../../data/services/device_info_service.dart';
+import '../../../../data/services/error_classification.dart';
 import '../../../../data/services/license_service.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../domain/models/license_document.dart';
@@ -32,18 +34,22 @@ class LicenseCubit extends Cubit<LicenseState> {
   /// Falls back to first login state if UUID is absent, or fetches license details.
   Future<void> checkLicense(User user) async {
     emit(LicenseChecking());
+    debugPrint('[LicenseCubit] 🔍 Checking license for user: ${user.id} (${user.phone})');
     try {
       final storedUuid = await _localStorageService.getLicenseUuid();
 
       if (storedUuid == null || storedUuid.trim().isEmpty) {
+        debugPrint('[LicenseCubit] 🆕 No cached license UUID found -> First Login registration needed.');
         emit(LicensePendingFirstLogin());
         return;
       }
 
+      debugPrint('[LicenseCubit] 📄 Cached license UUID found: $storedUuid. Fetching from Firestore...');
       // Fetch license document from remote Firestore
       final licenseDoc = await _licenseService.fetchLicense(storedUuid);
 
       if (licenseDoc == null) {
+        debugPrint('[LicenseCubit] ⚠️ License not found in Firestore -> re-registering.');
         // Stored locally but removed from server, trigger re-registration
         emit(LicensePendingFirstLogin());
         return;
@@ -52,6 +58,7 @@ class LicenseCubit extends Cubit<LicenseState> {
       // Check validation flags (enabled + expiration checks)
       final now = DateTime.now();
       if (!licenseDoc.enabled) {
+        debugPrint('[LicenseCubit] 🚫 License is DISABLED by administrator.');
         emit(
           const LicenseBlocked(
             reason:
@@ -62,6 +69,7 @@ class LicenseCubit extends Cubit<LicenseState> {
       }
 
       if (licenseDoc.expiryAt.isBefore(now)) {
+        debugPrint('[LicenseCubit] ⌛ License has EXPIRED at: ${licenseDoc.expiryAt}');
         emit(
           const LicenseBlocked(
             reason:
@@ -78,8 +86,27 @@ class LicenseCubit extends Cubit<LicenseState> {
       ServerConfig? serverConfig;
       try {
         serverConfig = await _licenseService.fetchServerConfig();
+        debugPrint(
+          '[LicenseCubit] 📥 ServerConfig loaded during checkLicense: '
+          'isValid=${serverConfig.isValid}, clientId="${serverConfig.clientId}"',
+        );
       } catch (e) {
+        if (isFirestorePermissionDenied(e)) {
+          debugPrint('[LicenseCubit] ❌ Permission-denied reading server_config/zoho: $e');
+          AppLogger.error(
+            'Licensing',
+            'Firestore permission-denied reading server_config/zoho: $e',
+          );
+          emit(
+            const LicenseError(
+              'Cannot read Zoho server configuration (permission denied). '
+              'Contact admin.',
+            ),
+          );
+          return;
+        }
         // Fail-open strategy allows proceeding even if remote credentials fail to load
+        debugPrint('[LicenseCubit] ⚠️ Fail-open: Failed to fetch Server Config: $e');
         AppLogger.warning(
           'Licensing',
           'Fail-open warning: Failed to fetch Server Config: $e',
@@ -88,7 +115,22 @@ class LicenseCubit extends Cubit<LicenseState> {
 
       emit(LicenseValid(serverConfig: serverConfig));
     } catch (e) {
+      if (isFirestorePermissionDenied(e)) {
+        debugPrint('[LicenseCubit] ❌ Firestore permission-denied during checkLicense: $e');
+        AppLogger.error(
+          'Licensing',
+          'Firestore permission-denied during license check: $e',
+        );
+        emit(
+          const LicenseError(
+            'Cannot read license data from the server (permission denied). '
+            'Contact admin — the app will not call Zoho until this is fixed.',
+          ),
+        );
+        return;
+      }
       // Fail-open strategy on Firestore network/access errors.
+      debugPrint('[LicenseCubit] ⚠️ Fail-open: Firestore fetch failed. Allowing access: $e');
       AppLogger.warning(
         'Licensing',
         'Fail-open: Firestore fetch failed. Allowing access: $e',
@@ -100,8 +142,9 @@ class LicenseCubit extends Cubit<LicenseState> {
   /// Registers a new license document in Firestore on the first login of a device.
   Future<void> registerFirstLogin(User user) async {
     emit(LicenseChecking());
+    debugPrint('[LicenseCubit] 🚀 Registering first-time login for user: ${user.id} (${user.phone})');
+    final newUuid = _uuidGenerator.v4();
     try {
-      final newUuid = _uuidGenerator.v4();
       final deviceDetails = await _deviceInfoService.getDeviceDetails();
 
       final now = DateTime.now();
@@ -125,17 +168,57 @@ class LicenseCubit extends Cubit<LicenseState> {
         expiryAt: expiry,
       );
 
-      // Save document to Firestore
-      await _licenseService.createLicense(licenseDoc);
+      // Best-effort remote write: fail-open if Firestore write fails
+      try {
+        await _licenseService.createLicense(licenseDoc);
+        debugPrint('[LicenseCubit] ☁️ Created initial license document in Firestore.');
+      } catch (e) {
+        debugPrint('[LicenseCubit] ⚠️ Fail-open: Failed to write initial license to Firestore: $e');
+        AppLogger.warning(
+          'Licensing',
+          'Fail-open: Failed to create license document in Firestore: $e',
+        );
+      }
 
       // Persist UUID securely on device
-      await _localStorageService.saveLicenseUuid(newUuid);
+      try {
+        await _localStorageService.saveLicenseUuid(newUuid);
+        debugPrint('[LicenseCubit] 💾 Saved license UUID locally: $newUuid');
+      } catch (e) {
+        debugPrint('[LicenseCubit] ⚠️ Failed to persist license UUID locally: $e');
+        AppLogger.warning(
+          'Licensing',
+          'Failed to persist license UUID locally: $e',
+        );
+      }
 
       // Attempt to load server configurations
       ServerConfig? serverConfig;
       try {
         serverConfig = await _licenseService.fetchServerConfig();
+        debugPrint(
+          '[LicenseCubit] 📥 ServerConfig loaded in registerFirstLogin: '
+          'isValid=${serverConfig.isValid}, clientId="${serverConfig.clientId}"',
+        );
       } catch (e) {
+        if (isFirestorePermissionDenied(e)) {
+          debugPrint(
+            '[LicenseCubit] ❌ Permission-denied reading server_config/zoho '
+            'during first login: $e',
+          );
+          AppLogger.error(
+            'Licensing',
+            'Firestore permission-denied reading server_config/zoho: $e',
+          );
+          emit(
+            const LicenseError(
+              'Cannot read Zoho server configuration (permission denied). '
+              'Contact admin.',
+            ),
+          );
+          return;
+        }
+        debugPrint('[LicenseCubit] ⚠️ Registration warning: Failed to load Zoho Config: $e');
         AppLogger.warning(
           'Licensing',
           'Registration warning: Failed to load Zoho Config: $e',
@@ -144,11 +227,26 @@ class LicenseCubit extends Cubit<LicenseState> {
 
       emit(LicenseValid(serverConfig: serverConfig));
     } catch (e) {
-      emit(
-        LicenseError(
-          'Failed to register application license: ${userFacingMessage(e)}',
-        ),
+      if (isFirestorePermissionDenied(e)) {
+        debugPrint('[LicenseCubit] ❌ Permission-denied on registerFirstLogin: $e');
+        AppLogger.error(
+          'Licensing',
+          'Firestore permission-denied on first login: $e',
+        );
+        emit(
+          const LicenseError(
+            'Cannot register this device (Firestore permission denied). '
+            'Contact admin.',
+          ),
+        );
+        return;
+      }
+      debugPrint('[LicenseCubit] ⚠️ Fail-open on registerFirstLogin unhandled error: $e');
+      AppLogger.warning(
+        'Licensing',
+        'Fail-open on registerFirstLogin error: $e',
       );
+      emit(const LicenseValid(serverConfig: null));
     }
   }
 

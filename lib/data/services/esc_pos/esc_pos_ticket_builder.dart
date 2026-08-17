@@ -77,6 +77,13 @@ class EscPosTicketBuilder {
 
   int get nameW => columns - slW - qtyW - amountW - _pipeCount;
 
+  /// Stock transfer table cell widths (Sl, Item, Qty - no amount column).
+  static const int transferQtyW = 10;
+  // |Sl|Item|Qty| → 4 pipe characters
+  static const int _pipeCount3 = 4;
+
+  int get transferNameW => columns - slW - transferQtyW - _pipeCount3;
+
   /// Maps app paper size to esc_pos_utils [PaperSize].
   ///
   /// Layout width is driven by [ThermalPaperSize.columns] (4" = 64, 2" = 32).
@@ -467,6 +474,83 @@ class EscPosTicketBuilder {
     return bytes;
   }
 
+  String _pipeRow3({
+    required String sl,
+    required String name,
+    required String qty,
+  }) {
+    final nw = transferNameW < 1 ? 1 : transferNameW;
+    final slCell = truncate(sl, slW).padLeft(slW);
+    final nameCell = truncate(name, nw).padRight(nw);
+    final qtyCell = truncate(qty, transferQtyW).padLeft(transferQtyW);
+    return '|$slCell|$nameCell|$qtyCell|';
+  }
+
+  List<int> stockTransferTableHeader() {
+    final bytes = <int>[];
+    bytes.addAll(divider());
+    bytes.addAll(
+      left(
+        _pipeRow3(sl: 'Sl', name: 'Item', qty: 'Qty'),
+        bold: true,
+      ),
+    );
+    bytes.addAll(divider());
+    return bytes;
+  }
+
+  /// One blank stock transfer item-table row (`|   | … |          |`).
+  List<int> emptyStockTransferItemRow() {
+    return left(_pipeRow3(sl: '', name: '', qty: ''));
+  }
+
+  List<int> stockTransferItemRow({
+    required int serial,
+    required String name,
+    required double quantity,
+    String baseUom = '',
+    String enteredUom = '',
+    double conversionRate = 1.0,
+  }) {
+    final nw = transferNameW < 1 ? 1 : transferNameW;
+    final bytes = <int>[];
+    final nameLines = wrapText(name, nw);
+    final lines = nameLines.isEmpty
+        ? <String>['']
+        : List<String>.from(nameLines);
+
+    // If unit conversion is used, append a sub-line e.g. "  (2 Box)"
+    if (conversionRate > 0 &&
+        conversionRate != 1.0 &&
+        enteredUom.trim().isNotEmpty) {
+      final entered = quantity / conversionRate;
+      final enteredNum = entered % 1 == 0
+          ? entered.toInt().toString()
+          : entered.toStringAsFixed(2);
+      lines.add('  ($enteredNum ${enteredUom.trim()})');
+    }
+
+    final qtyNum = quantity % 1 == 0
+        ? quantity.toInt().toString()
+        : quantity.toStringAsFixed(2);
+    final unit = baseUom.trim();
+    final qtyText = unit.isEmpty ? qtyNum : '$qtyNum $unit';
+
+    for (var i = 0; i < lines.length; i++) {
+      final isFirst = i == 0;
+      bytes.addAll(
+        left(
+          _pipeRow3(
+            sl: isFirst ? serial.toString() : '',
+            name: lines[i],
+            qty: isFirst ? qtyText : '',
+          ),
+        ),
+      );
+    }
+    return bytes;
+  }
+
   List<int> totalsBlock({
     required String symbol,
     String? currencyCode,
@@ -537,7 +621,7 @@ class EscPosTicketBuilder {
     return bytes;
   }
 
-  static const String supervisorContact = 'Suneer (Supervisor) : +971501880810';
+  static const String supervisorContact = 'Supervisor : +971 528300929';
 
   List<int> footer({String? salespersonName, String? salespersonPhone}) {
     final bytes = <int>[];

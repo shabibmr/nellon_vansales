@@ -38,11 +38,12 @@ class FakeLicenseService extends LicenseService {
   ServerConfig? serverConfig;
   bool shouldThrowFetch = false;
   bool shouldThrowCreate = false;
+  Object fetchError = Exception('Network connection timed out');
 
   @override
   Future<LicenseDocument?> fetchLicense(String uuid) async {
     if (shouldThrowFetch) {
-      throw Exception('Network connection timed out');
+      throw fetchError;
     }
     return document;
   }
@@ -285,7 +286,7 @@ void main() {
   );
 
   test(
-    'registerFirstLogin emits error state when Firestore write fails',
+    'registerFirstLogin fails open and emits valid state when Firestore write fails',
     () async {
       licenseService.shouldThrowCreate = true;
 
@@ -297,10 +298,28 @@ void main() {
 
       expect(states, [
         LicenseChecking(),
-        const LicenseError(
-          'Failed to register application license: Firestore write permission denied',
-        ),
+        const LicenseValid(serverConfig: null),
       ]);
+    },
+  );
+
+  test(
+    'checkLicense emits error when Firestore returns permission-denied',
+    () async {
+      localService.uuid = 'my-uuid-v4';
+      licenseService.shouldThrowFetch = true;
+      licenseService.fetchError = Exception(
+        '[cloud_firestore/permission-denied] Missing or insufficient permissions.',
+      );
+
+      final states = <LicenseState>[];
+      cubit.stream.listen(states.add);
+
+      await cubit.checkLicense(testUser);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(states.first, LicenseChecking());
+      expect(states.last, isA<LicenseError>());
     },
   );
 }

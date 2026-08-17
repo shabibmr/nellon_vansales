@@ -190,4 +190,65 @@ void main() {
       expect(cubit.state, isA<ServerConfigInitial>());
     });
   });
+
+  group('ServerConfig.fromMap', () {
+    test('parses standard keys with code field', () {
+      final parsed = ServerConfig.fromMap(const {
+        'client_id': 'cid_123',
+        'client_secret': 'sec_456',
+        'code': 'refresh_789',
+        'organization_id': 'org_999',
+      });
+      expect(parsed.clientId, 'cid_123');
+      expect(parsed.clientSecret, 'sec_456');
+      expect(parsed.code, 'refresh_789');
+      expect(parsed.organizationId, 'org_999');
+    });
+
+    test('falls back to refresh_token key when code is absent or empty', () {
+      final parsed = ServerConfig.fromMap(const {
+        'client_id': 'cid_123',
+        'client_secret': 'sec_456',
+        'refresh_token': 'refresh_fallback_789',
+        'organization_id': 'org_999',
+      });
+      expect(parsed.clientId, 'cid_123');
+      expect(parsed.clientSecret, 'sec_456');
+      expect(parsed.code, 'refresh_fallback_789');
+      expect(parsed.organizationId, 'org_999');
+    });
+
+    test('uses refresh_token when code is an empty string', () {
+      final parsed = ServerConfig.fromMap(const {
+        'client_id': 'cid_123',
+        'client_secret': 'sec_456',
+        'code': '   ',
+        'refresh_token': 'refresh_fallback_789',
+      });
+      expect(parsed.code, 'refresh_fallback_789');
+    });
+
+    test('prefers refresh_token over a leftover grant in code', () {
+      final parsed = ServerConfig.fromMap(const {
+        'client_id': 'cid_123',
+        'client_secret': 'sec_456',
+        'code': 'grant_not_a_refresh',
+        'refresh_token': 'actual_refresh_token',
+      });
+      expect(parsed.code, 'actual_refresh_token');
+    });
+
+    test('trims whitespace and handles null / non-string values safely', () {
+      final parsed = ServerConfig.fromMap(const {
+        'client_id': '  cid_trimmed  ',
+        'client_secret': '  sec_trimmed  ',
+        'code': '  code_trimmed  ',
+        'organization_id': 123456,
+      });
+      expect(parsed.clientId, 'cid_trimmed');
+      expect(parsed.clientSecret, 'sec_trimmed');
+      expect(parsed.code, 'code_trimmed');
+      expect(parsed.organizationId, '123456');
+    });
+  });
 }

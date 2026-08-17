@@ -8,8 +8,11 @@ import '../../../../domain/models/session_bind_result.dart';
 import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/auth_repository.dart';
 import '../../../../domain/repositories/salesperson_repository.dart';
+import '../../../../domain/repositories/server_config_repository.dart';
 import '../../../../domain/utils/phone_normalizer.dart';
+import '../../../../data/services/app_logger.dart';
 import '../../../../data/services/document_number_service.dart';
+import '../../../../data/services/firebase_telemetry.dart';
 import '../../../core/utils/error_mapper.dart';
 
 // --- Events ---
@@ -161,6 +164,7 @@ class AuthFailure extends AuthState {
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   final SalespersonRepository _salespersonRepository;
+  final ServerConfigRepository _serverConfigRepository;
   final DocumentNumberService _documentNumberService;
 
   static const _msgNotRegistered = 'Not registered — contact admin.';
@@ -168,6 +172,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   static const _msgNotFullyMapped = 'Not fully mapped — contact admin.';
   static const _msgNetwork =
       'Unable to verify with Zoho. Check network and retry.';
+  static const _msgServerNotConfigured =
+      'Server not configured — contact admin.';
   static const _msgInvalidPhone =
       'Enter a valid mobile number in international format (e.g. +971501234567).';
   static const _msgInvalidCode = 'Incorrect code. Please try again.';
@@ -181,9 +187,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc({
     required AuthRepository authRepository,
     required SalespersonRepository salespersonRepository,
+    required ServerConfigRepository serverConfigRepository,
     required DocumentNumberService documentNumberService,
   })  : _authRepository = authRepository,
         _salespersonRepository = salespersonRepository,
+        _serverConfigRepository = serverConfigRepository,
         _documentNumberService = documentNumberService,
         super(AuthInitial()) {
     on<AppStarted>(_onAppStarted);
@@ -205,6 +213,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return _msgNotFullyMapped;
       case SessionBindFailure.network:
         return _msgNetwork;
+      case SessionBindFailure.serverNotConfigured:
+        return _msgServerNotConfigured;
     }
   }
 
@@ -238,18 +248,42 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   /// Binds Zoho session for [user]; returns Authenticated user or emits failure.
   Future<User?> _bindAfterFirebase(User user, Emitter<AuthState> emit) async {
+    // Zoho config normally arrives via LicenseGate, which only mounts once the
+    // user is Authenticated — so on a fresh install (empty secure cache) the
+    // bind below would fail and tear down the very session that would have
+    // healed on the next boot. Firebase auth has already completed here, so
+    // the Firestore read is authorized.
+    final configured = await _serverConfigRepository.ensureCredentialsLoaded();
+    if (!configured) {
+      AppLogger.error(
+        'Auth',
+        'Cannot bind session: Zoho server configuration could not be loaded from Firestore.',
+      );
+      await _tearDownSession();
+      emit(const AuthFailure(_msgServerNotConfigured));
+      return null;
+    }
+
     SessionBindResult result;
     try {
       result = await _salespersonRepository
           .verifyAndBindSession(user.phone)
           .timeout(const Duration(seconds: 30));
-    } catch (_) {
+    } catch (e) {
+      AppLogger.error(
+        'Auth',
+        'Salesperson verifyAndBindSession failed/timed out for phone ${user.phone}: $e',
+      );
       await _tearDownSession();
       emit(const AuthFailure(_msgNetwork));
       return null;
     }
 
     if (!result.isSuccess || result.salesperson == null) {
+      AppLogger.warning(
+        'Auth',
+        'Salesperson bind unsuccessful for phone ${user.phone}: failure=${result.failure}',
+      );
       await _tearDownSession();
       emit(
         AuthFailure(
@@ -262,6 +296,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
 
     unawaited(_seedNumberingCounters());
+    AppLogger.info(
+      'Auth',
+      'Salesperson session bound successfully: ${result.salesperson!.name} (${user.phone})',
+    );
     return _userWithSalespersonName(user, result.salesperson!.name);
   }
 
@@ -297,6 +335,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
 
     try {
+      // Same reason as in _bindAfterFirebase: without this the first bind
+      // after a fresh install always fails and falls through to the tolerant
+      // branch below. If Firestore denied the config read, do not call Zoho
+      // with an empty/stale refresh token (that surfaces as `invalid_code`).
+      final configured = await _serverConfigRepository.ensureCredentialsLoaded();
+      if (!configured) {
+        AppLogger.warning(
+          'Auth',
+          'AppStarted: Zoho credentials not loaded; keeping Firebase session '
+          'without a Zoho bind.',
+        );
+        emit(Authenticated(user));
+        return;
+      }
       final result = await _salespersonRepository
           .verifyAndBindSession(user.phone)
           .timeout(const Duration(seconds: 15));
@@ -412,6 +464,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final bound = await _bindAfterFirebase(user, emit);
       if (bound != null) {
         _resetPendingOtpState();
+        unawaited(FirebaseTelemetry.logLogin());
         emit(Authenticated(bound));
       }
     } on fb.FirebaseAuthException catch (e) {

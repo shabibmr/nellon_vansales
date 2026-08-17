@@ -29,6 +29,11 @@ class FirebaseTelemetry {
         );
       }
       await FirebaseCrashlytics.instance.setCustomKey('user_role', user.role);
+    } catch (_) {}
+  }
+
+  static Future<void> logLogin() async {
+    try {
       await FirebaseAnalytics.instance.logLogin(loginMethod: 'phone');
     } catch (_) {}
   }

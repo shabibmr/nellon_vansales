@@ -181,4 +181,24 @@ void main() {
       expect(humanizeSyncError(error), 'The location is inactive.');
     });
   });
+
+  group('isFirestorePermissionDenied', () {
+    test('matches cloud_firestore permission-denied', () {
+      expect(
+        isFirestorePermissionDenied(
+          Exception(
+            '[cloud_firestore/permission-denied] Missing or insufficient permissions.',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not match a network timeout', () {
+      expect(
+        isFirestorePermissionDenied(Exception('Network connection timed out')),
+        isFalse,
+      );
+    });
+  });
 }

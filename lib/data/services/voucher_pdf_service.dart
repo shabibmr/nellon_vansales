@@ -9,6 +9,7 @@ import '../../domain/models/sales_order.dart';
 import '../../domain/models/sales_return.dart';
 import '../../domain/models/receipt_voucher.dart';
 import '../../domain/models/expense_entry.dart';
+import '../../domain/models/stock_transfer.dart';
 import '../../domain/models/organization.dart';
 import '../../domain/models/customer.dart';
 import '../../domain/repositories/voucher_pdf_repository.dart';
@@ -18,6 +19,7 @@ import '../../ui/features/voucher_pdf/templates/sales_order_pdf_template.dart';
 import '../../ui/features/voucher_pdf/templates/sales_return_pdf_template.dart';
 import '../../ui/features/voucher_pdf/templates/receipt_pdf_template.dart';
 import '../../ui/features/voucher_pdf/templates/expense_pdf_template.dart';
+import '../../ui/features/voucher_pdf/templates/stock_transfer_pdf_template.dart';
 
 /// A comprehensive service responsible for compiling PDFs, writing them to disk as temp files,
 /// and invoking native Android/iOS Print and Share handlers.
@@ -30,6 +32,7 @@ class VoucherPdfService implements VoucherPdfRepository {
     'sales_return_',
     'payment_receipt_',
     'expense_voucher_',
+    'stock_transfer_',
   ];
 
   @override
@@ -70,6 +73,11 @@ class VoucherPdfService implements VoucherPdfRepository {
         org,
         pageFormat: pageFormat,
       ),
+      VoucherType.stockTransfer => StockTransferPdfTemplate.generate(
+        voucher as StockTransfer,
+        org,
+        pageFormat: pageFormat,
+      ),
     };
 
     return doc.save();
@@ -91,6 +99,8 @@ class VoucherPdfService implements VoucherPdfRepository {
         'payment_receipt_${(voucher as ReceiptVoucher).paymentNumber}',
       VoucherType.expenseVoucher =>
         'expense_voucher_${(voucher as ExpenseEntry).id}',
+      VoucherType.stockTransfer =>
+        'stock_transfer_${(voucher as StockTransfer).transferNumber.isNotEmpty ? (voucher as StockTransfer).transferNumber : (voucher as StockTransfer).id}',
     };
 
     // Keep safe characters only

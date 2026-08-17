@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "133071346342-s5nb9ncnh375um0h9av3l6n1cqt0hukr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nellon.vansales.van_sales",
+            "certificate_hash": "d3b0625d74844f4af278d35e910292c6c4a1633d"
+          }
+        },
+        {
           "client_id": "133071346342-v19i3hddpa63eq1hg596amt0kjrsdrgq.apps.googleusercontent.com",
           "client_type": 3
         }

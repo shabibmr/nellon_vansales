@@ -109,7 +109,7 @@ abstract class AppLocalizations {
   /// No description provided for @operationsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Operations'**
+  /// **'Transactions'**
   String get operationsTitle;
 
   /// No description provided for @reportsTitle.
@@ -133,7 +133,7 @@ abstract class AppLocalizations {
   /// No description provided for @operationsPanelTitle.
   ///
   /// In en, this message translates to:
-  /// **'Operations Panel'**
+  /// **'Transactions Panel'**
   String get operationsPanelTitle;
 
   /// No description provided for @reportsStatementsTitle.

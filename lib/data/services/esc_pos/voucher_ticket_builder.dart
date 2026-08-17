@@ -7,6 +7,7 @@ import '../../../domain/models/receipt_voucher.dart';
 import '../../../domain/models/sales_invoice.dart';
 import '../../../domain/models/sales_order.dart';
 import '../../../domain/models/sales_return.dart';
+import '../../../domain/models/stock_transfer.dart';
 import '../../../domain/models/thermal_paper_size.dart';
 import '../../../domain/models/thermal_ticket_preview.dart';
 import '../../../domain/repositories/voucher_pdf_repository.dart';
@@ -125,6 +126,16 @@ class VoucherTicketBuilder {
           _expense(
             b,
             voucher as ExpenseEntry,
+            org,
+            salespersonName,
+            salespersonPhone,
+          ),
+        );
+      case VoucherType.stockTransfer:
+        bytes.addAll(
+          _stockTransfer(
+            b,
+            voucher as StockTransfer,
             org,
             salespersonName,
             salespersonPhone,
@@ -567,6 +578,105 @@ class VoucherTicketBuilder {
     return bytes;
   }
 
+  static List<int> _stockTransfer(
+    EscPosTicketBuilder b,
+    StockTransfer transfer,
+    Organization org,
+    String? salespersonName,
+    String? salespersonPhone,
+  ) {
+    final bytes = <int>[];
+    final isLoad = transfer.direction == StockTransferDirection.load;
+    final voucherTitle = isLoad ? 'ISSUE TO VAN' : 'STOCK UNLOADING';
+    final voucherNumber = transfer.transferNumber.isNotEmpty
+        ? transfer.transferNumber
+        : transfer.id;
+
+    bytes.addAll(
+      _orgHeader(
+        b,
+        org,
+        voucherTitle: voucherTitle,
+        voucherNumber: voucherNumber,
+        date: transfer.date,
+      ),
+    );
+
+    bytes.addAll(b.divider());
+    bytes.addAll(
+      b.leftRight(
+        'Type:',
+        isLoad ? 'Issue to Van (Load)' : 'Stock Unload (Return)',
+        bold: true,
+      ),
+    );
+    if (transfer.status.isNotEmpty) {
+      bytes.addAll(
+        b.leftRight('Status:', transfer.status.toUpperCase()),
+      );
+    }
+
+    bytes.addAll(b.stockTransferTableHeader());
+    for (var i = 0; i < transfer.lines.length; i++) {
+      final line = transfer.lines[i];
+      bytes.addAll(
+        b.stockTransferItemRow(
+          serial: i + 1,
+          name: line.item.name,
+          quantity: line.quantity,
+          baseUom: line.item.uom,
+          enteredUom: line.uom,
+          conversionRate: line.conversionRate,
+        ),
+      );
+    }
+
+    bytes.addAll(
+      _padToMinLength(
+        b,
+        tableStyle: true,
+        customEmptyRow: (builder) => builder.emptyStockTransferItemRow(),
+        buildTail: (tail) {
+          final after = <int>[];
+          after.addAll(tail.divider());
+          after.addAll(
+            tail.leftRight('Total Items:', '${transfer.lines.length}'),
+          );
+          final totalQty = transfer.totalQuantity;
+          final totalQtyStr = totalQty % 1 == 0
+              ? totalQty.toInt().toString()
+              : totalQty.toStringAsFixed(2);
+          final totalCols = (tail.columns / 2).floor().clamp(16, tail.columns);
+          after.addAll(
+            tail.leftRight(
+              'TOTAL QTY',
+              totalQtyStr,
+              bold: true,
+              width: PosTextSize.size2,
+              height: PosTextSize.size2,
+              layoutColumns: totalCols,
+            ),
+          );
+          if (transfer.notes.trim().isNotEmpty) {
+            after.addAll(
+              tail.left(
+                'Notes: ${tail.truncate(transfer.notes, tail.columns - 7)}',
+              ),
+            );
+          }
+          after.addAll(
+            tail.footer(
+              salespersonName: salespersonName,
+              salespersonPhone: salespersonPhone,
+            ),
+          );
+          return after;
+        },
+      ),
+    );
+    return bytes;
+  }
+
   /// UAE VAT line label, e.g. `VAT @ 5%`.
   static String _vatLabel(Iterable<double> percentages) {
     final rates = percentages.where((p) => p != 0).toSet();
@@ -583,6 +693,7 @@ class VoucherTicketBuilder {
     EscPosTicketBuilder b, {
     required List<int> Function(EscPosTicketBuilder tail) buildTail,
     required bool tableStyle,
+    List<int> Function(EscPosTicketBuilder b)? customEmptyRow,
   }) {
     final tail = EscPosTicketBuilder(
       generator: b.generator,
@@ -595,7 +706,11 @@ class VoucherTicketBuilder {
     );
     final bytes = <int>[];
     for (var i = 0; i < pad; i++) {
-      bytes.addAll(tableStyle ? b.emptyItemRow() : b.blankLine());
+      if (customEmptyRow != null) {
+        bytes.addAll(customEmptyRow(b));
+      } else {
+        bytes.addAll(tableStyle ? b.emptyItemRow() : b.blankLine());
+      }
     }
     bytes.addAll(tailBytes);
     b.absorbPreviewFrom(tail);

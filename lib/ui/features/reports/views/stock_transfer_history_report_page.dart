@@ -4,9 +4,11 @@ import 'package:intl/intl.dart';
 
 import '../../../../domain/models/stock_transfer.dart';
 import '../../../../domain/repositories/report_repository.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/sortable_report_scaffold.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../aggregators/stock_transfer_history_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
@@ -187,6 +189,14 @@ class StockTransferHistoryReportPage extends StatelessWidget {
                         ),
                       ),
                     ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    child: VoucherPdfActionsWidget(
+                      type: VoucherType.stockTransfer,
+                      voucher: transfer,
+                      compact: true,
+                    ),
+                  ),
                 ],
               ),
             );

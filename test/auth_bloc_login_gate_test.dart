@@ -8,6 +8,7 @@ import 'package:van_sales/domain/models/session_bind_result.dart';
 import 'package:van_sales/domain/models/user.dart';
 import 'package:van_sales/domain/repositories/auth_repository.dart';
 import 'package:van_sales/domain/repositories/salesperson_repository.dart';
+import 'package:van_sales/domain/repositories/server_config_repository.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
@@ -119,6 +120,20 @@ class _FakeSalespersonRepository implements SalespersonRepository {
   }
 }
 
+class _FakeServerConfigRepository implements ServerConfigRepository {
+  bool credentialsAvailable = true;
+  int ensureCalls = 0;
+
+  @override
+  bool get hasCredentials => credentialsAvailable;
+
+  @override
+  Future<bool> ensureCredentialsLoaded() async {
+    ensureCalls++;
+    return credentialsAvailable;
+  }
+}
+
 /// Drives phone → OTP → authenticated (or failure) through [AuthBloc].
 Future<void> _completeOtpLogin(AuthBloc bloc, {String code = '123456'}) async {
   bloc.add(const PhoneSubmitted('+971542891246'));
@@ -155,6 +170,7 @@ class _FakeDocNumberService extends DocumentNumberService {
 void main() {
   late _FakeAuthRepository auth;
   late _FakeSalespersonRepository salespersons;
+  late _FakeServerConfigRepository serverConfig;
   late AuthBloc bloc;
 
   final boundSalesperson = const Salesperson(
@@ -171,9 +187,11 @@ void main() {
   setUp(() {
     auth = _FakeAuthRepository();
     salespersons = _FakeSalespersonRepository();
+    serverConfig = _FakeServerConfigRepository();
     bloc = AuthBloc(
       authRepository: auth,
       salespersonRepository: salespersons,
+      serverConfigRepository: serverConfig,
       documentNumberService: _FakeDocNumberService(),
     );
   });
@@ -347,6 +365,27 @@ void main() {
     bloc.add(AppStarted());
     await future;
     expect(salespersons.bindCalls, 1);
+  });
+
+  test('AppStarted skips Zoho bind when credentials cannot be loaded', () async {
+    auth._currentUser = const User(
+      id: 'uid_1',
+      name: 'From Firebase',
+      email: '',
+      phone: '+971542891246',
+      role: 'agent',
+    );
+    serverConfig.credentialsAvailable = false;
+    salespersons.bindResult = SessionBindResult.success(boundSalesperson);
+
+    final future = expectLater(
+      bloc.stream,
+      emits(isA<Authenticated>()),
+    );
+
+    bloc.add(AppStarted());
+    await future;
+    expect(salespersons.bindCalls, 0);
   });
 
   test('OtpAborted returns to unauthenticated phone step', () async {

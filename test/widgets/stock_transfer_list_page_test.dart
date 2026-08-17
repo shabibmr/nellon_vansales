@@ -7,13 +7,20 @@ import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
+import 'package:van_sales/domain/models/paired_printer.dart';
+import 'package:van_sales/domain/models/thermal_paper_size.dart';
+import 'package:van_sales/domain/repositories/customer_repository.dart';
+import 'package:van_sales/domain/repositories/session_repository.dart';
 import 'package:van_sales/domain/repositories/stock_transfer_repository.dart';
+import 'package:van_sales/domain/repositories/thermal_printer_repository.dart';
+import 'package:van_sales/domain/repositories/voucher_pdf_repository.dart';
 import 'package:van_sales/ui/core/widgets/document_list_card.dart';
 import 'package:van_sales/ui/features/stock_transfer/bloc/stock_transfer_list_bloc.dart';
 import 'package:van_sales/ui/features/stock_transfer/bloc/stock_transfer_list_event.dart';
 import 'package:van_sales/ui/features/stock_transfer/bloc/stock_transfer_list_state.dart';
 import 'package:van_sales/ui/features/stock_transfer/views/issue_to_van_page.dart';
 import 'package:van_sales/ui/features/stock_transfer/views/stock_transfer_list_page.dart';
+import 'package:van_sales/ui/features/thermal_print/cubit/thermal_printer_cubit.dart';
 
 class _FakeListBloc extends Fake implements StockTransferListBloc {
   _FakeListBloc(this._state);
@@ -103,16 +110,54 @@ StockTransfer _transfer() {
   );
 }
 
+class _FakeVoucherPdfRepo extends Fake implements VoucherPdfRepository {}
+class _FakeCustomerRepo extends Fake implements CustomerRepository {}
+class _FakeSessionRepo extends Fake implements SessionRepository {
+  @override
+  bool isCashClosingPending() => false;
+}
+class _FakeThermalPrinterRepo extends Fake implements ThermalPrinterRepository {
+  @override
+  ThermalPaperSize get paperSize => ThermalPaperSize.inch4;
+  @override
+  PairedPrinter? get preferredPrinter => null;
+}
+
 Widget _harness({
   required _FakeListBloc listBloc,
   StockTransferDirection direction = StockTransferDirection.load,
 }) {
   // Providers must wrap MaterialApp (not just `home`) so they stay in scope
   // for pages pushed onto the Navigator later, not just the initial route.
-  return RepositoryProvider<StockTransferRepository>(
-    create: (_) => _FakeTransferRepo(),
-    child: BlocProvider<StockTransferListBloc>.value(
-      value: listBloc,
+  return MultiRepositoryProvider(
+    providers: [
+      RepositoryProvider<StockTransferRepository>(
+        create: (_) => _FakeTransferRepo(),
+      ),
+      RepositoryProvider<VoucherPdfRepository>(
+        create: (_) => _FakeVoucherPdfRepo(),
+      ),
+      RepositoryProvider<CustomerRepository>(
+        create: (_) => _FakeCustomerRepo(),
+      ),
+      RepositoryProvider<SessionRepository>(
+        create: (_) => _FakeSessionRepo(),
+      ),
+      RepositoryProvider<ThermalPrinterRepository>(
+        create: (_) => _FakeThermalPrinterRepo(),
+      ),
+    ],
+    child: MultiBlocProvider(
+      providers: [
+        BlocProvider<StockTransferListBloc>.value(
+          value: listBloc,
+        ),
+        BlocProvider<ThermalPrinterCubit>(
+          create: (_) => ThermalPrinterCubit(
+            repository: _FakeThermalPrinterRepo(),
+          ),
+        ),
+      ],
       child: MaterialApp(
         home: StockTransferListPage(direction: direction),
       ),
@@ -141,6 +186,11 @@ void main() {
   testWidgets('list renders a header card and opens the transfer on tap', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final transfer = _transfer();
     final listBloc = _FakeListBloc(
       StockTransferListState(

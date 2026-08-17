@@ -9,6 +9,7 @@ import 'sales_return_sync.dart';
 import 'zoho_payload_mapper.dart';
 import '../../domain/models/tax.dart';
 import '../../domain/utils/json_read.dart';
+import '../../domain/utils/server_config_rules.dart';
 
 /// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
 ///
@@ -157,7 +158,7 @@ class ZohoApiClient {
   /// Throws if the refresh workflow fails (see [_refreshAccessToken]).
   Future<String> _getOrRefreshAccessToken() async {
     if (!hasCredentials) {
-      throw Exception('Zoho credentials not configured');
+      throw const ZohoNotConfiguredException();
     }
 
     if (!_accessTokenInvalidated) {
@@ -184,7 +185,7 @@ class ZohoApiClient {
   /// than a generic fetch failure.
   Future<String> _refreshAccessToken({bool force = false}) async {
     if (!hasCredentials) {
-      throw Exception('Zoho credentials not configured');
+      throw const ZohoNotConfiguredException();
     }
     final refreshToken = _refreshToken;
     try {

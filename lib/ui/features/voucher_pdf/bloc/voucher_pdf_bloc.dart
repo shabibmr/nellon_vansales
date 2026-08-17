@@ -40,6 +40,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
       VoucherType.salesReturn => (voucher as SalesReturn).customerId,
       VoucherType.paymentReceipt => (voucher as ReceiptVoucher).customerId,
       VoucherType.expenseVoucher => null,
+      VoucherType.stockTransfer => null,
     };
   }
 

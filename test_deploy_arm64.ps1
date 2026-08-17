@@ -98,6 +98,60 @@ if (-not $SkipBuild) {
     Write-Host "`nSkipping build (-SkipBuild)." -ForegroundColor Yellow
 }
 
+function Find-ApkSigner {
+    $cmd = Get-Command 'apksigner' -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $sdkDirs = @()
+    if (Test-Path (Join-Path $repoRoot 'android\local.properties')) {
+        $props = Get-Content (Join-Path $repoRoot 'android\local.properties')
+        foreach ($line in $props) {
+            if ($line -match '^sdk\.dir\s*=\s*(.+)$') {
+                $rawDir = $matches[1].Trim().Replace('\\', '\')
+                $sdkDirs += $rawDir
+            }
+        }
+    }
+    if ($env:ANDROID_HOME) { $sdkDirs += $env:ANDROID_HOME }
+    if ($env:ANDROID_SDK_ROOT) { $sdkDirs += $env:ANDROID_SDK_ROOT }
+    $sdkDirs += 'E:\Android\AppData\Sdk'
+    $sdkDirs += "$env:LOCALAPPDATA\Android\Sdk"
+
+    foreach ($sdk in $sdkDirs) {
+        $buildTools = Join-Path $sdk 'build-tools'
+        if (Test-Path $buildTools) {
+            $versions = Get-ChildItem -Directory $buildTools | Sort-Object Name -Descending
+            foreach ($ver in $versions) {
+                $candidateBat = Join-Path $ver.FullName 'apksigner.bat'
+                if (Test-Path $candidateBat) { return $candidateBat }
+                $candidateExe = Join-Path $ver.FullName 'apksigner.exe'
+                if (Test-Path $candidateExe) { return $candidateExe }
+                $candidateBin = Join-Path $ver.FullName 'apksigner'
+                if (Test-Path $candidateBin) { return $candidateBin }
+            }
+        }
+    }
+    return $null
+}
+
+function Get-KeystoreConfig {
+    $keyPropsFile = Join-Path $repoRoot 'android\key.properties'
+    if (-not (Test-Path $keyPropsFile)) {
+        return $null
+    }
+    $props = @{}
+    Get-Content $keyPropsFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith('#') -and $line.Contains('=')) {
+            $idx = $line.IndexOf('=')
+            $k = $line.Substring(0, $idx).Trim()
+            $v = $line.Substring($idx + 1).Trim()
+            $props[$k] = $v
+        }
+    }
+    return $props
+}
+
 # Step 3: Find release APK
 $step3Sw = Log-StepStart "Locating release APK ($ApkName)..."
 $apkPath = Find-ReleaseApk -Name $ApkName
@@ -106,6 +160,59 @@ if (-not $apkPath) {
     exit 1
 }
 Log-StepEnd "Locating release APK ($apkPath)" $step3Sw
+
+# Step 3.5: Sign APK before copying
+$stepSignSw = Log-StepStart "Signing release APK ($apkPath)..."
+$keyConfig = Get-KeystoreConfig
+if (-not $keyConfig) {
+    Write-Warning "No android/key.properties found. Skipping explicit APK signing step."
+} else {
+    $storeFile = $keyConfig['storeFile']
+    $keystorePath = Join-Path $repoRoot "android\$storeFile"
+    if (-not (Test-Path $keystorePath)) {
+        $keystorePath = Join-Path $repoRoot $storeFile
+    }
+    if (-not (Test-Path $keystorePath)) {
+        Write-Error "Keystore file not found at '$keystorePath' (specified in key.properties)."
+        exit 1
+    }
+
+    $storePass = $keyConfig['storePassword']
+    $keyPass = $keyConfig['keyPassword']
+    $keyAlias = $keyConfig['keyAlias']
+    $apksigner = Find-ApkSigner
+
+    if ($apksigner) {
+        Write-Host "Signing with apksigner ($apksigner)..." -ForegroundColor Cyan
+        & $apksigner sign --ks "$keystorePath" --ks-key-alias "$keyAlias" --ks-pass "pass:$storePass" --key-pass "pass:$keyPass" "$apkPath"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "apksigner failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+        }
+        & $apksigner verify --verbose "$apkPath"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "apksigner signature verification failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+        }
+        Write-Host "APK successfully signed and verified via apksigner." -ForegroundColor Green
+    } else {
+        $jarsignerCmd = Get-Command 'jarsigner' -ErrorAction SilentlyContinue
+        if ($jarsignerCmd) {
+            Write-Host "apksigner not found; signing with jarsigner ($($jarsignerCmd.Source))..." -ForegroundColor Yellow
+            & $jarsignerCmd.Source -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore "$keystorePath" -storepass "$storePass" -keypass "$keyPass" "$apkPath" "$keyAlias"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "jarsigner failed with exit code $LASTEXITCODE"
+                exit $LASTEXITCODE
+            }
+            & $jarsignerCmd.Source -verify -verbose -certs "$apkPath"
+            Write-Host "APK successfully signed and verified via jarsigner." -ForegroundColor Green
+        } else {
+            Write-Error "Neither apksigner nor jarsigner could be located to sign the APK."
+            exit 1
+        }
+    }
+}
+Log-StepEnd "Signing release APK" $stepSignSw
 
 # Step 4: Transfer APK via scp
 $step4Sw = Log-StepStart "Copying APK via scp to $destination..."

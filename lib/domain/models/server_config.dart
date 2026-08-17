@@ -16,16 +16,25 @@ class ServerConfig extends Equatable {
     required this.code,
     this.organizationId = '',
   });
+  /// Whether all essential Zoho OAuth credentials are present and non-empty.
+  bool get isValid =>
+      clientId.trim().isNotEmpty &&
+      clientSecret.trim().isNotEmpty &&
+      code.trim().isNotEmpty;
 
-  /// Factory constructor to create a [ServerConfig] from a Firestore map.
-  ///
-  /// Unknown extra keys (including retired mock flags) are ignored.
+  /// Parses Firestore `server_config/zoho`. Prefers a non-empty
+  /// `refresh_token` over `code` (which is often a leftover grant).
   factory ServerConfig.fromMap(Map<String, dynamic> map) {
+    // Prefer `refresh_token` when it is non-empty. Firestore `code` is often a
+    // leftover Self Client grant (Zoho then returns `invalid_code` on refresh).
+    final refreshToken = (map['refresh_token'] ?? '').toString().trim();
+    final codeField = (map['code'] ?? '').toString().trim();
+    final codeValue = refreshToken.isNotEmpty ? refreshToken : codeField;
     return ServerConfig(
-      clientId: map['client_id'] as String? ?? '',
-      clientSecret: map['client_secret'] as String? ?? '',
-      code: map['code'] as String? ?? '',
-      organizationId: map['organization_id'] as String? ?? '',
+      clientId: (map['client_id'] ?? '').toString().trim(),
+      clientSecret: (map['client_secret'] ?? '').toString().trim(),
+      code: codeValue,
+      organizationId: (map['organization_id'] ?? '').toString().trim(),
     );
   }
 

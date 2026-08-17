@@ -7,6 +7,7 @@ import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/organization.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
+import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/thermal_paper_size.dart';
 import 'package:van_sales/domain/repositories/voucher_pdf_repository.dart';
 
@@ -339,7 +340,7 @@ void main() {
         isTrue,
       );
       expect(
-        preview.plainText.contains('Suneer (Supervisor) : +971501880810'),
+        preview.plainText.contains('Supervisor : +971 528300929'),
         isTrue,
       );
       final texts = preview.lines.map((l) => l.text).toList();
@@ -347,7 +348,7 @@ void main() {
         (t) => t.contains('Shinad ( Salesman ) : +971565124529'),
       );
       final supervisorIdx = texts.indexWhere(
-        (t) => t.contains('Suneer (Supervisor) : +971501880810'),
+        (t) => t.contains('Supervisor : +971 528300929'),
       );
       final thanksIdx = texts.indexWhere((t) => t.contains('Thank you'));
       expect(salesIdx, greaterThan(-1));
@@ -369,7 +370,7 @@ void main() {
         (t) => t.trim() == 'Shinad ( Salesman ) :',
       );
       expect(salesIdx, greaterThan(-1));
-      expect(texts[salesIdx + 1].trim(), 'Suneer (Supervisor) : +971501880810');
+      expect(texts[salesIdx + 1].trim(), 'Supervisor : +971 528300929');
     });
 
     test('short invoice pads item table to minimum 8 inch length', () async {
@@ -413,7 +414,10 @@ void main() {
             preview.plainText.contains('Ravi ( Salesman ) : 0509998887'),
             isTrue,
           );
-          expect(preview.plainText.contains('Suneer (Supervisor)'), isTrue);
+          expect(
+            preview.plainText.contains('Supervisor : +971 528300929'),
+            isTrue,
+          );
           expect(
             preview.lines.any(
               (l) => l.text == List.filled(size.columns, '=').join(),
@@ -475,6 +479,111 @@ void main() {
         );
         expect(bytes, isNotEmpty, reason: 'size $size');
       }
+    });
+
+    test('builds StockTransfer Issue to Van thermal ticket and preview', () async {
+      final transfer = StockTransfer(
+        id: 'st1',
+        transferNumber: 'TO-001',
+        date: DateTime(2026, 1, 15, 10, 30),
+        direction: StockTransferDirection.load,
+        fromLocationId: 'loc1',
+        toLocationId: 'loc2',
+        lines: const [
+          StockTransferLine(
+            item: item,
+            quantity: 50,
+            uom: 'pcs',
+          ),
+          StockTransferLine(
+            item: Item(
+              id: 'i2',
+              name: 'Bag Item',
+              sku: 'SKU-BAG',
+              rate: 20,
+              stock: 100,
+              description: 'Bag item',
+              taxName: 'GST 5%',
+              taxPercentage: 5,
+              uom: 'kg',
+            ),
+            quantity: 50,
+            uom: 'Bag',
+            conversionRate: 25,
+          ),
+        ],
+        notes: 'Morning van loading',
+        status: 'transferred',
+      );
+
+      for (final size in ThermalPaperSize.values) {
+        final preview = await VoucherTicketBuilder.buildPreview(
+          type: VoucherType.stockTransfer,
+          voucher: transfer,
+          org: org,
+          customer: null,
+          paperSize: size,
+          salespersonName: 'Ravi',
+          salespersonPhone: '0509998887',
+        );
+        expect(preview.plainText.contains('ISSUE TO VAN'), isTrue);
+        expect(preview.plainText.contains('TO-001'), isTrue);
+        expect(preview.plainText.contains('TRANSFERRED'), isTrue);
+        expect(preview.plainText.contains('Total Items:'), isTrue);
+        expect(preview.plainText.contains('TOTAL QTY'), isTrue);
+        expect(preview.plainText.contains('100'), isTrue);
+        expect(preview.plainText.contains('Morning van loading'), isTrue);
+        expect(
+          preview.plainText.contains('Ravi ( Salesman ) : 0509998887'),
+          isTrue,
+        );
+        expect(
+          preview.plainText.contains('Supervisor : +971 528300929'),
+          isTrue,
+        );
+        expect(preview.plainText.contains('Thank you'), isTrue);
+
+        final bytes = await VoucherTicketBuilder.build(
+          type: VoucherType.stockTransfer,
+          voucher: transfer,
+          org: org,
+          customer: null,
+          paperSize: size,
+        );
+        expect(bytes, isNotEmpty);
+      }
+    });
+
+    test('builds StockTransfer Stock Unloading thermal ticket and preview', () async {
+      final unloadTransfer = StockTransfer(
+        id: 'st2',
+        transferNumber: 'TO-002',
+        date: DateTime(2026, 1, 15, 18, 00),
+        direction: StockTransferDirection.unload,
+        fromLocationId: 'loc2',
+        toLocationId: 'loc1',
+        lines: const [
+          StockTransferLine(
+            item: item,
+            quantity: 10,
+            uom: 'pcs',
+          ),
+        ],
+        notes: 'End of day return',
+        status: 'draft',
+      );
+
+      final preview = await VoucherTicketBuilder.buildPreview(
+        type: VoucherType.stockTransfer,
+        voucher: unloadTransfer,
+        org: org,
+        customer: null,
+        paperSize: ThermalPaperSize.inch4,
+      );
+      expect(preview.plainText.contains('STOCK UNLOADING'), isTrue);
+      expect(preview.plainText.contains('TO-002'), isTrue);
+      expect(preview.plainText.contains('DRAFT'), isTrue);
+      expect(preview.plainText.contains('End of day return'), isTrue);
     });
   });
 }

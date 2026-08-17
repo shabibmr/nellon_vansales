@@ -11,6 +11,7 @@ enum VoucherType {
   salesReturn,
   paymentReceipt,
   expenseVoucher,
+  stockTransfer,
 }
 
 /// Abstract contract for compiling voucher PDFs and invoking native

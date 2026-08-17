@@ -14,6 +14,11 @@ enum SessionBindFailure {
 
   /// Network / Zoho API failure while loading identity masters or the profile.
   network,
+
+  /// Zoho OAuth credentials were never loaded, so the profile lookup could not
+  /// even be attempted. A configuration fault — retrying will not help until
+  /// `server_config/zoho` is populated.
+  serverNotConfigured,
 }
 
 /// Outcome of post-Firebase Zoho identity verification and session binding.

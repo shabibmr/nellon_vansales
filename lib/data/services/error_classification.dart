@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../../domain/utils/server_config_rules.dart';
+
 /// Whether a failure is worth retrying automatically, or requires a human
 /// to fix something (bad data, business-rule rejection) before retrying
 /// would ever succeed.
@@ -83,6 +85,36 @@ bool isNetworkFailure(Object error) {
   if (error is TimeoutException) return true;
   if (_isSocketShaped(error)) return true;
   return _looksLikeNetworkMessage(error.toString());
+}
+
+/// True when the failure is "Zoho OAuth credentials were never loaded", rather
+/// than a transport problem or an API rejection.
+///
+/// The typed [ZohoNotConfiguredException] is checked first, including when Dio
+/// carries it as `DioException.error` after the request interceptor rejects.
+/// Intermediate layers (e.g. `ZohoApiClient.fetchSalespersonProfiles`) re-wrap
+/// causes into a plain string-formatted `Exception`, which drops the type — so
+/// the message is sniffed as a fallback, the same way [isNetworkFailure] does.
+bool isZohoNotConfigured(Object error) {
+  if (error is ZohoNotConfiguredException) return true;
+  if (error is DioException && error.error is ZohoNotConfiguredException) {
+    return true;
+  }
+  return error.toString().toLowerCase().contains(zohoNotConfiguredNeedle);
+}
+
+/// True when Cloud Firestore rejected the call with `permission-denied`.
+///
+/// Matches the Firebase error code and the phrasing Flutter prints
+/// (`[cloud_firestore/permission-denied]`). Network timeouts must not match.
+bool isFirestorePermissionDenied(Object error) {
+  final message = error.toString().toLowerCase();
+  return message.contains('permission-denied') ||
+      message.contains('permission_denied') ||
+      (message.contains('permission denied') &&
+          (message.contains('firestore') ||
+              message.contains('cloud_firestore') ||
+              message.contains('firebase')));
 }
 
 /// Zoho API failures we want in Crashlytics/Analytics: anything except

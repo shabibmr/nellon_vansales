@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../../domain/models/license_document.dart';
 import '../../domain/models/server_config.dart';
+import 'app_logger.dart';
+import 'error_classification.dart';
 
 /// Pure Dart service to coordinate Firestore read/write tasks for app licensing and control.
 class LicenseService {
@@ -14,11 +17,21 @@ class LicenseService {
   /// Fetches an app license by its unique stored UUID string. Returns null if not found.
   Future<LicenseDocument?> fetchLicense(String uuid) async {
     try {
-      final doc = await firestore.collection('app_licenses').doc(uuid).get();
+      final doc = await firestore
+          .collection('app_licenses')
+          .doc(uuid)
+          .get()
+          .timeout(const Duration(seconds: 8));
       if (doc.exists && doc.data() != null) {
         return LicenseDocument.fromMap(doc.data()!);
       }
     } catch (e) {
+      AppLogger.warning('LicenseService', 'Failed to fetch license document: $e');
+      if (isFirestorePermissionDenied(e)) {
+        throw Exception(
+          'Firestore permission-denied reading app_licenses: $e',
+        );
+      }
       throw Exception('Failed to fetch app license document: $e');
     }
     return null;
@@ -27,8 +40,18 @@ class LicenseService {
   /// Registers and writes a new license document into Firestore collection `app_licenses`.
   Future<void> createLicense(LicenseDocument doc) async {
     try {
-      await firestore.collection('app_licenses').doc(doc.id).set(doc.toMap());
+      await firestore
+          .collection('app_licenses')
+          .doc(doc.id)
+          .set(doc.toMap())
+          .timeout(const Duration(seconds: 8));
     } catch (e) {
+      AppLogger.warning('LicenseService', 'Failed to create license document: $e');
+      if (isFirestorePermissionDenied(e)) {
+        throw Exception(
+          'Firestore permission-denied creating app_licenses: $e',
+        );
+      }
       throw Exception('Failed to create app license document: $e');
     }
   }
@@ -36,69 +59,80 @@ class LicenseService {
   /// Dynamically updates the `last_login_at` timestamp field to the server current time.
   Future<void> updateLastLogin(String uuid) async {
     try {
-      await firestore.collection('app_licenses').doc(uuid).update({
-        'last_login_at': FieldValue.serverTimestamp(),
-      });
+      await firestore
+          .collection('app_licenses')
+          .doc(uuid)
+          .update({
+            'last_login_at': FieldValue.serverTimestamp(),
+          })
+          .timeout(const Duration(seconds: 5));
     } catch (e) {
+      AppLogger.warning('LicenseService', 'Failed to update last login timestamp: $e');
       throw Exception('Failed to update last login timestamp: $e');
     }
   }
 
-  /// Reads and parses remote Zoho API integration configurations from `server_config/zoho`.
+  /// Reads remote Zoho API integration configurations from `server_config/zoho`.
   ///
-  /// If the document does not exist, it is created with default live settings.
-  /// If any specific key is missing from the document, it is automatically
-  /// populated and updated in Firestore.
+  /// This is a pure read operation that never attempts to mutate Firestore from
+  /// the client app, preventing permission-denied errors on devices with read-only rules.
   Future<ServerConfig> fetchServerConfig() async {
     try {
-      final docRef = firestore.collection('server_config').doc('zoho');
-      final doc = await docRef.get();
-
-      final defaultData = {
-        'client_id': '',
-        'client_secret': '',
-        'code': '',
-        'organization_id': '',
-      };
+      debugPrint('[ServerConfig] 🔍 Fetching server_config/zoho from Firestore...');
+      final doc = await firestore
+          .collection('server_config')
+          .doc('zoho')
+          .get()
+          .timeout(const Duration(seconds: 8));
 
       if (!doc.exists || doc.data() == null) {
-        await docRef.set(defaultData);
-        return ServerConfig.fromMap(defaultData);
+        debugPrint(
+          '[ServerConfig] ⚠️ server_config/zoho document DOES NOT EXIST or is null in Firestore!',
+        );
+        AppLogger.warning(
+          'ServerConfig',
+          'server_config/zoho doc does not exist or is empty in Firestore',
+        );
+        return const ServerConfig(
+          clientId: '',
+          clientSecret: '',
+          code: '',
+          organizationId: '',
+        );
       }
 
-      final data = Map<String, dynamic>.from(doc.data()!);
-      final missingUpdates = <String, dynamic>{};
+      final data = doc.data()!;
+      debugPrint('[ServerConfig] 📥 Received server_config/zoho from Firestore: $data');
+      AppLogger.info(
+        'ServerConfig',
+        'Received server_config/zoho: keys=${data.keys.toList()}, '
+        'clientId=${data['client_id']}, '
+        'organizationId=${data['organization_id']}, '
+        'hasCode=${data.containsKey('code')}, '
+        'hasRefreshToken=${data.containsKey('refresh_token')}',
+      );
 
-      for (final entry in defaultData.entries) {
-        if (!data.containsKey(entry.key)) {
-          missingUpdates[entry.key] = entry.value;
-        }
-      }
+      final config = ServerConfig.fromMap(data);
+      debugPrint(
+        '[ServerConfig] ✅ Parsed ServerConfig: '
+        'clientId="${config.clientId}", '
+        'clientSecretLength=${config.clientSecret.length}, '
+        'codeLength=${config.code.length}, '
+        'organizationId="${config.organizationId}", '
+        'isValid=${config.isValid}',
+      );
 
-      // DropMock leftovers — app no longer reads these flags.
-      const retiredMockKeys = [
-        'mock_transactions',
-        'mock_sales_order_transactions',
-        'mock_stock_transfers',
-      ];
-      final deletions = <String, dynamic>{};
-      for (final key in retiredMockKeys) {
-        if (data.containsKey(key)) {
-          deletions[key] = FieldValue.delete();
-          data.remove(key);
-        }
-      }
-
-      final updates = <String, dynamic>{...missingUpdates, ...deletions};
-      if (updates.isNotEmpty) {
-        await docRef.update(updates);
-        data.addAll(missingUpdates);
-      }
-
-      return ServerConfig.fromMap(data);
+      return config;
     } catch (e) {
+      debugPrint('[ServerConfig] ❌ Failed to fetch server_config/zoho: $e');
+      AppLogger.error('ServerConfig', 'Failed to read Zoho server configuration: $e');
+      if (isFirestorePermissionDenied(e)) {
+        throw Exception(
+          'Firestore permission-denied reading server_config/zoho: $e',
+        );
+      }
       throw Exception(
-        'Failed to read and auto-populate Zoho server configuration from Firestore: $e',
+        'Failed to read Zoho server configuration from Firestore: $e',
       );
     }
   }

@@ -93,7 +93,7 @@ void main() {
     expect(find.text('CHILD_CONTENT'), findsNothing);
     expect(find.byType(AppUpdateForceScreen), findsOneWidget);
     expect(find.text('Update Now'), findsOneWidget);
-    expect(find.text('v1.0.0 ➔ v1.0.2'), findsOneWidget);
+    expect(find.text('v1.0.0+1 ➔ v1.0.2+3'), findsOneWidget);
     expect(find.text('Later'), findsNothing);
   });
 

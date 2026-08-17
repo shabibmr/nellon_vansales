@@ -5,6 +5,7 @@ import '../../domain/repositories/salesperson_repository.dart';
 import '../../domain/utils/phone_normalizer.dart';
 import '../models/salesperson_model.dart';
 import '../models/warehouse_model.dart';
+import '../services/error_classification.dart';
 import '../services/hive_database_service.dart';
 import '../services/zoho_api_client.dart';
 
@@ -84,8 +85,15 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
       }
       primary ??= warehouses.isNotEmpty ? warehouses.first : null;
       await _dbService.setPrimaryWarehouseId(primary?.id);
-    } catch (_) {
-      return SessionBindResult.failed(SessionBindFailure.network);
+    } catch (e) {
+      // A missing credential triple is a configuration fault, not a network
+      // one — reporting it as "check your connection" sends the driver into
+      // an endless retry on something only an admin can fix.
+      return SessionBindResult.failed(
+        isZohoNotConfigured(e)
+            ? SessionBindFailure.serverNotConfigured
+            : SessionBindFailure.network,
+      );
     }
 
     Map<String, dynamic>? matched;

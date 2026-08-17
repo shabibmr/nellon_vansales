@@ -15,7 +15,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashboardTitle => 'Dashboard';
 
   @override
-  String get operationsTitle => 'Operations';
+  String get operationsTitle => 'Transactions';
 
   @override
   String get reportsTitle => 'Reports';
@@ -27,7 +27,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get analyticsDashboardTitle => 'Analytics & Dashboard';
 
   @override
-  String get operationsPanelTitle => 'Operations Panel';
+  String get operationsPanelTitle => 'Transactions Panel';
 
   @override
   String get reportsStatementsTitle => 'Reports & Statements';
