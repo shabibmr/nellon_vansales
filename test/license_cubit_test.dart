@@ -102,7 +102,7 @@ void main() {
       cubit.stream.listen(states.add);
 
       await cubit.checkLicense(testUser);
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(states, [LicenseChecking(), LicensePendingFirstLogin()]);
     },
@@ -137,7 +137,7 @@ void main() {
       cubit.stream.listen(states.add);
 
       await cubit.checkLicense(testUser);
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(states, [
         LicenseChecking(),
@@ -176,7 +176,7 @@ void main() {
       cubit.stream.listen(states.add);
 
       await cubit.checkLicense(testUser);
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(states, [
         LicenseChecking(),
@@ -214,7 +214,7 @@ void main() {
       cubit.stream.listen(states.add);
 
       await cubit.checkLicense(testUser);
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(states, [
         LicenseChecking(),
@@ -236,7 +236,7 @@ void main() {
       cubit.stream.listen(states.add);
 
       await cubit.checkLicense(testUser);
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(states, [
         LicenseChecking(),
@@ -258,7 +258,7 @@ void main() {
       cubit.stream.listen(states.add);
 
       await cubit.registerFirstLogin(testUser);
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(states, [
         LicenseChecking(),
@@ -293,7 +293,7 @@ void main() {
       cubit.stream.listen(states.add);
 
       await cubit.registerFirstLogin(testUser);
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(states, [
         LicenseChecking(),

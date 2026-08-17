@@ -85,7 +85,7 @@ class _SalesInvoiceListPageState extends State<SalesInvoiceListPage> {
     required bool readOnly,
     SalesInvoice? invoice,
   }) async {
-    await SalesInvoiceEditorPage.open(
+    await SalesInvoiceEditorPage.open<void>(
       context,
       invoice: invoice,
       readOnly: readOnly,

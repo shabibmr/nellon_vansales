@@ -5,7 +5,6 @@ import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/repositories/invoice_repository.dart';
 import 'package:van_sales/domain/repositories/sales_order_repository.dart';
-import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_bloc.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_event.dart';
 import 'package:van_sales/ui/features/sales_invoice/bloc/sales_invoice_list_state.dart';
@@ -54,31 +53,11 @@ class RecordingSalesRepository
         name.contains('getSync') ||
         name.contains('getOpen') ||
         name.contains('getWarehouses')) {
-      return [];
+      return <dynamic>[];
     }
     if (name.contains('hasPending')) return false;
     if (name.contains('isSyncing')) return false;
-    return Future.value();
-  }
-}
-
-class FakeSyncRepository implements SyncRepository {
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    if (invocation.isGetter) {
-      if (invocation.memberName.toString().contains('Stream')) {
-        return const Stream.empty();
-      }
-      if (invocation.memberName.toString().contains('isSyncing')) {
-        return false;
-      }
-      return null;
-    }
-    if (invocation.memberName.toString().contains('getSyncQueue')) {
-      return <dynamic>[];
-    }
-    if (invocation.memberName.toString().contains('hasCore')) return true;
-    return Future.value();
+    return Future<void>.value();
   }
 }
 
@@ -101,16 +80,12 @@ SalesInvoice _inv(String id, DateTime date) => SalesInvoice(
 
 void main() {
   late RecordingSalesRepository repo;
-  late FakeSyncRepository syncRepo;
   late SalesInvoiceListBloc bloc;
 
   setUp(() {
     repo = RecordingSalesRepository();
-    syncRepo = FakeSyncRepository();
     bloc = SalesInvoiceListBloc(
       invoiceRepository: repo,
-      salesOrderRepository: repo,
-      syncRepository: syncRepo,
       documentNumberService: FakeDocumentNumberService(),
     );
   });

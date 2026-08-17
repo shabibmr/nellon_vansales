@@ -54,6 +54,9 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
   }
 
   @override
+  Future<void> clearItemUnitConversions() async {}
+
+  @override
   Future<void> saveOpenInvoices(dynamic invoices) async {
     savedData.add(invoices);
   }
@@ -219,7 +222,7 @@ void main() {
 
       expect(() => worker.syncMaster(MasterType.items), throwsException);
 
-      await Future.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
       await subscription.cancel();
 
       expect(statusLogs, contains('Syncing Items...'));

@@ -18,9 +18,6 @@ class VanActionTile extends StatelessWidget {
   /// Accent color for icon badge, border wash, and highlights.
   final Color color;
 
-  /// Visual theme context flag.
-  final bool isDark;
-
   /// Callback fired when the tile body is tapped.
   final VoidCallback onTap;
 
@@ -53,7 +50,6 @@ class VanActionTile extends StatelessWidget {
     required this.subtitle,
     required this.icon,
     required this.color,
-    required this.isDark,
     required this.onTap,
     this.isGrid = false,
     this.actionIcon = Icons.arrow_forward_rounded,
@@ -67,14 +63,16 @@ class VanActionTile extends StatelessWidget {
   VoidCallback get _effectiveOnActionTap =>
       enabled ? (onActionTap ?? onTap) : (onBlocked ?? onTap);
 
-  Color get _surface => isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-  Color get _primaryText => isDark ? AppTheme.darkText : AppTheme.lightText;
-  Color get _secondaryText =>
+  Color _surface(bool isDark) =>
+      isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+  Color _primaryText(bool isDark) =>
+      isDark ? AppTheme.darkText : AppTheme.lightText;
+  Color _secondaryText(bool isDark) =>
       isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
-  Color get _border =>
+  Color _border(bool isDark) =>
       isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
 
-  List<BoxShadow> get _shadow => isDark
+  List<BoxShadow> _shadow(bool isDark) => isDark
       ? const []
       : [
           BoxShadow(
@@ -91,7 +89,10 @@ class VanActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tile = isGrid ? _buildGridCard() : _buildListTile();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tile = isGrid
+        ? _buildGridCard(isDark)
+        : _buildListTile(isDark);
     final labeled = Semantics(
       button: true,
       enabled: enabled,
@@ -105,18 +106,18 @@ class VanActionTile extends StatelessWidget {
 
   // ── List layout ──────────────────────────────────────────────────────────
 
-  Widget _buildListTile() {
+  Widget _buildListTile(bool isDark) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: _shadow,
+        border: Border.all(color: _border(isDark)),
+        boxShadow: _shadow(isDark),
         gradient: LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: [
             color.withValues(alpha: isDark ? 0.14 : 0.08),
-            _surface,
+            _surface(isDark),
           ],
           stops: const [0.0, 0.22],
         ),
@@ -160,7 +161,7 @@ class VanActionTile extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                   fontSize: 15.5,
                                   letterSpacing: -0.2,
-                                  color: _primaryText,
+                                  color: _primaryText(isDark),
                                   height: 1.2,
                                 ),
                               ),
@@ -172,7 +173,7 @@ class VanActionTile extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   height: 1.35,
-                                  color: _secondaryText,
+                                  color: _secondaryText(isDark),
                                 ),
                               ),
                             ],
@@ -190,7 +191,7 @@ class VanActionTile extends StatelessWidget {
                 child: _ActionChip(
                   icon: actionIcon,
                   color: color,
-                  isDark: isDark,
+                 
                   onTap: _effectiveOnActionTap,
                   tooltip: actionTooltip,
                 ),
@@ -204,7 +205,7 @@ class VanActionTile extends StatelessWidget {
 
   // ── Grid layout ──────────────────────────────────────────────────────────
 
-  Widget _buildGridCard() {
+  Widget _buildGridCard(bool isDark) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
@@ -213,14 +214,14 @@ class VanActionTile extends StatelessWidget {
               ? color.withValues(alpha: 0.28)
               : color.withValues(alpha: 0.18),
         ),
-        boxShadow: _shadow,
+        boxShadow: _shadow(isDark),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
             color.withValues(alpha: isDark ? 0.22 : 0.12),
-            _surface,
-            _surface,
+            _surface(isDark),
+            _surface(isDark),
           ],
           stops: const [0.0, 0.45, 1.0],
         ),
@@ -255,6 +256,7 @@ class VanActionTile extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 18, 14, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _IconBadge(
                       icon: icon,
@@ -264,29 +266,35 @@ class VanActionTile extends StatelessWidget {
                       radius: 16,
                       filled: true,
                     ),
-                    const Spacer(),
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15.5,
-                        letterSpacing: -0.25,
-                        color: _primaryText,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.35,
-                        color: _secondaryText,
-                      ),
+                    const SizedBox(height: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15.5,
+                            letterSpacing: -0.25,
+                            color: _primaryText(isDark),
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: _secondaryText(isDark),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -299,7 +307,6 @@ class VanActionTile extends StatelessWidget {
             child: _ActionChip(
               icon: actionIcon,
               color: color,
-              isDark: isDark,
               compact: true,
               onTap: _effectiveOnActionTap,
               tooltip: actionTooltip,
@@ -369,7 +376,6 @@ class _IconBadge extends StatelessWidget {
 class _ActionChip extends StatelessWidget {
   final IconData icon;
   final Color color;
-  final bool isDark;
   final bool compact;
   final VoidCallback? onTap;
   final String? tooltip;
@@ -377,7 +383,6 @@ class _ActionChip extends StatelessWidget {
   const _ActionChip({
     required this.icon,
     required this.color,
-    required this.isDark,
     this.compact = false,
     this.onTap,
     this.tooltip,
@@ -385,6 +390,7 @@ class _ActionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Slightly larger when showing a create (+) action.
     final isAdd = icon == Icons.add_rounded || icon == Icons.add;
     final dim = compact

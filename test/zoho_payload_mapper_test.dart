@@ -15,7 +15,7 @@ void main() {
         'company_name': 'ACME Ltd',
         'email': 'a@b.com',
         'phone': '123',
-        'billing_address': {'address': 'Street 1'},
+        'billing_address': {'address': 'Street 1', 'latitude': 1.1, 'longitude': 2.2},
         'credit_limit': 500,
         'outstandingBalance': 42.0,
         'route_id': 'r1',
@@ -23,15 +23,11 @@ void main() {
         'isPendingSync': true,
         'latitude': 1.1,
         'longitude': 2.2,
-        'custom_fields': [
-          {'api_name': 'cf_latitude', 'value': '1.1'},
-          {'api_name': 'cf_longitude', 'value': '2.2'},
-        ],
       };
 
       final out = ZohoPayloadMapper.zohoContactPayload(raw);
 
-      expect(out.keys, containsAll(['contact_name', 'company_name', 'custom_fields']));
+      expect(out.keys, containsAll(['contact_name', 'company_name', 'billing_address']));
       expect(out.containsKey('id'), isFalse);
       expect(out.containsKey('contact_id'), isFalse);
       expect(out.containsKey('name'), isFalse);
@@ -41,8 +37,9 @@ void main() {
       expect(out.containsKey('isPendingSync'), isFalse);
       expect(out.containsKey('latitude'), isFalse);
       expect(out.containsKey('longitude'), isFalse);
-      // GPS survives via custom_fields
-      expect(out['custom_fields'], hasLength(2));
+      // GPS survives via billing_address
+      expect((out['billing_address'] as Map)['latitude'], 1.1);
+      expect((out['billing_address'] as Map)['longitude'], 2.2);
     });
   });
 
@@ -350,7 +347,9 @@ void main() {
       final out = ZohoPayloadMapper.zohoCreditNotePayload(raw);
 
       expect(out['creditnote_number'], 'CN-1');
-      expect(out['reason'], 'damaged');
+      expect(out['notes'], 'damaged');
+      expect(out.containsKey('reason'), isFalse);
+      expect(out.containsKey('reason_for_credit_debit_note'), isFalse);
       for (final k in ['id', 'creditnote_id', 'customer_name', 'isPendingSync']) {
         expect(out.containsKey(k), isFalse, reason: 'should drop $k');
       }
@@ -360,6 +359,32 @@ void main() {
       expect(line['tax_id'], 'tax_std');
       expect(line.containsKey('invoice_number'), isFalse);
       expect(line.containsKey('invoiceLineItem'), isFalse);
+    });
+
+    test('maps empty reason to no notes', () {
+      final out = ZohoPayloadMapper.zohoCreditNotePayload({
+        'customer_id': 'c1',
+        'reason': '',
+        'line_items': const <dynamic>[],
+      });
+      expect(out.containsKey('notes'), isFalse);
+      expect(out.containsKey('reason'), isFalse);
+    });
+
+    test('forwards invoice_item_id from a returned invoice line', () {
+      final out = ZohoPayloadMapper.zohoCreditNotePayload({
+        'customer_id': 'c1',
+        'line_items': [
+          {
+            'item_id': 'item_1',
+            'quantity': 1,
+            'rate': 10.0,
+            'invoice_id': 'inv_1',
+            'invoice_item_id': 'line_zoho_1',
+          },
+        ],
+      });
+      expect((out['line_items'] as List).first['invoice_item_id'], 'line_zoho_1');
     });
 
     test('lifts tax_id from nested invoiceLineItem.item', () {
@@ -497,12 +522,40 @@ void main() {
       expect(out.containsKey('lines'), isFalse);
       expect(out.containsKey('id'), isFalse);
       expect(out.containsKey('isPendingSync'), isFalse);
+      expect(out.containsKey('is_inclusive_tax'), isFalse);
 
       final items = out['line_items'] as List;
       expect(items, hasLength(2));
       expect((items.first as Map)['account_id'], 'acc_fuel');
       expect((items.first as Map)['amount'], 30.0);
       expect((items[1] as Map)['account_id'], 'acc_toll');
+    });
+
+    test('forwards Fuel tax_id and sets inclusive tax', () {
+      final out = ZohoPayloadMapper.zohoExpensePayload(
+        {'date': '2026-07-06'},
+        resolvedLines: [
+          {
+            'account_id': 'acc_fuel',
+            'amount': 120.0,
+            'description': 'Diesel',
+            'tax_id': 'tax_standard',
+          },
+          {
+            'account_id': 'acc_park',
+            'amount': 10.0,
+            'description': 'Mall',
+          },
+        ],
+        paidThroughAccountId: 'acc_cash',
+        isInclusiveTax: true,
+      );
+
+      expect(out['is_inclusive_tax'], isTrue);
+      expect(out['amount'], 130.0);
+      final items = out['line_items'] as List;
+      expect((items[0] as Map)['tax_id'], 'tax_standard');
+      expect((items[1] as Map).containsKey('tax_id'), isFalse);
     });
   });
 }

@@ -4,7 +4,6 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/sync_worker.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -40,8 +39,8 @@ class ReceiptPaymentDialog extends StatelessWidget {
     return BlocProvider<ReceiptAllocationBloc>(
       create: (ctx) => ReceiptAllocationBloc(
         receiptRepository: ctx.read<ReceiptRepository>(),
-        syncWorker: sl<SyncWorker>(),
-        documentNumberService: sl<DocumentNumberService>(),
+        syncWorker: ctx.read<SyncWorker>(),
+        documentNumberService: ctx.read<DocumentNumberService>(),
       )..add(ReceiptAllocationStarted(customer)),
       child: _ReceiptPaymentDialogView(
         customer: customer,

@@ -129,7 +129,7 @@ class ClientOperationsSheet extends StatelessWidget {
                     'Create cart, calculate taxes, deduct stock, and sync invoice.',
                 icon: Icons.description_rounded,
                 color: AppTheme.primaryIndigo,
-                isDark: isDark,
+               
                 onTap: onNewInvoiceTap,
                 enabled: !ordersOnly,
                 onBlocked: onBlocked,
@@ -141,7 +141,7 @@ class ClientOperationsSheet extends StatelessWidget {
                     'Create offline sales order and enqueue for Zoho sync.',
                 icon: Icons.assignment_rounded,
                 color: AppTheme.primaryIndigo,
-                isDark: isDark,
+               
                 onTap: onNewOrderTap,
               ),
               const SizedBox(height: 14),
@@ -151,7 +151,7 @@ class ClientOperationsSheet extends StatelessWidget {
                     'Collect payment against outstanding contact balances.',
                 icon: Icons.receipt_long_rounded,
                 color: AppTheme.successEmerald,
-                isDark: isDark,
+               
                 onTap: onReceiptPaymentTap,
               ),
               const SizedBox(height: 14),
@@ -161,7 +161,7 @@ class ClientOperationsSheet extends StatelessWidget {
                     'Record returned stock and restore it back into the van.',
                 icon: Icons.assignment_return_rounded,
                 color: AppTheme.errorRose,
-                isDark: isDark,
+               
                 onTap: onSalesReturnTap,
                 enabled: !ordersOnly,
                 onBlocked: onBlocked,
@@ -175,7 +175,7 @@ class ClientOperationsSheet extends StatelessWidget {
                   subtitle: 'Open GPS location in maps app',
                   icon: Icons.directions,
                   color: AppTheme.primaryIndigo,
-                  isDark: isDark,
+                 
                   onTap: () async {
                     final uri = Uri.parse(
                       'https://www.google.com/maps/search/?api=1&query=${customer.latitude},${customer.longitude}',

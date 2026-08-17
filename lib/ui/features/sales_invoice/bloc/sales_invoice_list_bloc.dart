@@ -8,8 +8,6 @@ import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/invoice_repository.dart';
-import '../../../../domain/repositories/sales_order_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/stock_rules.dart';
 import '../../../core/utils/date_filter.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -20,10 +18,6 @@ import 'sales_invoice_list_state.dart';
 class SalesInvoiceListBloc
     extends Bloc<SalesInvoiceListEvent, SalesInvoiceListState> {
   final InvoiceRepository _invoiceRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SalesOrderRepository _salesOrderRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   /// Bumped on every remote list request; stale completions must not emit.
@@ -31,12 +25,8 @@ class SalesInvoiceListBloc
 
   SalesInvoiceListBloc({
     required InvoiceRepository invoiceRepository,
-    required SalesOrderRepository salesOrderRepository,
-    required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
   }) : _invoiceRepository = invoiceRepository,
-       _salesOrderRepository = salesOrderRepository,
-       _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(
          SalesInvoiceListState(

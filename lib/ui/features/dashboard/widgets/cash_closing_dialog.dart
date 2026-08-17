@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/repositories/cash_closing_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -43,12 +42,14 @@ class CashClosingDialog extends StatefulWidget {
     required double todayExpenses,
     required VoidCallback onSessionReconciled,
   }) {
+    final cashRepo = context.read<CashClosingRepository>();
+    final syncRepo = context.read<SyncRepository>();
     return showDialog<void>(
       context: context,
       builder: (_) => BlocProvider<CashClosingCubit>(
         create: (_) => CashClosingCubit(
-          cashClosingRepository: sl<CashClosingRepository>(),
-          syncRepository: sl<SyncRepository>(),
+          cashClosingRepository: cashRepo,
+          syncRepository: syncRepo,
         ),
         child: CashClosingDialog(
           todaySales: todaySales,
@@ -72,7 +73,8 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
   @override
   void initState() {
     super.initState();
-    final lastClosing = sl<CashClosingRepository>().getLocalCashClosing();
+    final lastClosing =
+        context.read<CashClosingRepository>().getLocalCashClosing();
     final opening = lastClosing?.closingBalance ?? 0.0;
     _openingBalanceController = TextEditingController(
       text: opening == 0 ? '' : opening.toStringAsFixed(2),
@@ -103,7 +105,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
 
           final closing = state.closing;
           final difference = closing.reportedDifference;
-          showDialog(
+          showDialog<void>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Session Reconciled'),

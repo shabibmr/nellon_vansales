@@ -18,7 +18,7 @@ void main() {
       return ReportBloc<String>(
         fetchRemote: () async {
           if (fetchDelay != null) {
-            await Future.delayed(fetchDelay);
+            await Future<void>.delayed(fetchDelay);
           }
           remoteCallCount++;
           if (remoteShouldFail) {

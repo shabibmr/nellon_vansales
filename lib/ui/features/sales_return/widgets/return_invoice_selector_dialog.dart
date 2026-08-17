@@ -166,7 +166,10 @@ class _ReturnInvoiceSelectorDialogState
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
         padding: const EdgeInsets.all(24.0),
         child: Form(
           key: _formKey,
@@ -269,143 +272,166 @@ class _ReturnInvoiceSelectorDialogState
                             horizontal: 16.0,
                             vertical: 12.0,
                           ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      inv.invoiceNumber,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                        color: AppTheme.warningAmber,
-                                      ),
+                          child: LayoutBuilder(
+                            builder: (context, cardConstraints) {
+                              final isCompact = cardConstraints.maxWidth < 360;
+
+                              final invoiceInfo = Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    inv.invoiceNumber,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: AppTheme.warningAmber,
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Date: ${_dateFormat.format(inv.date)}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark
-                                            ? AppTheme.darkTextSecondary
-                                            : AppTheme.lightTextSecondary,
-                                      ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Date: ${_dateFormat.format(inv.date)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? AppTheme.darkTextSecondary
+                                          : AppTheme.lightTextSecondary,
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Sold: ${formatQuantity(originalLine.quantity)} ${originalLine.displayUom}'
-                                      ' @ $cs${originalLine.rate.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: isDark
-                                            ? AppTheme.darkText
-                                            : AppTheme.lightText,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              // Unit selector — return can be in any of the
-                              // item's units; the qty cap converts from the
-                              // sold quantity.
-                              if (unitOptions.length > 1)
-                                SizedBox(
-                                  width: 110,
-                                  child: DropdownButtonFormField<String>(
-                                    key: ValueKey('ret_uom_${inv.id}_$selUom'),
-                                    initialValue:
-                                        unitOptions.contains(selUom)
-                                            ? selUom
-                                            : null,
-                                    isExpanded: true,
-                                    isDense: true,
-                                    decoration: InputDecoration(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 8,
-                                      ),
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Sold: ${formatQuantity(originalLine.quantity)} ${originalLine.displayUom}'
+                                    ' @ $cs${originalLine.rate.toStringAsFixed(2)}',
                                     style: TextStyle(
                                       fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                       color: isDark
                                           ? AppTheme.darkText
                                           : AppTheme.lightText,
                                     ),
-                                    items: unitOptions
-                                        .map(
-                                          (u) => DropdownMenuItem<String>(
-                                            value: u,
-                                            child: Text(
-                                              u,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (u) {
-                                      if (u == null) return;
-                                      setState(
-                                        () => _selectedUoms[inv.id] = u,
-                                      );
-                                      _formKey.currentState?.validate();
-                                    },
                                   ),
-                                ),
-                              if (unitOptions.length > 1)
-                                const SizedBox(width: 8),
-                              SizedBox(
-                                width: 80,
-                                child: TextFormField(
-                                  controller: _qtyControllers[inv.id],
-                                  keyboardType: decimals > 0
-                                      ? const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        )
-                                      : TextInputType.number,
-                                  inputFormatters: [
-                                    decimals > 0
-                                        ? FilteringTextInputFormatter.allow(
-                                            RegExp(
-                                              '^\\d*\\.?\\d{0,$decimals}',
+                                ],
+                              );
+
+                              final uomField = unitOptions.length > 1
+                                  ? DropdownButtonFormField<String>(
+                                      key: ValueKey('ret_uom_${inv.id}_$selUom'),
+                                      initialValue:
+                                          unitOptions.contains(selUom)
+                                              ? selUom
+                                              : null,
+                                      isExpanded: true,
+                                      isDense: true,
+                                      decoration: InputDecoration(
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 8,
+                                        ),
+                                        isDense: true,
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? AppTheme.darkText
+                                            : AppTheme.lightText,
+                                      ),
+                                      items: unitOptions
+                                          .map(
+                                            (u) => DropdownMenuItem<String>(
+                                              value: u,
+                                              child: Text(
+                                                u,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
                                           )
-                                        : FilteringTextInputFormatter
-                                            .digitsOnly,
-                                  ],
-                                  decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    hintText: '0',
-                                    isDense: true,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
+                                          .toList(),
+                                      onChanged: (u) {
+                                        if (u == null) return;
+                                        setState(
+                                          () => _selectedUoms[inv.id] = u,
+                                        );
+                                        _formKey.currentState?.validate();
+                                      },
+                                    )
+                                  : null;
+
+                              final qtyField = TextFormField(
+                                controller: _qtyControllers[inv.id],
+                                keyboardType: decimals > 0
+                                    ? const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      )
+                                    : TextInputType.number,
+                                inputFormatters: [
+                                  decimals > 0
+                                      ? FilteringTextInputFormatter.allow(
+                                          RegExp(
+                                            '^\\d*\\.?\\d{0,$decimals}',
+                                          ),
+                                        )
+                                      : FilteringTextInputFormatter
+                                          .digitsOnly,
+                                ],
+                                decoration: InputDecoration(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
                                   ),
-                                  textAlign: TextAlign.center,
-                                  validator: (val) {
-                                    if (val == null || val.isEmpty) return null;
-                                    final qty = double.tryParse(val);
-                                    if (qty == null) return 'Invalid';
-                                    if (qty < 0) return 'Min 0';
-                                    if (qty > maxQty) {
-                                      return 'Max ${formatQuantity(maxQty)}';
-                                    }
-                                    return null;
-                                  },
+                                  hintText: '0',
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
-                              ),
-                            ],
+                                textAlign: TextAlign.center,
+                                validator: (val) {
+                                  if (val == null || val.isEmpty) return null;
+                                  final qty = double.tryParse(val);
+                                  if (qty == null) return 'Invalid';
+                                  if (qty < 0) return 'Min 0';
+                                  if (qty > maxQty) {
+                                    return 'Max ${formatQuantity(maxQty)}';
+                                  }
+                                  return null;
+                                },
+                              );
+
+                              if (isCompact) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    invoiceInfo,
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        if (uomField != null) ...[
+                                          Expanded(flex: 3, child: uomField),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        Expanded(flex: 2, child: qtyField),
+                                      ],
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              return Row(
+                                children: [
+                                  Expanded(child: invoiceInfo),
+                                  const SizedBox(width: 12),
+                                  if (uomField != null) ...[
+                                    SizedBox(width: 110, child: uomField),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  SizedBox(width: 80, child: qtyField),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       );

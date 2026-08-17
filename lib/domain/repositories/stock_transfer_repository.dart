@@ -25,9 +25,27 @@ abstract class StockTransferRepository {
   /// Persists [transfer] locally and enqueues it for sync.
   Future<void> recordStockTransfer(StockTransfer transfer);
 
-  /// Enqueues a create (`stock_transfer`) sync item for [transfer].
-  Future<void> enqueueStockTransfer(StockTransfer transfer);
+  /// Enqueues a create (`stock_transfer`) or update (`update_stock_transfer`)
+  /// sync item for [transfer]. An update requires [transfer.zohoTransferId].
+  Future<void> enqueueStockTransfer(StockTransfer transfer, {required bool isUpdate});
 
-  /// Builds the stock-transfer queue item and submits it online-first.
-  Future<SubmitResult> submitStockTransfer(StockTransfer transfer);
+  /// Builds the stock-transfer queue item and submits it online-first. An
+  /// update ([isUpdate] true) requires [transfer.zohoTransferId] and is only
+  /// valid while Zoho still reports the transfer as `draft`.
+  Future<SubmitResult> submitStockTransfer(
+    StockTransfer transfer, {
+    bool isUpdate = false,
+  });
+
+  /// Local stock-transfer cache, scoped to the active van location.
+  List<StockTransfer> getLocalStockTransfers();
+
+  /// Online-first header list from Zoho for [direction] within [startDate] /
+  /// [endDate]. Issue uses `to_location_id = APP_LOCATION_ID`; unload uses
+  /// `from_location_id`. Merges into the local cache without touching stock.
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+    required StockTransferDirection direction,
+  });
 }

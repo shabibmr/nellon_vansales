@@ -50,5 +50,12 @@ void main() {
       expect(captured.single, contains('[WARNING]'));
       expect(captured.single, contains('[Sync]'));
     });
+
+    test('exposes sanitize for telemetry payloads', () {
+      expect(
+        AppLogger.sanitize('Authorization: Zoho-oauthtoken abc.def'),
+        contains('[REDACTED]'),
+      );
+    });
   });
 }

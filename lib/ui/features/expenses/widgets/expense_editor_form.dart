@@ -76,7 +76,7 @@ class _ExpenseEditorFormState extends State<ExpenseEditorForm> {
   }
 
   void _showImageSourceSheet(BuildContext context, bool isDark) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: isDark
           ? AppTheme.darkBackground

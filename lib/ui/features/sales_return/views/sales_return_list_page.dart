@@ -68,7 +68,7 @@ class _SalesReturnListPageState extends State<SalesReturnListPage> {
     required bool readOnly,
     SalesReturn? salesReturn,
   }) async {
-    await SalesReturnEditorPage.open(
+    await SalesReturnEditorPage.open<void>(
       context,
       salesReturn: salesReturn,
       readOnly: readOnly,

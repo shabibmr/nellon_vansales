@@ -36,12 +36,16 @@ class LocalStorageService {
   /// Returns null if any of client id / secret / refresh token is missing.
   Future<ServerConfig?> readZohoCredentials() async {
     try {
-      final clientId = await _secureStorage.read(key: _zohoClientIdKey);
-      final clientSecret = await _secureStorage.read(key: _zohoClientSecretKey);
-      final refreshToken = await _secureStorage.read(key: _zohoRefreshTokenKey);
-      final organizationId = await _secureStorage.read(
-        key: _zohoOrganizationIdKey,
-      );
+      final results = await Future.wait([
+        _secureStorage.read(key: _zohoClientIdKey),
+        _secureStorage.read(key: _zohoClientSecretKey),
+        _secureStorage.read(key: _zohoRefreshTokenKey),
+        _secureStorage.read(key: _zohoOrganizationIdKey),
+      ]);
+      final clientId = results[0];
+      final clientSecret = results[1];
+      final refreshToken = results[2];
+      final organizationId = results[3];
       if (clientId == null ||
           clientId.isEmpty ||
           clientSecret == null ||
@@ -64,16 +68,18 @@ class LocalStorageService {
   /// Persists a complete Zoho config so fail-open / offline boots can refresh.
   Future<void> saveZohoCredentials(ServerConfig config) async {
     try {
-      await _secureStorage.write(key: _zohoClientIdKey, value: config.clientId);
-      await _secureStorage.write(
-        key: _zohoClientSecretKey,
-        value: config.clientSecret,
-      );
-      await _secureStorage.write(key: _zohoRefreshTokenKey, value: config.code);
-      await _secureStorage.write(
-        key: _zohoOrganizationIdKey,
-        value: config.organizationId,
-      );
+      await Future.wait([
+        _secureStorage.write(key: _zohoClientIdKey, value: config.clientId),
+        _secureStorage.write(
+          key: _zohoClientSecretKey,
+          value: config.clientSecret,
+        ),
+        _secureStorage.write(key: _zohoRefreshTokenKey, value: config.code),
+        _secureStorage.write(
+          key: _zohoOrganizationIdKey,
+          value: config.organizationId,
+        ),
+      ]);
     } catch (e) {
       throw Exception('Failed to write Zoho credentials securely: $e');
     }

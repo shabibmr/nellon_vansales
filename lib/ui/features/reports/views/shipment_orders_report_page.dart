@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
-import '../../../../data/services/injection.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
@@ -18,8 +17,6 @@ import '../../sales_invoice/bloc/sales_invoice_list_bloc.dart' as inv;
 import '../../sales_invoice/bloc/sales_invoice_list_event.dart' as inv;
 import '../../sales_invoice/bloc/sales_invoice_list_state.dart' as inv;
 import '../../sales_order/views/sales_order_editor_page.dart';
-import '../../stock_transfer/bloc/stock_transfer_bloc.dart'
-    hide ClearMessages;
 import '../../stock_transfer/views/issue_to_van_page.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
@@ -37,7 +34,7 @@ class ShipmentOrdersReportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportBlocHost<SalesOrder>(
       create: (_) => ReportBloc<SalesOrder>(
-        fetchRemote: () => sl<SalesOrderRepository>().fetchRemoteOrders(),
+        fetchRemote: () => context.read<SalesOrderRepository>().fetchRemoteOrders(),
       ),
       builder: (context, reportState) {
         return BlocProvider(
@@ -74,7 +71,7 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
   }
 
   Future<void> _openOrderView(BuildContext context, SalesOrder order) async {
-    await SalesOrderEditorPage.open(
+    await SalesOrderEditorPage.open<void>(
       context,
       order: order,
       readOnly: true,
@@ -121,11 +118,7 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
       showErrorSnackBar(context, 'No item quantities to transfer');
       return;
     }
-    context.read<StockTransferBloc>().add(LoadIssueGridWithDemand(demand));
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const IssueToVanPage()),
-    );
+    IssueToVanPage.open<void>(context, demand: demand);
   }
 
   @override

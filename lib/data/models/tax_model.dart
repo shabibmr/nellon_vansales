@@ -1,4 +1,5 @@
 import '../../domain/models/tax.dart';
+import 'json_read.dart';
 
 /// Data transfer object representing a [Tax] configuration.
 ///
@@ -18,12 +19,11 @@ class TaxModel extends Tax {
   /// Mappes keys (`tax_id`, `tax_percentage`, `is_default_tax`) to their parent domains.
   factory TaxModel.fromJson(Map<String, dynamic> json) {
     return TaxModel(
-      id: json['tax_id'] ?? json['id'] ?? '',
-      name: json['tax_name'] ?? json['name'] ?? '',
-      percentage: (json['tax_percentage'] ?? json['percentage'] ?? 0.0)
-          .toDouble(),
-      type: json['tax_type'] ?? json['type'] ?? 'tax',
-      isDefault: json['is_default_tax'] ?? json['isDefault'] ?? false,
+      id: jsonString(json['tax_id'] ?? json['id']),
+      name: jsonString(json['tax_name'] ?? json['name']),
+      percentage: jsonDouble(json['tax_percentage'] ?? json['percentage']),
+      type: jsonString(json['tax_type'] ?? json['type'], 'tax'),
+      isDefault: jsonBool(json['is_default_tax'] ?? json['isDefault']),
     );
   }
 

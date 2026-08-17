@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
+import '../../../../domain/models/stock_transfer.dart';
 import '../../../../domain/repositories/salesperson_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../expenses/bloc/expense_list_bloc.dart';
@@ -37,8 +38,10 @@ import '../../sales_return/bloc/sales_return_list_bloc.dart';
 import '../../sales_return/bloc/sales_return_list_event.dart';
 import '../../sales_return/views/sales_return_editor_page.dart';
 import '../../sales_return/views/sales_return_list_page.dart';
-import '../../stock_transfer/bloc/stock_transfer_bloc.dart';
+import '../../stock_transfer/bloc/stock_transfer_list_bloc.dart';
+import '../../stock_transfer/bloc/stock_transfer_list_event.dart';
 import '../../stock_transfer/views/issue_to_van_page.dart';
+import '../../stock_transfer/views/stock_transfer_list_page.dart';
 import '../../stock_transfer/views/stock_unloading_page.dart';
 import '../../sync/views/masters_sync_page.dart';
 import '../cubit/daily_stats_cubit.dart';
@@ -52,7 +55,7 @@ import 'sales_return_dialog.dart';
 
 abstract class DashboardNavHelpers {
   static void showGlobalSearchSheet(BuildContext context, bool isDark) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -77,7 +80,7 @@ abstract class DashboardNavHelpers {
   }
 
   static void showItemDetailsDialog(BuildContext context, Item item, bool isDark) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => ItemDetailsDialog(item: item),
     );
@@ -85,7 +88,7 @@ abstract class DashboardNavHelpers {
 
   static void showClientOperationsSheet(BuildContext context, Customer customer, bool isDark) {
     final dailyStatsCubit = context.read<DailyStatsCubit>();
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
@@ -120,7 +123,7 @@ abstract class DashboardNavHelpers {
   }
 
   static void launchSalesOrderFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer) {
-    SalesOrderEditorPage.open(
+    SalesOrderEditorPage.open<void>(
       context,
       prefillCustomer: customer,
     ).then((_) {
@@ -130,7 +133,7 @@ abstract class DashboardNavHelpers {
 
   static void launchInvoiceFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
     if (blockIfOrdersOnly(context)) return;
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
@@ -150,7 +153,7 @@ abstract class DashboardNavHelpers {
   }
 
   static void launchPaymentFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => ReceiptPaymentDialog(
         customer: customer,
@@ -163,7 +166,7 @@ abstract class DashboardNavHelpers {
 
   static void launchSalesReturnFlow(BuildContext context, DailyStatsCubit statsCubit, Customer customer, bool isDark) {
     if (blockIfOrdersOnly(context)) return;
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => SalesReturnDialog(
         customer: customer,
@@ -177,28 +180,28 @@ abstract class DashboardNavHelpers {
   static void showItemSalesReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ItemSalesReportPage()),
+      MaterialPageRoute<void>(builder: (_) => const ItemSalesReportPage()),
     );
   }
 
   static void showAgingReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AgingReceivablesReportPage()),
+      MaterialPageRoute<void>(builder: (_) => const AgingReceivablesReportPage()),
     );
   }
 
   static void showStockReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const StockReportPage()),
+      MaterialPageRoute<void>(builder: (_) => const StockReportPage()),
     );
   }
 
   static void showStockTransferHistoryReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const StockTransferHistoryReportPage(),
       ),
     );
@@ -207,21 +210,21 @@ abstract class DashboardNavHelpers {
   static void showTransactionsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const TransactionsSummaryReportPage()),
+      MaterialPageRoute<void>(builder: (_) => const TransactionsSummaryReportPage()),
     );
   }
 
   static void showExpenseSummaryReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ExpenseSummaryReportPage()),
+      MaterialPageRoute<void>(builder: (_) => const ExpenseSummaryReportPage()),
     );
   }
 
   static void showInvoiceReceiptsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const InvoiceReceiptsSummaryReportPage(),
       ),
     );
@@ -230,7 +233,7 @@ abstract class DashboardNavHelpers {
   static void showSalesSummaryByCustomerValueReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const SalesSummaryByCustomerValueReportPage(),
       ),
     );
@@ -239,7 +242,7 @@ abstract class DashboardNavHelpers {
   static void showSalesSummaryByCustomerItemReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const SalesSummaryByCustomerItemReportPage(),
       ),
     );
@@ -248,7 +251,7 @@ abstract class DashboardNavHelpers {
   static void showItemwiseOrdersSummaryReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const ItemwiseOrdersSummaryReportPage(),
       ),
     );
@@ -257,7 +260,7 @@ abstract class DashboardNavHelpers {
   static void showOrdersSummaryByCustomerReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const OrdersSummaryByCustomerReportPage(),
       ),
     );
@@ -266,14 +269,14 @@ abstract class DashboardNavHelpers {
   static void showOrdersByShipmentDateReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ShipmentOrdersReportPage()),
+      MaterialPageRoute<void>(builder: (_) => const ShipmentOrdersReportPage()),
     );
   }
 
   static void showOrdersReadyReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const OrderStatusReportPage(
           filter: OrderStatusFilter.readyOrPending,
           title: 'Orders Ready',
@@ -285,7 +288,7 @@ abstract class DashboardNavHelpers {
   static void showPendingOrdersReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const OrderStatusReportPage(
           filter: OrderStatusFilter.readyOrPending,
           title: 'Pending Orders',
@@ -297,7 +300,7 @@ abstract class DashboardNavHelpers {
   static void showOrdersInvoicedReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const OrderStatusReportPage(
           filter: OrderStatusFilter.invoiced,
           title: 'Orders Invoiced',
@@ -309,7 +312,7 @@ abstract class DashboardNavHelpers {
   static void showOrdersDelayedReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const OrderStatusReportPage(
           filter: OrderStatusFilter.delayed,
           title: 'Orders Delayed',
@@ -321,7 +324,7 @@ abstract class DashboardNavHelpers {
   static void showItemwiseReturnsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const ItemwiseReturnsSummaryReportPage(),
       ),
     );
@@ -330,7 +333,7 @@ abstract class DashboardNavHelpers {
   static void showCustomerwiseReturnsSummaryReport(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => const CustomerwiseReturnsSummaryReportPage(),
       ),
     );
@@ -340,7 +343,7 @@ abstract class DashboardNavHelpers {
     if (blockIfOrdersOnly(context)) return;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const SalesInvoiceListPage()),
+      MaterialPageRoute<void>(builder: (context) => const SalesInvoiceListPage()),
     ).then((_) {
       statsCubit.refresh();
     });
@@ -349,7 +352,7 @@ abstract class DashboardNavHelpers {
   static void showSalesOrderListPage(BuildContext context, DailyStatsCubit statsCubit) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const SalesOrderListPage()),
+      MaterialPageRoute<void>(builder: (context) => const SalesOrderListPage()),
     ).then((_) {
       statsCubit.refresh();
     });
@@ -360,7 +363,7 @@ abstract class DashboardNavHelpers {
     context.read<SalesReturnListBloc>().add(const LoadReturns());
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const SalesReturnListPage()),
+      MaterialPageRoute<void>(builder: (_) => const SalesReturnListPage()),
     ).then((_) => statsCubit.refresh());
   }
 
@@ -368,7 +371,7 @@ abstract class DashboardNavHelpers {
     context.read<ExpenseListBloc>().add(const LoadExpenses());
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ExpenseListPage()),
+      MaterialPageRoute<void>(builder: (_) => const ExpenseListPage()),
     ).then((_) => statsCubit.refresh());
   }
 
@@ -376,7 +379,7 @@ abstract class DashboardNavHelpers {
     context.read<ReceiptListBloc>().add(const LoadReceipts());
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ReceiptListPage()),
+      MaterialPageRoute<void>(builder: (_) => const ReceiptListPage()),
     ).then((_) => statsCubit.refresh());
   }
 
@@ -396,30 +399,30 @@ abstract class DashboardNavHelpers {
 
   static void createNewInvoice(BuildContext context, DailyStatsCubit statsCubit) {
     if (blockIfOrdersOnly(context)) return;
-    SalesInvoiceEditorPage.open(context).then((_) => statsCubit.refresh());
+    SalesInvoiceEditorPage.open<void>(context).then((_) => statsCubit.refresh());
   }
 
   static void createNewOrder(BuildContext context, DailyStatsCubit statsCubit) {
-    SalesOrderEditorPage.open(context).then((_) => statsCubit.refresh());
+    SalesOrderEditorPage.open<void>(context).then((_) => statsCubit.refresh());
   }
 
   static void createNewExpense(BuildContext context, DailyStatsCubit statsCubit) {
-    ExpenseEditorPage.open(context).then((_) => statsCubit.refresh());
+    ExpenseEditorPage.open<void>(context).then((_) => statsCubit.refresh());
   }
 
   static void createNewReceipt(BuildContext context, DailyStatsCubit statsCubit) {
-    ReceiptEditorPage.open(context).then((_) => statsCubit.refresh());
+    ReceiptEditorPage.open<void>(context).then((_) => statsCubit.refresh());
   }
 
   static void createNewReturn(BuildContext context, DailyStatsCubit statsCubit) {
     if (blockIfOrdersOnly(context)) return;
-    SalesReturnEditorPage.open(context).then((_) => statsCubit.refresh());
+    SalesReturnEditorPage.open<void>(context).then((_) => statsCubit.refresh());
   }
 
   static void showCustomerLedgerPage(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => BlocProvider.value(
           value: context.read<CustomerLedgerBloc>(),
           child: const CustomerLedgerPage(),
@@ -431,26 +434,54 @@ abstract class DashboardNavHelpers {
   static void showMastersSyncPage(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const MastersSyncPage()),
+      MaterialPageRoute<void>(builder: (_) => const MastersSyncPage()),
     );
+  }
+
+  static void showIssueToVanListPage(
+    BuildContext context,
+    DailyStatsCubit statsCubit,
+  ) {
+    if (blockIfOrdersOnly(context)) return;
+    context.read<StockTransferListBloc>().add(
+      const LoadStockTransfers(StockTransferDirection.load),
+    );
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => const StockTransferListPage(
+          direction: StockTransferDirection.load,
+        ),
+      ),
+    ).then((_) => statsCubit.refresh());
+  }
+
+  static void showStockUnloadingListPage(
+    BuildContext context,
+    DailyStatsCubit statsCubit,
+  ) {
+    if (blockIfOrdersOnly(context)) return;
+    context.read<StockTransferListBloc>().add(
+      const LoadStockTransfers(StockTransferDirection.unload),
+    );
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => const StockTransferListPage(
+          direction: StockTransferDirection.unload,
+        ),
+      ),
+    ).then((_) => statsCubit.refresh());
   }
 
   static void showIssueToVanPage(BuildContext context, DailyStatsCubit statsCubit) {
     if (blockIfOrdersOnly(context)) return;
-    context.read<StockTransferBloc>().add(LoadIssueGrid());
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const IssueToVanPage()),
-    ).then((_) => statsCubit.refresh());
+    IssueToVanPage.open<void>(context).then((_) => statsCubit.refresh());
   }
 
   static void showStockUnloadingPage(BuildContext context, DailyStatsCubit statsCubit) {
     if (blockIfOrdersOnly(context)) return;
-    context.read<StockTransferBloc>().add(LoadUnloadGrid());
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const StockUnloadingPage()),
-    ).then((_) => statsCubit.refresh());
+    StockUnloadingPage.open<void>(context).then((_) => statsCubit.refresh());
   }
 
   static void showCashClosingForm(BuildContext context, DailyStatsCubit statsCubit, double todaySales, double todayPayments, double todayExpenses) {

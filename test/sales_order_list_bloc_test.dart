@@ -44,10 +44,10 @@ class RecordingSalesRepository implements SalesOrderRepository {
         name.contains('getSync') ||
         name.contains('getOpen') ||
         name.contains('getWarehouses')) {
-      return [];
+      return <dynamic>[];
     }
     if (name.contains('hasPending')) return false;
-    return Future.value();
+    return Future<void>.value();
   }
 }
 

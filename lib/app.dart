@@ -1,9 +1,14 @@
 // \file app.dart
 // \brief Main application widget setting up providers, themes, and navigation routing gateways.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'data/services/firebase_telemetry.dart';
 import 'data/services/injection.dart';
+import 'l10n/app_localizations.dart';
+import 'ui/core/extensions/l10n_context_extension.dart';
 import 'ui/core/theme/app_theme.dart';
 import 'ui/core/theme/theme_cubit.dart';
 import 'ui/core/widgets/animated_glow_background.dart';
@@ -28,7 +33,7 @@ import 'ui/features/expenses/bloc/expense_list_bloc.dart';
 import 'ui/features/receipts/bloc/receipt_list_bloc.dart';
 import 'ui/features/sales_return/bloc/sales_return_list_bloc.dart';
 
-import 'ui/features/stock_transfer/bloc/stock_transfer_bloc.dart';
+import 'ui/features/stock_transfer/bloc/stock_transfer_list_bloc.dart';
 import 'ui/features/ledger/bloc/customer_ledger_bloc.dart';
 import 'ui/core/cubit/organization_cubit.dart';
 import 'ui/core/cubit/salesperson_cubit.dart';
@@ -37,6 +42,7 @@ import 'domain/repositories/report_repository.dart';
 import 'domain/repositories/voucher_pdf_repository.dart';
 import 'data/services/document_number_service.dart';
 import 'data/services/hive_database_service.dart';
+import 'data/services/sync_worker.dart';
 import 'data/services/zoho_api_client.dart';
 import 'ui/core/widgets/app_splash_screen.dart';
 import 'ui/features/auth/views/login_page.dart';
@@ -114,6 +120,12 @@ class VanSalesApp extends StatelessWidget {
         RepositoryProvider<VoucherPdfRepository>(
           create: (context) => sl<VoucherPdfRepository>(),
         ),
+        RepositoryProvider<DocumentNumberService>(
+          create: (context) => sl<DocumentNumberService>(),
+        ),
+        RepositoryProvider<SyncWorker>(
+          create: (context) => sl<SyncWorker>(),
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -128,6 +140,7 @@ class VanSalesApp extends StatelessWidget {
             create: (context) => AuthBloc(
               authRepository: context.read<AuthRepository>(),
               salespersonRepository: context.read<SalespersonRepository>(),
+              documentNumberService: context.read<DocumentNumberService>(),
             )..add(AppStarted()),
           ),
           BlocProvider<SyncBloc>(
@@ -144,9 +157,7 @@ class VanSalesApp extends StatelessWidget {
           BlocProvider<SalesInvoiceListBloc>(
             create: (context) => SalesInvoiceListBloc(
               invoiceRepository: context.read<InvoiceRepository>(),
-              salesOrderRepository: context.read<SalesOrderRepository>(),
-              syncRepository: context.read<SyncRepository>(),
-              documentNumberService: sl<DocumentNumberService>(),
+              documentNumberService: context.read<DocumentNumberService>(),
             ),
           ),
           BlocProvider<SalesOrderListBloc>(
@@ -169,10 +180,9 @@ class VanSalesApp extends StatelessWidget {
               salesReturnRepository: context.read<SalesReturnRepository>(),
             ),
           ),
-          BlocProvider<StockTransferBloc>(
-            create: (context) => StockTransferBloc(
+          BlocProvider<StockTransferListBloc>(
+            create: (context) => StockTransferListBloc(
               stockTransferRepository: context.read<StockTransferRepository>(),
-              syncRepository: context.read<SyncRepository>(),
             ),
           ),
           BlocProvider<CustomerLedgerBloc>(
@@ -208,6 +218,8 @@ class VanSalesApp extends StatelessWidget {
           builder: (context, appThemeMode) {
             return MaterialApp(
               title: context.read<OrganizationCubit>().companyName,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,
               darkTheme: appThemeMode == AppThemeMode.glass
@@ -216,6 +228,7 @@ class VanSalesApp extends StatelessWidget {
               themeMode: appThemeMode == AppThemeMode.light
                   ? ThemeMode.light
                   : ThemeMode.dark,
+              navigatorObservers: [FirebaseTelemetry.navigatorObserver()],
               builder: (context, child) => AnimatedGlowBackground(
                 themeMode: appThemeMode,
                 child: child ?? const SizedBox.shrink(),
@@ -243,9 +256,14 @@ class SessionGateway extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, authState) {
+        if (authState is Authenticated) {
+          unawaited(FirebaseTelemetry.bindUser(authState.user));
+        } else if (authState is Unauthenticated) {
+          unawaited(FirebaseTelemetry.clearUser());
+        }
         // Keep SalespersonCubit in sync after login resolution or logout clear.
         if (authState is Authenticated || authState is Unauthenticated) {
-          context.read<SalespersonCubit>().refresh(sl<HiveDatabaseService>());
+          context.read<SalespersonCubit>().refresh();
         }
       },
       child: BlocBuilder<AuthBloc, AuthState>(
@@ -256,8 +274,8 @@ class SessionGateway extends StatelessWidget {
               child: BlocBuilder<RouteBloc, RouteState>(
                 builder: (context, routeState) {
                   if (routeState.isLoading) {
-                    return const AppSplashScreen(
-                      statusText: 'Loading active route…',
+                    return AppSplashScreen(
+                      statusText: context.l10n.loadingActiveRoute,
                     );
                   }
                   final hasMasters = context
@@ -271,8 +289,8 @@ class SessionGateway extends StatelessWidget {
               ),
             );
           } else if (authState is AuthInitial) {
-            return const AppSplashScreen(
-              statusText: 'Verifying session…',
+            return AppSplashScreen(
+              statusText: context.l10n.verifyingSession,
             );
           }
           return const LoginPage();

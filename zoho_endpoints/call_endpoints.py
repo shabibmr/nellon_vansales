@@ -16,12 +16,12 @@ import time
 import requests
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env_zoho"))
 
 def _require_env(key: str) -> str:
     val = os.getenv(key)
     if not val:
-        raise RuntimeError(f"Missing required env var: {key}  (set it in zoho_endpoints/.env)")
+        raise RuntimeError(f"Missing required env var: {key}  (set it in .env_zoho)")
     return val
 
 CLIENT_ID     = _require_env("ZOHO_CLIENT_ID")

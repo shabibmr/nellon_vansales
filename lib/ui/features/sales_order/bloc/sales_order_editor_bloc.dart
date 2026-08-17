@@ -10,7 +10,6 @@ import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'sales_order_editor_event.dart';
 import 'sales_order_editor_state.dart';
@@ -20,18 +19,14 @@ class SalesOrderEditorBloc
     extends Bloc<SalesOrderEditorEvent, SalesOrderEditorState> {
   final SalesOrderRepository _salesOrderRepository;
   final CustomerRepository _customerRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   SalesOrderEditorBloc({
     required SalesOrderRepository salesOrderRepository,
     required CustomerRepository customerRepository,
-    required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
   }) : _salesOrderRepository = salesOrderRepository,
        _customerRepository = customerRepository,
-       _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const SalesOrderEditorState()) {
     on<StartNewSalesOrder>(_onStartNewSalesOrder);

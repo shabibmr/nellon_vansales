@@ -46,9 +46,9 @@ class FakeSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<String> get syncStatusStream => const Stream.empty();
+  Stream<String> get syncStatusStream => const Stream<Never>.empty();
   @override
-  Stream<int> get syncCountStream => const Stream.empty();
+  Stream<int> get syncCountStream => const Stream<Never>.empty();
   @override
   bool get isSyncing => false;
   @override

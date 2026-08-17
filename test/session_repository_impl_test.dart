@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/repositories/session_repository_impl.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
-import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/organization.dart';
 import 'package:van_sales/domain/models/route.dart';
 
@@ -27,18 +26,13 @@ class _FakeDb extends HiveDatabaseService {
   Organization? getOrganization() => org;
 }
 
-class _FakeApi extends ZohoApiClient {
-  _FakeApi(HiveDatabaseService db)
-    : super(dbService: db);
-}
-
 void main() {
   late _FakeDb db;
   late SessionRepositoryImpl repo;
 
   setUp(() {
     db = _FakeDb();
-    repo = SessionRepositoryImpl(dbService: db, apiClient: _FakeApi(db));
+    repo = SessionRepositoryImpl(dbService: db);
   });
 
   test('getRoutes delegates to dbService', () {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
@@ -28,7 +27,7 @@ class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
 
     return ReportBlocHost<SalesReturn>(
       create: (_) => ReportBloc<SalesReturn>(
-        fetchRemote: () => sl<ReportRepository>().fetchSalesReturns(),
+        fetchRemote: () => context.read<ReportRepository>().fetchSalesReturns(),
         initialSortField: ItemwiseReturnsSummarySortField.amount,
         initialSortAscending: false,
       ),

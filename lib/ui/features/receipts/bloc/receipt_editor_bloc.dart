@@ -11,7 +11,6 @@ import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'receipt_editor_event.dart';
 import 'receipt_editor_state.dart';
@@ -21,18 +20,14 @@ class ReceiptEditorBloc
     extends Bloc<ReceiptEditorEvent, ReceiptEditorState> {
   final ReceiptRepository _receiptRepository;
   final CustomerRepository _customerRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   ReceiptEditorBloc({
     required ReceiptRepository receiptRepository,
     required CustomerRepository customerRepository,
-    required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
   }) : _receiptRepository = receiptRepository,
        _customerRepository = customerRepository,
-       _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const ReceiptEditorState()) {
     on<StartNewReceipt>(_onStartNewReceipt);

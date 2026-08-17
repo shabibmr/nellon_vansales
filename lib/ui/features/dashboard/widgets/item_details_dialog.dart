@@ -16,34 +16,44 @@ class ItemDetailsDialog extends StatelessWidget {
     final cs = context.org.currencySymbol;
     return AlertDialog(
       title: Text(item.name),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'SKU: ${item.sku}',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'SKU: ${item.sku}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text('Rate: $cs${item.rate.toStringAsFixed(2)}'),
+              const SizedBox(height: 8),
+              Text('Tax Group: ${item.taxName} (${item.taxPercentage}%)'),
+              const SizedBox(height: 8),
+              Text(
+                'Available in Van: ${item.stock} units',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: item.stock > 0
+                      ? AppTheme.successEmerald
+                      : AppTheme.errorRose,
+                ),
+              ),
+              if (item.description.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  item.description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 8),
-          Text('Rate: $cs${item.rate.toStringAsFixed(2)}'),
-          const SizedBox(height: 8),
-          Text('Tax Group: ${item.taxName} (${item.taxPercentage}%)'),
-          const SizedBox(height: 8),
-          Text(
-            'Available in Van: ${item.stock} units',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: item.stock > 0
-                  ? AppTheme.successEmerald
-                  : AppTheme.errorRose,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            item.description,
-            style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(

@@ -67,6 +67,78 @@ void main() {
     });
   });
 
+  group('isNetworkFailure', () {
+    test('connection and timeout types are network', () {
+      expect(
+        isNetworkFailure(
+          DioException(
+            requestOptions: RequestOptions(path: '/invoices'),
+            type: DioExceptionType.connectionTimeout,
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        isNetworkFailure(
+          DioException(
+            requestOptions: RequestOptions(path: '/invoices'),
+            type: DioExceptionType.connectionError,
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('HTTP 4xx and 5xx are not network', () {
+      expect(
+        isNetworkFailure(
+          DioException(
+            requestOptions: RequestOptions(path: '/invoices'),
+            type: DioExceptionType.badResponse,
+            response: Response(
+              requestOptions: RequestOptions(path: '/invoices'),
+              statusCode: 400,
+            ),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        isNetworkFailure(
+          DioException(
+            requestOptions: RequestOptions(path: '/invoices'),
+            type: DioExceptionType.badResponse,
+            response: Response(
+              requestOptions: RequestOptions(path: '/invoices'),
+              statusCode: 503,
+            ),
+          ),
+        ),
+        isFalse,
+      );
+    });
+
+    test('cancelled requests are not reported as Zoho API failures', () {
+      final error = DioException(
+        requestOptions: RequestOptions(path: '/invoices'),
+        type: DioExceptionType.cancel,
+      );
+      expect(isNetworkFailure(error), isFalse);
+      expect(shouldReportZohoApiFailure(error), isFalse);
+    });
+
+    test('socket-shaped messages are network', () {
+      expect(
+        isNetworkFailure(Exception('SocketException: Failed host lookup')),
+        isTrue,
+      );
+      expect(
+        shouldReportZohoApiFailure(Exception('Failed host lookup')),
+        isFalse,
+      );
+    });
+  });
+
   group('humanizeSyncErrorMessage', () {
     test('extracts Zoho message from verbose body= exception', () {
       const raw =

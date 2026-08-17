@@ -61,18 +61,15 @@ class CreateCustomerCubit extends Cubit<CreateCustomerState> {
         'company_name': company,
         'email': email,
         'phone': phone,
-        'billing_address': {'address': address},
+        'billing_address': {
+          'address': address,
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
+        },
         'route_id': routeId,
         'credit_limit': creditLimit,
         'isPendingSync': true,
       };
-
-      if (latitude != null && longitude != null) {
-        customerPayload['custom_fields'] = [
-          {'api_name': 'cf_latitude', 'value': latitude.toString()},
-          {'api_name': 'cf_longitude', 'value': longitude.toString()},
-        ];
-      }
 
       final result = await customerRepository.submitOrEnqueue(
         SyncQueueItem(

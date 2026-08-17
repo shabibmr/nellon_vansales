@@ -11,7 +11,7 @@ class DeveloperChannelSheet extends StatefulWidget {
 
   /// Displays the developer channel switcher modal
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet(
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.darkSurface,
@@ -53,7 +53,7 @@ class _DeveloperChannelSheetState extends State<DeveloperChannelSheet> {
     final isBeta = _selectedChannel == 'beta';
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -67,6 +67,24 @@ void main() {
       expect(db.getItems().single.stock, 100);
     });
 
+    test('programming Error is not queued as a sync failure', () async {
+      final db = FakeHiveDatabaseService();
+      final api = FakeZohoApiClient()
+        ..failNextInvoiceSync = true
+        ..failureToThrow = ArgumentError('bug');
+      final worker = SyncWorker(
+        dbService: db,
+        apiClient: api,
+        checkConnectivity: fakeCheckConnectivity,
+      );
+
+      await expectLater(
+        worker.submitOrEnqueue(invoiceItem()),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(db.getSyncQueue(), isEmpty);
+    });
+
     test('Zoho failure queues only — history empty', () async {
       final db = FakeHiveDatabaseService();
       final api = FakeZohoApiClient()

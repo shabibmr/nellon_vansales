@@ -165,7 +165,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
             if (state is VoucherPdfReady) {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                MaterialPageRoute<void>(
                   builder: (_) => VoucherPdfPreviewPage(
                     pdfBytes: state.pdfBytes,
                     filename: state.filename,

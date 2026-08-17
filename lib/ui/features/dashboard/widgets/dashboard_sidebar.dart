@@ -175,7 +175,7 @@ class DashboardSidebar extends StatelessWidget {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        MaterialPageRoute<void>(
                           builder: (_) => const UserProfilePage(),
                         ),
                       );
@@ -200,7 +200,7 @@ class DashboardSidebar extends StatelessWidget {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        MaterialPageRoute<void>(
                           builder: (_) => const SettingsPage(),
                         ),
                       );

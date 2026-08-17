@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/report_repository.dart';
@@ -23,13 +22,12 @@ class OrdersSummaryByCustomerReportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sl = GetIt.instance;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
 
     return ReportBlocHost<SalesOrder>(
       create: (_) => ReportBloc<SalesOrder>(
-        fetchRemote: () => sl<ReportRepository>().fetchSalesOrders(),
+        fetchRemote: () => context.read<ReportRepository>().fetchSalesOrders(),
         initialSortField: OrdersSummaryByCustomerSortField.value,
         initialSortAscending: false,
       ),

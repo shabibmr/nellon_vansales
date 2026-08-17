@@ -23,6 +23,7 @@ import '../models/stock_transfer_model.dart';
 import '../../domain/models/route.dart';
 import '../../domain/models/sales_invoice.dart';
 import '../../domain/models/sales_order.dart';
+import '../../domain/utils/json_read.dart';
 import '../../domain/models/stock_transfer.dart';
 import '../../domain/models/submit_result.dart';
 import '../../domain/utils/stock_rules.dart';
@@ -180,7 +181,7 @@ class SyncWorker {
     try {
       await _dispatchSync(item);
       return SubmitResult.synced;
-    } catch (e) {
+    } on Exception catch (e) {
       final category = classifySyncError(e);
       final friendly = humanizeSyncError(e);
       final tag = category == ErrorCategory.transient
@@ -222,6 +223,7 @@ class SyncWorker {
           );
         }
       case 'stock_transfer':
+      case 'update_stock_transfer':
         _assertTransferStock(StockTransferModel.fromJson(item.payload));
       default:
         return;
@@ -364,7 +366,7 @@ class SyncWorker {
             await _dbService.dequeueSyncItem(item.id);
             successCount++;
             break;
-          } catch (e) {
+          } on Exception catch (e) {
             final docType = _docTypeForItemType(item.type);
             if (docType != null &&
                 renumberAttemptsLeft > 0 &&
@@ -373,7 +375,7 @@ class SyncWorker {
               try {
                 item = await _renumberAndPersist(item, docType);
                 continue;
-              } catch (renumberError) {
+              } on Exception catch (renumberError) {
                 AppLogger.error(
                   'Sync',
                   'Renumber failed for item ${item.id}: $renumberError',
@@ -482,13 +484,13 @@ class SyncWorker {
         await _resolveTempOrderIdsInQueue(item.id, remoteId);
       case 'update_sales_order':
         final remoteId = await _apiClient.updateSalesOrder(
-          item.payload['salesorder_id'],
+          jsonString(item.payload['salesorder_id']),
           item.payload,
         );
         await _persistOrder(item, remoteId);
       case 'convert_so':
         final remoteId = await _apiClient.convertSalesOrderToInvoice(
-          item.payload['salesorder_id'],
+          jsonString(item.payload['salesorder_id']),
         );
         await _persistConvertedInvoice(item, remoteId);
         final localInvoiceId =
@@ -500,18 +502,50 @@ class SyncWorker {
         );
         await _persistReceipt(item, remoteId);
       case 'return':
-        final remoteId = await _apiClient.syncSalesReturn(
+        final payload = Map<String, dynamic>.from(
           _withResolvedInvoiceRefs(item.payload),
         );
-        await _persistReturn(item, remoteId);
+        try {
+          final remoteId = await _apiClient.syncSalesReturn(payload);
+          await _stampZohoCreditNoteId(item, remoteId);
+          await _persistReturn(item, remoteId);
+        } on Exception catch (_) {
+          final stamped = payload['zoho_credit_note_id']?.toString();
+          if (stamped != null && stamped.isNotEmpty) {
+            await _stampZohoCreditNoteId(item, stamped);
+          }
+          rethrow;
+        }
       case 'expense':
         final remoteId = await _apiClient.syncExpense(item.payload);
         await _persistExpense(item, remoteId);
       case 'stock_transfer':
         final remoteId = await _apiClient.syncStockTransfer(item.payload);
         await _persistStockTransfer(item, remoteId);
+      case 'update_stock_transfer':
+        final remoteId = await _apiClient.updateStockTransfer(
+          jsonString(item.payload['transfer_order_id']),
+          item.payload,
+        );
+        await _persistUpdatedStockTransfer(item, remoteId);
       default:
         throw Exception('Unsupported transaction sync type: ${item.type}');
+    }
+  }
+
+  /// Writes the Zoho credit-note id onto the in-memory queue payload so a
+  /// later enqueue-on-failure keeps it. Hive/test maps may be unmodifiable —
+  /// fall back to replacing the queued item.
+  Future<void> _stampZohoCreditNoteId(
+    SyncQueueItem item,
+    String remoteId,
+  ) async {
+    try {
+      item.payload['zoho_credit_note_id'] = remoteId;
+    } on UnsupportedError {
+      final next = Map<String, dynamic>.from(item.payload);
+      next['zoho_credit_note_id'] = remoteId;
+      await _dbService.updateSyncItem(item.copyWith(payload: next));
     }
   }
 
@@ -848,6 +882,28 @@ class SyncWorker {
     await _dbService.saveLocalStockTransfer(transfer);
   }
 
+  /// Persists an `update_stock_transfer` push: reverses the previously
+  /// applied stock delta of the local baseline and applies the edited lines'
+  /// delta in one net step via [HiveDatabaseService.updateLocalStockTransfer].
+  /// Editing only ever targets an already-synced local transfer, so a missing
+  /// baseline falls back to a plain upsert rather than losing the update.
+  Future<void> _persistUpdatedStockTransfer(
+    SyncQueueItem item,
+    String zohoTransferId,
+  ) async {
+    final transfers = _dbService.getAllLocalStockTransfersUnfiltered();
+    final index = transfers.indexWhere((t) => t.id == item.id);
+    final newTransfer = StockTransferModel.fromJson(item.payload).copyWith(
+      zohoTransferId: zohoTransferId,
+      isPendingSync: false,
+    );
+    if (index < 0) {
+      await _dbService.updateStockTransferRecord(newTransfer);
+      return;
+    }
+    await _dbService.updateLocalStockTransfer(transfers[index], newTransfer);
+  }
+
   Future<void> _persistConvertedInvoice(
     SyncQueueItem item,
     String zohoInvoiceId,
@@ -991,9 +1047,9 @@ class SyncWorker {
             list
                 .map(
                   (r) => RouteModel(
-                    id: r['id'],
-                    name: r['name'],
-                    description: r['description'],
+                    id: jsonString(r['id']),
+                    name: jsonString(r['name']),
+                    description: jsonString(r['description']),
                   ),
                 )
                 .toList(),
@@ -1027,7 +1083,7 @@ class SyncWorker {
           break;
       }
       _syncStatusController.add('${type.label} synced.');
-    } catch (e) {
+    } on Exception catch (e) {
       _syncStatusController.add('${type.label} sync failed: $e');
       rethrow;
     }
@@ -1039,7 +1095,7 @@ class SyncWorker {
     for (final type in MasterType.values) {
       try {
         await syncMaster(type);
-      } catch (_) {
+      } on Exception catch (_) {
         // Per-master errors already surfaced; continue with the rest.
       }
     }

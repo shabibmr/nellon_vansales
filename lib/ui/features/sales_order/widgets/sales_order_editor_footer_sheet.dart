@@ -89,10 +89,13 @@ class SalesOrderEditorFooterSheet extends StatelessWidget {
                   const BorderRadius.vertical(top: Radius.circular(20)),
               border: Border(top: BorderSide(color: border)),
             ),
-            child: ListView(
-              controller: scrollController,
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-              children: [
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  children: [
                 Center(
                   child: Container(
                     width: 40,
@@ -223,8 +226,10 @@ class SalesOrderEditorFooterSheet extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+  },
     );
   }
 }

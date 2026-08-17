@@ -589,15 +589,9 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
                   ],
                 );
 
-                // Last-resort fallback only when the viewport (e.g. keyboard)
-                // is shorter than the intrinsic content height.
-                if (constraints.maxHeight.isFinite &&
-                    constraints.maxHeight < 420) {
-                  return SingleChildScrollView(
-                    child: content,
-                  );
-                }
-                return content;
+                return SingleChildScrollView(
+                  child: content,
+                );
               },
             ),
           ),

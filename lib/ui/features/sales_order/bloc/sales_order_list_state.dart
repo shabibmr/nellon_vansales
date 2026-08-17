@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import '../../../../domain/models/sales_order.dart';
+import '../../../core/bloc/list_load_status.dart';
 import '../../../core/utils/date_filter.dart';
 
 /// List-only state for sales orders (filters, load status, messages).
@@ -8,7 +9,7 @@ class SalesOrderListState extends Equatable {
   final List<SalesOrder> orders;
   final DateTime? startDate;
   final DateTime? endDate;
-  final bool isLoading;
+  final ListLoadStatus status;
   final String? errorMessage;
   final String? successMessage;
 
@@ -16,10 +17,13 @@ class SalesOrderListState extends Equatable {
     this.orders = const [],
     this.startDate,
     this.endDate,
-    this.isLoading = false,
+    this.status = ListLoadStatus.initial,
     this.errorMessage,
     this.successMessage,
   });
+
+  /// True while a remote list fetch is in flight.
+  bool get isLoading => status == ListLoadStatus.loading;
 
   /// Orders filtered by the active date range (client-side safety net).
   List<SalesOrder> get filteredOrders => filterByDateRange(
@@ -34,16 +38,25 @@ class SalesOrderListState extends Equatable {
     List<SalesOrder>? orders,
     DateTime? Function()? startDate,
     DateTime? Function()? endDate,
+    ListLoadStatus? status,
     bool? isLoading,
     String? errorMessage,
     String? successMessage,
     bool clearMessages = false,
   }) {
+    final nextStatus = status ??
+        (isLoading == null
+            ? this.status
+            : (isLoading
+                ? ListLoadStatus.loading
+                : (errorMessage != null
+                    ? ListLoadStatus.failure
+                    : ListLoadStatus.success)));
     return SalesOrderListState(
       orders: orders ?? this.orders,
       startDate: startDate != null ? startDate() : this.startDate,
       endDate: endDate != null ? endDate() : this.endDate,
-      isLoading: isLoading ?? this.isLoading,
+      status: nextStatus,
       errorMessage: clearMessages ? null : (errorMessage ?? this.errorMessage),
       successMessage:
           clearMessages ? null : (successMessage ?? this.successMessage),
@@ -55,7 +68,7 @@ class SalesOrderListState extends Equatable {
     orders,
     startDate,
     endDate,
-    isLoading,
+    status,
     errorMessage,
     successMessage,
   ];

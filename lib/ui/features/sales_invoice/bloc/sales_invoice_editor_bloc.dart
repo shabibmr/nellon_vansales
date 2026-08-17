@@ -11,7 +11,6 @@ import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/invoice_repository.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/stock_rules.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -24,20 +23,16 @@ class SalesInvoiceEditorBloc
   final InvoiceRepository _invoiceRepository;
   final SalesOrderRepository _salesOrderRepository;
   final CustomerRepository _customerRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   SalesInvoiceEditorBloc({
     required InvoiceRepository invoiceRepository,
     required SalesOrderRepository salesOrderRepository,
     required CustomerRepository customerRepository,
-    required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
   }) : _invoiceRepository = invoiceRepository,
        _salesOrderRepository = salesOrderRepository,
        _customerRepository = customerRepository,
-       _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const SalesInvoiceEditorState()) {
     on<StartNewInvoice>(_onStartNewInvoice);

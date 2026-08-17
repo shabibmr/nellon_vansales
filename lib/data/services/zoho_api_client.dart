@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'app_logger.dart';
 import 'error_classification.dart';
+import 'firebase_telemetry.dart';
 import 'hive_database_service.dart';
+import 'sales_return_sync.dart';
 import 'zoho_payload_mapper.dart';
 import '../../domain/models/tax.dart';
+import '../../domain/utils/json_read.dart';
 
 /// REST API Client that coordinates direct HTTPS calls to Zoho Books v3 APIs.
 ///
@@ -87,13 +90,23 @@ class ZohoApiClient {
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
 
+    // Added first so it runs *after* the 401-retry interceptor on errors.
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (DioException error, handler) {
+          unawaited(FirebaseTelemetry.reportZohoApiFailure(error));
+          handler.next(error);
+        },
+      ),
+    );
+
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final String accessToken;
           try {
             accessToken = await _getOrRefreshAccessToken();
-          } catch (e) {
+          } on Exception catch (e) {
             // Fail the request with the real auth error instead of sending
             // an unauthenticated call that dies as an opaque 401.
             return handler.reject(
@@ -115,7 +128,7 @@ class ZohoApiClient {
             final String newAccessToken;
             try {
               newAccessToken = await _refreshAccessToken(force: true);
-            } catch (_) {
+            } on Exception catch (_) {
               // Refresh failed — surface the original 401.
               return handler.next(error);
             }
@@ -125,9 +138,9 @@ class ZohoApiClient {
 
             // Retry the original request
             try {
-              final response = await _dio.fetch(requestOptions);
+              final response = await _dio.fetch<dynamic>(requestOptions);
               return handler.resolve(response);
-            } catch (e) {
+            } on Exception catch (_) {
               return handler.next(error);
             }
           }
@@ -175,7 +188,7 @@ class ZohoApiClient {
     }
     final refreshToken = _refreshToken;
     try {
-      final response = await Dio().post(
+      final response = await Dio().post<dynamic>(
         _accountsUrl,
         queryParameters: {
           'refresh_token': refreshToken,
@@ -205,8 +218,15 @@ class ZohoApiClient {
       _accessTokenInvalidated = false;
 
       return newAccessToken;
-    } catch (e) {
+    } on Exception catch (e, stack) {
       AppLogger.error('ZohoApi', 'OAuth Refresh Error: $e');
+      unawaited(
+        FirebaseTelemetry.reportZohoApiFailure(
+          e,
+          stackTrace: stack,
+          source: 'oauth_refresh',
+        ),
+      );
       throw Exception('Zoho OAuth token refresh failed: $e');
     }
   }
@@ -228,7 +248,7 @@ class ZohoApiClient {
         'per_page': 200,
         'page': page,
       };
-      final response = await _dio.get(path, queryParameters: params);
+      final response = await _dio.get<dynamic>(path, queryParameters: params);
       if (response.statusCode != 200) {
         throw Exception('GET $path failed: ${response.statusCode}');
       }
@@ -253,20 +273,20 @@ class ZohoApiClient {
 
   /// Fetches a single contact detail record (opening balance, tax_reg_no).
   Future<Map<String, dynamic>> fetchContactDetail(String contactId) async {
-    final response = await _dio.get('/contacts/$contactId');
+    final response = await _dio.get<dynamic>('/contacts/$contactId');
     if (response.statusCode != 200) {
       throw Exception(
         'GET /contacts/$contactId failed: ${response.statusCode}',
       );
     }
-    return Map<String, dynamic>.from(response.data['contact'] ?? {});
+    return jsonMap(response.data is Map ? (response.data as Map)['contact'] : null);
   }
 
   // --- Zoho Books REST APIs ---
 
   // 1. Fetch Routes (Simulated since Zoho Books doesn't have a native Route entity, we map to custom Contact Fields)
   Future<List<Map<String, dynamic>>> fetchRoutes() async {
-    await Future.delayed(
+    await Future<void>.delayed(
       const Duration(milliseconds: 600),
     ); // Network latency simulator
 
@@ -293,7 +313,7 @@ class ZohoApiClient {
   Future<List<Map<String, dynamic>>> fetchCustomers() async {
     try {
       return await _fetchAllPages('/contacts', {'contact_type': 'customer'});
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchCustomers error: $e');
       throw Exception('Failed to fetch customers from Zoho: $e');
     }
@@ -309,7 +329,7 @@ class ZohoApiClient {
       }
 
       return await _fetchAllPages('/items', queryParams);
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchItems error: $e');
       throw Exception('Failed to fetch items from Zoho: $e');
     }
@@ -319,11 +339,11 @@ class ZohoApiClient {
   // return `unit_conversions`, so multi-UOM data is fetched per-item on demand
   // (see ItemRepository.resolveItemUnitConversions).
   Future<Map<String, dynamic>> fetchItemDetail(String itemId) async {
-    final response = await _dio.get('/items/$itemId');
+    final response = await _dio.get<dynamic>('/items/$itemId');
     if (response.statusCode != 200) {
       throw Exception('GET /items/$itemId failed: ${response.statusCode}');
     }
-    return Map<String, dynamic>.from(response.data['item'] ?? {});
+    return jsonMap(response.data is Map ? (response.data as Map)['item'] : null);
   }
 
   /// Forces the transaction **header** `location_id` to the org's KGT primary
@@ -418,7 +438,7 @@ class ZohoApiClient {
     List<Tax> taxes;
     try {
       taxes = _dbService.getTaxes();
-    } catch (_) {
+    } on Exception catch (_) {
       return payload;
     }
     if (taxes.isEmpty) return payload;
@@ -445,7 +465,7 @@ class ZohoApiClient {
   // 4. Zoho Books Contacts API: Sync New Customer
   Future<String> syncCustomer(Map<String, dynamic> customerJson) async {
     try {
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         '/contacts',
         data: ZohoPayloadMapper.zohoContactPayload(customerJson),
       );
@@ -453,15 +473,15 @@ class ZohoApiClient {
         return response.data['contact']['contact_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Customer Sync Failed: $e');
     }
   }
 
-  /// Update GPS (latitude/longitude) custom fields on an existing Zoho contact.
+  /// Update GPS (latitude/longitude) on an existing Zoho contact via billing_address.
   ///
-  /// Uses PUT /contacts/{contactId} sending only the custom_fields array to minimize
-  /// risk of overwriting other fields.
+  /// Uses PUT /contacts/{contactId} sending only the billing_address coordinates
+  /// to minimize risk of overwriting other fields.
   /// Returns the contact_id on success.
   Future<String> updateCustomerGps(
     String contactId,
@@ -469,19 +489,19 @@ class ZohoApiClient {
     double longitude,
   ) async {
     final payload = {
-      'custom_fields': [
-        {'api_name': 'cf_latitude', 'value': latitude.toString()},
-        {'api_name': 'cf_longitude', 'value': longitude.toString()},
-      ],
+      'billing_address': {
+        'latitude': latitude,
+        'longitude': longitude,
+      },
     };
 
     try {
-      final response = await _dio.put('/contacts/$contactId', data: payload);
+      final response = await _dio.put<dynamic>('/contacts/$contactId', data: payload);
       if (response.statusCode == 200 || response.statusCode == 201) {
         return response.data['contact']?['contact_id']?.toString() ?? contactId;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Customer GPS Update Failed: $e');
     }
   }
@@ -500,12 +520,12 @@ class ZohoApiClient {
     if (payload.isEmpty) return contactId;
 
     try {
-      final response = await _dio.put('/contacts/$contactId', data: payload);
+      final response = await _dio.put<dynamic>('/contacts/$contactId', data: payload);
       if (response.statusCode == 200 || response.statusCode == 201) {
         return response.data['contact']?['contact_id']?.toString() ?? contactId;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Customer Contact Update Failed: $e');
     }
   }
@@ -516,7 +536,7 @@ class ZohoApiClient {
       _withSalespersonId(_withPrimaryHeaderLocation(invoiceJson)),
     );
     try {
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         '/invoices',
         data: _withResolvedLineTaxIds(
           ZohoPayloadMapper.zohoInvoicePayload(invoiceJson),
@@ -527,7 +547,7 @@ class ZohoApiClient {
         return response.data['invoice']['invoice_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Invoice Sync Failed: $e');
     }
   }
@@ -546,7 +566,7 @@ class ZohoApiClient {
       'POST /salesorders payload: ${jsonEncode(payload)}',
     );
     try {
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         '/salesorders',
         data: payload,
         queryParameters: const {'ignore_auto_number_generation': true},
@@ -581,7 +601,7 @@ class ZohoApiClient {
             : 'Zoho Books Sales Order Sync Failed: '
                 'status=${e.response?.statusCode} body=$bodyStr',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error(
         'ZohoApi',
         'POST /salesorders failed: $e payload=${jsonEncode(payload)}',
@@ -605,7 +625,7 @@ class ZohoApiClient {
       );
     }
     try {
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         '/salesorders/$salesOrderId/converttoinvoice',
         data: body ?? {},
       );
@@ -613,7 +633,7 @@ class ZohoApiClient {
         return response.data['invoice']['invoice_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Sales Order Conversion Failed: $e');
     }
   }
@@ -713,7 +733,7 @@ class ZohoApiClient {
         'dates=${dateParams['date_start'] ?? '*'}..${dateParams['date_end'] ?? '*'}',
       );
       return filtered;
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesOrders error: $e');
       throw Exception('Failed to fetch sales orders from Zoho: $e');
     }
@@ -735,12 +755,12 @@ class ZohoApiClient {
         if (id == null || id.isEmpty) continue;
         try {
           details.add(await fetchSalesOrder(id));
-        } catch (e) {
+        } on Exception catch (e) {
           AppLogger.error('ZohoApi', 'fetchSalesOrder($id) error: $e');
         }
       }
       return _filterBySalesperson(details);
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesOrdersWithDetails error: $e');
       throw Exception('Failed to fetch sales order details from Zoho: $e');
     }
@@ -749,14 +769,14 @@ class ZohoApiClient {
   // 5e. Zoho Books Sales Orders API: Read a single sales order by id.
   Future<Map<String, dynamic>> fetchSalesOrder(String salesOrderId) async {
     try {
-      final response = await _dio.get('/salesorders/$salesOrderId');
+      final response = await _dio.get<dynamic>('/salesorders/$salesOrderId');
       if (response.statusCode != 200) {
         throw Exception(
           'GET /salesorders/$salesOrderId failed: ${response.statusCode}',
         );
       }
-      return Map<String, dynamic>.from(response.data['salesorder'] ?? {});
-    } catch (e) {
+      return jsonMap(response.data is Map ? (response.data as Map)['salesorder'] : null);
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesOrder error: $e');
       throw Exception('Failed to fetch sales order from Zoho: $e');
     }
@@ -771,7 +791,7 @@ class ZohoApiClient {
       _withSalespersonId(_withPrimaryHeaderLocation(payload)),
     );
     try {
-      final response = await _dio.put(
+      final response = await _dio.put<dynamic>(
         '/salesorders/$salesOrderId',
         data: _withResolvedLineTaxIds(
           ZohoPayloadMapper.zohoSalesOrderPayload(payload),
@@ -781,7 +801,7 @@ class ZohoApiClient {
         return response.data['salesorder']['salesorder_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Sales Order Update Failed: $e');
     }
   }
@@ -793,7 +813,7 @@ class ZohoApiClient {
   // Posted to Books v3 — this org's Inventory account is disabled (HTTP 6018).
   Future<String> syncStockTransfer(Map<String, dynamic> transferJson) async {
     try {
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         '/transferorders',
         data: ZohoPayloadMapper.zohoStockTransferPayload(transferJson),
       );
@@ -801,26 +821,79 @@ class ZohoApiClient {
         return response.data['transfer_order']['transfer_order_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Stock Transfer Sync Failed: $e');
     }
   }
 
+  // 5g-2. Zoho Books Transfer Orders API: Update an existing (still-draft)
+  // transfer order. Only valid while Zoho reports status `draft` — the
+  // caller is responsible for not calling this once Zoho has moved the
+  // transfer past draft.
+  Future<String> updateStockTransfer(
+    String transferOrderId,
+    Map<String, dynamic> transferJson,
+  ) async {
+    try {
+      final response = await _dio.put<dynamic>(
+        '/transferorders/$transferOrderId',
+        data: {
+          ...ZohoPayloadMapper.zohoStockTransferPayload(transferJson),
+          // Trust the id passed by the caller (sync_worker reads it from the
+          // queue item), not whatever the raw payload's own bookkeeping
+          // fields happen to hold — the payload mapper never whitelists
+          // transfer_order_id (create must never send it).
+          'transfer_order_id': transferOrderId,
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return response.data['transfer_order']['transfer_order_id'] as String;
+      }
+      throw Exception('HTTP ${response.statusCode}');
+    } on Exception catch (e) {
+      throw Exception('Zoho Books Stock Transfer Update Failed: $e');
+    }
+  }
+
   // 5h. Zoho Books Transfer Orders API: List stock transfers (paginated).
+  //
+  // Issue-to-Van lists pass [toLocationId] (stock into the van).
+  // Stock-Unloading lists pass [fromLocationId] (stock out of the van).
+  // The history report passes neither and is scoped client-side to the
+  // session location on either end.
+  //
+  // Inventory documents `from_location_id` / `to_location_id` query
+  // filters; Books v3 is thinner. Matching client-side predicates still
+  // run so an ignored query param cannot leak the other direction.
   Future<List<Map<String, dynamic>>> fetchStockTransfers({
     DateTime? startDate,
     DateTime? endDate,
+    String? fromLocationId,
+    String? toLocationId,
   }) async {
     try {
-      final list = await _fetchAllPages(
-        '/transferorders',
-        _dateRangeParams(startDate: startDate, endDate: endDate),
-      );
-      // Zoho Books has no salesperson_id on Transfer Orders and no
-      // documented from/to location query filter, so scope client-side. A
-      // van's transfers can appear on either side depending on direction
-      // (Issue to Van puts the van in `to`, Stock Unloading puts it in
-      // `from`), so match either field.
+      final params = <String, dynamic>{
+        ..._dateRangeParams(startDate: startDate, endDate: endDate),
+        if (fromLocationId != null && fromLocationId.isNotEmpty)
+          'from_location_id': fromLocationId,
+        if (toLocationId != null && toLocationId.isNotEmpty)
+          'to_location_id': toLocationId,
+      };
+      final list = await _fetchAllPages('/transferorders', params);
+
+      if (toLocationId != null && toLocationId.isNotEmpty) {
+        return list
+            .where((j) => j['to_location_id']?.toString() == toLocationId)
+            .toList();
+      }
+      if (fromLocationId != null && fromLocationId.isNotEmpty) {
+        return list
+            .where((j) => j['from_location_id']?.toString() == fromLocationId)
+            .toList();
+      }
+
+      // Unfiltered (history report): a van's transfers can appear on either
+      // side depending on direction.
       final locationId = _dbService.getCurrentSalesperson()?.locationId;
       if (locationId != null && locationId.isNotEmpty) {
         return list.where((j) {
@@ -831,7 +904,7 @@ class ZohoApiClient {
         }).toList();
       }
       return list;
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchStockTransfers error: $e');
       throw Exception('Failed to fetch stock transfers from Zoho: $e');
     }
@@ -854,7 +927,7 @@ class ZohoApiClient {
       paymentJson = {...paymentJson, 'account_id': cashAccountId};
     }
     try {
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         '/customerpayments',
         data: ZohoPayloadMapper.zohoReceiptPayload(paymentJson),
       );
@@ -862,30 +935,80 @@ class ZohoApiClient {
         return response.data['payment']['payment_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Payment Sync Failed: $e');
     }
   }
 
   // 7. Zoho Books Credit Notes API: Sync Sales Return
+  ///
+  /// Create-or-skip, then apply credit to the source invoice(s). On retry
+  /// after a successful create + failed apply, [creditNoteJson] must already
+  /// carry `zoho_credit_note_id` so this does not POST a second credit note.
+  /// Stamps that id onto [creditNoteJson] immediately after create.
   Future<String> syncSalesReturn(Map<String, dynamic> creditNoteJson) async {
     creditNoteJson = _withVanLineItemLocations(
       _withSalespersonId(_withPrimaryHeaderLocation(creditNoteJson)),
     );
     try {
-      final response = await _dio.post(
-        '/creditnotes',
-        data: _withResolvedLineTaxIds(
-          ZohoPayloadMapper.zohoCreditNotePayload(creditNoteJson),
-        ),
-        queryParameters: const {'ignore_auto_number_generation': true},
-      );
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        return response.data['creditnote']['creditnote_id'] as String;
+      var remoteId = SalesReturnSync.existingRemoteId(creditNoteJson);
+      Map<String, dynamic>? createdCreditnote;
+      if (remoteId == null) {
+        final query = <String, dynamic>{
+          'ignore_auto_number_generation': true,
+        };
+        final invoiceId = SalesReturnSync.sharedInvoiceId(creditNoteJson);
+        if (invoiceId != null) query['invoice_id'] = invoiceId;
+
+        final response = await _dio.post<dynamic>(
+          '/creditnotes',
+          data: _withResolvedLineTaxIds(
+            ZohoPayloadMapper.zohoCreditNotePayload(creditNoteJson),
+          ),
+          queryParameters: query,
+        );
+        if (response.statusCode != 201 && response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+        remoteId = response.data['creditnote']['creditnote_id'] as String;
+        creditNoteJson['zoho_credit_note_id'] = remoteId;
+        createdCreditnote = response.data['creditnote'] is Map
+            ? Map<String, dynamic>.from(response.data['creditnote'] as Map)
+            : null;
       }
-      throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+
+      await _applyCreditNoteToInvoices(
+        remoteId,
+        creditNoteJson,
+        createdCreditnote: createdCreditnote,
+      );
+      return remoteId;
+    } on Exception catch (e) {
       throw Exception('Zoho Books Credit Note Sync Failed: $e');
+    }
+  }
+
+  Future<void> _applyCreditNoteToInvoices(
+    String creditNoteId,
+    Map<String, dynamic> creditNoteJson, {
+    Map<String, dynamic>? createdCreditnote,
+  }) async {
+    final invoices = SalesReturnSync.applyInvoices(creditNoteJson);
+    if (invoices.isEmpty) return;
+    if (SalesReturnSync.alreadyApplied(createdCreditnote, invoices)) return;
+    try {
+      final response = await _dio.post<dynamic>(
+        '/creditnotes/$creditNoteId/invoices',
+        data: {'invoices': invoices},
+      );
+      if (response.statusCode != 201 && response.statusCode != 200) {
+        throw Exception(
+          'Apply credit to invoice failed: HTTP ${response.statusCode}',
+        );
+      }
+    } on Exception catch (e) {
+      if (SalesReturnSync.isAlreadyAppliedError(e)) return;
+      rethrow;
     }
   }
 
@@ -912,12 +1035,12 @@ class ZohoApiClient {
         dataPayload = zohoExpense;
       }
 
-      final response = await _dio.post('/expenses', data: dataPayload);
+      final response = await _dio.post<dynamic>('/expenses', data: dataPayload);
       if (response.statusCode == 201 || response.statusCode == 200) {
         return response.data['expense']['expense_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Zoho Books Expense Sync Failed: $e');
     }
   }
@@ -968,21 +1091,61 @@ class ZohoApiClient {
       paidThroughAccountId = fallback.id;
     }
 
-    final rawLines = (expenseJson['lines'] as List?) ?? const [];
-    final resolvedLines = rawLines.whereType<Map>().map((line) {
+    final rawLines = (expenseJson['lines'] as List?) ?? const <dynamic>[];
+    final standardTaxId = _defaultStandardTaxId();
+    final resolvedLines = rawLines.whereType<Map<dynamic, dynamic>>().map((line) {
       final map = Map<String, dynamic>.from(line);
-      return <String, dynamic>{
-        'account_id': accountIdForCategory(map['category']?.toString() ?? ''),
+      final category = map['category']?.toString() ?? '';
+      final resolved = <String, dynamic>{
+        'account_id': accountIdForCategory(category),
         'amount': (map['amount'] as num?)?.toDouble() ?? 0.0,
         'description': map['description']?.toString() ?? '',
       };
+      if (_expenseCategoryIsTaxable(category) &&
+          standardTaxId != null &&
+          standardTaxId.isNotEmpty) {
+        resolved['tax_id'] = standardTaxId;
+      }
+      return resolved;
     }).toList();
 
+    final anyTaxable = resolvedLines.any(
+      (l) => (l['tax_id']?.toString() ?? '').isNotEmpty,
+    );
     return ZohoPayloadMapper.zohoExpensePayload(
       expenseJson,
       resolvedLines: resolvedLines,
       paidThroughAccountId: paidThroughAccountId,
+      isInclusiveTax: anyTaxable,
     );
+  }
+
+  /// Fuel / Maintenance match live UAE Books (Standard Rate). Tolls and
+  /// parking stay EXEMPT by omitting `tax_id`.
+  static bool _expenseCategoryIsTaxable(String category) {
+    switch (category.trim().toLowerCase()) {
+      case 'fuel':
+      case 'maintenance':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  String? _defaultStandardTaxId() {
+    List<Tax> taxes;
+    try {
+      taxes = _dbService.getTaxes();
+    } on Exception catch (_) {
+      return null;
+    }
+    for (final t in taxes) {
+      if (t.isDefault) return t.id;
+    }
+    for (final t in taxes) {
+      if (t.percentage > 0) return t.id;
+    }
+    return null;
   }
 
   // --- Master Data Fetchers ---
@@ -990,7 +1153,7 @@ class ZohoApiClient {
   // 9. Warehouses/Locations (GET /locations)
   Future<List<Map<String, dynamic>>> fetchWarehouses() async {
     try {
-      final response = await _dio.get('/locations');
+      final response = await _dio.get<dynamic>('/locations');
       if (response.statusCode == 200) {
         final list = (response.data['locations'] as List? ?? []);
         return list.map((w) => Map<String, dynamic>.from(w as Map)).toList();
@@ -998,7 +1161,7 @@ class ZohoApiClient {
       throw Exception(
         'Failed to fetch locations: Server returned status code ${response.statusCode}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchWarehouses (locations) error: $e');
       throw Exception('Failed to fetch locations from Zoho: $e');
     }
@@ -1007,18 +1170,20 @@ class ZohoApiClient {
   // Salespersons (GET /salespersons)
   Future<List<Map<String, dynamic>>> fetchSalespersons() async {
     try {
-      final response = await _dio.get('/salespersons');
+      final response = await _dio.get<dynamic>('/salespersons');
       if (response.statusCode == 200) {
         // Zoho returns salespersons under `data` (verified against live API).
         final list =
-            (response.data['data'] ?? response.data['salespersons'] ?? [])
+            (response.data['data'] ??
+                    response.data['salespersons'] ??
+                    <dynamic>[])
                 as List;
         return list.map((s) => Map<String, dynamic>.from(s as Map)).toList();
       }
       throw Exception(
         'Failed to fetch salespersons: Server returned status code ${response.statusCode}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalespersons error: $e');
       throw Exception('Failed to fetch salespersons from Zoho: $e');
     }
@@ -1031,17 +1196,19 @@ class ZohoApiClient {
   // (Zoho quirk) — callers must NOT filter by record status, only `cf_active`.
   Future<List<Map<String, dynamic>>> fetchSalespersonProfiles() async {
     try {
-      final response = await _dio.get('/cm_salesperson_profile');
+      final response = await _dio.get<dynamic>('/cm_salesperson_profile');
       if (response.statusCode == 200) {
         final list =
-            (response.data['module_records'] ?? response.data['data'] ?? [])
+            (response.data['module_records'] ??
+                    response.data['data'] ??
+                    <dynamic>[])
                 as List;
         return list.map((m) => Map<String, dynamic>.from(m as Map)).toList();
       }
       throw Exception(
         'Failed to fetch salesperson profiles: Server returned status code ${response.statusCode}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalespersonProfiles error: $e');
       throw Exception('Failed to fetch salesperson profiles from Zoho: $e');
     }
@@ -1061,7 +1228,7 @@ class ZohoApiClient {
           .map((r) => r[numberKey]?.toString())
           .whereType<String>()
           .toList();
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error(
         'ZohoApi',
         'fetchDocumentNumbersStartingWith($endpoint) error: $e',
@@ -1073,7 +1240,7 @@ class ZohoApiClient {
   // 10. Payment Accounts (GET /bankaccounts — bank + cash accounts for receipts)
   Future<List<Map<String, dynamic>>> fetchPaymentAccounts() async {
     try {
-      final response = await _dio.get('/bankaccounts');
+      final response = await _dio.get<dynamic>('/bankaccounts');
       if (response.statusCode == 200) {
         final list = (response.data['bankaccounts'] as List? ?? []);
         return list.map((a) => Map<String, dynamic>.from(a as Map)).toList();
@@ -1081,7 +1248,7 @@ class ZohoApiClient {
       throw Exception(
         'Failed to fetch payment accounts: Server returned status code ${response.statusCode}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchPaymentAccounts error: $e');
       throw Exception('Failed to fetch payment accounts from Zoho: $e');
     }
@@ -1090,7 +1257,7 @@ class ZohoApiClient {
   // 11. Taxes (GET /settings/taxes)
   Future<List<Map<String, dynamic>>> fetchTaxes() async {
     try {
-      final response = await _dio.get('/settings/taxes');
+      final response = await _dio.get<dynamic>('/settings/taxes');
       if (response.statusCode == 200) {
         final list = (response.data['taxes'] as List? ?? []);
         return list.map((t) => Map<String, dynamic>.from(t as Map)).toList();
@@ -1098,7 +1265,7 @@ class ZohoApiClient {
       throw Exception(
         'Failed to fetch taxes: Server returned status code ${response.statusCode}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchTaxes error: $e');
       throw Exception('Failed to fetch taxes from Zoho: $e');
     }
@@ -1107,7 +1274,7 @@ class ZohoApiClient {
   // 12. Expense Accounts (GET /chartofaccounts?filter_by=AccountType.Expense)
   Future<List<Map<String, dynamic>>> fetchExpenseAccounts() async {
     try {
-      final response = await _dio.get(
+      final response = await _dio.get<dynamic>(
         '/chartofaccounts',
         queryParameters: {'filter_by': 'AccountType.Expense'},
       );
@@ -1118,7 +1285,7 @@ class ZohoApiClient {
       throw Exception(
         'Failed to fetch expense accounts: Server returned status code ${response.statusCode}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchExpenseAccounts error: $e');
       throw Exception('Failed to fetch expense accounts from Zoho: $e');
     }
@@ -1127,7 +1294,7 @@ class ZohoApiClient {
   // 13. Organization (GET /organizations/{org_id})
   Future<Map<String, dynamic>?> fetchOrganization() async {
     try {
-      final response = await _dio.get('/organizations/$_organizationId');
+      final response = await _dio.get<dynamic>('/organizations/$_organizationId');
       if (response.statusCode == 200) {
         final org = response.data['organization'];
         if (org != null) return Map<String, dynamic>.from(org as Map);
@@ -1135,7 +1302,7 @@ class ZohoApiClient {
       throw Exception(
         'Failed to fetch organization: Server returned status code ${response.statusCode}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchOrganization error: $e');
       throw Exception('Failed to fetch organization from Zoho: $e');
     }
@@ -1172,7 +1339,7 @@ class ZohoApiClient {
 
       final contactName =
           (contact['contact_name'] ?? contact['company_name'] ?? '') as String;
-      final baseOpening = (contact['opening_balance_amount'] ?? 0).toDouble();
+      final baseOpening = jsonDouble(contact['opening_balance_amount']);
 
       DateTime parseDate(String? s) =>
           s == null || s.isEmpty ? DateTime(1970) : DateTime.parse(s);
@@ -1189,15 +1356,15 @@ class ZohoApiClient {
       double opening = baseOpening;
       for (final inv in invoices) {
         final d = parseDate(inv['date'] as String?);
-        if (before(d)) opening += (inv['total'] ?? 0).toDouble();
+        if (before(d)) opening += jsonDouble(inv['total']);
       }
       for (final pay in payments) {
         final d = parseDate(pay['date'] as String?);
-        if (before(d)) opening -= (pay['amount'] ?? 0).toDouble();
+        if (before(d)) opening -= jsonDouble(pay['amount']);
       }
       for (final cn in creditNotes) {
         final d = parseDate(cn['date'] as String?);
-        if (before(d)) opening -= (cn['total'] ?? 0).toDouble();
+        if (before(d)) opening -= jsonDouble(cn['total']);
       }
 
       // Build in-period rows.
@@ -1268,7 +1435,7 @@ class ZohoApiClient {
         'closing_balance': running,
         'transactions': rows,
       };
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchCustomerStatement error: $e');
       throw Exception('Failed to fetch customer statement from Zoho: $e');
     }
@@ -1307,7 +1474,7 @@ class ZohoApiClient {
             : double.tryParse(rawBalance?.toString() ?? '') ?? 0.0;
         return balance > 0;
       }).toList();
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchOpenInvoices error: $e');
       throw Exception('Failed to fetch open invoices from Zoho: $e');
     }
@@ -1316,13 +1483,13 @@ class ZohoApiClient {
   // 16. Single invoice detail (GET /invoices/{id}) — the list endpoint only
   // returns invoice headers, so line items must be fetched per-invoice.
   Future<Map<String, dynamic>> fetchInvoiceDetail(String invoiceId) async {
-    final response = await _dio.get('/invoices/$invoiceId');
+    final response = await _dio.get<dynamic>('/invoices/$invoiceId');
     if (response.statusCode != 200) {
       throw Exception(
         'GET /invoices/$invoiceId failed: ${response.statusCode}',
       );
     }
-    return Map<String, dynamic>.from(response.data['invoice'] ?? {});
+    return jsonMap(response.data is Map ? (response.data as Map)['invoice'] : null);
   }
 
   // 16b. Invoice list headers only (GET /invoices) — powers the sales invoice
@@ -1337,7 +1504,7 @@ class ZohoApiClient {
         ..._dateRangeParams(startDate: startDate, endDate: endDate),
       });
       return _filterBySalesperson(headers);
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchInvoiceHeaders error: $e');
       throw Exception('Failed to fetch invoice list from Zoho: $e');
     }
@@ -1361,13 +1528,13 @@ class ZohoApiClient {
         if (id == null || id.isEmpty) continue;
         try {
           details.add(await fetchInvoiceDetail(id));
-        } catch (e) {
+        } on Exception catch (e) {
           // Skip invoices whose detail fails to load rather than failing the whole report.
           AppLogger.error('ZohoApi', 'fetchInvoiceDetail($id) error: $e');
         }
       }
       return _filterBySalesperson(details);
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchInvoices error: $e');
       throw Exception('Failed to fetch invoices from Zoho: $e');
     }
@@ -1376,13 +1543,13 @@ class ZohoApiClient {
   // 18. Single expense detail (GET /expenses/{id}) — the list endpoint only
   // returns expense headers, so itemized line items must be fetched per-expense.
   Future<Map<String, dynamic>> fetchExpenseDetail(String expenseId) async {
-    final response = await _dio.get('/expenses/$expenseId');
+    final response = await _dio.get<dynamic>('/expenses/$expenseId');
     if (response.statusCode != 200) {
       throw Exception(
         'GET /expenses/$expenseId failed: ${response.statusCode}',
       );
     }
-    return Map<String, dynamic>.from(response.data['expense'] ?? {});
+    return jsonMap(response.data is Map ? (response.data as Map)['expense'] : null);
   }
 
   // 18b. Expense list headers only (GET /expenses) — powers the expense list
@@ -1397,7 +1564,7 @@ class ZohoApiClient {
         ..._paidThroughAccountFilterParams(),
         ..._dateRangeParams(startDate: startDate, endDate: endDate),
       });
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchExpenseHeaders error: $e');
       throw Exception('Failed to fetch expense list from Zoho: $e');
     }
@@ -1420,13 +1587,13 @@ class ZohoApiClient {
         if (id == null || id.isEmpty) continue;
         try {
           details.add(await fetchExpenseDetail(id));
-        } catch (e) {
+        } on Exception catch (e) {
           // Skip expenses whose detail fails to load rather than failing the whole report.
           AppLogger.error('ZohoApi', 'fetchExpenseDetail($id) error: $e');
         }
       }
       return details;
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchExpenses error: $e');
       throw Exception('Failed to fetch expenses from Zoho: $e');
     }
@@ -1434,13 +1601,13 @@ class ZohoApiClient {
 
   // 20. Single customer-payment detail (GET /customerpayments/{id}).
   Future<Map<String, dynamic>> fetchReceiptDetail(String paymentId) async {
-    final response = await _dio.get('/customerpayments/$paymentId');
+    final response = await _dio.get<dynamic>('/customerpayments/$paymentId');
     if (response.statusCode != 200) {
       throw Exception(
         'GET /customerpayments/$paymentId failed: ${response.statusCode}',
       );
     }
-    return Map<String, dynamic>.from(response.data['payment'] ?? {});
+    return jsonMap(response.data is Map ? (response.data as Map)['payment'] : null);
   }
 
   // 20b. Full customer-payment (receipt) list — powers the Receipt list page,
@@ -1456,7 +1623,7 @@ class ZohoApiClient {
         ..._receiptSeriesReferenceFilterParams(),
         ..._dateRangeParams(startDate: startDate, endDate: endDate),
       });
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchReceipts error: $e');
       throw Exception('Failed to fetch receipts from Zoho: $e');
     }
@@ -1467,13 +1634,13 @@ class ZohoApiClient {
   Future<Map<String, dynamic>> fetchSalesReturnDetail(
     String creditNoteId,
   ) async {
-    final response = await _dio.get('/creditnotes/$creditNoteId');
+    final response = await _dio.get<dynamic>('/creditnotes/$creditNoteId');
     if (response.statusCode != 200) {
       throw Exception(
         'GET /creditnotes/$creditNoteId failed: ${response.statusCode}',
       );
     }
-    return Map<String, dynamic>.from(response.data['creditnote'] ?? {});
+    return jsonMap(response.data is Map ? (response.data as Map)['creditnote'] : null);
   }
 
   // 21b. Sales-return list headers only (GET /creditnotes) — powers the
@@ -1488,7 +1655,7 @@ class ZohoApiClient {
         ..._dateRangeParams(startDate: startDate, endDate: endDate),
       });
       return _filterSalesReturnsByLocation(headers);
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesReturnHeaders error: $e');
       throw Exception('Failed to fetch sales return list from Zoho: $e');
     }
@@ -1512,7 +1679,7 @@ class ZohoApiClient {
         if (id == null || id.isEmpty) continue;
         try {
           details.add(await fetchSalesReturnDetail(id));
-        } catch (e) {
+        } on Exception catch (e) {
           // Skip returns whose detail fails to load rather than failing the whole report.
           AppLogger.error(
             'ZohoApi',
@@ -1521,7 +1688,7 @@ class ZohoApiClient {
         }
       }
       return _filterSalesReturnsByLocation(details);
-    } catch (e) {
+    } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalesReturns error: $e');
       throw Exception('Failed to fetch sales returns from Zoho: $e');
     }

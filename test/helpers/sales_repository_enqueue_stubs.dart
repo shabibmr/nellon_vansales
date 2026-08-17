@@ -21,7 +21,7 @@ mixin InvoiceRepositorySubmitStubs implements InvoiceRepository {
       SyncQueueItem(
         id: invoice.id,
         type: 'invoice',
-        payload: const {},
+        payload: const <String, dynamic>{},
         timestamp: DateTime.now(),
       ),
     );
@@ -80,7 +80,7 @@ mixin ReceiptRepositorySubmitStubs implements ReceiptRepository {
       SyncQueueItem(
         id: voucher.id,
         type: 'receipt',
-        payload: const {},
+        payload: const <String, dynamic>{},
         timestamp: DateTime.now(),
       ),
     );
@@ -100,7 +100,7 @@ mixin SalesReturnRepositorySubmitStubs implements SalesReturnRepository {
       SyncQueueItem(
         id: salesReturn.id,
         type: 'return',
-        payload: const {},
+        payload: const <String, dynamic>{},
         timestamp: DateTime.now(),
       ),
     );
@@ -120,7 +120,7 @@ mixin ExpenseRepositorySubmitStubs implements ExpenseRepository {
       SyncQueueItem(
         id: expense.id,
         type: 'expense',
-        payload: const {},
+        payload: const <String, dynamic>{},
         timestamp: DateTime.now(),
       ),
     );
@@ -135,10 +135,24 @@ mixin ExpenseRepositorySubmitStubs implements ExpenseRepository {
 
 mixin StockTransferRepositorySubmitStubs implements StockTransferRepository {
   @override
-  Future<SubmitResult> submitStockTransfer(StockTransfer transfer) async {
-    await enqueueStockTransfer(transfer);
+  Future<SubmitResult> submitStockTransfer(
+    StockTransfer transfer, {
+    bool isUpdate = false,
+  }) async {
+    await enqueueStockTransfer(transfer, isUpdate: isUpdate);
     return SubmitResult.queued;
   }
+
+  @override
+  List<StockTransfer> getLocalStockTransfers() => [];
+
+  @override
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+    required StockTransferDirection direction,
+  }) async =>
+      [];
 }
 
 mixin CustomerRepositorySubmitStubs implements CustomerRepository {

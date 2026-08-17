@@ -89,9 +89,9 @@ class FakeSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<String> get syncStatusStream => const Stream.empty();
+  Stream<String> get syncStatusStream => const Stream<Never>.empty();
   @override
-  Stream<int> get syncCountStream => const Stream.empty();
+  Stream<int> get syncCountStream => const Stream<Never>.empty();
   @override
   bool get isSyncing => false;
   @override
@@ -170,7 +170,7 @@ void main() {
           return 1; // PermissionStatus.granted
         }
         if (methodCall.method == 'requestPermissions') {
-          final List<dynamic> permissions = methodCall.arguments;
+          final permissions = methodCall.arguments as List<dynamic>;
           return {
             for (final p in permissions) p: 1, // granted
           };
@@ -245,5 +245,57 @@ void main() {
     expect(salesRepo.lastRemoteCustomerId, isNull);
     expect(salesRepo.queue.length, 1);
     expect(salesRepo.queue.first.payload['contact_id'], 'temp_cust_123');
+  });
+
+  test('GpsCaptureRequested rejects an inaccurate fix without persisting', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('flutter.baseflow.com/geolocator'),
+      (MethodCall methodCall) async {
+        if (methodCall.method == 'isLocationServiceEnabled') {
+          return true;
+        }
+        if (methodCall.method == 'getCurrentPosition') {
+          return {
+            'latitude': 12.3456,
+            'longitude': 78.9012,
+            'timestamp': 0,
+            'accuracy': 250.0,
+            'altitude': 1.0,
+            'heading': 1.0,
+            'speed': 1.0,
+            'speed_accuracy': 1.0,
+            'floor': null,
+            'is_mocked': false,
+          };
+        }
+        return null;
+      },
+    );
+
+    final future = bloc.stream.firstWhere((state) => state is GpsCaptureInaccurate);
+    bloc.add(GpsCaptureRequested(customer: testCustomer, persist: true));
+    final state = await future as GpsCaptureInaccurate;
+
+    expect(state.accuracy, 250.0);
+    expect(salesRepo.queue, isEmpty);
+  });
+
+  test('ContactFieldsSaveRequested persists phone and TRN', () async {
+    final future =
+        bloc.stream.firstWhere((state) => state is ContactFieldsSaved);
+    bloc.add(ContactFieldsSaveRequested(
+      customer: testCustomer,
+      phone: '0501234567',
+      trn: '100533986400003',
+    ));
+    final state = await future as ContactFieldsSaved;
+
+    expect(state.enrichedCustomer.phone, '0501234567');
+    expect(state.enrichedCustomer.trn, '100533986400003');
+    expect(salesRepo.queue, hasLength(1));
+    expect(salesRepo.queue.first.type, 'customer_contact_update');
+    expect(salesRepo.queue.first.payload['phone'], '0501234567');
+    expect(salesRepo.queue.first.payload['tax_reg_no'], '100533986400003');
   });
 }

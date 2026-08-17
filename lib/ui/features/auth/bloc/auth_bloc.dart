@@ -10,7 +10,6 @@ import '../../../../domain/repositories/auth_repository.dart';
 import '../../../../domain/repositories/salesperson_repository.dart';
 import '../../../../domain/utils/phone_normalizer.dart';
 import '../../../../data/services/document_number_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../core/utils/error_mapper.dart';
 
 // --- Events ---
@@ -182,10 +181,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc({
     required AuthRepository authRepository,
     required SalespersonRepository salespersonRepository,
-    DocumentNumberService? documentNumberService,
+    required DocumentNumberService documentNumberService,
   })  : _authRepository = authRepository,
         _salespersonRepository = salespersonRepository,
-        _documentNumberService = documentNumberService ?? sl<DocumentNumberService>(),
+        _documentNumberService = documentNumberService,
         super(AuthInitial()) {
     on<AppStarted>(_onAppStarted);
     on<PhoneSubmitted>(_onPhoneSubmitted);

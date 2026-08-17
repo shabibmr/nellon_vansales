@@ -1,12 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
-import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/models/submit_result.dart';
 import 'package:van_sales/domain/models/warehouse.dart';
 import 'package:van_sales/domain/repositories/stock_transfer_repository.dart';
-import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'package:van_sales/ui/features/stock_transfer/bloc/stock_transfer_bloc.dart';
 
 class _FakeStockTransferRepository implements StockTransferRepository {
@@ -26,6 +24,7 @@ class _FakeStockTransferRepository implements StockTransferRepository {
   );
 
   StockTransfer? recorded;
+  bool? lastIsUpdate;
   final List<SyncQueueItem> queue = [];
 
   @override
@@ -52,51 +51,41 @@ class _FakeStockTransferRepository implements StockTransferRepository {
   }
 
   @override
-  Future<void> enqueueStockTransfer(StockTransfer transfer) async {
+  Future<void> enqueueStockTransfer(
+    StockTransfer transfer, {
+    required bool isUpdate,
+  }) async {
     recorded = transfer;
     queue.add(
       SyncQueueItem(
         id: transfer.id,
-        type: 'stock_transfer',
-        payload: const {},
+        type: isUpdate ? 'update_stock_transfer' : 'stock_transfer',
+        payload: const <String, dynamic>{},
         timestamp: DateTime.now(),
       ),
     );
   }
 
   @override
-  Future<SubmitResult> submitStockTransfer(StockTransfer transfer) async {
-    await enqueueStockTransfer(transfer);
+  Future<SubmitResult> submitStockTransfer(
+    StockTransfer transfer, {
+    bool isUpdate = false,
+  }) async {
+    lastIsUpdate = isUpdate;
+    await enqueueStockTransfer(transfer, isUpdate: isUpdate);
     return SubmitResult.queued;
   }
-}
-
-class _FakeSyncRepository implements SyncRepository {
-  int triggerCount = 0;
 
   @override
-  Future<void> triggerSync({bool forceRetryAll = false}) async {
-    triggerCount++;
-  }
+  List<StockTransfer> getLocalStockTransfers() => [];
 
   @override
-  Stream<String> get syncStatusStream => const Stream.empty();
-  @override
-  Stream<int> get syncCountStream => const Stream.empty();
-  @override
-  bool get isSyncing => false;
-  @override
-  List<SyncQueueItem> getSyncQueue() => [];
-  @override
-  Future<void> clearFailedSyncItems() async {}
-  @override
-  Future<void> refreshMasterData() async {}
-  @override
-  Future<void> syncMaster(MasterType type) async {}
-  @override
-  bool hasCoreMasters() => true;
-  @override
-  int getMasterRecordCount(MasterType type) => 0;
+  Future<List<StockTransfer>> fetchRemoteStockTransfers({
+    DateTime? startDate,
+    DateTime? endDate,
+    required StockTransferDirection direction,
+  }) async =>
+      [];
 }
 
 void main() {
@@ -265,16 +254,13 @@ void main() {
 
   group('StockTransferBloc', () {
     late _FakeStockTransferRepository stockTransferRepo;
-    late _FakeSyncRepository syncRepo;
 
     setUp(() {
       stockTransferRepo = _FakeStockTransferRepository();
-      syncRepo = _FakeSyncRepository();
     });
 
     StockTransferBloc buildBloc() => StockTransferBloc(
       stockTransferRepository: stockTransferRepo,
-      syncRepository: syncRepo,
     );
 
     test('SubmitTransfer with no lines fails validation', () async {
@@ -409,6 +395,164 @@ void main() {
       expect(state.rows.single.item.id, 'demand_item');
       expect(state.rows.single.currentStock, 0);
       expect(state.rows.single.invoiceQty, 5);
+      bloc.close();
+    });
+
+    test('LoadIssueGridForEdit prefills extraQty from the transfer\'s own lines', () async {
+      stockTransferRepo.liveItems = [item]; // current stock, extraQty starts 0
+      final existing = StockTransfer(
+        id: 'to_1',
+        transferNumber: 'TO-1',
+        date: DateTime(2026, 8, 1),
+        direction: StockTransferDirection.load,
+        fromLocationId: 'w1',
+        toLocationId: 'van_1',
+        lines: [
+          StockTransferLine(item: item, quantity: 6, uom: 'pcs'),
+        ],
+        zohoTransferId: 'zoho_to_1',
+        status: 'draft',
+      );
+
+      final bloc = buildBloc();
+      bloc.add(LoadIssueGridForEdit(existing));
+      final state = await bloc.stream.firstWhere((s) => !s.isLoading);
+
+      expect(state.rows, hasLength(1));
+      expect(state.rows.single.extraQty, 6);
+      expect(state.editingTransferId, 'to_1');
+      expect(state.editingZohoTransferId, 'zoho_to_1');
+      expect(state.status, 'draft');
+      expect(state.isEditingExisting, isTrue);
+      expect(state.isReadOnly, isFalse);
+      bloc.close();
+    });
+
+    test('LoadIssueGridForEdit keeps a zero-stock line item from the transfer visible', () async {
+      const zeroStockItem = Item(
+        id: 'gone_item',
+        name: 'No Longer In Stock',
+        sku: 'SKUG',
+        rate: 1.0,
+        stock: 0,
+        description: '',
+        taxName: 'No Tax',
+        taxPercentage: 0.0,
+      );
+      stockTransferRepo.liveItems = []; // not in current stock anymore
+      final existing = StockTransfer(
+        id: 'to_2',
+        transferNumber: 'TO-2',
+        date: DateTime(2026, 8, 1),
+        direction: StockTransferDirection.load,
+        fromLocationId: 'w1',
+        toLocationId: 'van_1',
+        lines: [StockTransferLine(item: zeroStockItem, quantity: 3)],
+        zohoTransferId: 'zoho_to_2',
+      );
+
+      final bloc = buildBloc();
+      bloc.add(LoadIssueGridForEdit(existing));
+      final state = await bloc.stream.firstWhere((s) => !s.isLoading);
+
+      expect(state.rows, hasLength(1));
+      expect(state.rows.single.item.id, 'gone_item');
+      expect(state.rows.single.extraQty, 3);
+      bloc.close();
+    });
+
+    test('LoadUnloadGridForEdit prefills extraQty from the transfer\'s own lines', () async {
+      stockTransferRepo.localItems = [item];
+      final existing = StockTransfer(
+        id: 'to_3',
+        transferNumber: 'TO-3',
+        date: DateTime(2026, 8, 1),
+        direction: StockTransferDirection.unload,
+        fromLocationId: 'van_1',
+        toLocationId: 'w1',
+        lines: [StockTransferLine(item: item, quantity: 4)],
+        zohoTransferId: 'zoho_to_3',
+        status: 'transferred',
+      );
+
+      final bloc = buildBloc();
+      bloc.add(LoadUnloadGridForEdit(existing));
+      final state = await bloc.stream.firstWhere((s) => !s.isLoading);
+
+      expect(state.rows, hasLength(1));
+      expect(state.rows.single.extraQty, 4);
+      expect(state.status, 'transferred');
+      expect(state.isReadOnly, isTrue);
+      bloc.close();
+    });
+
+    test('SubmitTransfer in edit mode calls submitStockTransfer with isUpdate '
+        'true and preserves id/zohoTransferId/number/date', () async {
+      stockTransferRepo.liveItems = [item];
+      stockTransferRepo.defaultWarehouse = const Warehouse(
+        id: 'w1',
+        name: 'Warehouse',
+        address: '',
+      );
+      stockTransferRepo.currentLocation = const Warehouse(
+        id: 'van_1',
+        name: 'Van',
+        address: '',
+      );
+      final existing = StockTransfer(
+        id: 'to_4',
+        transferNumber: 'TO-4',
+        date: DateTime(2026, 8, 1),
+        direction: StockTransferDirection.load,
+        fromLocationId: 'w1',
+        toLocationId: 'van_1',
+        lines: [StockTransferLine(item: item, quantity: 6)],
+        zohoTransferId: 'zoho_to_4',
+        status: 'draft',
+      );
+
+      final bloc = buildBloc();
+      bloc.add(LoadIssueGridForEdit(existing));
+      await bloc.stream.firstWhere((s) => !s.isLoading);
+
+      bloc.add(const SubmitTransfer(notes: 'updated notes'));
+      final state = await bloc.stream.firstWhere(
+        (s) => s.successMessage != null,
+      );
+
+      expect(state.successMessage, 'Saved to upload queue');
+      expect(stockTransferRepo.recorded!.id, 'to_4');
+      expect(stockTransferRepo.recorded!.zohoTransferId, 'zoho_to_4');
+      expect(stockTransferRepo.recorded!.transferNumber, 'TO-4');
+      expect(stockTransferRepo.recorded!.date, DateTime(2026, 8, 1));
+      expect(stockTransferRepo.lastIsUpdate, isTrue);
+      bloc.close();
+    });
+
+    test('SubmitTransfer is a no-op guard once the transfer is read-only', () async {
+      final existing = StockTransfer(
+        id: 'to_5',
+        transferNumber: 'TO-5',
+        date: DateTime(2026, 8, 1),
+        direction: StockTransferDirection.load,
+        fromLocationId: 'w1',
+        toLocationId: 'van_1',
+        lines: [StockTransferLine(item: item, quantity: 6)],
+        zohoTransferId: 'zoho_to_5',
+        status: 'transferred',
+      );
+
+      final bloc = buildBloc();
+      bloc.add(LoadIssueGridForEdit(existing));
+      await bloc.stream.firstWhere((s) => !s.isLoading);
+
+      bloc.add(const SubmitTransfer());
+      final state = await bloc.stream.firstWhere(
+        (s) => s.errorMessage != null,
+      );
+
+      expect(state.errorMessage, contains('already been processed'));
+      expect(stockTransferRepo.recorded, isNull);
       bloc.close();
     });
   });

@@ -95,6 +95,12 @@ class StockTransfer extends Equatable {
   /// transfer — used to scope local history to the active session location.
   final String? locationId;
 
+  /// Zoho Books transfer-order workflow status: `draft`, `pending_approval`,
+  /// `approved`, `in_transit`, `partially_transferred`, `transferred`, or
+  /// `void`. Defaults to `draft` for transfers created on-device and not yet
+  /// confirmed by a Zoho fetch.
+  final String status;
+
   /// Creates a new [StockTransfer].
   const StockTransfer({
     required this.id,
@@ -108,11 +114,17 @@ class StockTransfer extends Equatable {
     this.isPendingSync = false,
     this.zohoTransferId,
     this.locationId,
+    this.status = 'draft',
   });
 
   /// Computes the total quantity of items moved across all lines (base units).
   double get totalQuantity =>
       lines.fold(0.0, (sum, line) => sum + line.quantity);
+
+  /// Whether this transfer can still be edited from the app — only while
+  /// Zoho still reports it as a draft. Once Zoho moves it to any other
+  /// status (transferred, in_transit, void, ...) it is locked.
+  bool get isEditable => status == 'draft';
 
   /// Creates a copy of this [StockTransfer] with replaced values for specific fields.
   StockTransfer copyWith({
@@ -127,6 +139,7 @@ class StockTransfer extends Equatable {
     bool? isPendingSync,
     String? zohoTransferId,
     String? locationId,
+    String? status,
   }) {
     return StockTransfer(
       id: id ?? this.id,
@@ -140,6 +153,7 @@ class StockTransfer extends Equatable {
       isPendingSync: isPendingSync ?? this.isPendingSync,
       zohoTransferId: zohoTransferId ?? this.zohoTransferId,
       locationId: locationId ?? this.locationId,
+      status: status ?? this.status,
     );
   }
 
@@ -155,6 +169,7 @@ class StockTransfer extends Equatable {
     notes,
     isPendingSync,
     zohoTransferId,
+    status,
     locationId,
   ];
 }

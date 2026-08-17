@@ -214,7 +214,7 @@ void main() {
     final item = SyncQueueItem(
       id: 'r1',
       type: 'receipt',
-      payload: const {},
+      payload: const <String, dynamic>{},
       timestamp: DateTime(2026, 8, 16),
     );
     await repo.enqueueSyncItem(item);

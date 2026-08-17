@@ -68,7 +68,7 @@ class _ReceiptListPageState extends State<ReceiptListPage> {
     required bool readOnly,
     ReceiptVoucher? receipt,
   }) async {
-    await ReceiptEditorPage.open(
+    await ReceiptEditorPage.open<void>(
       context,
       receipt: receipt,
       readOnly: readOnly,

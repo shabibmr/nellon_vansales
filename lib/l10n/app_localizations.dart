@@ -124,6 +124,24 @@ abstract class AppLocalizations {
   /// **'Customers & Routes'**
   String get customersAndRoutes;
 
+  /// No description provided for @analyticsDashboardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Analytics & Dashboard'**
+  String get analyticsDashboardTitle;
+
+  /// No description provided for @operationsPanelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Operations Panel'**
+  String get operationsPanelTitle;
+
+  /// No description provided for @reportsStatementsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reports & Statements'**
+  String get reportsStatementsTitle;
+
   /// No description provided for @loginWelcome.
   ///
   /// In en, this message translates to:
@@ -154,6 +172,96 @@ abstract class AppLocalizations {
   /// **'VERIFY & LOGIN'**
   String get verifyOtpButton;
 
+  /// No description provided for @brandName.
+  ///
+  /// In en, this message translates to:
+  /// **'VAN SALES PRO'**
+  String get brandName;
+
+  /// No description provided for @brandSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Predefined Routes & Zoho Books Integration'**
+  String get brandSubtitle;
+
+  /// No description provided for @agentSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Sign In'**
+  String get agentSignIn;
+
+  /// No description provided for @loginPhoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your registered mobile number to receive a login code.'**
+  String get loginPhoneHint;
+
+  /// No description provided for @mobileNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Mobile Number'**
+  String get mobileNumberLabel;
+
+  /// No description provided for @phoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'+<country code><number>'**
+  String get phoneHint;
+
+  /// No description provided for @invalidPhoneFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid mobile number in international format (e.g. +971501234567)'**
+  String get invalidPhoneFormat;
+
+  /// No description provided for @sendCodeButton.
+  ///
+  /// In en, this message translates to:
+  /// **'SEND CODE'**
+  String get sendCodeButton;
+
+  /// No description provided for @enterCodeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Code'**
+  String get enterCodeTitle;
+
+  /// No description provided for @otpSentTo.
+  ///
+  /// In en, this message translates to:
+  /// **'A 6-digit code was sent to {phone}.'**
+  String otpSentTo(String phone);
+
+  /// No description provided for @otpHint.
+  ///
+  /// In en, this message translates to:
+  /// **'••••••'**
+  String get otpHint;
+
+  /// No description provided for @resendCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Resend code'**
+  String get resendCode;
+
+  /// No description provided for @resendInSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Resend in {seconds}s'**
+  String resendInSeconds(int seconds);
+
+  /// No description provided for @verifyButton.
+  ///
+  /// In en, this message translates to:
+  /// **'VERIFY'**
+  String get verifyButton;
+
+  /// No description provided for @changeNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Change number'**
+  String get changeNumber;
+
   /// No description provided for @syncStatusSynced.
   ///
   /// In en, this message translates to:
@@ -183,6 +291,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Something went wrong. Please try again.'**
   String get somethingWentWrong;
+
+  /// No description provided for @loadingActiveRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading active route…'**
+  String get loadingActiveRoute;
+
+  /// No description provided for @verifyingSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying session…'**
+  String get verifyingSession;
+
+  /// No description provided for @salesInvoicesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales Invoices'**
+  String get salesInvoicesTitle;
+
+  /// No description provided for @salesInvoicesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View, filter, edit, or create offline sales invoices.'**
+  String get salesInvoicesSubtitle;
+
+  /// No description provided for @newSalesInvoice.
+  ///
+  /// In en, this message translates to:
+  /// **'New Sales Invoice'**
+  String get newSalesInvoice;
+
+  /// No description provided for @salesOrdersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales Orders'**
+  String get salesOrdersTitle;
+
+  /// No description provided for @salesOrdersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View, filter, edit, or create offline sales orders.'**
+  String get salesOrdersSubtitle;
+
+  /// No description provided for @newSalesOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'New Sales Order'**
+  String get newSalesOrder;
+
+  /// No description provided for @salesReturnsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales Returns'**
+  String get salesReturnsTitle;
+
+  /// No description provided for @salesReturnsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View, filter, edit, or create credit notes for returned goods.'**
+  String get salesReturnsSubtitle;
+
+  /// No description provided for @newSalesReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'New Sales Return'**
+  String get newSalesReturn;
+
+  /// No description provided for @expensesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Expenses'**
+  String get expensesTitle;
+
+  /// No description provided for @expensesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View and log van trip expenses with receipt capture.'**
+  String get expensesSubtitle;
+
+  /// No description provided for @newExpense.
+  ///
+  /// In en, this message translates to:
+  /// **'New Expense'**
+  String get newExpense;
+
+  /// No description provided for @receiptsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Receipts'**
+  String get receiptsTitle;
+
+  /// No description provided for @receiptsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View and log customer payment receipt vouchers.'**
+  String get receiptsSubtitle;
+
+  /// No description provided for @newReceipt.
+  ///
+  /// In en, this message translates to:
+  /// **'New Receipt'**
+  String get newReceipt;
+
+  /// No description provided for @issueToVanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Issue to Van'**
+  String get issueToVanTitle;
+
+  /// No description provided for @issueToVanSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View and plan stock loaded from the default warehouse onto the van.'**
+  String get issueToVanSubtitle;
+
+  /// No description provided for @newIssueToVan.
+  ///
+  /// In en, this message translates to:
+  /// **'New Issue to Van'**
+  String get newIssueToVan;
+
+  /// No description provided for @stockUnloadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock Unloading'**
+  String get stockUnloadingTitle;
+
+  /// No description provided for @stockUnloadingSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'View and return the van\'s balance stock back to the default warehouse.'**
+  String get stockUnloadingSubtitle;
+
+  /// No description provided for @newStockUnloading.
+  ///
+  /// In en, this message translates to:
+  /// **'New Stock Unloading'**
+  String get newStockUnloading;
+
+  /// No description provided for @dailyCashClosingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Cash Closing'**
+  String get dailyCashClosingTitle;
+
+  /// No description provided for @dailyCashClosingSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'End of session cash count, inventory check & Zoho reconciliation.'**
+  String get dailyCashClosingSubtitle;
 }
 
 class _AppLocalizationsDelegate

@@ -41,6 +41,11 @@ class _FakeSalesRepository
   @override
   Future<void> enqueueSyncItem(SyncQueueItem item) async {
     queue.add(item);
+    if (item.type == 'customer_contact_update') {
+      savedPhone = item.payload['phone'] as String?;
+      savedTrn = item.payload['tax_reg_no'] as String?;
+      remotePushed = true;
+    }
   }
 
   @override
@@ -75,7 +80,7 @@ class _FakeSalesRepository
   dynamic noSuchMethod(Invocation invocation) {
     final name = invocation.memberName.toString();
     if (invocation.isGetter) {
-      if (name.contains('Stream')) return const Stream.empty();
+      if (name.contains('Stream')) return const Stream<Never>.empty();
       if (name.contains('isSyncing') || name.contains('hasPending')) {
         return false;
       }
@@ -89,7 +94,7 @@ class _FakeSalesRepository
         name.contains('getSync') ||
         name.contains('getOpen') ||
         name.contains('getWarehouses')) {
-      return [];
+      return <dynamic>[];
     }
     return null;
   }
@@ -100,10 +105,10 @@ class _FakeSyncRepository implements SyncRepository {
   Future<void> triggerSync({bool forceRetryAll = false}) async {}
 
   @override
-  Stream<String> get syncStatusStream => const Stream.empty();
+  Stream<String> get syncStatusStream => const Stream<Never>.empty();
 
   @override
-  Stream<int> get syncCountStream => const Stream.empty();
+  Stream<int> get syncCountStream => const Stream<Never>.empty();
 
   @override
   bool get isSyncing => false;
@@ -212,7 +217,7 @@ void main() {
   });
 
   testWidgets(
-    'missing location, TRN or phone opens a dialog with skip, save and cancel',
+    'missing location, TRN or phone opens a dialog with skip and save',
     (tester) async {
       await pumpSearch(
         tester,
@@ -227,7 +232,6 @@ void main() {
       expect(find.text('Complete Customer Details'), findsOneWidget);
       expect(find.text('SKIP'), findsOneWidget);
       expect(find.text('SAVE'), findsOneWidget);
-      expect(find.text('CANCEL'), findsOneWidget);
     },
   );
 
@@ -251,7 +255,9 @@ void main() {
     expect(sales.remotePushed, isFalse);
   });
 
-  testWidgets('cancel leaves the customer unselected', (tester) async {
+  testWidgets(
+      'dismissing the missing-fields prompt via the barrier still selects the customer',
+      (tester) async {
     Customer? selected;
     await pumpSearch(
       tester,
@@ -261,11 +267,12 @@ void main() {
 
     await tester.tap(find.text('Shop A'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('CANCEL'));
+    // Tap the modal barrier, well outside the dialog card.
+    await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
 
     expect(find.byType(CustomerMissingFieldsDialog), findsNothing);
-    expect(selected, isNull);
+    expect(selected?.id, 'c1');
     expect(sales.remotePushed, isFalse);
   });
 

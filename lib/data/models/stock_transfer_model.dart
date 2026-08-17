@@ -1,5 +1,6 @@
 import '../../domain/models/stock_transfer.dart';
 import 'item_model.dart';
+import 'json_read.dart';
 
 /// Data transfer object representing a [StockTransferLine].
 class StockTransferLineModel extends StockTransferLine {
@@ -14,8 +15,8 @@ class StockTransferLineModel extends StockTransferLine {
   /// Factory constructor to parse local/remote JSON maps into a [StockTransferLineModel].
   factory StockTransferLineModel.fromJson(Map<String, dynamic> json) {
     return StockTransferLineModel(
-      item: ItemModel.fromJson(json['item'] ?? json),
-      quantity: ((json['quantity'] ?? 0) as num).toDouble(),
+      item: ItemModel.fromJson(jsonMap(json['item'] ?? json)),
+      quantity: jsonDouble(json['quantity']),
       uom: (json['entered_uom'] ?? '').toString(),
       conversionRate: ((json['entered_conversion_rate'] ?? 1) as num)
           .toDouble(),
@@ -72,30 +73,36 @@ class StockTransferModel extends StockTransfer {
     super.isPendingSync,
     super.zohoTransferId,
     super.locationId,
+    super.status,
   });
 
   /// Factory constructor to parse local database JSON maps into a [StockTransferModel].
+  ///
+  /// `id` wins over `transfer_order_id` when both are present: a local
+  /// record always carries both (historically equal), but an
+  /// `update_stock_transfer` sync payload stamps `transfer_order_id` with
+  /// the *real* Zoho id while `id` stays the local record's join key — that
+  /// must not be clobbered by the Zoho id on round-trip. A pure remote fetch
+  /// has no `id` key at all, so it still falls back to `transfer_order_id`.
   factory StockTransferModel.fromJson(Map<String, dynamic> json) {
     return StockTransferModel(
-      id: json['transfer_order_id'] ?? json['id'] ?? '',
+      id: jsonString(json['id'] ?? json['transfer_order_id']),
       transferNumber:
-          json['transfer_order_number'] ?? json['transferNumber'] ?? '',
-      date: json['date'] != null
-          ? DateTime.parse(json['date'])
-          : DateTime.now(),
+          jsonString(json['transfer_order_number'] ?? json['transferNumber']),
+      date: jsonDate(json['date']),
       direction: _directionFromString(json['direction']),
       fromLocationId:
-          json['from_location_id'] ?? json['fromLocationId'] ?? '',
-      toLocationId: json['to_location_id'] ?? json['toLocationId'] ?? '',
+          jsonString(json['from_location_id'] ?? json['fromLocationId']),
+      toLocationId: jsonString(json['to_location_id'] ?? json['toLocationId']),
       lines:
-          (json['line_items'] as List?)
-              ?.map((line) => StockTransferLineModel.fromJson(line))
-              .toList() ??
-          [],
-      notes: json['notes'] ?? '',
-      isPendingSync: json['isPendingSync'] ?? false,
-      zohoTransferId: json['zoho_transfer_id'],
-      locationId: json['location_id'],
+          jsonList(json['line_items'])
+              .map((line) => StockTransferLineModel.fromJson(jsonMap(line)))
+              .toList(),
+      notes: jsonString(json['notes']),
+      isPendingSync: jsonBool(json['isPendingSync']),
+      zohoTransferId: jsonStringOrNull(json['zoho_transfer_id']),
+      locationId: jsonStringOrNull(json['location_id']),
+      status: jsonString(json['status'], 'draft'),
     );
   }
 
@@ -125,6 +132,7 @@ class StockTransferModel extends StockTransfer {
       'isPendingSync': isPendingSync,
       'zoho_transfer_id': zohoTransferId,
       'location_id': locationId,
+      'status': status,
     };
   }
 
@@ -142,6 +150,7 @@ class StockTransferModel extends StockTransfer {
       isPendingSync: transfer.isPendingSync,
       zohoTransferId: transfer.zohoTransferId,
       locationId: transfer.locationId,
+      status: transfer.status,
     );
   }
 }

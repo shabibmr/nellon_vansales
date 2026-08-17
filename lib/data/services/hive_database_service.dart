@@ -18,6 +18,7 @@ import '../../domain/models/expense_account.dart';
 import '../../domain/models/organization.dart';
 import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
+import '../../domain/utils/json_read.dart';
 import '../../domain/models/stock_transfer.dart';
 import '../../domain/models/unit_conversion.dart';
 import '../../domain/utils/stock_rules.dart';
@@ -52,10 +53,10 @@ class HiveDatabaseService {
   static const String _localHistoryBoxName = 'local_history_box';
   static const String _itemUomBoxName = 'item_uom_box';
 
-  late Box _masterBox;
-  late Box _syncQueueBox;
-  late Box _localHistoryBox;
-  late Box _itemUomBox;
+  late Box<dynamic> _masterBox;
+  late Box<dynamic> _syncQueueBox;
+  late Box<dynamic> _localHistoryBox;
+  late Box<dynamic> _itemUomBox;
 
   /// Lazily-built id-indexed cache backing [getCustomerById], invalidated
   /// whenever [saveCustomers] persists a new master list.
@@ -103,7 +104,7 @@ class HiveDatabaseService {
   }
 
   /// Gets the ID of the selected active delivery route.
-  String? get activeRouteId => _masterBox.get('active_route_id');
+  String? get activeRouteId => _masterBox.get('active_route_id') as String?;
 
   /// Saves the active delivery route ID.
   Future<void> setActiveRouteId(String? routeId) async {
@@ -111,7 +112,7 @@ class HiveDatabaseService {
   }
 
   /// Gets the physical warehouse ID mapped to the van.
-  String? get assignedWarehouseId => _masterBox.get('assigned_warehouse_id');
+  String? get assignedWarehouseId => _masterBox.get('assigned_warehouse_id') as String?;
 
   /// Mapps a specific Zoho warehouse ID to this local van sales session.
   Future<void> setAssignedWarehouseId(String? warehouseId) async {
@@ -119,7 +120,7 @@ class HiveDatabaseService {
   }
 
   /// Org HQ / primary Zoho location id (from `is_primary` on `GET /locations`).
-  String? get primaryWarehouseId => _masterBox.get('primary_warehouse_id');
+  String? get primaryWarehouseId => _masterBox.get('primary_warehouse_id') as String?;
 
   /// Persists the organization primary location for Issue-to-Van HQ side.
   Future<void> setPrimaryWarehouseId(String? warehouseId) async {
@@ -231,12 +232,12 @@ class HiveDatabaseService {
   /// `list[i] = customer.copyWith(...)` throws because [Customer.copyWith]
   /// returns a plain [Customer] (list covariance).
   List<Customer> getCustomers() {
-    final rawList = _masterBox.get('customers', defaultValue: []);
+    final rawList = _masterBox.get('customers', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map<Customer>(
           (item) => _applyCachedCustomerDetail(
             CustomerModel.fromJson(
-              Map<String, dynamic>.from(jsonDecode(item)),
+              jsonMap(jsonDecode(jsonString(item))),
             ),
           ),
         )
@@ -265,7 +266,7 @@ class HiveDatabaseService {
 
   static const _customerDetailsKey = 'customer_details';
 
-  Map<String, Map<String, String>> _readCustomerDetails() {
+  Map<String, Map<String, dynamic>> _readCustomerDetails() {
     final raw = _masterBox.get(_customerDetailsKey);
     if (raw == null) return {};
     final decoded = raw is String ? jsonDecode(raw) : raw;
@@ -274,9 +275,17 @@ class HiveDatabaseService {
       final inner = value is Map
           ? Map<String, dynamic>.from(value)
           : <String, dynamic>{};
+      final lat = inner['latitude'] is num
+          ? (inner['latitude'] as num).toDouble()
+          : double.tryParse(inner['latitude']?.toString() ?? '');
+      final lng = inner['longitude'] is num
+          ? (inner['longitude'] as num).toDouble()
+          : double.tryParse(inner['longitude']?.toString() ?? '');
       return MapEntry(key.toString(), {
         'trn': (inner['trn'] ?? '').toString(),
         'address': (inner['address'] ?? '').toString(),
+        if (lat != null) 'latitude': lat,
+        if (lng != null) 'longitude': lng,
       });
     });
   }
@@ -286,21 +295,36 @@ class HiveDatabaseService {
   /// A present-but-empty TRN means "checked, none exists" — skip re-fetch.
   bool hasCustomerDetail(String id) => _readCustomerDetails().containsKey(id);
 
-  /// Cached TRN / address from a prior contact-detail fetch, if any.
-  ({String trn, String address})? getCustomerDetail(String id) {
+  /// Cached TRN / address / GPS from a prior contact-detail fetch, if any.
+  ({String trn, String address, double? latitude, double? longitude})?
+      getCustomerDetail(String id) {
     final entry = _readCustomerDetails()[id];
     if (entry == null) return null;
-    return (trn: entry['trn'] ?? '', address: entry['address'] ?? '');
+    final lat = entry['latitude'] as double?;
+    final lng = entry['longitude'] as double?;
+    return (
+      trn: (entry['trn'] ?? '').toString(),
+      address: (entry['address'] ?? '').toString(),
+      latitude: lat,
+      longitude: lng,
+    );
   }
 
-  /// Persists a contact-detail result, including empty TRN.
+  /// Persists a contact-detail result, including empty TRN and GPS coordinates.
   Future<void> saveCustomerDetail(
     String id, {
     required String trn,
     required String address,
+    double? latitude,
+    double? longitude,
   }) async {
     final all = _readCustomerDetails();
-    all[id] = {'trn': trn, 'address': address};
+    all[id] = {
+      'trn': trn,
+      'address': address,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+    };
     await _masterBox.put(_customerDetailsKey, jsonEncode(all));
   }
 
@@ -311,6 +335,8 @@ class HiveDatabaseService {
       trn: customer.trn.trim().isNotEmpty ? customer.trn : cached.trn,
       address:
           customer.address.trim().isNotEmpty ? customer.address : cached.address,
+      latitude: customer.latitude ?? cached.latitude,
+      longitude: customer.longitude ?? cached.longitude,
     );
   }
 
@@ -357,6 +383,15 @@ class HiveDatabaseService {
     final newList = List<Customer>.from(current);
     newList[index] = updated;
     await saveCustomers(newList);
+
+    final cached = getCustomerDetail(customerId);
+    await saveCustomerDetail(
+      customerId,
+      trn: cached?.trn ?? updated.trn,
+      address: cached?.address ?? updated.address,
+      latitude: latitude,
+      longitude: longitude,
+    );
   }
 
   /// Updates phone and/or TRN for a specific customer and persists.
@@ -385,6 +420,8 @@ class HiveDatabaseService {
         customerId,
         trn: trn,
         address: cached?.address ?? updated.address,
+        latitude: cached?.latitude ?? updated.latitude,
+        longitude: cached?.longitude ?? updated.longitude,
       );
     }
   }
@@ -396,11 +433,11 @@ class HiveDatabaseService {
   /// `list[i] = item.copyWith(...)` (e.g. stock deduct on invoice save)
   /// throws: type 'Item' is not a subtype of type 'ItemModel' of 'value'.
   List<Item> getItems() {
-    final rawList = _masterBox.get('items', defaultValue: []);
+    final rawList = _masterBox.get('items', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map<Item>(
           (item) =>
-              ItemModel.fromJson(Map<String, dynamic>.from(jsonDecode(item))),
+              ItemModel.fromJson(jsonMap(jsonDecode(jsonString(item)))),
         )
         .toList();
   }
@@ -424,7 +461,7 @@ class HiveDatabaseService {
     final decoded = jsonDecode(raw as String) as List;
     return decoded
         .map<UnitConversion>(
-          (c) => UnitConversionModel.fromJson(Map<String, dynamic>.from(c)),
+          (c) => UnitConversionModel.fromJson(jsonMap(c)),
         )
         .toList();
   }
@@ -459,13 +496,13 @@ class HiveDatabaseService {
 
   /// Retrieves the list of synced master routes.
   List<RouteModel> getRoutes() {
-    final rawList = _masterBox.get('routes', defaultValue: []);
+    final rawList = _masterBox.get('routes', defaultValue: <dynamic>[]);
     return (rawList as List).map((item) {
-      final decoded = Map<String, dynamic>.from(jsonDecode(item));
+      final decoded = jsonMap(jsonDecode(jsonString(item)));
       return RouteModel(
-        id: decoded['id'] ?? '',
-        name: decoded['name'] ?? '',
-        description: decoded['description'] ?? '',
+        id: jsonString(decoded['id']),
+        name: jsonString(decoded['name']),
+        description: jsonString(decoded['description']),
       );
     }).toList();
   }
@@ -491,11 +528,11 @@ class HiveDatabaseService {
   /// `firstWhere(orElse: () => Warehouse(...))` then throws
   /// `type 'Warehouse' is not a subtype of type 'WarehouseModel'`.
   List<Warehouse> getWarehouses() {
-    final rawList = _masterBox.get('warehouses', defaultValue: []);
+    final rawList = _masterBox.get('warehouses', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map<Warehouse>(
           (w) =>
-              WarehouseModel.fromJson(Map<String, dynamic>.from(jsonDecode(w))),
+              WarehouseModel.fromJson(jsonMap(jsonDecode(jsonString(w)))),
         )
         .toList();
   }
@@ -523,11 +560,11 @@ class HiveDatabaseService {
 
   /// Retrieves the master list of all synced Zoho Books salespersons (sales users).
   List<Salesperson> getSalespersons() {
-    final rawList = _masterBox.get('salespersons', defaultValue: []);
+    final rawList = _masterBox.get('salespersons', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map(
           (s) => SalespersonModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(s)),
+            jsonMap(jsonDecode(jsonString(s))),
           ),
         )
         .toList();
@@ -546,7 +583,7 @@ class HiveDatabaseService {
     final raw = _masterBox.get('current_salesperson');
     if (raw == null) return null;
     return SalespersonModel.fromJson(
-      Map<String, dynamic>.from(jsonDecode(raw)),
+      jsonMap(jsonDecode(jsonString(raw))),
     );
   }
 
@@ -578,11 +615,11 @@ class HiveDatabaseService {
 
   /// Retrieves payment/bank ledgers for receipt mapping.
   List<PaymentAccount> getPaymentAccounts() {
-    final rawList = _masterBox.get('payment_accounts', defaultValue: []);
+    final rawList = _masterBox.get('payment_accounts', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map(
           (a) => PaymentAccountModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(a)),
+            jsonMap(jsonDecode(jsonString(a))),
           ),
         )
         .toList();
@@ -598,9 +635,9 @@ class HiveDatabaseService {
 
   /// Retrieves the list of synced VAT/Tax configurations.
   List<Tax> getTaxes() {
-    final rawList = _masterBox.get('taxes', defaultValue: []);
+    final rawList = _masterBox.get('taxes', defaultValue: <dynamic>[]);
     return (rawList as List)
-        .map((t) => TaxModel.fromJson(Map<String, dynamic>.from(jsonDecode(t))))
+        .map((t) => TaxModel.fromJson(jsonMap(jsonDecode(jsonString(t)))))
         .toList();
   }
 
@@ -614,11 +651,11 @@ class HiveDatabaseService {
 
   /// Retrieves list of synced expense account ledgers.
   List<ExpenseAccount> getExpenseAccounts() {
-    final rawList = _masterBox.get('expense_accounts', defaultValue: []);
+    final rawList = _masterBox.get('expense_accounts', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map(
           (a) => ExpenseAccountModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(a)),
+            jsonMap(jsonDecode(jsonString(a))),
           ),
         )
         .toList();
@@ -637,7 +674,7 @@ class HiveDatabaseService {
     final raw = _masterBox.get('organization');
     if (raw == null) return null;
     return OrganizationModel.fromJson(
-      Map<String, dynamic>.from(jsonDecode(raw)),
+      jsonMap(jsonDecode(jsonString(raw))),
     );
   }
 
@@ -654,7 +691,7 @@ class HiveDatabaseService {
   /// Reads the raw list only — does not deserialize models. Returns 0 when
   /// the key is missing or is not a list (e.g. the single organization object).
   int countMasterList(String key) {
-    final raw = _masterBox.get(key, defaultValue: const []);
+    final raw = _masterBox.get(key, defaultValue: const <dynamic>[]);
     return raw is List ? raw.length : 0;
   }
 
@@ -665,11 +702,11 @@ class HiveDatabaseService {
   ///
   /// Optionally filters outstanding invoices down to a specific [customerId].
   List<OpenInvoice> getOpenInvoices({String? customerId}) {
-    final rawList = _masterBox.get('open_invoices', defaultValue: []);
+    final rawList = _masterBox.get('open_invoices', defaultValue: <dynamic>[]);
     final all = (rawList as List)
         .map(
           (i) => OpenInvoiceModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(i)),
+            jsonMap(jsonDecode(jsonString(i))),
           ),
         )
         .toList();
@@ -690,7 +727,7 @@ class HiveDatabaseService {
     final keys = _syncQueueBox.keys.toList();
     return keys.map((key) {
       final raw = _syncQueueBox.get(key);
-      return SyncQueueItem.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
+      return SyncQueueItem.fromJson(jsonMap(jsonDecode(jsonString(raw))));
     }).toList();
   }
 
@@ -742,13 +779,13 @@ class HiveDatabaseService {
 
   /// Retrieves the full, unfiltered list of invoices recorded locally (for internal read-modify-write use).
   List<SalesInvoice> _getAllLocalInvoices() {
-    final rawList = _localHistoryBox.get('invoices', defaultValue: []);
+    final rawList = _localHistoryBox.get('invoices', defaultValue: <dynamic>[]);
     // Explicit type argument: without it the list reifies as
     // List<SalesInvoiceModel> and breaks firstWhere(orElse: () => SalesInvoice(…)).
     return (rawList as List)
         .map<SalesInvoice>(
           (item) => SalesInvoiceModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item)),
+            jsonMap(jsonDecode(jsonString(item))),
           ),
         )
         .toList();
@@ -950,14 +987,14 @@ class HiveDatabaseService {
 
   /// Retrieves the full, unfiltered list of sales orders recorded locally (for internal read-modify-write use).
   List<SalesOrder> _getAllLocalOrders() {
-    final rawList = _localHistoryBox.get('sales_orders', defaultValue: []);
+    final rawList = _localHistoryBox.get('sales_orders', defaultValue: <dynamic>[]);
     // Always reify as List<SalesOrder> of plain domain instances.
     // Returning List<SalesOrderModel> (map().toList() inference) breaks
     // firstWhere(orElse: () => SalesOrder(...)) at runtime.
     return [
       for (final item in rawList as List)
         SalesOrderModel.fromJson(
-          Map<String, dynamic>.from(jsonDecode(item)),
+          jsonMap(jsonDecode(jsonString(item))),
         ).copyWith(),
     ];
   }
@@ -1150,11 +1187,11 @@ class HiveDatabaseService {
 
   /// Retrieves the full, unfiltered list of stock transfers recorded locally (for internal read-modify-write use).
   List<StockTransfer> _getAllLocalStockTransfers() {
-    final rawList = _localHistoryBox.get('stock_transfers', defaultValue: []);
+    final rawList = _localHistoryBox.get('stock_transfers', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map<StockTransfer>(
           (item) => StockTransferModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item)),
+            jsonMap(jsonDecode(jsonString(item))),
           ),
         )
         .toList();
@@ -1260,6 +1297,66 @@ class HiveDatabaseService {
     await _localHistoryBox.put('stock_transfers', serialized);
   }
 
+  /// Applies the *net* stock delta of editing an existing draft transfer from
+  /// [oldTransfer]'s lines to [newTransfer]'s lines, then upserts the record —
+  /// for the `update_stock_transfer` sync path only. Reverses [oldTransfer]'s
+  /// already-applied per-item effect and applies [newTransfer]'s in one step
+  /// per item (net delta) so stock never transiently double-counts.
+  ///
+  /// Validates the resulting stock *before* writing anything — an edited
+  /// unload that would now drive an item's stock below zero throws
+  /// [InsufficientStockException] and neither the transfer record nor stock
+  /// levels are written, mirroring [saveLocalStockTransfer].
+  Future<void> updateLocalStockTransfer(
+    StockTransfer oldTransfer,
+    StockTransfer newTransfer,
+  ) async {
+    final oldQtyByItem = <String, double>{};
+    for (final line in oldTransfer.lines) {
+      oldQtyByItem[line.item.id] =
+          (oldQtyByItem[line.item.id] ?? 0) + line.quantity;
+    }
+    final newQtyByItem = <String, double>{};
+    for (final line in newTransfer.lines) {
+      newQtyByItem[line.item.id] =
+          (newQtyByItem[line.item.id] ?? 0) + line.quantity;
+    }
+
+    final localItems = getItems();
+    for (final itemId in {...oldQtyByItem.keys, ...newQtyByItem.keys}) {
+      final itemIndex = localItems.indexWhere((it) => it.id == itemId);
+      if (itemIndex < 0) continue;
+      final existingItem = localItems[itemIndex];
+      final netDelta = (newQtyByItem[itemId] ?? 0) - (oldQtyByItem[itemId] ?? 0);
+      if (netDelta == 0) continue;
+      final updatedStock = newTransfer.direction == StockTransferDirection.load
+          ? existingItem.stock + netDelta
+          : deductStock(
+              itemId: existingItem.id,
+              itemName: existingItem.name,
+              available: existingItem.stock,
+              requested: netDelta,
+            );
+      localItems[itemIndex] = existingItem.copyWith(stock: updatedStock);
+    }
+
+    // Stock validation passed — now persist the updated transfer and stock.
+    final current = _getAllLocalStockTransfers();
+    final model = StockTransferModel.fromDomain(newTransfer);
+    final index = current.indexWhere((t) => t.id == newTransfer.id);
+    if (index >= 0) {
+      current[index] = model;
+    } else {
+      current.insert(0, model);
+    }
+
+    final serialized = current
+        .map((t) => jsonEncode(StockTransferModel.fromDomain(t).toJson()))
+        .toList();
+    await _localHistoryBox.put('stock_transfers', serialized);
+    await saveItems(localItems);
+  }
+
   /// Merges a freshly downloaded set of remote stock transfers into the local
   /// cache. Same shape as [saveRemoteOrders]: a still-pending local transfer
   /// is kept unless remote already confirms it via `zohoTransferId`; a synced
@@ -1284,11 +1381,11 @@ class HiveDatabaseService {
 
   /// Retrieves the full, unfiltered list of receipts recorded locally (for internal read-modify-write use).
   List<ReceiptVoucher> _getAllLocalReceipts() {
-    final rawList = _localHistoryBox.get('receipts', defaultValue: []);
+    final rawList = _localHistoryBox.get('receipts', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map<ReceiptVoucher>(
           (item) => ReceiptVoucherModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item)),
+            jsonMap(jsonDecode(jsonString(item))),
           ),
         )
         .toList();
@@ -1439,11 +1536,11 @@ class HiveDatabaseService {
 
   /// Retrieves the full, unfiltered list of sales returns recorded locally (for internal read-modify-write use).
   List<SalesReturn> _getAllLocalReturns() {
-    final rawList = _localHistoryBox.get('returns', defaultValue: []);
+    final rawList = _localHistoryBox.get('returns', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map<SalesReturn>(
           (item) => SalesReturnModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item)),
+            jsonMap(jsonDecode(jsonString(item))),
           ),
         )
         .toList();
@@ -1587,11 +1684,11 @@ class HiveDatabaseService {
 
   /// Retrieves the full, unfiltered list of expenses recorded locally (for internal read-modify-write use).
   List<ExpenseEntry> _getAllLocalExpenses() {
-    final rawList = _localHistoryBox.get('expenses', defaultValue: []);
+    final rawList = _localHistoryBox.get('expenses', defaultValue: <dynamic>[]);
     return (rawList as List)
         .map<ExpenseEntry>(
           (item) => ExpenseEntryModel.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item)),
+            jsonMap(jsonDecode(jsonString(item))),
           ),
         )
         .toList();
@@ -1719,7 +1816,7 @@ class HiveDatabaseService {
     final raw = _localHistoryBox.get('cash_closing');
     if (raw == null) return null;
     return CashClosingModel.fromJson(
-      Map<String, dynamic>.from(jsonDecode(raw)),
+      jsonMap(jsonDecode(jsonString(raw))),
     );
   }
 
@@ -1751,7 +1848,7 @@ class HiveDatabaseService {
   }
 
   /// Gets the cached OAuth 2.0 Access Token for Zoho Books.
-  String? get oauthAccessToken => _masterBox.get('oauth_access_token');
+  String? get oauthAccessToken => _masterBox.get('oauth_access_token') as String?;
 
   /// Saves the cached OAuth 2.0 Access Token for Zoho Books.
   Future<void> setOauthAccessToken(String? token) async {
@@ -1759,7 +1856,7 @@ class HiveDatabaseService {
   }
 
   /// Gets the token expiry timestamp in milliseconds.
-  int? get oauthTokenExpiry => _masterBox.get('oauth_token_expiry');
+  int? get oauthTokenExpiry => _masterBox.get('oauth_token_expiry') as int?;
 
   /// Saves the token expiry timestamp in milliseconds.
   Future<void> setOauthTokenExpiry(int? expiryMillis) async {
@@ -1768,7 +1865,7 @@ class HiveDatabaseService {
 
   /// Active update channel for in-app OTA updates ('production' or 'beta').
   String get updateChannel =>
-      _masterBox.get('update_channel', defaultValue: 'production');
+      _masterBox.get('update_channel', defaultValue: 'production') as String;
 
   /// Sets the active update channel ('production' or 'beta').
   Future<void> setUpdateChannel(String channel) async {

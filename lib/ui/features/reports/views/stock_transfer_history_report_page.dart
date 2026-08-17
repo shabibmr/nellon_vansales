@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/stock_transfer.dart';
 import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/theme/app_theme.dart';
@@ -41,7 +40,7 @@ class StockTransferHistoryReportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportBlocHost<StockTransfer>(
       create: (_) => ReportBloc<StockTransfer>(
-        fetchRemote: () => sl<ReportRepository>().fetchStockTransfers(),
+        fetchRemote: () => context.read<ReportRepository>().fetchStockTransfers(),
         initialSortField: StockTransferHistorySortField.date,
         initialSortAscending: false,
       ),

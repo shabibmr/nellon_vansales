@@ -9,7 +9,11 @@ import '../../../domain/models/salesperson.dart';
 /// display [Salesperson.name]). Read [locationId] / [name] from here rather
 /// than reaching into [HiveDatabaseService] directly.
 class SalespersonCubit extends Cubit<Salesperson?> {
-  SalespersonCubit(HiveDatabaseService db) : super(db.getCurrentSalesperson());
+  final HiveDatabaseService _db;
+
+  SalespersonCubit(HiveDatabaseService db)
+      : _db = db,
+        super(db.getCurrentSalesperson());
 
   /// The Zoho Location ID mapped to the active salesperson, if resolved.
   String? get locationId => state?.locationId;
@@ -29,5 +33,5 @@ class SalespersonCubit extends Cubit<Salesperson?> {
   }
 
   /// Re-reads the cached active salesperson from Hive (e.g. after login resolution).
-  void refresh(HiveDatabaseService db) => emit(db.getCurrentSalesperson());
+  void refresh() => emit(_db.getCurrentSalesperson());
 }

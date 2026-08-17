@@ -96,9 +96,9 @@ class FakeSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<String> get syncStatusStream => const Stream.empty();
+  Stream<String> get syncStatusStream => const Stream<Never>.empty();
   @override
-  Stream<int> get syncCountStream => const Stream.empty();
+  Stream<int> get syncCountStream => const Stream<Never>.empty();
   @override
   bool get isSyncing => false;
   @override
@@ -171,9 +171,9 @@ void main() {
     expect(syncItem.type, 'customer');
     expect(syncItem.payload['contact_name'], 'John Doe');
     expect(syncItem.payload['credit_limit'], 1500.0);
-    final customFields = syncItem.payload['custom_fields'] as List;
-    expect(customFields[0]['api_name'], 'cf_latitude');
-    expect(customFields[0]['value'], '12.34');
+    final billingAddress = syncItem.payload['billing_address'] as Map;
+    expect(billingAddress['latitude'], 12.34);
+    expect(billingAddress['longitude'], 56.78);
   });
 
   test('submit failure path emits CreateCustomerFailure state', () async {

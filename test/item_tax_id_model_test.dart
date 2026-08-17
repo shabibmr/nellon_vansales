@@ -79,6 +79,18 @@ void main() {
       expect(line.toJson()['tax_id'], '3331482000000075238');
     });
 
+    test('invoice line persists Zoho line_item_id', () {
+      final line = InvoiceLineItemModel.fromJson({
+        'item_id': 'i1',
+        'name': 'Product',
+        'quantity': 1,
+        'rate': 100,
+        'line_item_id': 'zoho_line_9',
+      });
+      expect(line.lineItemId, 'zoho_line_9');
+      expect(line.toJson()['line_item_id'], 'zoho_line_9');
+    });
+
     test('order line fromJson merges line-level tax_id onto item', () {
       final line = OrderLineItemModel.fromJson({
         'item_id': 'i1',

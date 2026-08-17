@@ -70,6 +70,21 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
   }
 
   @override
+  Future<void> updateStockTransferRecord(StockTransfer transfer) async {
+    if (_transfers.containsKey(transfer.id)) {
+      _transfers[transfer.id] = transfer;
+    }
+  }
+
+  @override
+  Future<void> updateLocalStockTransfer(
+    StockTransfer oldTransfer,
+    StockTransfer newTransfer,
+  ) async {
+    _transfers[newTransfer.id] = newTransfer;
+  }
+
+  @override
   List<Customer> getCustomers() => _customers.values.toList();
 
   @override
@@ -248,6 +263,19 @@ class FakeZohoApiClient extends ZohoApiClient {
   Future<String> syncStockTransfer(Map<String, dynamic> transferJson) async =>
       'zoho_xfer_PERMANENT';
 
+  Map<String, dynamic>? lastUpdateStockTransferPayload;
+  String? lastUpdateStockTransferId;
+
+  @override
+  Future<String> updateStockTransfer(
+    String transferOrderId,
+    Map<String, dynamic> transferJson,
+  ) async {
+    lastUpdateStockTransferId = transferOrderId;
+    lastUpdateStockTransferPayload = transferJson;
+    return transferOrderId;
+  }
+
   @override
   Future<String> updateSalesOrder(
     String salesOrderId,
@@ -313,7 +341,7 @@ void main() {
           SyncQueueItem(
             id: 'temp_inv_1',
             type: 'invoice',
-            payload: const {'customer_id': 'temp_cust_1', 'line_items': []},
+            payload: const {'customer_id': 'temp_cust_1', 'line_items': <dynamic>[]},
             timestamp: DateTime.now(),
           ),
         );
@@ -366,7 +394,7 @@ void main() {
           SyncQueueItem(
             id: 'temp_so_1',
             type: 'sales_order',
-            payload: const {'customer_id': 'cust_1', 'line_items': []},
+            payload: const {'customer_id': 'cust_1', 'line_items': <dynamic>[]},
             timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
           ),
         );
@@ -455,7 +483,7 @@ void main() {
           SyncQueueItem(
             id: 'temp_inv_1',
             type: 'invoice',
-            payload: const {'customer_id': 'cust_1', 'line_items': []},
+            payload: const {'customer_id': 'cust_1', 'line_items': <dynamic>[]},
             timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
           ),
         );
@@ -608,7 +636,7 @@ void main() {
           SyncQueueItem(
             id: 'temp_inv_fail',
             type: 'invoice',
-            payload: const {'customer_id': 'cust_1', 'line_items': []},
+            payload: const {'customer_id': 'cust_1', 'line_items': <dynamic>[]},
             timestamp: DateTime.now(),
           ),
         );
@@ -641,7 +669,7 @@ void main() {
           SyncQueueItem(
             id: 'temp_inv_invalid',
             type: 'invoice',
-            payload: const {'customer_id': '', 'line_items': []},
+            payload: const {'customer_id': '', 'line_items': <dynamic>[]},
             timestamp: DateTime.now(),
           ),
         );
@@ -673,7 +701,7 @@ void main() {
           SyncQueueItem(
             id: 'temp_inv_backoff',
             type: 'invoice',
-            payload: const {'customer_id': 'cust_1', 'line_items': []},
+            payload: const {'customer_id': 'cust_1', 'line_items': <dynamic>[]},
             status: SyncStatus.failed,
             errorMessage: '[Retryable] Exception: SocketException',
             retryCount: 1,
@@ -709,7 +737,7 @@ void main() {
           SyncQueueItem(
             id: 'temp_inv_ready',
             type: 'invoice',
-            payload: const {'customer_id': 'cust_1', 'line_items': []},
+            payload: const {'customer_id': 'cust_1', 'line_items': <dynamic>[]},
             status: SyncStatus.failed,
             errorMessage: '[Retryable] Exception: SocketException',
             retryCount: 0,
@@ -740,7 +768,7 @@ void main() {
         SyncQueueItem(
           id: 'temp_inv_needs_attention',
           type: 'invoice',
-          payload: const {'customer_id': 'cust_1', 'line_items': []},
+          payload: const {'customer_id': 'cust_1', 'line_items': <dynamic>[]},
           status: SyncStatus.failed,
           errorMessage: '[Needs Attention] Exception: Invalid customer_id',
           retryCount: 3,
@@ -768,5 +796,83 @@ void main() {
         isFalse,
       );
     });
+
+    test(
+      'update_stock_transfer dispatch PUTs to the transfer_order_id and '
+      'persists the edited lines over the local baseline',
+      () async {
+        final db = FakeHiveDatabaseService();
+        final api = FakeZohoApiClient();
+        final worker = SyncWorker(
+          dbService: db,
+          apiClient: api,
+          checkConnectivity: fakeCheckConnectivity,
+        );
+
+        await db.saveLocalStockTransfer(
+          StockTransfer(
+            id: 'to_1',
+            transferNumber: 'TO-1',
+            date: DateTime(2026, 8, 1),
+            direction: StockTransferDirection.load,
+            fromLocationId: 'wh',
+            toLocationId: 'van',
+            lines: const [StockTransferLine(item: testItem, quantity: 4)],
+            zohoTransferId: 'zoho_to_1',
+            isPendingSync: false,
+          ),
+        );
+
+        await db.enqueueSyncItem(
+          SyncQueueItem(
+            id: 'to_1',
+            type: 'update_stock_transfer',
+            payload: {
+              'id': 'to_1',
+              'transfer_order_id': 'zoho_to_1',
+              'transferNumber': 'TO-1',
+              'date': '2026-08-01',
+              'direction': 'load',
+              'from_location_id': 'wh',
+              'to_location_id': 'van',
+              'line_items': [
+                {
+                  'item_id': testItem.id,
+                  'name': testItem.name,
+                  'quantity_transfer': 9,
+                  'quantity': 9,
+                  'item': {
+                    'item_id': testItem.id,
+                    'name': testItem.name,
+                    'sku': testItem.sku,
+                    'rate': testItem.rate,
+                    'stock_on_hand': testItem.stock,
+                  },
+                },
+              ],
+              'notes': 'revised',
+              'isPendingSync': true,
+            },
+            timestamp: DateTime.now(),
+          ),
+        );
+
+        await worker.syncPendingItems();
+
+        expect(db.getSyncQueue(), isEmpty);
+        expect(api.lastUpdateStockTransferId, 'zoho_to_1');
+        expect(
+          api.lastUpdateStockTransferPayload?['transfer_order_id'],
+          'zoho_to_1',
+        );
+
+        final updated = db.getAllLocalStockTransfersUnfiltered().firstWhere(
+          (t) => t.id == 'to_1',
+        );
+        expect(updated.lines.single.quantity, 9);
+        expect(updated.notes, 'revised');
+        expect(updated.isPendingSync, isFalse);
+      },
+    );
   });
 }

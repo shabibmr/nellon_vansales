@@ -1,4 +1,5 @@
 import '../../domain/models/payment_account.dart';
+import 'json_read.dart';
 
 /// Data transfer object representing a deposit [PaymentAccount].
 ///
@@ -18,11 +19,11 @@ class PaymentAccountModel extends PaymentAccount {
   /// Mappes Zoho ledger fields (`account_id`, `account_name`, `account_type`, `currency_code`, `payment_mode`) with fallback defaults.
   factory PaymentAccountModel.fromJson(Map<String, dynamic> json) {
     return PaymentAccountModel(
-      id: json['account_id'] ?? json['id'] ?? '',
-      name: json['account_name'] ?? json['name'] ?? '',
-      accountType: json['account_type'] ?? json['accountType'] ?? 'bank',
-      currencyCode: json['currency_code'] ?? json['currencyCode'] ?? '',
-      paymentMode: json['payment_mode'] ?? json['paymentMode'] ?? '',
+      id: jsonString(json['account_id'] ?? json['id']),
+      name: jsonString(json['account_name'] ?? json['name']),
+      accountType: jsonString(json['account_type'] ?? json['accountType'], 'bank'),
+      currencyCode: jsonString(json['currency_code'] ?? json['currencyCode']),
+      paymentMode: jsonString(json['payment_mode'] ?? json['paymentMode']),
     );
   }
 

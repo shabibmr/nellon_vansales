@@ -31,7 +31,8 @@ class DashboardDrawer extends StatelessWidget {
           ? AppTheme.glassBackground2
           : (isDark ? AppTheme.darkBackground : AppTheme.lightSurface),
       child: SafeArea(
-        child: Column(
+        child: ListView(
+          padding: EdgeInsets.zero,
           children: [
             Container(
               width: double.infinity,
@@ -86,7 +87,7 @@ class DashboardDrawer extends StatelessWidget {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  MaterialPageRoute<void>(
                     builder: (_) => const UserProfilePage(),
                   ),
                 );
@@ -104,7 +105,7 @@ class DashboardDrawer extends StatelessWidget {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  MaterialPageRoute<void>(
                     builder: (_) => const SettingsPage(),
                   ),
                 );

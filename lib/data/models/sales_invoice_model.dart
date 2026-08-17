@@ -1,5 +1,6 @@
 import '../../domain/models/sales_invoice.dart';
 import 'item_model.dart';
+import 'json_read.dart';
 
 /// Parses a JSON value that may be a [num] or a numeric [String] (Zoho
 /// sometimes returns line-item numeric fields as strings).
@@ -22,11 +23,12 @@ class InvoiceLineItemModel extends InvoiceLineItem {
     super.discount = 0.0,
     super.uom = '',
     super.unitConversionId = '',
+    super.lineItemId = '',
   });
 
   /// Factory constructor to parse local/remote JSON maps into an [InvoiceLineItemModel].
   factory InvoiceLineItemModel.fromJson(Map<String, dynamic> json) {
-    var item = ItemModel.fromJson(json['item'] ?? json);
+    var item = ItemModel.fromJson(jsonMap(json['item'] ?? json));
     // Line-level tax fields win when Zoho returns them only on the line.
     final lineTaxId = (json['tax_id'] ?? '').toString();
     final lineTaxName = (json['tax_name'] ?? '').toString();
@@ -52,6 +54,8 @@ class InvoiceLineItemModel extends InvoiceLineItem {
       discount: _parseNum(json['discount_amount'] ?? json['discount']),
       uom: lineUom.isNotEmpty ? lineUom : item.uom,
       unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
+      lineItemId: (json['line_item_id'] ?? json['invoice_item_id'] ?? '')
+          .toString(),
     );
   }
 
@@ -69,6 +73,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
       if (unit.isNotEmpty) 'unit': unit,
       if (unit.isNotEmpty) 'uom': unit,
       if (unitConversionId.isNotEmpty) 'unit_conversion_id': unitConversionId,
+      if (lineItemId.isNotEmpty) 'line_item_id': lineItemId,
       'item': ItemModel.fromDomain(item).toJson(),
     };
   }
@@ -83,6 +88,7 @@ class InvoiceLineItemModel extends InvoiceLineItem {
       discount: lineItem.discount,
       uom: lineItem.uom.isNotEmpty ? lineItem.uom : lineItem.item.uom,
       unitConversionId: lineItem.unitConversionId,
+      lineItemId: lineItem.lineItemId,
     );
   }
 }
@@ -119,26 +125,21 @@ class SalesInvoiceModel extends SalesInvoice {
     }
 
     return SalesInvoiceModel(
-      id: json['invoice_id'] ?? json['id'] ?? '',
-      invoiceNumber: json['invoice_number'] ?? json['invoiceNumber'] ?? '',
-      customerId: json['customer_id'] ?? json['customerId'] ?? '',
-      customerName: json['customer_name'] ?? json['customerName'] ?? '',
-      date: json['date'] != null
-          ? DateTime.parse(json['date'])
-          : DateTime.now(),
-      dueDate: json['due_date'] != null
-          ? DateTime.parse(json['due_date'])
-          : DateTime.now(),
+      id: jsonString(json['invoice_id'] ?? json['id']),
+      invoiceNumber: jsonString(json['invoice_number'] ?? json['invoiceNumber']),
+      customerId: jsonString(json['customer_id'] ?? json['customerId']),
+      customerName: jsonString(json['customer_name'] ?? json['customerName']),
+      date: jsonDate(json['date']),
+      dueDate: jsonDate(json['due_date']),
       items:
-          (json['line_items'] as List?)
-              ?.map((item) => InvoiceLineItemModel.fromJson(item))
-              .toList() ??
-          [],
-      notes: json['notes'] ?? '',
-      isPendingSync: json['isPendingSync'] ?? false,
-      zohoInvoiceId: json['zoho_invoice_id'] ?? json['zohoInvoiceId'],
-      locationId: json['location_id'],
-      status: (json['status'] ?? '').toString(),
+          jsonList(json['line_items'])
+              .map((item) => InvoiceLineItemModel.fromJson(jsonMap(item)))
+              .toList(),
+      notes: jsonString(json['notes']),
+      isPendingSync: jsonBool(json['isPendingSync']),
+      zohoInvoiceId: jsonStringOrNull(json['zoho_invoice_id'] ?? json['zohoInvoiceId']),
+      locationId: jsonStringOrNull(json['location_id']),
+      status: jsonString(json['status']),
       listedTotal: listedTotal,
     );
   }

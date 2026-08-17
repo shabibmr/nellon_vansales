@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/document_number_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/invoice_repository.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
@@ -41,19 +39,17 @@ class SalesInvoiceEditorPage extends StatefulWidget {
     final invoiceRepo = context.read<InvoiceRepository>();
     final salesOrderRepo = context.read<SalesOrderRepository>();
     final customerRepo = context.read<CustomerRepository>();
-    final syncRepo = context.read<SyncRepository>();
-    final docNumbers = sl<DocumentNumberService>();
+    final docNumbers = context.read<DocumentNumberService>();
 
     return Navigator.push<T>(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<T>(
         builder: (_) => BlocProvider(
           create: (_) {
             final bloc = SalesInvoiceEditorBloc(
               invoiceRepository: invoiceRepo,
               salesOrderRepository: salesOrderRepo,
               customerRepository: customerRepo,
-              syncRepository: syncRepo,
               documentNumberService: docNumbers,
             );
             if (invoice != null) {

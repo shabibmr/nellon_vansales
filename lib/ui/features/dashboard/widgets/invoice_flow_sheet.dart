@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../data/services/document_number_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/models/sales_invoice.dart';
@@ -10,7 +9,6 @@ import '../../../../domain/repositories/invoice_repository.dart';
 import '../../../../domain/repositories/item_repository.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../ui/core/cubit/list_filter_cubit.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
@@ -44,8 +42,7 @@ class InvoiceFlowSheet extends StatelessWidget {
         invoiceRepository: ctx.read<InvoiceRepository>(),
         salesOrderRepository: ctx.read<SalesOrderRepository>(),
         customerRepository: ctx.read<CustomerRepository>(),
-        syncRepository: ctx.read<SyncRepository>(),
-        documentNumberService: sl<DocumentNumberService>(),
+        documentNumberService: ctx.read<DocumentNumberService>(),
       )..add(StartNewInvoice(customer: customer)),
       child: BlocProvider<ListFilterCubit<Item>>(
         create: (_) => ListFilterCubit<Item>(
@@ -211,232 +208,292 @@ class _InvoiceFlowSheetBodyState extends State<_InvoiceFlowSheetBody> {
           minChildSize: 0.6,
           maxChildSize: 0.95,
           expand: false,
-          builder: (context, scrollController) {
-            return Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: widget.isDark
-                    ? AppTheme.darkBackground
-                    : AppTheme.lightBackground,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: widget.isDark ? Colors.grey[700] : Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: AppTheme.primaryIndigo.withValues(alpha: 0.1),
-                        child: const Icon(Icons.receipt_long, color: AppTheme.primaryIndigo),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.customer.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            Text(
-                              'Direct Van Sale',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                              ),
-                            ),
-                          ],
+          builder: (context, scrollController) => Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: widget.isDark
+                      ? AppTheme.darkBackground
+                      : AppTheme.lightBackground,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: widget.isDark ? Colors.grey[700] : Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search items to add...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchController.clear();
-                                context.read<ListFilterCubit<Item>>().setQuery('');
-                              },
-                            )
-                          : null,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
-                    onChanged: (query) => context.read<ListFilterCubit<Item>>().setQuery(query),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: BlocBuilder<ListFilterCubit<Item>, ListFilterState<Item>>(
-                      builder: (context, filterState) {
-                        final items = filterState.filteredItems;
-                        if (items.isEmpty) {
-                          return const Center(child: Text('No items match search.'));
-                        }
-                        return ListView.separated(
-                          controller: scrollController,
-                          itemCount: items.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final item = items[index];
-                            final line = _lineForItem(invoiceState, item);
-                            final isResolving = _resolvingItemId == item.id;
-
-                            return ListTile(
-                              title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text(
-                                'SKU: ${item.sku} • Stock: ${formatQuantity(item.stock)} ${item.uom} • ${formatCurrency(item.rate, cs)}',
-                                style: const TextStyle(fontSize: 12),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: AppTheme.primaryIndigo.withValues(alpha: 0.1),
+                          child: const Icon(Icons.receipt_long, color: AppTheme.primaryIndigo),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.customer.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
-                              trailing: isResolving
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (line != null) ...[
-                                          Text(
-                                            '${formatQuantity(line.quantity)} ${line.displayUom} (${formatCurrency(line.total, cs)})',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
+                              Text(
+                                'Direct Van Sale',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _searchController,
+                      onChanged: (val) =>
+                          context.read<ListFilterCubit<Item>>().setQuery(val),
+                      decoration: InputDecoration(
+                        hintText: 'Search items to add...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: BlocBuilder<ListFilterCubit<Item>, ListFilterState<Item>>(
+                        builder: (context, filterState) {
+                          final items = filterState.filteredItems;
+
+                          if (items.isEmpty) {
+                            return const Center(
+                              child: Text('No items match search'),
+                            );
+                          }
+
+                          return ListView.separated(
+                            controller: scrollController,
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              final line = _lineForItem(invoiceState, item);
+                              final isResolving = _resolvingItemId == item.id;
+
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 2,
+                                ),
+                                title: Text(
+                                  item.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  'SKU: ${item.sku} • Stock: ${formatQuantity(item.stock)} ${item.uom} • ${formatCurrency(item.rate, cs)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                trailing: isResolving
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (line != null) ...[
+                                            Text(
+                                              '${formatQuantity(line.quantity)} ${line.displayUom}\n(${formatCurrency(line.total, cs)})',
+                                              textAlign: TextAlign.end,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.primaryIndigo,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                          ],
+                                          IconButton(
+                                            icon: Icon(
+                                              line != null
+                                                  ? Icons.edit
+                                                  : Icons.add_circle_outline,
                                               color: AppTheme.primaryIndigo,
-                                              fontSize: 12,
+                                            ),
+                                            padding: const EdgeInsets.all(6),
+                                            constraints: const BoxConstraints(),
+                                            onPressed: () => _addOrEditItem(
+                                              item,
+                                              existing: line,
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
+                                          if (line != null) ...[
+                                            const SizedBox(width: 4),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete_outline,
+                                                color: Colors.red,
+                                              ),
+                                              padding: const EdgeInsets.all(6),
+                                              constraints:
+                                                  const BoxConstraints(),
+                                              onPressed: () {
+                                                context
+                                                    .read<SalesInvoiceEditorBloc>()
+                                                    .add(RemoveLineItem(item));
+                                              },
+                                            ),
+                                          ],
                                         ],
-                                        IconButton(
-                                          icon: Icon(
-                                            line != null ? Icons.edit : Icons.add_circle_outline,
-                                            color: AppTheme.primaryIndigo,
-                                          ),
-                                          onPressed: () => _addOrEditItem(item, existing: line),
-                                        ),
-                                        if (line != null)
-                                          IconButton(
-                                            icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                            onPressed: () {
-                                              context.read<SalesInvoiceEditorBloc>().add(RemoveLineItem(item));
-                                            },
-                                          ),
-                                      ],
-                                    ),
-                            );
-                          },
-                        );
-                      },
+                                      ),
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.only(top: 16),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: widget.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: widget.isDark
+                            ? AppTheme.darkSurface
+                            : AppTheme.lightSurface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: widget.isDark
+                              ? Colors.grey[800]!
+                              : Colors.grey[300]!,
                           width: 1,
                         ),
                       ),
-                    ),
-                    child: Builder(
-                      builder: (context) {
-                        double cartSubTotal = 0.0;
-                        double cartTaxTotal = 0.0;
-                        double cartTotal = 0.0;
+                      child: Builder(
+                        builder: (context) {
+                          double cartSubTotal = 0.0;
+                          double cartTaxTotal = 0.0;
+                          double cartTotal = 0.0;
 
-                        for (final line in invoiceState.editingItems) {
-                          cartSubTotal += line.subTotal;
-                          cartTaxTotal += line.taxAmount;
-                          cartTotal += line.total;
-                        }
+                          for (final line in invoiceState.editingItems) {
+                            cartSubTotal += line.subTotal;
+                            cartTaxTotal += line.taxAmount;
+                            cartTotal += line.total;
+                          }
 
-                        final canSubmit = invoiceState.editingItems.isNotEmpty && !invoiceState.isSaving;
+                          final canSubmit =
+                              invoiceState.editingItems.isNotEmpty &&
+                              !invoiceState.isSaving;
 
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Sub Total:', style: TextStyle(fontSize: 13)),
-                                Text(formatCurrency(cartSubTotal, cs)),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('VAT:', style: TextStyle(fontSize: 13)),
-                                Text(formatCurrency(cartTaxTotal, cs)),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Invoice Total:',
-                                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                                ),
-                                Text(
-                                  formatCurrency(cartTotal, cs),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 18,
-                                    color: AppTheme.primaryIndigo,
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Sub Total:',
+                                    style: TextStyle(fontSize: 13),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: canSubmit
-                                  ? () {
-                                      context.read<SalesInvoiceEditorBloc>().add(
-                                            const SaveInvoice(notes: 'Van Sales Checkout'),
-                                          );
-                                    }
-                                  : null,
-                              child: invoiceState.isSaving
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : Text(
-                                      'SUBMIT SALES INVOICE'
-                                      '${cartTotal > 0 ? ' (${formatCurrency(cartTotal, cs)})' : ''}',
+                                  Text(formatCurrency(cartSubTotal, cs)),
+                                ],
+                              ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'VAT:',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                  Text(formatCurrency(cartTaxTotal, cs)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Invoice Total:',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
                                     ),
-                            ),
-                          ],
-                        );
-                      },
+                                  ),
+                                  Text(
+                                    formatCurrency(cartTotal, cs),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 18,
+                                      color: AppTheme.primaryIndigo,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: canSubmit
+                                    ? () {
+                                        context
+                                            .read<SalesInvoiceEditorBloc>()
+                                            .add(
+                                              const SaveInvoice(
+                                                notes: 'Van Sales Checkout',
+                                              ),
+                                            );
+                                      }
+                                    : null,
+                                child: invoiceState.isSaving
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        'SUBMIT SALES INVOICE'
+                                        '${cartTotal > 0 ? ' (${formatCurrency(cartTotal, cs)})' : ''}',
+                                      ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );

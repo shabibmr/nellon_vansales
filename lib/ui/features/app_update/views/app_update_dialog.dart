@@ -36,11 +36,17 @@ class AppUpdateDialog extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         side: const BorderSide(color: AppTheme.glassBorder, width: 1),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: AppUpdatePanel(
-          updateInfo: updateInfo,
-          onLater: () => Navigator.of(context).pop(),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 480,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: AppUpdatePanel(
+            updateInfo: updateInfo,
+            onLater: () => Navigator.of(context).pop(),
+          ),
         ),
       ),
     );

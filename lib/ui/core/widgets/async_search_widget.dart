@@ -13,6 +13,10 @@ import '../bloc/async_search_bloc.dart';
 import '../bloc/async_search_event.dart';
 import '../bloc/async_search_state.dart';
 import '../bloc/gps_capture_bloc.dart';
+import '../bloc/customer_selection_bloc.dart';
+import '../bloc/customer_selection_event.dart';
+import '../bloc/customer_selection_state.dart';
+import '../utils/snackbars.dart';
 
 /// Reusable widget that facilitates debounced in-memory search over local cache.
 ///
@@ -20,10 +24,10 @@ import '../bloc/gps_capture_bloc.dart';
 /// for either [Customer]s or [Item]s within local cached directories.
 class AsyncSearchWidget extends StatelessWidget {
   /// Callback triggered when a customer contact is selected from search results.
-  final Function(Customer)? onCustomerSelected;
+  final void Function(Customer)? onCustomerSelected;
 
   /// Callback triggered when an inventory product is selected from search results.
-  final Function(Item)? onItemSelected;
+  final void Function(Item)? onItemSelected;
 
   /// Creates a new [AsyncSearchWidget].
   const AsyncSearchWidget({
@@ -48,6 +52,11 @@ class AsyncSearchWidget extends StatelessWidget {
             syncRepository: ctx.read<SyncRepository>(),
           ),
         ),
+        BlocProvider(
+          create: (ctx) => CustomerSelectionBloc(
+            customerRepository: ctx.read<CustomerRepository>(),
+          ),
+        ),
       ],
       child: _AsyncSearchView(
         onCustomerSelected: onCustomerSelected,
@@ -58,13 +67,10 @@ class AsyncSearchWidget extends StatelessWidget {
 }
 
 class _AsyncSearchView extends StatefulWidget {
-  final Function(Customer)? onCustomerSelected;
-  final Function(Item)? onItemSelected;
+  final void Function(Customer)? onCustomerSelected;
+  final void Function(Item)? onItemSelected;
 
-  const _AsyncSearchView({
-    this.onCustomerSelected,
-    this.onItemSelected,
-  });
+  const _AsyncSearchView({this.onCustomerSelected, this.onItemSelected});
 
   @override
   State<_AsyncSearchView> createState() => _AsyncSearchViewState();
@@ -72,7 +78,6 @@ class _AsyncSearchView extends StatefulWidget {
 
 class _AsyncSearchViewState extends State<_AsyncSearchView> {
   final _searchController = TextEditingController();
-  String? _resolvingCustomerId;
 
   @override
   void dispose() {
@@ -80,32 +85,35 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
     super.dispose();
   }
 
-  Future<void> _selectCustomer(Customer customer) async {
-    final callback = widget.onCustomerSelected;
-    if (callback == null || _resolvingCustomerId != null) return;
-    setState(() => _resolvingCustomerId = customer.id);
-    var resolved = customer;
-    try {
-      final result = await context
-          .read<CustomerRepository>()
-          .resolveCustomerDetails(customer);
-      resolved = result.customer;
-    } finally {
-      if (mounted) setState(() => _resolvingCustomerId = null);
-    }
-    if (!mounted) return;
-
-    if (CustomerMissingFields.of(resolved).any) {
-      final enriched = await showCustomerMissingFieldsDialog(
+  Future<void> _handleSelectionState(
+    BuildContext context,
+    CustomerSelectionState state,
+  ) async {
+    if (state is CustomerSelectionNeedsMissingFields) {
+      if (state.offlineFallback) {
+        showErrorSnackBar(
+          context,
+          "Couldn't load customer TRN — will retry when online.",
+        );
+      }
+      final resolved = await showCustomerMissingFieldsDialog(
         context,
         gpsBloc: context.read<GpsCaptureBloc>(),
-        customer: resolved,
+        customer: state.customer,
       );
-      if (enriched == null) return;
-      resolved = enriched;
+      if (!context.mounted) return;
+      context.read<CustomerSelectionBloc>().add(
+        MissingFieldsResolved(resolved),
+      );
+    } else if (state is CustomerSelectionCompleted) {
+      if (state.offlineFallback) {
+        showErrorSnackBar(
+          context,
+          "Couldn't load customer TRN — will retry when online.",
+        );
+      }
+      widget.onCustomerSelected?.call(state.customer);
     }
-
-    callback(resolved);
   }
 
   void _onSearchChanged(String query) {
@@ -121,77 +129,80 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return BlocBuilder<AsyncSearchBloc, AsyncSearchState>(
-      builder: (context, state) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: SegmentedButton<SearchType>(
-                segments: const [
-                  ButtonSegment<SearchType>(
-                    value: SearchType.customers,
-                    label: Text('Clients'),
-                    icon: Icon(Icons.people_outline_rounded),
-                  ),
-                  ButtonSegment<SearchType>(
-                    value: SearchType.items,
-                    label: Text('Inventory'),
-                    icon: Icon(Icons.inventory_2_outlined),
-                  ),
-                ],
-                selected: {state.searchType},
-                onSelectionChanged: (Set<SearchType> newSelection) {
-                  _searchController.clear();
-                  context.read<AsyncSearchBloc>().add(
-                        SearchTypeChanged(newSelection.first),
-                      );
-                },
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: AppTheme.primaryIndigo.withValues(
-                    alpha: 0.15,
-                  ),
-                  selectedForegroundColor: AppTheme.primaryIndigo,
-                  side: BorderSide(
-                    color: isDark
-                        ? const Color(0xFF334155)
-                        : const Color(0xFFE2E8F0),
+    return BlocListener<CustomerSelectionBloc, CustomerSelectionState>(
+      listener: _handleSelectionState,
+      child: BlocBuilder<AsyncSearchBloc, AsyncSearchState>(
+        builder: (context, state) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: SegmentedButton<SearchType>(
+                  segments: const [
+                    ButtonSegment<SearchType>(
+                      value: SearchType.customers,
+                      label: Text('Clients'),
+                      icon: Icon(Icons.people_outline_rounded),
+                    ),
+                    ButtonSegment<SearchType>(
+                      value: SearchType.items,
+                      label: Text('Inventory'),
+                      icon: Icon(Icons.inventory_2_outlined),
+                    ),
+                  ],
+                  selected: {state.searchType},
+                  onSelectionChanged: (Set<SearchType> newSelection) {
+                    _searchController.clear();
+                    context.read<AsyncSearchBloc>().add(
+                      SearchTypeChanged(newSelection.first),
+                    );
+                  },
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor: AppTheme.primaryIndigo.withValues(
+                      alpha: 0.15,
+                    ),
+                    selectedForegroundColor: AppTheme.primaryIndigo,
+                    side: BorderSide(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: state.searchType == SearchType.customers
-                    ? 'Search active client names, shops...'
-                    : 'Search catalog SKU, product names...',
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  color: AppTheme.primaryIndigo,
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: state.searchType == SearchType.customers
+                      ? 'Search active client names, shops...'
+                      : 'Search catalog SKU, product names...',
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: AppTheme.primaryIndigo,
+                  ),
+                  suffixIcon: state.query.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(
+                            Icons.cancel,
+                            color: isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.lightTextSecondary,
+                            size: 20,
+                          ),
+                          onPressed: _clearSearch,
+                        )
+                      : null,
                 ),
-                suffixIcon: state.query.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(
-                          Icons.cancel,
-                          color: isDark
-                              ? AppTheme.darkTextSecondary
-                              : AppTheme.lightTextSecondary,
-                          size: 20,
-                        ),
-                        onPressed: _clearSearch,
-                      )
-                    : null,
               ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(child: _buildResultsSection(context, state, isDark)),
-          ],
-        );
-      },
+              const SizedBox(height: 16),
+              Expanded(child: _buildResultsSection(context, state, isDark)),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -260,60 +271,74 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
         separatorBuilder: (context, index) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final customer = state.customerResults[index];
-          return Card(
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 4,
-              ),
-              leading: CircleAvatar(
-                backgroundColor: AppTheme.primaryIndigo.withValues(alpha: 0.12),
-                child: Text(
-                  customer.sequence.toString(),
-                  style: const TextStyle(
-                    color: AppTheme.primaryIndigo,
-                    fontWeight: FontWeight.bold,
+          return BlocBuilder<CustomerSelectionBloc, CustomerSelectionState>(
+            builder: (context, selectionState) {
+              final resolvingId = selectionState is CustomerSelectionResolving
+                  ? selectionState.customerId
+                  : null;
+              return Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
                   ),
-                ),
-              ),
-              title: Text(
-                customer.name,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                _customerAddressOrLocation(customer),
-                style: const TextStyle(fontSize: 12),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: _resolvingCustomerId == customer.id
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('Outstanding', style: TextStyle(fontSize: 10)),
-                        Text(
-                          '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: customer.outstandingBalance > 0
-                                ? AppTheme.errorRose
-                                : AppTheme.successEmerald,
-                          ),
-                        ),
-                      ],
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.primaryIndigo.withValues(
+                      alpha: 0.12,
                     ),
-              onTap: widget.onCustomerSelected != null &&
-                      _resolvingCustomerId == null
-                  ? () => _selectCustomer(customer)
-                  : null,
-            ),
+                    child: Text(
+                      customer.sequence.toString(),
+                      style: const TextStyle(
+                        color: AppTheme.primaryIndigo,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    customer.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    _customerAddressOrLocation(customer),
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: resolvingId == customer.id
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text(
+                              'Outstanding',
+                              style: TextStyle(fontSize: 10),
+                            ),
+                            Text(
+                              '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: customer.outstandingBalance > 0
+                                    ? AppTheme.errorRose
+                                    : AppTheme.successEmerald,
+                              ),
+                            ),
+                          ],
+                        ),
+                  onTap:
+                      widget.onCustomerSelected != null && resolvingId == null
+                      ? () => context.read<CustomerSelectionBloc>().add(
+                          CustomerTapped(customer),
+                        )
+                      : null,
+                ),
+              );
+            },
           );
         },
       );

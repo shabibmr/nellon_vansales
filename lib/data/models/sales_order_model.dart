@@ -1,5 +1,6 @@
 import '../../domain/models/sales_order.dart';
 import 'item_model.dart';
+import 'json_read.dart';
 
 /// Data transfer object representing an [OrderLineItem].
 ///
@@ -18,7 +19,7 @@ class OrderLineItemModel extends OrderLineItem {
 
   /// Factory constructor to parse local/remote JSON maps into an [OrderLineItemModel].
   factory OrderLineItemModel.fromJson(Map<String, dynamic> json) {
-    var item = ItemModel.fromJson(json['item'] ?? json);
+    var item = ItemModel.fromJson(jsonMap(json['item'] ?? json));
     // Line-level tax fields win when Zoho returns them only on the line.
     final lineTaxId = (json['tax_id'] ?? '').toString();
     final lineTaxName = (json['tax_name'] ?? '').toString();
@@ -36,10 +37,10 @@ class OrderLineItemModel extends OrderLineItem {
     final lineUom = (json['unit'] ?? json['uom'] ?? '').toString();
     return OrderLineItemModel(
       item: item,
-      quantity: ((json['quantity'] ?? 1) as num).toDouble(),
-      rate: (json['rate'] ?? 0.0).toDouble(),
-      taxPercentage: (json['tax_percentage'] ?? item.taxPercentage).toDouble(),
-      discount: (json['discount'] ?? 0.0).toDouble(),
+      quantity: jsonDouble(json['quantity'], 1.0),
+      rate: jsonDouble(json['rate']),
+      taxPercentage: jsonDouble(json['tax_percentage'], item.taxPercentage),
+      discount: jsonDouble(json['discount']),
       uom: lineUom.isNotEmpty ? lineUom : item.uom,
       unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
     );
@@ -120,31 +121,26 @@ class SalesOrderModel extends SalesOrder {
         (json['reference_number'] ?? json['referenceNumber'] ?? '').toString();
 
     return SalesOrderModel(
-      id: json['salesorder_id'] ?? json['id'] ?? '',
-      orderNumber: json['salesorder_number'] ?? json['orderNumber'] ?? '',
-      customerId: json['customer_id'] ?? json['customerId'] ?? '',
-      customerName: json['customer_name'] ?? json['customerName'] ?? '',
-      date: json['date'] != null
-          ? DateTime.parse(json['date'])
-          : DateTime.now(),
-      shipmentDate: json['shipment_date'] != null
-          ? DateTime.parse(json['shipment_date'])
-          : DateTime.now(),
+      id: jsonString(json['salesorder_id'] ?? json['id']),
+      orderNumber: jsonString(json['salesorder_number'] ?? json['orderNumber']),
+      customerId: jsonString(json['customer_id'] ?? json['customerId']),
+      customerName: jsonString(json['customer_name'] ?? json['customerName']),
+      date: jsonDate(json['date']),
+      shipmentDate: jsonDate(json['shipment_date']),
       items:
-          (json['line_items'] as List?)
-              ?.map((item) => OrderLineItemModel.fromJson(item))
-              .toList() ??
-          [],
-      notes: json['notes'] ?? '',
-      isPendingSync: json['isPendingSync'] ?? false,
+          jsonList(json['line_items'])
+              .map((item) => OrderLineItemModel.fromJson(jsonMap(item)))
+              .toList(),
+      notes: jsonString(json['notes']),
+      isPendingSync: jsonBool(json['isPendingSync']),
       status: _statusFromZohoFields(
         status: json['status'],
         orderStatus: orderStatus,
         invoicedStatus: invoicedStatus,
       ),
-      convertedInvoiceNumber: json['converted_invoice_number'],
-      zohoOrderId: json['zoho_order_id'],
-      locationId: json['location_id'],
+      convertedInvoiceNumber: jsonStringOrNull(json['converted_invoice_number']),
+      zohoOrderId: jsonStringOrNull(json['zoho_order_id']),
+      locationId: jsonStringOrNull(json['location_id']),
       listedTotal: listedTotal,
       orderStatus: orderStatus,
       invoicedStatus: invoicedStatus,

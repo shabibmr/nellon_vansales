@@ -56,9 +56,12 @@ class _SettingsPageState extends State<SettingsPage> {
           }
         },
         builder: (context, state) {
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
               _sectionTitle('Thermal printer'),
               const SizedBox(height: 8),
               Text(
@@ -339,11 +342,13 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 24),
             ],
-          );
-        },
-      ),
-    );
-  }
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
 
   Widget _sectionTitle(String text) {
     return Text(

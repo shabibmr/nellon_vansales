@@ -133,7 +133,7 @@ void main() {
     final item = SyncQueueItem(
       id: 'c1',
       type: 'customer',
-      payload: const {},
+      payload: const <String, dynamic>{},
       timestamp: DateTime(2026, 8, 16),
     );
     await repo.enqueueSyncItem(item);
@@ -146,7 +146,7 @@ void main() {
         'contact_name': 'AL AMANAH',
         'opening_balance': 0,
         'closing_balance': 0,
-        'transactions': [],
+        'transactions': <dynamic>[],
       };
       final ledger = await repo.fetchCustomerLedger('c1');
       expect(ledger.customerName, 'AL AMANAH');
@@ -159,7 +159,7 @@ void main() {
         'contact_name': '',
         'opening_balance': 0,
         'closing_balance': 0,
-        'transactions': [],
+        'transactions': <dynamic>[],
       };
       final ledger = await repo.fetchCustomerLedger('c1');
       expect(ledger.customerName, 'Local Shop');
@@ -171,7 +171,7 @@ void main() {
         'contact_name': 'Demo Customer',
         'opening_balance': 0,
         'closing_balance': 0,
-        'transactions': [],
+        'transactions': <dynamic>[],
       };
       final ledger = await repo.fetchCustomerLedger('c1');
       expect(ledger.customerName, 'Local Shop');

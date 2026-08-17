@@ -3,13 +3,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/models/customer.dart';
 import '../../../domain/repositories/customer_repository.dart';
 import '../../../domain/repositories/sync_repository.dart';
-import '../../../data/services/injection.dart';
 import '../theme/app_theme.dart';
 import '../extensions/org_context_extension.dart';
 import '../utils/currency.dart';
 import '../utils/snackbars.dart';
 import '../cubit/list_filter_cubit.dart';
 import '../bloc/gps_capture_bloc.dart';
+import '../bloc/customer_selection_bloc.dart';
+import '../bloc/customer_selection_event.dart';
+import '../bloc/customer_selection_state.dart';
 import 'customer_missing_fields_dialog.dart';
 
 /// Generic customer-selector bottom sheet shared by all editor flows.
@@ -41,7 +43,9 @@ class CustomerSelectorSheet extends StatelessWidget {
     Future<void> Function()? onCreateTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return showModalBottomSheet(
+    final customerRepo = context.read<CustomerRepository>();
+    final syncRepo = context.read<SyncRepository>();
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -66,8 +70,13 @@ class CustomerSelectorSheet extends StatelessWidget {
           ),
           BlocProvider<GpsCaptureBloc>(
             create: (_) => GpsCaptureBloc(
-              customerRepository: sl<CustomerRepository>(),
-              syncRepository: sl<SyncRepository>(),
+              customerRepository: customerRepo,
+              syncRepository: syncRepo,
+            ),
+          ),
+          BlocProvider<CustomerSelectionBloc>(
+            create: (_) => CustomerSelectionBloc(
+              customerRepository: customerRepo,
             ),
           ),
         ],
@@ -115,11 +124,9 @@ class _CustomerSelectorSheetBody extends StatefulWidget {
       _CustomerSelectorSheetBodyState();
 }
 
-class _CustomerSelectorSheetBodyState extends State<_CustomerSelectorSheetBody> {
+class _CustomerSelectorSheetBodyState
+    extends State<_CustomerSelectorSheetBody> {
   final _searchController = TextEditingController();
-
-  /// Id of the customer whose TRN is being fetched, or null when idle.
-  String? _resolvingCustomerId;
 
   @override
   void dispose() {
@@ -127,28 +134,36 @@ class _CustomerSelectorSheetBodyState extends State<_CustomerSelectorSheetBody> 
     super.dispose();
   }
 
-  /// Fetches TRN / address (`GET /contacts/{id}`) before notifying the caller.
-  Future<Customer> _resolveDetails(Customer customer) async {
-    if (_resolvingCustomerId != null) return customer;
-    setState(() => _resolvingCustomerId = customer.id);
-    var resolved = customer;
-    var offlineFallback = false;
-    try {
-      final result = await context
-          .read<CustomerRepository>()
-          .resolveCustomerDetails(customer);
-      resolved = result.customer;
-      offlineFallback = result.offlineFallback;
-    } finally {
-      if (mounted) setState(() => _resolvingCustomerId = null);
-    }
-    if (mounted && offlineFallback) {
-      showErrorSnackBar(
+  Future<void> _handleSelectionState(
+    BuildContext context,
+    CustomerSelectionState state,
+  ) async {
+    if (state is CustomerSelectionNeedsMissingFields) {
+      if (state.offlineFallback) {
+        showErrorSnackBar(
+          context,
+          "Couldn't load customer TRN — will retry when online.",
+        );
+      }
+      final resolved = await showCustomerMissingFieldsDialog(
         context,
-        "Couldn't load customer TRN — will retry when online.",
+        gpsBloc: context.read<GpsCaptureBloc>(),
+        customer: state.customer,
       );
+      if (!context.mounted) return;
+      context.read<CustomerSelectionBloc>().add(
+        MissingFieldsResolved(resolved),
+      );
+    } else if (state is CustomerSelectionCompleted) {
+      if (state.offlineFallback) {
+        showErrorSnackBar(
+          context,
+          "Couldn't load customer TRN — will retry when online.",
+        );
+      }
+      widget.onSelected(state.customer);
+      Navigator.of(context).pop();
     }
-    return resolved;
   }
 
   @override
@@ -159,171 +174,180 @@ class _CustomerSelectorSheetBodyState extends State<_CustomerSelectorSheetBody> 
 
     // Lift the sheet above the soft keyboard so the search field stays at the
     // top and the results list remains visible (not covered mid-sheet).
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboardInset),
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.92,
-        minChildSize: 0.55,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) {
-          return Column(
-            children: [
-              const SizedBox(height: 12),
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Select Customer',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  onChanged: (val) => context
-                      .read<ListFilterCubit<Customer>>()
-                      .setQuery(val),
-                  decoration: InputDecoration(
-                    hintText: 'Search by name, company or phone...',
-                    prefixIcon:
-                        Icon(Icons.search, color: widget.accentColor),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-              const Divider(height: 1),
-              if (widget.showCreateOption) ...[
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
+    return BlocListener<CustomerSelectionBloc, CustomerSelectionState>(
+      listener: _handleSelectionState,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboardInset),
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.92,
+          minChildSize: 0.55,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                const SizedBox(height: 12),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 5,
                     decoration: BoxDecoration(
-                      color: widget.accentColor.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.person_add_rounded,
-                      color: widget.accentColor,
-                      size: 20,
+                      color: Colors.grey.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  title: Text(
-                    'Create New Customer',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: widget.accentColor,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Select Customer',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  child: TextField(
+                    controller: _searchController,
+                    autofocus: true,
+                    onChanged: (val) =>
+                        context.read<ListFilterCubit<Customer>>().setQuery(val),
+                    decoration: InputDecoration(
+                      hintText: 'Search by name, company or phone...',
+                      prefixIcon: Icon(Icons.search, color: widget.accentColor),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                  subtitle: Text(widget.createOptionSubtitle),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await widget.onCreateTap?.call();
-                  },
                 ),
                 const Divider(height: 1),
-              ],
-              Expanded(
-                child: BlocBuilder<ListFilterCubit<Customer>,
-                    ListFilterState<Customer>>(
-                  builder: (context, state) {
-                    final filtered = state.filteredItems;
+                if (widget.showCreateOption) ...[
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: widget.accentColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.person_add_rounded,
+                        color: widget.accentColor,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Create New Customer',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: widget.accentColor,
+                      ),
+                    ),
+                    subtitle: Text(widget.createOptionSubtitle),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await widget.onCreateTap?.call();
+                    },
+                  ),
+                  const Divider(height: 1),
+                ],
+                Expanded(
+                  child:
+                      BlocBuilder<
+                        ListFilterCubit<Customer>,
+                        ListFilterState<Customer>
+                      >(
+                        builder: (context, state) {
+                          final filtered = state.filteredItems;
 
-                    if (filtered.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'No customers found',
-                          style: TextStyle(
-                            color: isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary,
-                          ),
-                        ),
-                      );
-                    }
+                          if (filtered.isEmpty) {
+                            return Center(
+                              child: Text(
+                                'No customers found',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? AppTheme.darkTextSecondary
+                                      : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                            );
+                          }
 
-                    return ListView.separated(
-                      controller: scrollController,
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final customer = filtered[index];
-                        return ListTile(
-                          title: Text(
-                            customer.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            _customerAddressOrLocation(customer),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          isThreeLine: false,
-                          trailing: _resolvingCustomerId == customer.id
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : customer.outstandingBalance > 0
-                              ? Text(
-                                  'Outstanding: ${formatCurrency(customer.outstandingBalance, cs)}',
-                                  style: const TextStyle(
-                                    color: AppTheme.errorRose,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                )
-                              : null,
-                          onTap: _resolvingCustomerId != null
-                              ? null
-                              : () async {
-                            final navigator = Navigator.of(context);
-                            final gpsBloc = context.read<GpsCaptureBloc>();
-                            Customer toSelect =
-                                await _resolveDetails(customer);
-                            if (!context.mounted) return;
-
-                            if (CustomerMissingFields.of(toSelect).any) {
-                              final enriched =
-                                  await showCustomerMissingFieldsDialog(
-                                context,
-                                gpsBloc: gpsBloc,
-                                customer: toSelect,
+                          return ListView.separated(
+                            controller: scrollController,
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final customer = filtered[index];
+                              return BlocBuilder<
+                                CustomerSelectionBloc,
+                                CustomerSelectionState
+                              >(
+                                builder: (context, selectionState) {
+                                  final resolvingId =
+                                      selectionState
+                                          is CustomerSelectionResolving
+                                      ? selectionState.customerId
+                                      : null;
+                                  return ListTile(
+                                    title: Text(
+                                      customer.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      _customerAddressOrLocation(customer),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    isThreeLine: false,
+                                    trailing: resolvingId == customer.id
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : customer.outstandingBalance > 0
+                                        ? ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 130,
+                                            ),
+                                            child: Text(
+                                              'Outstanding: ${formatCurrency(customer.outstandingBalance, cs)}',
+                                              textAlign: TextAlign.end,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: AppTheme.errorRose,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          )
+                                        : null,
+                                    onTap: resolvingId != null
+                                        ? null
+                                        : () => context
+                                              .read<CustomerSelectionBloc>()
+                                              .add(CustomerTapped(customer)),
+                                  );
+                                },
                               );
-                              if (enriched == null) return;
-                              toSelect = enriched;
-                            }
-
-                            widget.onSelected(toSelect);
-                            navigator.pop();
-                          },
-                        );
-                      },
-                    );
-                  },
+                            },
+                          );
+                        },
+                      ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }

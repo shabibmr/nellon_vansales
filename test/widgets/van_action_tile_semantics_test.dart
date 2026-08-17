@@ -15,7 +15,6 @@ void main() {
             subtitle: 'Bill a customer',
             icon: Icons.receipt_long,
             color: AppTheme.primaryIndigo,
-            isDark: false,
             onTap: () {},
           ),
         ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/item.dart';
 import '../../../../domain/repositories/report_repository.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
@@ -30,7 +29,7 @@ class StockReportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportBlocHost<Item>(
       create: (_) => ReportBloc<Item>(
-        fetchRemote: () => sl<ReportRepository>().fetchItems(),
+        fetchRemote: () => context.read<ReportRepository>().fetchItems(),
         initialSortField: StockReportSortField.name,
         initialSortAscending: true,
       ),

@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../domain/repositories/expense_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
@@ -37,12 +36,14 @@ class ExpenseLogDialog extends StatefulWidget {
     required bool isDark,
     required VoidCallback onExpenseLogged,
   }) {
+    final expenseRepo = context.read<ExpenseRepository>();
+    final syncRepo = context.read<SyncRepository>();
     return showDialog<void>(
       context: context,
       builder: (_) => BlocProvider<ExpenseLogCubit>(
         create: (_) => ExpenseLogCubit(
-          expenseRepository: sl<ExpenseRepository>(),
-          syncRepository: sl<SyncRepository>(),
+          expenseRepository: expenseRepo,
+          syncRepository: syncRepo,
         ),
         child: ExpenseLogDialog(
           isDark: isDark,
@@ -72,7 +73,7 @@ class _ExpenseLogDialogState extends State<ExpenseLogDialog> {
   }
 
   Future<void> _pickImageSource(StateSetter setDialogState) async {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: widget.isDark
           ? AppTheme.darkBackground

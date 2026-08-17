@@ -5,22 +5,29 @@ import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/customer.dart';
 
 class _FakeDb extends HiveDatabaseService {
-  final Map<String, ({String trn, String address})> details = {};
+  final Map<String, ({String trn, String address, double? latitude, double? longitude})> details = {};
   final List<Customer> customers = [];
 
   @override
   bool hasCustomerDetail(String id) => details.containsKey(id);
 
   @override
-  ({String trn, String address})? getCustomerDetail(String id) => details[id];
+  ({String trn, String address, double? latitude, double? longitude})? getCustomerDetail(String id) => details[id];
 
   @override
   Future<void> saveCustomerDetail(
     String id, {
     required String trn,
     required String address,
+    double? latitude,
+    double? longitude,
   }) async {
-    details[id] = (trn: trn, address: address);
+    details[id] = (
+      trn: trn,
+      address: address,
+      latitude: latitude,
+      longitude: longitude,
+    );
   }
 
   @override
@@ -49,6 +56,8 @@ class _FakeDb extends HiveDatabaseService {
       details[customerId] = (
         trn: trn,
         address: details[customerId]?.address ?? customers[index].address,
+        latitude: details[customerId]?.latitude ?? customers[index].latitude,
+        longitude: details[customerId]?.longitude ?? customers[index].longitude,
       );
     }
   }

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../data/models/sync_queue_item.dart';
 import '../../../domain/models/customer.dart';
-import '../../../domain/repositories/customer_repository.dart';
 import '../bloc/gps_capture_bloc.dart';
 import '../bloc/gps_capture_event.dart';
 import '../bloc/gps_capture_state.dart';
@@ -12,30 +10,28 @@ import '../utils/permission_dialogs.dart';
 import '../utils/snackbars.dart';
 import 'app_text_field.dart';
 
-/// Blocking prompt that asks only for the customer's missing GPS / phone / TRN.
-///
-/// Returns the enriched [Customer] after [SAVE] (fields persisted to Zoho),
-/// the original [Customer] after [SKIP] (selection proceeds unchanged),
-/// or `null` if the user cancelled (selection must not proceed).
-Future<Customer?> showCustomerMissingFieldsDialog(
+/// Non-blocking prompt that offers to fill in the customer's missing GPS /
+/// phone / TRN. Selection always proceeds afterward — SAVE, SKIP, and
+/// dismissing (tap outside / back button) all resolve to a [Customer]; GPS
+/// captured with an accurate fix is persisted immediately regardless of how
+/// the dialog is closed, since it's saved the moment it's captured.
+Future<Customer> showCustomerMissingFieldsDialog(
   BuildContext context, {
   required GpsCaptureBloc gpsBloc,
   required Customer customer,
-}) {
+}) async {
   final missing = CustomerMissingFields.of(customer);
-  if (!missing.any) return Future.value(customer);
+  if (!missing.any) return customer;
 
-  return showDialog<Customer>(
+  final result = await showDialog<Customer>(
     context: context,
-    barrierDismissible: false,
+    barrierDismissible: true,
     builder: (dialogCtx) => BlocProvider.value(
       value: gpsBloc,
-      child: CustomerMissingFieldsDialog(
-        customer: customer,
-        missing: missing,
-      ),
+      child: CustomerMissingFieldsDialog(customer: customer, missing: missing),
     ),
   );
+  return result ?? customer;
 }
 
 class CustomerMissingFieldsDialog extends StatefulWidget {
@@ -84,8 +80,6 @@ class _CustomerMissingFieldsDialogState
 
   bool get _needsTextFields => widget.missing.phone || widget.missing.trn;
 
-  bool get _gpsReady => !widget.missing.gps || _gpsFilled;
-
   bool get _phoneReady {
     if (!widget.missing.phone) return true;
     return _isValidPhone(_phoneController.text);
@@ -96,7 +90,7 @@ class _CustomerMissingFieldsDialogState
     return _isValidTrn(_trnController.text);
   }
 
-  bool get _canComplete => _gpsReady && _phoneReady && _trnReady;
+  bool get _canComplete => _phoneReady && _trnReady;
 
   static bool _isValidPhone(String raw) {
     final digits = raw.trim().replaceAll(RegExp(r'\D'), '');
@@ -109,7 +103,8 @@ class _CustomerMissingFieldsDialogState
   }
 
   void _onGpsSuccess(GpsCaptureSuccess state) {
-    final enriched = state.enrichedCustomer ??
+    final enriched =
+        state.enrichedCustomer ??
         _customer.copyWith(
           latitude: state.latitude,
           longitude: state.longitude,
@@ -120,84 +115,40 @@ class _CustomerMissingFieldsDialogState
     });
   }
 
+  /// SAVE only persists phone/TRN — GPS is already persisted (see
+  /// [_onGpsSuccess]) the moment an accurate fix is captured.
   Future<void> _complete() async {
     if (_saving || !_canComplete) return;
-    if (_needsTextFields && !(_formKey.currentState?.validate() ?? true)) {
-      return;
-    }
+    if (!(_formKey.currentState?.validate() ?? true)) return;
 
     setState(() => _saving = true);
-    try {
-      var result = _customer;
-      if (widget.missing.gps && _gpsFilled) {
-        result = await _persistGps(result);
-      }
-      if (_needsTextFields) {
-        result = await _persistContactFields(result);
-      }
-      if (!mounted) return;
-      Navigator.of(context).pop(result);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      showErrorSnackBar(context, 'Could not save customer details.');
-    }
-  }
-
-  /// Select the customer as originally presented, without persisting typed fields.
-  void _skip() {
-    Navigator.of(context).pop(widget.customer);
-  }
-
-  Future<Customer> _persistGps(Customer customer) async {
-    final lat = customer.latitude;
-    final lng = customer.longitude;
-    if (lat == null || lng == null) return customer;
-
-    final customers = context.read<CustomerRepository>();
-
-    await customers.submitOrEnqueue(
-      SyncQueueItem(
-        id: 'gps_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
-        type: 'customer_gps_update',
-        payload: {
-          'contact_id': customer.id,
-          'latitude': lat,
-          'longitude': lng,
-        },
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
-    );
-
-    return customer;
-  }
-
-  Future<Customer> _persistContactFields(Customer customer) async {
-    final customers = context.read<CustomerRepository>();
+    final bloc = context.read<GpsCaptureBloc>();
     final phone = widget.missing.phone ? _phoneController.text.trim() : null;
     final trn = widget.missing.trn
         ? _trnController.text.trim().replaceAll(RegExp(r'\D'), '')
         : null;
 
-    await customers.submitOrEnqueue(
-      SyncQueueItem(
-        id: 'contact_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
-        type: 'customer_contact_update',
-        payload: {
-          'contact_id': customer.id,
-          if (phone != null) 'phone': phone,
-          if (trn != null) 'tax_reg_no': trn,
-        },
-        status: SyncStatus.pending,
-        timestamp: DateTime.now(),
-      ),
+    final resultFuture = bloc.stream.firstWhere(
+      (s) => s is ContactFieldsSaved || s is ContactFieldsSaveFailure,
     );
+    bloc.add(
+      ContactFieldsSaveRequested(customer: _customer, phone: phone, trn: trn),
+    );
+    final state = await resultFuture;
 
-    return customer.copyWith(
-      phone: phone ?? customer.phone,
-      trn: trn ?? customer.trn,
-    );
+    if (!mounted) return;
+    if (state is ContactFieldsSaved) {
+      Navigator.of(context).pop(state.enrichedCustomer);
+    } else {
+      setState(() => _saving = false);
+      showErrorSnackBar(context, 'Could not save customer details.');
+    }
+  }
+
+  /// Close without persisting typed text; any GPS already captured (and
+  /// therefore already persisted) is retained.
+  void _skip() {
+    Navigator.of(context).pop(_customer);
   }
 
   @override
@@ -207,12 +158,18 @@ class _CustomerMissingFieldsDialogState
     return BlocListener<GpsCaptureBloc, GpsCaptureState>(
       listenWhen: (prev, curr) =>
           curr is GpsCaptureSuccess ||
+          curr is GpsCaptureInaccurate ||
           curr is GpsCapturePermissionDenied ||
           curr is GpsCaptureServiceDisabled ||
           curr is GpsCaptureFailure,
       listener: (ctx, state) {
         if (state is GpsCaptureSuccess) {
           _onGpsSuccess(state);
+        } else if (state is GpsCaptureInaccurate) {
+          showErrorSnackBar(
+            context,
+            'GPS accuracy too low (±${state.accuracy.toStringAsFixed(0)}m) — try again outdoors.',
+          );
         } else if (state is GpsCapturePermissionDenied) {
           showLocationPermissionSettingsDialog(context);
         } else if (state is GpsCaptureServiceDisabled) {
@@ -249,11 +206,11 @@ class _CustomerMissingFieldsDialogState
                         capturing: capturing,
                         enabled: !busy,
                         onCapture: () => ctx.read<GpsCaptureBloc>().add(
-                              GpsCaptureRequested(
-                                customer: _customer,
-                                persist: false,
-                              ),
-                            ),
+                          GpsCaptureRequested(
+                            customer: _customer,
+                            persist: true,
+                          ),
+                        ),
                       ),
                     ],
                     if (missing.phone) ...[
@@ -296,26 +253,23 @@ class _CustomerMissingFieldsDialogState
             ),
             actions: [
               TextButton(
-                onPressed: busy
-                    ? null
-                    : () => Navigator.of(context).pop(null),
-                child: const Text('CANCEL'),
-              ),
-              TextButton(
                 onPressed: busy ? null : _skip,
                 child: const Text('SKIP'),
               ),
-              FilledButton.icon(
-                onPressed: busy || !_canComplete ? null : _complete,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check),
-                label: const Text('SAVE'),
-              ),
+              // GPS already persists the moment it's captured — SAVE only
+              // has work to do (and is only shown) when phone/TRN are typed.
+              if (_needsTextFields)
+                FilledButton.icon(
+                  onPressed: busy || !_canComplete ? null : _complete,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check),
+                  label: const Text('SAVE'),
+                ),
             ],
           );
         },
@@ -365,7 +319,11 @@ class _GpsSection extends StatelessWidget {
       final lng = customer.longitude?.toStringAsFixed(5) ?? '';
       return Row(
         children: [
-          const Icon(Icons.check_circle, color: AppTheme.successEmerald, size: 20),
+          const Icon(
+            Icons.check_circle,
+            color: AppTheme.successEmerald,
+            size: 20,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

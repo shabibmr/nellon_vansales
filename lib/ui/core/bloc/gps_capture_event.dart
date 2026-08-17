@@ -17,3 +17,18 @@ class GpsCaptureRequested extends GpsCaptureEvent {
   @override
   List<Object?> get props => [customer, persist];
 }
+
+class ContactFieldsSaveRequested extends GpsCaptureEvent {
+  final Customer customer;
+  final String? phone;
+  final String? trn;
+
+  const ContactFieldsSaveRequested({
+    required this.customer,
+    this.phone,
+    this.trn,
+  });
+
+  @override
+  List<Object?> get props => [customer, phone, trn];
+}

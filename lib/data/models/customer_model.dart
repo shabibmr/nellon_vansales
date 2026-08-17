@@ -34,22 +34,38 @@ class CustomerModel extends Customer {
   /// Extracts GPS latitude/longitude from Zoho contact JSON.
   ///
   /// Supports multiple shapes seen in practice:
-  /// - top-level cf_latitude / latitude / lat
+  /// - native billing_address / shipping_address {latitude, longitude}
+  /// - top-level latitude / lat / cf_latitude
   /// - custom_field_hash map
   /// - custom_fields array of {api_name, value} or {label, value}
   static (double?, double?) _extractGps(Map<String, dynamic> json) {
-    double? lat = _parseLatLng(json['cf_latitude'] ??
-        json['latitude'] ??
-        json['lat'] ??
-        json['custom_field_hash']?['cf_latitude'] ??
-        json['custom_field_hash']?['latitude']);
+    final billing = json['billing_address'] is Map
+        ? json['billing_address'] as Map
+        : null;
+    final shipping = json['shipping_address'] is Map
+        ? json['shipping_address'] as Map
+        : null;
 
-    double? lng = _parseLatLng(json['cf_longitude'] ??
-        json['longitude'] ??
-        json['lng'] ??
-        json['long'] ??
-        json['custom_field_hash']?['cf_longitude'] ??
-        json['custom_field_hash']?['longitude']);
+    double? lat = _parseLatLng(
+      billing?['latitude'] ??
+          shipping?['latitude'] ??
+          json['latitude'] ??
+          json['lat'] ??
+          json['cf_latitude'] ??
+          json['custom_field_hash']?['cf_latitude'] ??
+          json['custom_field_hash']?['latitude'],
+    );
+
+    double? lng = _parseLatLng(
+      billing?['longitude'] ??
+          shipping?['longitude'] ??
+          json['longitude'] ??
+          json['lng'] ??
+          json['long'] ??
+          json['cf_longitude'] ??
+          json['custom_field_hash']?['cf_longitude'] ??
+          json['custom_field_hash']?['longitude'],
+    );
 
     // Fallback: scan custom_fields array
     final cfs = json['custom_fields'];
@@ -182,7 +198,14 @@ class CustomerModel extends Customer {
     };
     if (latitude != null) map['latitude'] = latitude;
     if (longitude != null) map['longitude'] = longitude;
-    // Also expose cf_ keys for direct Zoho payload convenience in some flows
+    if (address.isNotEmpty || latitude != null || longitude != null) {
+      map['billing_address'] = {
+        if (address.isNotEmpty) 'address': address,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+      };
+    }
+    // Also expose cf_ keys for backwards compatibility
     if (latitude != null) map['cf_latitude'] = latitude;
     if (longitude != null) map['cf_longitude'] = longitude;
     return map;

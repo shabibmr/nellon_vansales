@@ -8,7 +8,6 @@ import '../../../../domain/models/stock_transfer.dart';
 import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/models/warehouse.dart';
 import '../../../../domain/repositories/stock_transfer_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/utils/error_mapper.dart';
 
 // --- Row model ---
@@ -129,6 +128,31 @@ class LoadIssueGridWithDemand extends StockTransferEvent {
 /// Loads the Stock-Unloading grid (current location → warehouse).
 class LoadUnloadGrid extends StockTransferEvent {}
 
+/// Re-opens an existing Issue-to-Van transfer for viewing/editing: builds the
+/// same current-stock grid as [LoadIssueGrid], but prefills each row's
+/// editable quantity from [transfer]'s own lines instead of starting at 0.
+/// Editable only while [transfer.status] is `draft`; read-only otherwise.
+class LoadIssueGridForEdit extends StockTransferEvent {
+  final StockTransfer transfer;
+  const LoadIssueGridForEdit(this.transfer);
+
+  @override
+  List<Object?> get props => [transfer];
+}
+
+/// Re-opens an existing Stock-Unloading transfer for viewing/editing: builds
+/// the same van-stock grid as [LoadUnloadGrid], but prefills each row's
+/// editable quantity from [transfer]'s own lines instead of defaulting to the
+/// full balance. Editable only while [transfer.status] is `draft`; read-only
+/// otherwise.
+class LoadUnloadGridForEdit extends StockTransferEvent {
+  final StockTransfer transfer;
+  const LoadUnloadGridForEdit(this.transfer);
+
+  @override
+  List<Object?> get props => [transfer];
+}
+
 /// Updates the editable quantity (Col 4 for load; transfer qty for unload)
 /// for an existing row. [quantity] is expressed in the row's currently
 /// selected unit; the handler converts it to base units.
@@ -207,6 +231,27 @@ class StockTransferState extends Equatable {
   final String? errorMessage;
   final String? successMessage;
 
+  /// Local id of the transfer being viewed/edited, or null when planning a
+  /// brand-new transfer.
+  final String? editingTransferId;
+
+  /// The transfer's permanent Zoho `transfer_order_id` — required to submit
+  /// an update. Null for a brand-new transfer or one never yet synced.
+  final String? editingZohoTransferId;
+
+  /// The transfer's existing voucher reference (e.g. `TO-00012`), preserved
+  /// across an update so the local record doesn't lose its display number.
+  final String? editingTransferNumber;
+
+  /// The transfer's original issue date, preserved across an update so
+  /// re-saving a draft doesn't silently bump its recorded date to today.
+  final DateTime? editingTransferDate;
+
+  /// Zoho's transfer-order workflow status (`draft`, `transferred`, ...) for
+  /// the transfer being viewed/edited. Meaningless for a brand-new transfer
+  /// (defaults to `draft`, matching a transfer that hasn't reached Zoho yet).
+  final String status;
+
   const StockTransferState({
     this.direction = StockTransferDirection.load,
     this.rows = const [],
@@ -216,6 +261,11 @@ class StockTransferState extends Equatable {
     this.isLiveData = false,
     this.errorMessage,
     this.successMessage,
+    this.editingTransferId,
+    this.editingZohoTransferId,
+    this.editingTransferNumber,
+    this.editingTransferDate,
+    this.status = 'draft',
   });
 
   /// Quantity that actually transfers for [row] (base units), depending on [direction].
@@ -229,6 +279,13 @@ class StockTransferState extends Equatable {
   double get totalTransferQty =>
       rows.fold(0.0, (sum, row) => sum + transferQtyFor(row));
 
+  /// Whether an existing transfer (rather than a brand-new one) is loaded.
+  bool get isEditingExisting => editingTransferId != null;
+
+  /// Locked to view-only: an existing transfer whose Zoho status has moved
+  /// past `draft`. A brand-new transfer is never read-only.
+  bool get isReadOnly => isEditingExisting && status != 'draft';
+
   StockTransferState copyWith({
     StockTransferDirection? direction,
     List<StockTransferRow>? rows,
@@ -238,6 +295,15 @@ class StockTransferState extends Equatable {
     bool? isLiveData,
     String? errorMessage,
     String? successMessage,
+    String? editingTransferId,
+    bool clearEditingTransferId = false,
+    String? editingZohoTransferId,
+    bool clearEditingZohoTransferId = false,
+    String? editingTransferNumber,
+    bool clearEditingTransferNumber = false,
+    DateTime? editingTransferDate,
+    bool clearEditingTransferDate = false,
+    String? status,
   }) {
     return StockTransferState(
       direction: direction ?? this.direction,
@@ -248,6 +314,19 @@ class StockTransferState extends Equatable {
       isLiveData: isLiveData ?? this.isLiveData,
       errorMessage: errorMessage,
       successMessage: successMessage,
+      editingTransferId: clearEditingTransferId
+          ? null
+          : (editingTransferId ?? this.editingTransferId),
+      editingZohoTransferId: clearEditingZohoTransferId
+          ? null
+          : (editingZohoTransferId ?? this.editingZohoTransferId),
+      editingTransferNumber: clearEditingTransferNumber
+          ? null
+          : (editingTransferNumber ?? this.editingTransferNumber),
+      editingTransferDate: clearEditingTransferDate
+          ? null
+          : (editingTransferDate ?? this.editingTransferDate),
+      status: status ?? this.status,
     );
   }
 
@@ -261,6 +340,11 @@ class StockTransferState extends Equatable {
     isLiveData,
     errorMessage,
     successMessage,
+    editingTransferId,
+    editingZohoTransferId,
+    editingTransferNumber,
+    editingTransferDate,
+    status,
   ];
 }
 
@@ -270,18 +354,16 @@ class StockTransferState extends Equatable {
 /// planning grids and their submission as Zoho Transfer Orders.
 class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
   final StockTransferRepository _stockTransferRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SyncRepository _syncRepository;
 
   StockTransferBloc({
     required StockTransferRepository stockTransferRepository,
-    required SyncRepository syncRepository,
   }) : _stockTransferRepository = stockTransferRepository,
-       _syncRepository = syncRepository,
        super(const StockTransferState()) {
     on<LoadIssueGrid>(_onLoadIssueGrid);
     on<LoadIssueGridWithDemand>(_onLoadIssueGridWithDemand);
     on<LoadUnloadGrid>(_onLoadUnloadGrid);
+    on<LoadIssueGridForEdit>(_onLoadIssueGridForEdit);
+    on<LoadUnloadGridForEdit>(_onLoadUnloadGridForEdit);
     on<UpdateExtraQty>(_onUpdateExtraQty);
     on<UpdateRowUnit>(_onUpdateRowUnit);
     on<AddExtraItem>(_onAddExtraItem);
@@ -320,6 +402,11 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         direction: StockTransferDirection.load,
         errorMessage: null,
         successMessage: null,
+        clearEditingTransferId: true,
+        clearEditingZohoTransferId: true,
+        clearEditingTransferNumber: true,
+        clearEditingTransferDate: true,
+        status: 'draft',
       ),
     );
     try {
@@ -379,6 +466,11 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
         direction: StockTransferDirection.unload,
         errorMessage: null,
         successMessage: null,
+        clearEditingTransferId: true,
+        clearEditingZohoTransferId: true,
+        clearEditingTransferNumber: true,
+        clearEditingTransferDate: true,
+        status: 'draft',
       ),
     );
     try {
@@ -408,6 +500,143 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
           currentLocation: currentLocation,
           isLoading: false,
           isLiveData: true,
+        ),
+      );
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)));
+    }
+  }
+
+  /// Shared line-quantity index built from an existing transfer's own lines,
+  /// used to prefill the grid rows opened via [LoadIssueGridForEdit] /
+  /// [LoadUnloadGridForEdit].
+  ({
+    Map<String, double> qty,
+    Map<String, String> uom,
+    Map<String, double> conversionRate,
+  }) _lineIndex(StockTransfer transfer) {
+    final qty = <String, double>{};
+    final uom = <String, String>{};
+    final conversionRate = <String, double>{};
+    for (final line in transfer.lines) {
+      qty[line.item.id] = line.quantity;
+      uom[line.item.id] = line.uom;
+      conversionRate[line.item.id] = line.conversionRate;
+    }
+    return (qty: qty, uom: uom, conversionRate: conversionRate);
+  }
+
+  Future<void> _onLoadIssueGridForEdit(
+    LoadIssueGridForEdit event,
+    Emitter<StockTransferState> emit,
+  ) async {
+    final transfer = event.transfer;
+    emit(
+      state.copyWith(
+        isLoading: true,
+        direction: StockTransferDirection.load,
+        errorMessage: null,
+        successMessage: null,
+      ),
+    );
+    try {
+      final (:items, :live) =
+          await _stockTransferRepository.loadCurrentLocationItems();
+
+      final itemsById = <String, Item>{for (final it in items) it.id: it};
+      for (final line in transfer.lines) {
+        itemsById.putIfAbsent(line.item.id, () => line.item);
+      }
+
+      final index = _lineIndex(transfer);
+      final rows =
+          [
+              for (final item in itemsById.values)
+                if (item.stock > 0 || index.qty.containsKey(item.id))
+                  StockTransferRow(
+                    item: item,
+                    currentStock: item.stock,
+                    extraQty: index.qty[item.id] ?? 0,
+                    uom: index.uom[item.id] ?? '',
+                    conversionRate: index.conversionRate[item.id] ?? 1.0,
+                  ),
+            ]
+            ..sort((a, b) => a.item.name.compareTo(b.item.name));
+
+      final (:defaultWarehouse, :currentLocation) =
+          _stockTransferRepository.resolveTransferLocations();
+
+      emit(
+        state.copyWith(
+          rows: rows,
+          defaultWarehouse: defaultWarehouse,
+          currentLocation: currentLocation,
+          isLoading: false,
+          isLiveData: live,
+          editingTransferId: transfer.id,
+          editingZohoTransferId: transfer.zohoTransferId,
+          editingTransferNumber: transfer.transferNumber,
+          editingTransferDate: transfer.date,
+          status: transfer.status,
+        ),
+      );
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, errorMessage: userFacingMessage(e)));
+    }
+  }
+
+  Future<void> _onLoadUnloadGridForEdit(
+    LoadUnloadGridForEdit event,
+    Emitter<StockTransferState> emit,
+  ) async {
+    final transfer = event.transfer;
+    emit(
+      state.copyWith(
+        isLoading: true,
+        direction: StockTransferDirection.unload,
+        errorMessage: null,
+        successMessage: null,
+      ),
+    );
+    try {
+      final vanItemsById = <String, Item>{
+        for (final it in _stockTransferRepository.getItems())
+          if (it.stock > 0) it.id: it,
+      };
+      for (final line in transfer.lines) {
+        vanItemsById.putIfAbsent(line.item.id, () => line.item);
+      }
+
+      final index = _lineIndex(transfer);
+      final rows =
+          vanItemsById.values
+              .map(
+                (item) => StockTransferRow(
+                  item: item,
+                  currentStock: item.stock,
+                  extraQty: index.qty[item.id] ?? 0,
+                  uom: index.uom[item.id] ?? '',
+                  conversionRate: index.conversionRate[item.id] ?? 1.0,
+                ),
+              )
+              .toList()
+            ..sort((a, b) => a.item.name.compareTo(b.item.name));
+
+      final (:defaultWarehouse, :currentLocation) =
+          _stockTransferRepository.resolveTransferLocations();
+
+      emit(
+        state.copyWith(
+          rows: rows,
+          defaultWarehouse: defaultWarehouse,
+          currentLocation: currentLocation,
+          isLoading: false,
+          isLiveData: true,
+          editingTransferId: transfer.id,
+          editingZohoTransferId: transfer.zohoTransferId,
+          editingTransferNumber: transfer.transferNumber,
+          editingTransferDate: transfer.date,
+          status: transfer.status,
         ),
       );
     } catch (e) {
@@ -486,6 +715,17 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
     SubmitTransfer event,
     Emitter<StockTransferState> emit,
   ) async {
+    if (state.isReadOnly) {
+      emit(
+        state.copyWith(
+          errorMessage:
+              'This transfer has already been processed in Zoho and can no '
+              'longer be edited.',
+        ),
+      );
+      return;
+    }
+
     final linesToTransfer = state.rows
         .where((r) => state.transferQtyFor(r) > 0)
         .toList();
@@ -526,12 +766,16 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
       final fromLocationId = isLoad ? defaultWarehouse.id : currentLocation.id;
       final toLocationId = isLoad ? currentLocation.id : defaultWarehouse.id;
 
-      final tempId = 'temp_to_${DateTime.now().millisecondsSinceEpoch}';
+      final isUpdate = state.isEditingExisting;
+      final id = isUpdate
+          ? state.editingTransferId!
+          : 'temp_to_${DateTime.now().millisecondsSinceEpoch}';
       final transfer = StockTransfer(
-        id: tempId,
-        transferNumber:
-            'TO-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-        date: DateTime.now(),
+        id: id,
+        transferNumber: isUpdate
+            ? (state.editingTransferNumber ?? '')
+            : 'TO-TEMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+        date: isUpdate ? (state.editingTransferDate ?? DateTime.now()) : DateTime.now(),
         direction: state.direction,
         fromLocationId: fromLocationId,
         toLocationId: toLocationId,
@@ -549,15 +793,21 @@ class StockTransferBloc extends Bloc<StockTransferEvent, StockTransferState> {
             .toList(),
         notes: event.notes,
         isPendingSync: true,
+        zohoTransferId: state.editingZohoTransferId,
       );
 
-      final result = await _stockTransferRepository.submitStockTransfer(transfer);
+      final result = await _stockTransferRepository.submitStockTransfer(
+        transfer,
+        isUpdate: isUpdate,
+      );
 
       emit(
         state.copyWith(
           isLoading: false,
           successMessage: result.message(
-            isLoad
+            isUpdate
+                ? 'Transfer updated successfully'
+                : isLoad
                 ? 'Stock issued to van successfully'
                 : 'Stock unloaded successfully',
           ),

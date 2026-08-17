@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../extensions/l10n_context_extension.dart';
 import '../theme/app_theme.dart';
 import 'app_logo.dart';
 
@@ -8,11 +9,11 @@ import 'app_logo.dart';
 /// with a progress bar while [AuthBloc] resolves the cached session.
 class AppSplashScreen extends StatelessWidget {
   /// Status caption displayed beneath the progress bar.
-  final String statusText;
+  final String? statusText;
 
   const AppSplashScreen({
     super.key,
-    this.statusText = 'Verifying session…',
+    this.statusText,
   });
 
   @override
@@ -92,7 +93,7 @@ class AppSplashScreen extends StatelessWidget {
                     const AppLogo(size: 100, showShadow: true),
                     const SizedBox(height: 24),
                     Text(
-                      'VAN SALES PRO',
+                      context.l10n.brandName,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 26,
@@ -103,7 +104,7 @@ class AppSplashScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Predefined Routes & Zoho Books Integration',
+                      context.l10n.brandSubtitle,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -127,7 +128,7 @@ class AppSplashScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      statusText,
+                      statusText ?? context.l10n.verifyingSession,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

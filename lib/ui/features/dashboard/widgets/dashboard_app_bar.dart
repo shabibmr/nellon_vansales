@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../ui/core/extensions/l10n_context_extension.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/widgets/app_logo.dart';
@@ -27,11 +28,11 @@ class DashboardAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: isWideScreen
           ? Text(
               switch (currentIndex) {
-                0 => 'Customers & Routes',
-                1 => 'Analytics & Dashboard',
-                2 => 'Operations Panel',
-                3 => 'Reports & Statements',
-                _ => 'Dashboard',
+                0 => context.l10n.customersAndRoutes,
+                1 => context.l10n.analyticsDashboardTitle,
+                2 => context.l10n.operationsPanelTitle,
+                3 => context.l10n.reportsStatementsTitle,
+                _ => context.l10n.dashboardTitle,
               },
               style: const TextStyle(
                 fontSize: 18,
@@ -133,7 +134,7 @@ class DashboardAppBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
+              MaterialPageRoute<void>(
                 builder: (_) => const UserProfilePage(),
               ),
             );
@@ -145,7 +146,7 @@ class DashboardAppBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
+              MaterialPageRoute<void>(
                 builder: (_) => const SettingsPage(),
               ),
             );

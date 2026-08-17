@@ -4,7 +4,6 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/sync_repository.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/permission_dialogs.dart';
@@ -34,21 +33,24 @@ class CreateCustomerDialog extends StatefulWidget {
     BuildContext context, {
     VoidCallback? onCustomerCreated,
   }) {
+    final customerRepo = context.read<CustomerRepository>();
+    final sessionRepo = context.read<SessionRepository>();
+    final syncRepo = context.read<SyncRepository>();
     return showDialog<Customer>(
       context: context,
       builder: (_) => MultiBlocProvider(
         providers: [
           BlocProvider<GpsCaptureBloc>(
             create: (_) => GpsCaptureBloc(
-              customerRepository: sl<CustomerRepository>(),
-              syncRepository: sl<SyncRepository>(),
+              customerRepository: customerRepo,
+              syncRepository: syncRepo,
             ),
           ),
           BlocProvider<CreateCustomerCubit>(
             create: (_) => CreateCustomerCubit(
-              customerRepository: sl<CustomerRepository>(),
-              sessionRepository: sl<SessionRepository>(),
-              syncRepository: sl<SyncRepository>(),
+              customerRepository: customerRepo,
+              sessionRepository: sessionRepo,
+              syncRepository: syncRepo,
             ),
           ),
         ],
@@ -187,11 +189,13 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                     ),
                   ],
                 ),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  child: Form(
-                    key: _formKey,
-                    child: SingleChildScrollView(
+                content: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Form(
+                      key: _formKey,
+                      child: SingleChildScrollView(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -331,7 +335,8 @@ class _CreateCustomerDialogState extends State<CreateCustomerDialog> {
                     ),
                   ),
                 ),
-                actions: [
+              ),
+              actions: [
                   TextButton(
                     onPressed: isSaving ? null : () => Navigator.pop(context),
                     child: const Text('CANCEL'),

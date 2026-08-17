@@ -56,7 +56,7 @@ class SalesOrderConvertAction extends StatelessWidget {
               compact ? VisualDensity.compact : VisualDensity.standard,
         ),
         onPressed: () {
-          SalesInvoiceEditorPage.open(context, fromOrder: order);
+          SalesInvoiceEditorPage.open<void>(context, fromOrder: order);
         },
       ),
     );

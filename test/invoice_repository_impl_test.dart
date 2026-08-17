@@ -101,7 +101,7 @@ void main() {
         'customer_name': 'Cust',
         'date': '2026-08-16',
         'due_date': '2026-08-23',
-        'line_items': [],
+        'line_items': <dynamic>[],
       };
       final result = await repo.fetchInvoiceById('inv1', forceRemote: true);
       expect(result?.id, 'inv1');
@@ -144,7 +144,7 @@ void main() {
     final item = SyncQueueItem(
       id: 'inv1',
       type: 'invoice',
-      payload: const {},
+      payload: const <String, dynamic>{},
       timestamp: DateTime(2026, 8, 16),
     );
     await repo.enqueueSyncItem(item);

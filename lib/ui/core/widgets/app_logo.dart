@@ -35,6 +35,7 @@ class AppLogo extends StatelessWidget {
       height: size,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.medium,
+      semanticLabel: 'Nellon Van Sales',
       errorBuilder: (context, error, stackTrace) {
         return Icon(
           Icons.local_shipping_rounded,

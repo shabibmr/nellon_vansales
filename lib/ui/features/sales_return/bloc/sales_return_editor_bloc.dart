@@ -11,7 +11,6 @@ import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sales_return_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'sales_return_editor_event.dart';
 import 'sales_return_editor_state.dart';
@@ -21,18 +20,14 @@ class SalesReturnEditorBloc
     extends Bloc<SalesReturnEditorEvent, SalesReturnEditorState> {
   final SalesReturnRepository _salesReturnRepository;
   final CustomerRepository _customerRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SyncRepository _syncRepository;
   final DocumentNumberService _documentNumberService;
 
   SalesReturnEditorBloc({
     required SalesReturnRepository salesReturnRepository,
     required CustomerRepository customerRepository,
-    required SyncRepository syncRepository,
     required DocumentNumberService documentNumberService,
   }) : _salesReturnRepository = salesReturnRepository,
        _customerRepository = customerRepository,
-       _syncRepository = syncRepository,
        _documentNumberService = documentNumberService,
        super(const SalesReturnEditorState()) {
     on<StartNewReturn>(_onStartNewReturn);

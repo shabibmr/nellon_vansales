@@ -71,7 +71,6 @@ class DashboardScaffold extends StatelessWidget {
                 onTapReturns: () => DashboardNavHelpers.showSalesReturnListPage(context, statsCubit),
               ),
               OperationsTab(
-                isDark: isDark || isGlass,
                 ordersOnly: context.read<SalespersonRepository>().isOrdersOnlyMode,
                 onBlocked: () => DashboardNavHelpers.blockIfOrdersOnly(context),
                 onCashClosing: () => DashboardNavHelpers.showCashClosingForm(
@@ -86,13 +85,15 @@ class DashboardScaffold extends StatelessWidget {
                 onManageReturns: () => DashboardNavHelpers.showSalesReturnListPage(context, statsCubit),
                 onManageInvoices: () => DashboardNavHelpers.showSalesInvoiceListPage(context, statsCubit),
                 onManageOrders: () => DashboardNavHelpers.showSalesOrderListPage(context, statsCubit),
-                onIssueToVan: () => DashboardNavHelpers.showIssueToVanPage(context, statsCubit),
-                onStockUnloading: () => DashboardNavHelpers.showStockUnloadingPage(context, statsCubit),
+                onIssueToVan: () => DashboardNavHelpers.showIssueToVanListPage(context, statsCubit),
+                onStockUnloading: () => DashboardNavHelpers.showStockUnloadingListPage(context, statsCubit),
                 onCreateInvoice: () => DashboardNavHelpers.createNewInvoice(context, statsCubit),
                 onCreateOrder: () => DashboardNavHelpers.createNewOrder(context, statsCubit),
                 onCreateExpense: () => DashboardNavHelpers.createNewExpense(context, statsCubit),
                 onCreateReceipt: () => DashboardNavHelpers.createNewReceipt(context, statsCubit),
                 onCreateReturn: () => DashboardNavHelpers.createNewReturn(context, statsCubit),
+                onCreateIssueToVan: () => DashboardNavHelpers.showIssueToVanPage(context, statsCubit),
+                onCreateStockUnloading: () => DashboardNavHelpers.showStockUnloadingPage(context, statsCubit),
               ),
               ReportsTab(
                 isDark: isDark,

@@ -9,6 +9,9 @@ import '../utils/error_mapper.dart';
 import 'gps_capture_event.dart';
 import 'gps_capture_state.dart';
 
+/// GPS fixes worse than this (meters) are rejected rather than persisted.
+const double kMaxAcceptableGpsAccuracyMeters = 50.0;
+
 class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
   final CustomerRepository customerRepository;
   final SyncRepository syncRepository;
@@ -18,6 +21,7 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
     required this.syncRepository,
   }) : super(GpsCaptureIdle()) {
     on<GpsCaptureRequested>(_onGpsCaptureRequested);
+    on<ContactFieldsSaveRequested>(_onContactFieldsSaveRequested);
   }
 
   Future<void> _onGpsCaptureRequested(
@@ -58,11 +62,19 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
 
       final lat = pos.latitude;
       final lng = pos.longitude;
+      final accuracy = pos.accuracy;
+
+      if (accuracy > kMaxAcceptableGpsAccuracyMeters) {
+        emit(GpsCaptureInaccurate(accuracy));
+        return;
+      }
 
       if (event.persist) {
         final customer = event.customer;
         if (customer == null) {
-          emit(const GpsCaptureFailure('Customer is required for persist mode.'));
+          emit(
+            const GpsCaptureFailure('Customer is required for persist mode.'),
+          );
           return;
         }
 
@@ -80,18 +92,60 @@ class GpsCaptureBloc extends Bloc<GpsCaptureEvent, GpsCaptureState> {
           ),
         );
 
-        final enrichedCustomer = customer.copyWith(latitude: lat, longitude: lng);
-        emit(GpsCaptureSuccess(
+        final enrichedCustomer = customer.copyWith(
           latitude: lat,
           longitude: lng,
-          enrichedCustomer: enrichedCustomer,
-        ));
+        );
+        emit(
+          GpsCaptureSuccess(
+            latitude: lat,
+            longitude: lng,
+            accuracy: accuracy,
+            enrichedCustomer: enrichedCustomer,
+          ),
+        );
       } else {
         // Capture-only mode: just return lat/lng
-        emit(GpsCaptureSuccess(latitude: lat, longitude: lng));
+        emit(
+          GpsCaptureSuccess(latitude: lat, longitude: lng, accuracy: accuracy),
+        );
       }
     } catch (e) {
       emit(GpsCaptureFailure(userFacingMessage(e)));
+    }
+  }
+
+  Future<void> _onContactFieldsSaveRequested(
+    ContactFieldsSaveRequested event,
+    Emitter<GpsCaptureState> emit,
+  ) async {
+    emit(ContactFieldsSaveInProgress());
+    try {
+      final customer = event.customer;
+      await customerRepository.submitOrEnqueue(
+        SyncQueueItem(
+          id: 'contact_${customer.id}_${DateTime.now().millisecondsSinceEpoch}',
+          type: 'customer_contact_update',
+          payload: {
+            'contact_id': customer.id,
+            if (event.phone != null) 'phone': event.phone,
+            if (event.trn != null) 'tax_reg_no': event.trn,
+          },
+          status: SyncStatus.pending,
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      emit(
+        ContactFieldsSaved(
+          customer.copyWith(
+            phone: event.phone ?? customer.phone,
+            trn: event.trn ?? customer.trn,
+          ),
+        ),
+      );
+    } catch (e) {
+      emit(ContactFieldsSaveFailure(userFacingMessage(e)));
     }
   }
 }

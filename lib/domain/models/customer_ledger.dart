@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../utils/json_read.dart';
+
 /// A single debit/credit entry in a customer's ledger statement.
 class LedgerTransaction extends Equatable {
   final String transactionId;
@@ -25,17 +27,15 @@ class LedgerTransaction extends Equatable {
 
   factory LedgerTransaction.fromJson(Map<String, dynamic> json) {
     return LedgerTransaction(
-      transactionId: json['transaction_id'] ?? json['id'] ?? '',
+      transactionId: jsonString(json['transaction_id'] ?? json['id']),
       transactionNumber:
-          json['transaction_number'] ?? json['reference_number'] ?? '',
-      date: json['date'] != null
-          ? DateTime.parse(json['date'])
-          : DateTime.now(),
-      type: json['transaction_type'] ?? json['type'] ?? 'unknown',
-      debit: (json['debit'] ?? json['debit_amount'] ?? 0.0).toDouble(),
-      credit: (json['credit'] ?? json['credit_amount'] ?? 0.0).toDouble(),
-      balance: (json['balance'] ?? json['running_balance'] ?? 0.0).toDouble(),
-      description: json['description'] ?? json['reference_number'] ?? '',
+          jsonString(json['transaction_number'] ?? json['reference_number']),
+      date: jsonDate(json['date']),
+      type: jsonString(json['transaction_type'] ?? json['type'], 'unknown'),
+      debit: jsonDouble(json['debit'] ?? json['debit_amount']),
+      credit: jsonDouble(json['credit'] ?? json['credit_amount']),
+      balance: jsonDouble(json['balance'] ?? json['running_balance']),
+      description: jsonString(json['description'] ?? json['reference_number']),
     );
   }
 
@@ -76,15 +76,15 @@ class CustomerLedger extends Equatable {
     Map<String, dynamic> json,
     String customerId,
   ) {
-    final txList = (json['transactions'] as List? ?? [])
-        .map((t) => LedgerTransaction.fromJson(Map<String, dynamic>.from(t)))
+    final txList = jsonList(json['transactions'])
+        .map((t) => LedgerTransaction.fromJson(jsonMap(t)))
         .toList();
 
     return CustomerLedger(
-      customerId: json['contact_id'] ?? customerId,
-      customerName: json['contact_name'] ?? '',
-      openingBalance: (json['opening_balance'] ?? 0.0).toDouble(),
-      closingBalance: (json['closing_balance'] ?? 0.0).toDouble(),
+      customerId: jsonString(json['contact_id'], customerId),
+      customerName: jsonString(json['contact_name']),
+      openingBalance: jsonDouble(json['opening_balance']),
+      closingBalance: jsonDouble(json['closing_balance']),
       transactions: txList,
     );
   }

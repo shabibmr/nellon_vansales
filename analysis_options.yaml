@@ -10,9 +10,17 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
   exclude:
     - "scratch/**"
     - "test/test_org_sync.dart"
+    - "test/test_parsers.dart"
+    - "test/test_all_pages_parsers.dart"
+    - "test/test_all_sync.dart"
+    - "test/test_items_by_location.dart"
 
 
 linter:

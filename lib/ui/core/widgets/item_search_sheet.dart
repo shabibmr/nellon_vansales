@@ -272,9 +272,13 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                           title: Text(
                             item.name,
                             style: const TextStyle(fontWeight: FontWeight.bold),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
                             'SKU: ${item.sku} | Rate: ${formatCurrency(item.rate, cs)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           trailing: isResolving
                               ? const SizedBox(
@@ -287,6 +291,8 @@ class _ItemSearchSheetBodyState extends State<_ItemSearchSheetBody> {
                               : item.stock >= 0
                               ? Text(
                                   'Stock: ${item.stock}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,

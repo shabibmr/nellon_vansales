@@ -57,127 +57,143 @@ class LicenseBlockedScreen extends StatelessWidget {
 
           // Main Content Layer
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32.0,
-                vertical: 24.0,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Spacer(),
-
-                  // Pulsing Glowing Lock Container
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(24.0),
-                      decoration: BoxDecoration(
-                        color: AppTheme.darkSurface.withValues(alpha: 0.6),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.errorRose.withValues(alpha: 0.3),
-                            blurRadius: 30,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                        border: Border.all(
-                          color: AppTheme.errorRose.withValues(alpha: 0.4),
-                          width: 1.5,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 500),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32.0,
+                        vertical: 24.0,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight - 48.0,
                         ),
-                      ),
-                      child: const Icon(
-                        Icons.lock_person_rounded,
-                        size: 64,
-                        color: AppTheme.errorRose,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 48),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Spacer(),
 
-                  // Heading
-                  const Text(
-                    'Access Restricted',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppTheme.darkText,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Glassmorphic Detail Card
-                  Container(
-                    padding: const EdgeInsets.all(24.0),
-                    decoration: BoxDecoration(
-                      color: AppTheme.darkSurface.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFF334155).withValues(alpha: 0.4),
-                        width: 1,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          reason,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xFFCBD5E1),
-                            fontSize: 15,
-                            height: 1.6,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Divider(color: Color(0xFF334155), height: 1),
-                        const SizedBox(height: 20),
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.support_agent_rounded,
-                              size: 20,
-                              color: AppTheme.darkTextSecondary,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              'Please contact your administrator.',
-                              style: TextStyle(
-                                color: AppTheme.darkTextSecondary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
+                              // Pulsing Glowing Lock Container
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(24.0),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.darkSurface.withValues(alpha: 0.6),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.errorRose.withValues(alpha: 0.3),
+                                        blurRadius: 30,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                    border: Border.all(
+                                      color: AppTheme.errorRose.withValues(alpha: 0.4),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.lock_person_rounded,
+                                    size: 64,
+                                    color: AppTheme.errorRose,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                              const SizedBox(height: 48),
 
-                  const Spacer(flex: 2),
+                              // Heading
+                              const Text(
+                                'Access Restricted',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppTheme.darkText,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
 
-                  // Footer brand + security banner
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AppLogo(size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Van Sales Pro • Enterprise Security Gate',
-                        style: TextStyle(
-                          color: Color(0xFF475569),
-                          fontSize: 12,
-                          letterSpacing: 0.5,
-                          fontWeight: FontWeight.w600,
+                              // Glassmorphic Detail Card
+                              Container(
+                                padding: const EdgeInsets.all(24.0),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.darkSurface.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFF334155).withValues(alpha: 0.4),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      reason,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Color(0xFFCBD5E1),
+                                        fontSize: 15,
+                                        height: 1.6,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    const Divider(color: Color(0xFF334155), height: 1),
+                                    const SizedBox(height: 20),
+                                    const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.support_agent_rounded,
+                                          size: 20,
+                                          color: AppTheme.darkTextSecondary,
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          'Please contact your administrator.',
+                                          style: TextStyle(
+                                            color: AppTheme.darkTextSecondary,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const Spacer(flex: 2),
+
+                              // Footer brand + security banner
+                              const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  AppLogo(size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Van Sales Pro • Enterprise Security Gate',
+                                    style: TextStyle(
+                                      color: Color(0xFF475569),
+                                      fontSize: 12,
+                                      letterSpacing: 0.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
             ),
           ),

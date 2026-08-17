@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../domain/utils/phone_normalizer.dart';
+import '../../../../ui/core/extensions/l10n_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/widgets/app_logo.dart';
 import '../bloc/auth_bloc.dart';
+import '../widgets/login_otp_step.dart';
+import '../widgets/login_phone_step.dart';
 
 /// The Login Screen of the Van Sales application.
 ///
@@ -172,7 +174,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          'VAN SALES PRO',
+                          context.l10n.brandName,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 28,
@@ -185,7 +187,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Predefined Routes & Zoho Books Integration',
+                          context.l10n.brandSubtitle,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
@@ -205,8 +207,25 @@ class _LoginPageState extends State<LoginPage> {
                                     state is AuthCodeSent ||
                                     state is AuthVerifyingOtp;
                                 return showOtpStep
-                                    ? _buildOtpStep(context, isDark, state)
-                                    : _buildPhoneStep(context, isDark, state);
+                                    ? LoginOtpStep(
+                                        otpController: _otpController,
+                                        phone: state is AuthCodeSent
+                                            ? state.phone
+                                            : state is AuthVerifyingOtp
+                                            ? state.phone
+                                            : _phoneController.text,
+                                        state: state,
+                                        resendSecondsLeft: _resendSecondsLeft,
+                                        onSubmit: _onOtpSubmit,
+                                        onResend: _onResend,
+                                        onChangeNumber: _onChangeNumber,
+                                      )
+                                    : LoginPhoneStep(
+                                        formKey: _phoneFormKey,
+                                        phoneController: _phoneController,
+                                        state: state,
+                                        onSubmit: _onPhoneSubmit,
+                                      );
                               },
                             ),
                           ),
@@ -223,138 +242,4 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildPhoneStep(BuildContext context, bool isDark, AuthState state) {
-    final isLoading = state is AuthLoading;
-    return Form(
-      key: _phoneFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Agent Sign In',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? AppTheme.darkText : AppTheme.lightText,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Enter your registered mobile number to receive a login code.',
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark
-                  ? AppTheme.darkTextSecondary
-                  : AppTheme.lightTextSecondary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          TextFormField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            autofillHints: const [AutofillHints.telephoneNumber],
-            decoration: const InputDecoration(
-              labelText: 'Mobile Number',
-              hintText: '+<country code><number>',
-            ),
-            validator: (value) {
-              final normalized = normalizePhone((value ?? '').trim());
-              if (!isValidE164(normalized)) {
-                return 'Enter a valid mobile number in international format (e.g. +971501234567)';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: isLoading ? null : _onPhoneSubmit,
-            child: isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Text('SEND CODE'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOtpStep(BuildContext context, bool isDark, AuthState state) {
-    final phone = state is AuthCodeSent
-        ? state.phone
-        : state is AuthVerifyingOtp
-            ? state.phone
-            : _phoneController.text;
-    final canResend = _resendSecondsLeft <= 0;
-    final isVerifying = state is AuthVerifyingOtp;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Enter Code',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: isDark ? AppTheme.darkText : AppTheme.lightText,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'A 6-digit code was sent to $phone.',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark
-                ? AppTheme.darkTextSecondary
-                : AppTheme.lightTextSecondary,
-          ),
-        ),
-        const SizedBox(height: 24),
-        TextFormField(
-          controller: _otpController,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          enabled: !isVerifying,
-          autofillHints: const [AutofillHints.oneTimeCode],
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 22, letterSpacing: 8),
-          decoration: const InputDecoration(
-            counterText: '',
-            hintText: '••••••',
-          ),
-        ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: canResend && !isVerifying ? _onResend : null,
-            child: Text(canResend ? 'Resend code' : 'Resend in ${_resendSecondsLeft}s'),
-          ),
-        ),
-        ElevatedButton(
-          onPressed: isVerifying ? null : _onOtpSubmit,
-          child: isVerifying
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Text('VERIFY'),
-        ),
-        const SizedBox(height: 12),
-        TextButton(
-          onPressed: isVerifying ? null : _onChangeNumber,
-          child: const Text('Change number'),
-        ),
-      ],
-    );
-  }
 }

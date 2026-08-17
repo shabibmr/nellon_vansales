@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../domain/repositories/report_repository.dart';
@@ -41,12 +40,10 @@ class AgingReceivablesReportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sl = GetIt.instance;
-
     return ReportBlocHost<AgingReportData>(
       create: (_) => ReportBloc<AgingReportData>(
         fetchRemote: () async {
-          final repository = sl<ReportRepository>();
+          final repository = context.read<ReportRepository>();
           final invoices = await repository.fetchOpenInvoices();
           final customers = await repository.fetchCustomers();
           final customerNames = {

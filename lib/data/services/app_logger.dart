@@ -1,6 +1,8 @@
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
+import 'error_classification.dart';
+
 /// Severity level for a log line, mirroring common logging framework conventions.
 enum LogLevel { debug, info, warning, error }
 
@@ -59,7 +61,7 @@ class AppLogger {
     bool fatal = false,
   }) async {
     try {
-      final sanitizedReason = reason != null ? _sanitize(reason) : null;
+      final sanitizedReason = reason != null ? sanitize(reason) : null;
       await FirebaseCrashlytics.instance.recordError(
         error,
         stackTrace,
@@ -76,7 +78,7 @@ class AppLogger {
     Object? error,
     StackTrace? stackTrace,
   }) {
-    final sanitized = _sanitize(message);
+    final sanitized = sanitize(message);
     debugPrint('[${level.name.toUpperCase()}] [$tag] $sanitized');
 
     // Resilient Crashlytics breadcrumb and error reporting
@@ -85,13 +87,16 @@ class AppLogger {
         '[${level.name.toUpperCase()}] [$tag] $sanitized',
       );
 
-      if (level == LogLevel.error) {
-        FirebaseCrashlytics.instance.recordError(
-          error ?? Exception('[$tag] $sanitized'),
-          stackTrace,
-          reason: '[$tag] $sanitized',
-          fatal: false,
-        );
+      if (level == LogLevel.error && tag != 'ZohoApi') {
+        final candidate = error ?? Exception('[$tag] $sanitized');
+        if (!isNetworkFailure(candidate)) {
+          FirebaseCrashlytics.instance.recordError(
+            candidate,
+            stackTrace,
+            reason: '[$tag] $sanitized',
+            fatal: false,
+          );
+        }
       }
     } catch (_) {
       // Ignored if Firebase is not initialized or in unsupported test environments
@@ -100,7 +105,7 @@ class AppLogger {
 
   /// Strips known credential-shaped substrings (OAuth tokens, client
   /// secrets, refresh tokens) from a log message before it's emitted.
-  static String _sanitize(String message) {
+  static String sanitize(String message) {
     var sanitized = message;
     for (final pattern in _secretPatterns) {
       sanitized = sanitized.replaceAllMapped(

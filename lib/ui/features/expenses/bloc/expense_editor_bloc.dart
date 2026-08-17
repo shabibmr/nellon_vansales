@@ -7,7 +7,6 @@ import '../../../../data/services/error_classification.dart';
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/expense_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'expense_editor_event.dart';
 import 'expense_editor_state.dart';
@@ -16,14 +15,10 @@ import 'expense_editor_state.dart';
 class ExpenseEditorBloc
     extends Bloc<ExpenseEditorEvent, ExpenseEditorState> {
   final ExpenseRepository _expenseRepository;
-  // ignore: unused_field — kept so existing BlocProvider wiring stays unchanged
-  final SyncRepository _syncRepository;
 
   ExpenseEditorBloc({
     required ExpenseRepository expenseRepository,
-    required SyncRepository syncRepository,
   }) : _expenseRepository = expenseRepository,
-       _syncRepository = syncRepository,
        super(const ExpenseEditorState()) {
     on<StartNewExpense>(_onStartNewExpense);
     on<OpenExpenseEntry>(_onOpenExpenseEntry);

@@ -4,14 +4,12 @@ import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/services/document_number_service.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/data/services/zoho_api_client.dart';
-import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/customer_ledger.dart';
 import 'package:van_sales/domain/repositories/customer_repository.dart';
 import 'package:van_sales/domain/repositories/sales_return_repository.dart';
-import 'package:van_sales/domain/repositories/sync_repository.dart';
 import 'helpers/sales_repository_enqueue_stubs.dart';
 import 'package:van_sales/ui/features/sales_return/bloc/sales_return_editor_bloc.dart';
 import 'package:van_sales/ui/features/sales_return/bloc/sales_return_editor_event.dart';
@@ -30,7 +28,6 @@ class _FakeDocDb extends HiveDatabaseService {
     _counters[tag] = value;
   }
 
-  @override
   int getNextSequence(String key) {
     final next = (_counters[key] ?? 0) + 1;
     _counters[key] = next;
@@ -113,35 +110,6 @@ class FakeSalesRepository
   Future<void> pushCustomerGpsRemote(String customerId, double latitude, double longitude) => throw UnimplementedError();
 }
 
-class FakeSyncRepository implements SyncRepository {
-  int triggerCount = 0;
-
-  @override
-  Future<void> triggerSync({bool forceRetryAll = false}) async {
-    triggerCount++;
-  }
-
-  @override
-  Stream<String> get syncStatusStream => const Stream.empty();
-  @override
-  Stream<int> get syncCountStream => const Stream.empty();
-  @override
-  bool get isSyncing => false;
-  @override
-  List<SyncQueueItem> getSyncQueue() => [];
-  @override
-  Future<void> clearFailedSyncItems() async {}
-  @override
-  Future<void> refreshMasterData() async {}
-  @override
-  Future<void> syncMaster(MasterType type) async {}
-  @override
-  bool hasCoreMasters() => true;
-
-  @override
-  int getMasterRecordCount(MasterType type) => 0;
-}
-
 Item _item(String id) => Item(
       id: id,
       name: 'Item $id',
@@ -171,7 +139,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakeSalesRepository salesRepo;
-  late FakeSyncRepository syncRepo;
   late SalesReturnEditorBloc bloc;
 
   setUp(() {
@@ -187,11 +154,9 @@ void main() {
     );
 
     salesRepo = FakeSalesRepository();
-    syncRepo = FakeSyncRepository();
     bloc = SalesReturnEditorBloc(
       salesReturnRepository: salesRepo,
       customerRepository: salesRepo,
-      syncRepository: syncRepo,
       documentNumberService: sl<DocumentNumberService>(),
     );
   });

@@ -28,6 +28,10 @@ class InvoiceLineItem extends Equatable {
   /// the item's base unit.
   final String unitConversionId;
 
+  /// Zoho invoice `line_item_id` when this line came from a synced invoice.
+  /// Empty for locally created / unsynced lines.
+  final String lineItemId;
+
   /// Creates a new [InvoiceLineItem].
   const InvoiceLineItem({
     required this.item,
@@ -37,6 +41,7 @@ class InvoiceLineItem extends Equatable {
     this.discount = 0.0,
     this.uom = '',
     this.unitConversionId = '',
+    this.lineItemId = '',
   });
 
   /// Effective UOM for display/sync — line override, else item master.
@@ -64,6 +69,7 @@ class InvoiceLineItem extends Equatable {
     double? discount,
     String? uom,
     String? unitConversionId,
+    String? lineItemId,
   }) {
     return InvoiceLineItem(
       item: item ?? this.item,
@@ -73,12 +79,21 @@ class InvoiceLineItem extends Equatable {
       discount: discount ?? this.discount,
       uom: uom ?? this.uom,
       unitConversionId: unitConversionId ?? this.unitConversionId,
+      lineItemId: lineItemId ?? this.lineItemId,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [item, quantity, rate, taxPercentage, discount, uom, unitConversionId];
+  List<Object?> get props => [
+    item,
+    quantity,
+    rate,
+    taxPercentage,
+    discount,
+    uom,
+    unitConversionId,
+    lineItemId,
+  ];
 }
 
 /// Represents a Sales Invoice created during route delivery.

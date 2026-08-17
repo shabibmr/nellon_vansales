@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:van_sales/data/services/hive_database_service.dart';
 import 'package:van_sales/domain/models/salesperson.dart';
 import 'package:van_sales/ui/core/cubit/salesperson_cubit.dart';
 import 'package:van_sales/ui/features/auth/bloc/auth_bloc.dart';
@@ -32,7 +31,7 @@ class _FakeSalespersonCubit extends Cubit<Salesperson?>
   }
 
   @override
-  void refresh(HiveDatabaseService db) {}
+  void refresh() {}
 }
 
 class _FakeAuthBloc extends Fake implements AuthBloc {

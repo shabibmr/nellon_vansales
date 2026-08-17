@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -50,6 +51,74 @@ ErrorCategory classifySyncError(Object error) {
   }
 
   return ErrorCategory.permanent;
+}
+
+/// True when the failure is a transport/connectivity problem, not a Zoho
+/// business-rule, auth, or HTTP-status rejection.
+///
+/// Timeouts, DNS/socket failures, and Dio connection errors count as network.
+/// HTTP 4xx/5xx responses, cancelled requests, and certificate errors do not —
+/// those mean the device reached a server (or failed for a non-network reason).
+bool isNetworkFailure(Object error) {
+  if (error is DioException) {
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.badResponse:
+      case DioExceptionType.cancel:
+      case DioExceptionType.badCertificate:
+        return false;
+      case DioExceptionType.unknown:
+        if (_isSocketShaped(error.error)) return true;
+        return _looksLikeNetworkMessage(
+          '${error.message ?? ''} ${error.error ?? ''}',
+        );
+    }
+  }
+
+  if (error is TimeoutException) return true;
+  if (_isSocketShaped(error)) return true;
+  return _looksLikeNetworkMessage(error.toString());
+}
+
+/// Zoho API failures we want in Crashlytics/Analytics: anything except
+/// network/connectivity and user-cancelled requests.
+bool shouldReportZohoApiFailure(Object error) {
+  if (error is DioException && error.type == DioExceptionType.cancel) {
+    return false;
+  }
+  return !isNetworkFailure(error);
+}
+
+bool _isSocketShaped(Object? error) {
+  if (error == null) return false;
+  final name = error.runtimeType.toString();
+  return name == 'SocketException' || name == 'HandshakeException';
+}
+
+bool _looksLikeNetworkMessage(String raw) {
+  final message = raw.toLowerCase();
+  const needles = [
+    'socketexception',
+    'handshakeexception',
+    'failed host lookup',
+    'network is unreachable',
+    'network_unreachable',
+    'connection refused',
+    'connection reset',
+    'connection abort',
+    'no address associated',
+    'software caused connection abort',
+    'clientexception with socket',
+    'connection timed out',
+    'timed out',
+    'timeoutexception',
+  ];
+  return needles.any(message.contains);
 }
 
 /// Short, user-facing text for a sync failure — prefers Zoho's `message`

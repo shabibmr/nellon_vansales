@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'json_read.dart';
+
 /// Enumerates all sync progression states of local transaction logs.
 enum SyncStatus {
   /// Scheduled to upload.
@@ -80,18 +82,16 @@ class SyncQueueItem extends Equatable {
   /// Parses local database JSON map into a [SyncQueueItem] task.
   factory SyncQueueItem.fromJson(Map<String, dynamic> json) {
     return SyncQueueItem(
-      id: json['id'] ?? '',
-      type: json['type'] ?? '',
-      payload: Map<String, dynamic>.from(json['payload'] ?? {}),
+      id: jsonString(json['id']),
+      type: jsonString(json['type']),
+      payload: jsonMap(json['payload']),
       status: SyncStatus.values.firstWhere(
         (e) => e.name == json['status'],
         orElse: () => SyncStatus.pending,
       ),
-      errorMessage: json['errorMessage'],
-      timestamp: json['timestamp'] != null
-          ? DateTime.parse(json['timestamp'])
-          : DateTime.now(),
-      retryCount: json['retryCount'] as int? ?? 0,
+      errorMessage: jsonStringOrNull(json['errorMessage']),
+      timestamp: jsonDate(json['timestamp']),
+      retryCount: jsonInt(json['retryCount']),
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../../domain/models/salesperson.dart';
 import '../../../core/cubit/salesperson_cubit.dart';
@@ -19,78 +20,132 @@ class UserProfilePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('My Profile')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (salesperson == null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                child: Text(
-                  'No active session.',
-                  style: TextStyle(
-                    color: isDark
-                        ? AppTheme.darkTextSecondary
-                        : AppTheme.lightTextSecondary,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (salesperson == null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Center(
+                      child: Text(
+                        'No active session.',
+                        style: TextStyle(
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
+                        ),
+                      ),
+                    ),
+                  )
+                else ...[
+                  _ProfileHeader(salesperson: salesperson, isDark: isDark),
+                  const SizedBox(height: 20),
+                  _sectionTitle('Contact'),
+                  const SizedBox(height: 8),
+                  _infoCard([
+                    _infoRow(
+                      Icons.phone_outlined,
+                      'Phone',
+                      salesperson.phone,
+                      isDark,
+                    ),
+                    _infoRow(
+                      Icons.email_outlined,
+                      'Email',
+                      salesperson.email,
+                      isDark,
+                    ),
+                  ]),
+                  const SizedBox(height: 20),
+                  _sectionTitle('Assignment'),
+                  const SizedBox(height: 8),
+                  _infoCard([
+                    _infoRow(
+                      Icons.warehouse_outlined,
+                      'Warehouse',
+                      salesperson.locationName,
+                      isDark,
+                    ),
+                    _infoRow(
+                      Icons.account_balance_wallet_outlined,
+                      'Cash Account',
+                      salesperson.cashAccountName,
+                      isDark,
+                    ),
+                    _infoRow(
+                      Icons.tag_outlined,
+                      'Voucher Prefix',
+                      salesperson.voucherPrefix,
+                      isDark,
+                    ),
+                  ]),
+                  const SizedBox(height: 20),
+                  _sectionTitle('Account'),
+                  const SizedBox(height: 8),
+                  _infoCard([
+                    _infoRow(
+                      Icons.badge_outlined,
+                      'Salesperson ID',
+                      salesperson.id,
+                      isDark,
+                    ),
+                    _StatusRow(status: salesperson.status),
+                  ]),
+                ],
+                const SizedBox(height: 20),
+                _sectionTitle('Session'),
+                const SizedBox(height: 8),
+                _infoCard([
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(
+                      Icons.logout,
+                      color: AppTheme.errorRose,
+                      size: 20,
+                    ),
+                    title: const Text(
+                      'Log out',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.errorRose,
+                      ),
+                    ),
+                    onTap: () => attemptLogout(context),
                   ),
+                ]),
+                const SizedBox(height: 20),
+                _sectionTitle('App'),
+                const SizedBox(height: 8),
+                FutureBuilder<PackageInfo>(
+                  future: PackageInfo.fromPlatform(),
+                  builder: (context, snapshot) {
+                    final info = snapshot.data;
+                    return _infoCard([
+                      _infoRow(
+                        Icons.info_outline,
+                        'Version',
+                        info?.version,
+                        isDark,
+                      ),
+                      _infoRow(
+                        Icons.numbers_outlined,
+                        'Build',
+                        info?.buildNumber,
+                        isDark,
+                      ),
+                    ]);
+                  },
                 ),
-              ),
-            )
-          else ...[
-            _ProfileHeader(salesperson: salesperson, isDark: isDark),
-            const SizedBox(height: 20),
-            _sectionTitle('Contact'),
-            const SizedBox(height: 8),
-            _infoCard([
-              _infoRow(Icons.phone_outlined, 'Phone',
-                  salesperson.phone, isDark),
-              _infoRow(Icons.email_outlined, 'Email',
-                  salesperson.email, isDark),
-            ]),
-            const SizedBox(height: 20),
-            _sectionTitle('Assignment'),
-            const SizedBox(height: 8),
-            _infoCard([
-              _infoRow(Icons.warehouse_outlined, 'Warehouse',
-                  salesperson.locationName, isDark),
-              _infoRow(Icons.account_balance_wallet_outlined,
-                  'Cash Account', salesperson.cashAccountName, isDark),
-              _infoRow(Icons.tag_outlined, 'Voucher Prefix',
-                  salesperson.voucherPrefix, isDark),
-            ]),
-            const SizedBox(height: 20),
-            _sectionTitle('Account'),
-            const SizedBox(height: 8),
-            _infoCard([
-              _infoRow(Icons.badge_outlined, 'Salesperson ID',
-                  salesperson.id, isDark),
-              _StatusRow(status: salesperson.status),
-            ]),
-          ],
-          const SizedBox(height: 20),
-          _sectionTitle('Session'),
-          const SizedBox(height: 8),
-          _infoCard([
-            ListTile(
-              dense: true,
-              leading: const Icon(
-                Icons.logout,
-                color: AppTheme.errorRose,
-                size: 20,
-              ),
-              title: const Text(
-                'Log out',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.errorRose,
-                ),
-              ),
-              onTap: () => attemptLogout(context),
+                const SizedBox(height: 24),
+              ],
             ),
-          ]),
-          const SizedBox(height: 24),
-        ],
+          ),
+        ),
       ),
     );
   }

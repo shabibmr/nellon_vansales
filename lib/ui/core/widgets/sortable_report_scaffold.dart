@@ -133,11 +133,11 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
 
   Widget _sortIcon(F field) {
     if (sortField != field) {
-      return const Icon(Icons.unfold_more, size: 14, color: Colors.grey);
+      return const Icon(Icons.unfold_more, size: 16, color: Colors.grey);
     }
     return Icon(
       sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-      size: 14,
+      size: 16,
       color: AppTheme.primaryIndigo,
     );
   }
@@ -167,6 +167,10 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
               tooltip: 'Refresh from Zoho',
               icon: const Icon(Icons.refresh_rounded),
               onPressed: onRefresh,
+              style: IconButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
             ),
           if (_canExport)
             PopupMenuButton<String>(
@@ -255,35 +259,50 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
                       for (final col in columns)
                         Expanded(
                           flex: col.flex,
-                          child: GestureDetector(
-                            onTap: () => onSort(col.field),
-                            child: Row(
-                              mainAxisAlignment: col.alignEnd
-                                  ? MainAxisAlignment.end
-                                  : MainAxisAlignment.start,
-                              children: col.alignEnd
-                                  ? [
-                                      _sortIcon(col.field),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        col.label,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ]
-                                  : [
-                                      Text(
-                                        col.label,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      _sortIcon(col.field),
-                                    ],
+                          child: Semantics(
+                            button: true,
+                            label: 'Sort by ${col.label}',
+                            child: InkWell(
+                              onTap: () => onSort(col.field),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 48,
+                                ),
+                                child: Align(
+                                  alignment: col.alignEnd
+                                      ? Alignment.centerRight
+                                      : Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: col.alignEnd
+                                        ? MainAxisAlignment.end
+                                        : MainAxisAlignment.start,
+                                    children: col.alignEnd
+                                        ? [
+                                            _sortIcon(col.field),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              col.label,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ]
+                                        : [
+                                            Text(
+                                              col.label,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            _sortIcon(col.field),
+                                          ],
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -369,6 +388,8 @@ class _SummaryChipView extends StatelessWidget {
         children: [
           Text(
             chip.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.bold,

@@ -106,7 +106,7 @@ class _SalesOrderListPageState extends State<SalesOrderListPage> {
     required bool readOnly,
     SalesOrder? order,
   }) async {
-    await SalesOrderEditorPage.open(
+    await SalesOrderEditorPage.open<void>(
       context,
       order: order,
       readOnly: readOnly,

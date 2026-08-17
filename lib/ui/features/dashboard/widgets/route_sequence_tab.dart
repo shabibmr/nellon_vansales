@@ -15,7 +15,7 @@ class RouteSequenceTab extends StatelessWidget {
   final bool isDark;
 
   /// Callback triggered when a customer tile is tapped to open actions/details.
-  final Function(Customer customer) onCustomerTap;
+  final void Function(Customer customer) onCustomerTap;
 
   /// Creates a new [RouteSequenceTab] widget.
   const RouteSequenceTab({

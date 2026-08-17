@@ -1,4 +1,5 @@
 import '../../domain/models/sales_return.dart';
+import 'json_read.dart';
 import 'sales_invoice_model.dart';
 
 /// Data transfer object representing a [SalesReturnLineItem].
@@ -17,15 +18,21 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
 
   /// Factory constructor to parse local/remote JSON maps into a [SalesReturnLineItemModel].
   factory SalesReturnLineItemModel.fromJson(Map<String, dynamic> json) {
+    final nested = Map<String, dynamic>.from(
+      (json['invoiceLineItem'] as Map?) ?? json,
+    );
+    final invoiceItemId = (json['invoice_item_id'] ?? nested['line_item_id'])
+        ?.toString();
+    if (invoiceItemId != null && invoiceItemId.isNotEmpty) {
+      nested['line_item_id'] = invoiceItemId;
+    }
     return SalesReturnLineItemModel(
-      invoiceLineItem: InvoiceLineItemModel.fromJson(
-        json['invoiceLineItem'] ?? json,
-      ),
+      invoiceLineItem: InvoiceLineItemModel.fromJson(nested),
       returnedQuantity: ((json['returned_quantity'] ?? json['quantity'] ?? 1)
               as num)
           .toDouble(),
-      invoiceId: json['invoice_id'],
-      invoiceNumber: json['invoice_number'],
+      invoiceId: jsonStringOrNull(json['invoice_id']),
+      invoiceNumber: jsonStringOrNull(json['invoice_number']),
       uom: (json['return_uom'] ?? '').toString(),
       unitConversionId: (json['unit_conversion_id'] ?? '').toString(),
     );
@@ -51,6 +58,8 @@ class SalesReturnLineItemModel extends SalesReturnLineItem {
       // override from the nested invoice line's unit.
       if (uom.isNotEmpty) 'return_uom': uom,
       if (unitConversionId.isNotEmpty) 'unit_conversion_id': unitConversionId,
+      if (invoiceLineItem.lineItemId.isNotEmpty)
+        'invoice_item_id': invoiceLineItem.lineItemId,
       'invoiceLineItem': InvoiceLineItemModel.fromDomain(
         invoiceLineItem,
       ).toJson(),
@@ -100,27 +109,23 @@ class SalesReturnModel extends SalesReturn {
     }
 
     return SalesReturnModel(
-      id: json['creditnote_id'] ?? json['id'] ?? '',
+      id: jsonString(json['creditnote_id'] ?? json['id']),
       creditNoteNumber:
-          json['creditnote_number'] ?? json['creditNoteNumber'] ?? '',
-      customerId: json['customer_id'] ?? json['customerId'] ?? '',
-      customerName: json['customer_name'] ?? json['customerName'] ?? '',
-      date: json['date'] != null
-          ? DateTime.parse(json['date'])
-          : DateTime.now(),
+          jsonString(json['creditnote_number'] ?? json['creditNoteNumber']),
+      customerId: jsonString(json['customer_id'] ?? json['customerId']),
+      customerName: jsonString(json['customer_name'] ?? json['customerName']),
+      date: jsonDate(json['date']),
       items:
-          (json['line_items'] as List?)
-              ?.map((item) => SalesReturnLineItemModel.fromJson(item))
-              .toList() ??
-          [],
-      reason:
+          jsonList(json['line_items'])
+              .map((item) => SalesReturnLineItemModel.fromJson(jsonMap(item)))
+              .toList(),
+      reason: jsonString(
           json['reason'] ??
           json['reason_for_credit_debit_note'] ??
-          json['notes'] ??
-          '',
-      isPendingSync: json['isPendingSync'] ?? false,
-      zohoCreditNoteId: json['zoho_credit_note_id'] ?? json['zohoCreditNoteId'],
-      locationId: json['location_id'],
+          json['notes']),
+      isPendingSync: jsonBool(json['isPendingSync']),
+      zohoCreditNoteId: jsonStringOrNull(json['zoho_credit_note_id'] ?? json['zohoCreditNoteId']),
+      locationId: jsonStringOrNull(json['location_id']),
       listedTotal: listedTotal,
     );
   }

@@ -4,18 +4,17 @@ import '../../../../ui/core/theme/app_theme.dart';
 /// Compact list/grid layout switch for menu-style tabs (Operations, Reports).
 class ListGridToggle extends StatelessWidget {
   final bool isGrid;
-  final bool isDark;
   final ValueChanged<bool> onChanged;
 
   const ListGridToggle({
     super.key,
     required this.isGrid,
-    required this.isDark,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark
         ? AppTheme.darkTextSecondary
         : AppTheme.lightTextSecondary;
@@ -100,12 +99,14 @@ class _ToggleIcon extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Icon(
-              icon,
-              size: 18,
-              color: selected ? selectedFg : unselectedFg,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Center(
+              child: Icon(
+                icon,
+                size: 18,
+                color: selected ? selectedFg : unselectedFg,
+              ),
             ),
           ),
         ),

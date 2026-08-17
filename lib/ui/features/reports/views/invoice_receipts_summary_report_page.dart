@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/repositories/report_repository.dart';
@@ -24,13 +23,12 @@ class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sl = GetIt.instance;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = context.org.currencySymbol;
 
     return ReportBlocHost<ReceiptVoucher>(
       create: (_) => ReportBloc<ReceiptVoucher>(
-        fetchRemote: () => sl<ReportRepository>().fetchReceipts(),
+        fetchRemote: () => context.read<ReportRepository>().fetchReceipts(),
         initialSortField: InvoiceReceiptsSummarySortField.collected,
         initialSortAscending: false,
       ),

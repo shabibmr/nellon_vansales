@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/sales_invoice.dart';
@@ -46,7 +45,7 @@ class TransactionsSummaryReportPage extends StatelessWidget {
     return ReportBlocHost<TransactionsReportData>(
       create: (_) => ReportBloc<TransactionsReportData>(
         fetchRemote: () async {
-          final repo = sl<ReportRepository>();
+          final repo = context.read<ReportRepository>();
           final results = await Future.wait([
             repo.fetchInvoices(),
             repo.fetchReceipts(),

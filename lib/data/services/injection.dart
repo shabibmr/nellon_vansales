@@ -95,10 +95,10 @@ Future<void> setupDependencyInjection() async {
     ),
   );
   sl.registerLazySingleton<SessionRepository>(
-    () => SessionRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => SessionRepositoryImpl(dbService: sl()),
   );
   sl.registerLazySingleton<CashClosingRepository>(
-    () => CashClosingRepositoryImpl(dbService: sl(), apiClient: sl()),
+    () => CashClosingRepositoryImpl(dbService: sl()),
   );
   sl.registerLazySingleton<SalespersonRepository>(
     () => SalespersonRepositoryImpl(dbService: sl(), apiClient: sl()),

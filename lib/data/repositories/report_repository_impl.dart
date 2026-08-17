@@ -8,6 +8,7 @@ import '../../domain/models/sales_order.dart';
 import '../../domain/models/sales_return.dart';
 import '../../domain/models/stock_transfer.dart';
 import '../../domain/repositories/report_repository.dart';
+import '../../domain/utils/stock_transfer_direction.dart';
 import '../models/customer_model.dart';
 import '../models/expense_entry_model.dart';
 import '../models/item_model.dart';
@@ -94,6 +95,19 @@ class ReportRepositoryImpl implements ReportRepository {
   @override
   Future<List<StockTransfer>> fetchStockTransfers() async {
     final raw = await apiClient.fetchStockTransfers();
-    return raw.map((json) => StockTransferModel.fromJson(json)).toList();
+    final vanId =
+        dbService.getCurrentSalesperson()?.locationId ??
+        dbService.assignedWarehouseId;
+    return raw.map((json) {
+      final mapped = StockTransferModel.fromJson(json);
+      return mapped.copyWith(
+        direction: inferStockTransferDirection(
+          fromLocationId: mapped.fromLocationId,
+          toLocationId: mapped.toLocationId,
+          vanLocationId: vanId,
+          stored: mapped.direction,
+        ),
+      );
+    }).toList();
   }
 }

@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../data/services/injection.dart';
 import '../../../domain/repositories/cash_closing_repository.dart';
 import 'bloc/auth_bloc.dart';
 
 /// Signs the user out unless today's cash closing is still pending.
 ///
-/// When [hasPendingCashClosing] is omitted, the live sales repository is
-/// consulted. Pass it explicitly in tests to avoid GetIt.
+/// When [hasPendingCashClosing] is omitted, the live cash-closing
+/// repository is consulted. Pass it explicitly in tests to skip the lookup.
 Future<void> attemptLogout(
   BuildContext context, {
   bool? hasPendingCashClosing,
 }) async {
   final pending = hasPendingCashClosing ??
-      sl<CashClosingRepository>().hasPendingCashClosingForToday();
+      context.read<CashClosingRepository>().hasPendingCashClosingForToday();
   if (!pending) {
     context.read<AuthBloc>().add(LogoutRequested());
     return;

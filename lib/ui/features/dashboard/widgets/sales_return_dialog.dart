@@ -9,7 +9,6 @@ import '../../../../domain/repositories/invoice_repository.dart';
 import '../../../../domain/repositories/item_repository.dart';
 import '../../../../domain/repositories/sales_return_repository.dart';
 import '../../../../data/services/document_number_service.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
@@ -43,8 +42,8 @@ class SalesReturnDialog extends StatelessWidget {
         salesReturnRepository: ctx.read<SalesReturnRepository>(),
         invoiceRepository: ctx.read<InvoiceRepository>(),
         itemRepository: ctx.read<ItemRepository>(),
-        syncWorker: sl<SyncWorker>(),
-        documentNumberService: sl<DocumentNumberService>(),
+        syncWorker: ctx.read<SyncWorker>(),
+        documentNumberService: ctx.read<DocumentNumberService>(),
       )..loadEligibleItems(),
       child: _SalesReturnDialogView(onReturnConfirmed: onReturnConfirmed),
     );

@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/models/sync_queue_item.dart';
 import 'package:van_sales/data/repositories/cash_closing_repository_impl.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
-import 'package:van_sales/data/services/zoho_api_client.dart';
 import 'package:van_sales/domain/models/cash_closing.dart';
 
 class _FakeDb extends HiveDatabaseService {
@@ -27,18 +26,13 @@ class _FakeDb extends HiveDatabaseService {
   }
 }
 
-class _FakeApi extends ZohoApiClient {
-  _FakeApi(HiveDatabaseService db)
-    : super(dbService: db);
-}
-
 void main() {
   late _FakeDb db;
   late CashClosingRepositoryImpl repo;
 
   setUp(() {
     db = _FakeDb();
-    repo = CashClosingRepositoryImpl(dbService: db, apiClient: _FakeApi(db));
+    repo = CashClosingRepositoryImpl(dbService: db);
   });
 
   test('getLocalCashClosing delegates to dbService', () {
@@ -82,7 +76,7 @@ void main() {
     final item = SyncQueueItem(
       id: 'cc1',
       type: 'expense',
-      payload: const {},
+      payload: const <String, dynamic>{},
       timestamp: DateTime(2026, 8, 16),
     );
     await repo.enqueueSyncItem(item);

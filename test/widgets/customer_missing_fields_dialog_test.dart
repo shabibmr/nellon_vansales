@@ -64,7 +64,7 @@ class _FakeSalesRepository
   dynamic noSuchMethod(Invocation invocation) {
     final name = invocation.memberName.toString();
     if (invocation.isGetter) {
-      if (name.contains('Stream')) return const Stream.empty();
+      if (name.contains('Stream')) return const Stream<Never>.empty();
       if (name.contains('isSyncing') || name.contains('hasPending')) {
         return false;
       }
@@ -79,7 +79,7 @@ class _FakeSalesRepository
         name.contains('getSync') ||
         name.contains('getOpen') ||
         name.contains('getWarehouses')) {
-      return [];
+      return <dynamic>[];
     }
     return null;
   }
@@ -90,10 +90,10 @@ class _FakeSyncRepository implements SyncRepository {
   Future<void> triggerSync({bool forceRetryAll = false}) async {}
 
   @override
-  Stream<String> get syncStatusStream => const Stream.empty();
+  Stream<String> get syncStatusStream => const Stream<Never>.empty();
 
   @override
-  Stream<int> get syncCountStream => const Stream.empty();
+  Stream<int> get syncCountStream => const Stream<Never>.empty();
 
   @override
   bool get isSyncing => false;
@@ -210,13 +210,10 @@ void main() {
     expect(find.text('CAPTURE GPS'), findsOneWidget);
     expect(find.text('Phone Number'), findsNothing);
     expect(find.text('TRN Number'), findsNothing);
-    expect(find.text('SAVE'), findsOneWidget);
+    // GPS persists the moment it's captured — there's nothing for SAVE to
+    // do when GPS is the only missing field, so it isn't shown.
+    expect(find.text('SAVE'), findsNothing);
     expect(find.text('SKIP'), findsOneWidget);
-    expect(find.text('CANCEL'), findsOneWidget);
-    expect(
-      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'SAVE')).onPressed,
-      isNull,
-    );
   });
 
   testWidgets('phone-only customer shows phone field, not GPS or TRN',
@@ -236,7 +233,6 @@ void main() {
     expect(find.text('TRN Number'), findsNothing);
     expect(find.text('SAVE'), findsOneWidget);
     expect(find.text('SKIP'), findsOneWidget);
-    expect(find.text('CANCEL'), findsOneWidget);
     expect(
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'SAVE')).onPressed,
       isNull,
@@ -304,22 +300,56 @@ void main() {
     expect(sales.savedPhone, isNull);
   });
 
-  testWidgets('cancel closes without saving or selecting', (tester) async {
-    final resultFuture = await pumpDialog(
-      tester,
-      _customer(
-        trn: '100533986400003',
-        latitude: 25.1,
-        longitude: 55.2,
+  testWidgets(
+      'dismissing via the barrier still selects the customer, without saving',
+      (tester) async {
+    final customer = _customer(
+      trn: '100533986400003',
+      latitude: 25.1,
+      longitude: 55.2,
+    );
+    late Future<Customer> resultFuture;
+    await tester.pumpWidget(
+      MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<CustomerRepository>.value(value: sales),
+          RepositoryProvider<SyncRepository>.value(value: sync),
+        ],
+        child: MaterialApp(
+          home: BlocProvider(
+            create: (_) => GpsCaptureBloc(
+              customerRepository: sales,
+              syncRepository: sync,
+            ),
+            child: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () {
+                    resultFuture = showCustomerMissingFieldsDialog(
+                      context,
+                      gpsBloc: context.read<GpsCaptureBloc>(),
+                      customer: customer,
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.text('CANCEL'));
+    // Tap the modal barrier, well outside the dialog card.
+    await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
     final selected = await resultFuture;
 
     expect(find.byType(CustomerMissingFieldsDialog), findsNothing);
-    expect(selected, isNull);
+    expect(selected.id, customer.id);
+    expect(selected.phone, customer.phone);
     expect(sales.savedPhone, isNull);
     expect(sales.remotePushed, isFalse);
   });

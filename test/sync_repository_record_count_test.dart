@@ -46,7 +46,7 @@ void main() {
   test('list masters count raw Hive entries without deserializing', () {
     db.store['customers'] = ['a', 'b', 'c'];
     db.store['items'] = ['i1'];
-    db.store['warehouses'] = [];
+    db.store['warehouses'] = <dynamic>[];
 
     expect(repo.getMasterRecordCount(MasterType.customers), 3);
     expect(repo.getMasterRecordCount(MasterType.items), 1);

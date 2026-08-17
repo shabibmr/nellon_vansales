@@ -43,57 +43,59 @@ void main() {
     taxPercentage: 0,
   );
 
-  testWidgets('Issue to Van hides invoice and total columns and shows date', (
-    tester,
-  ) async {
-    final bloc = _FakeStockTransferBloc(
-      const StockTransferState(
-        defaultWarehouse: Warehouse(
-          id: 'wh',
-          name: 'Main Store',
-          address: '',
+  testWidgets(
+    'Issue to Van shows a from/to/date header and a line tile per row',
+    (tester) async {
+      final bloc = _FakeStockTransferBloc(
+        const StockTransferState(
+          defaultWarehouse: Warehouse(
+            id: 'wh',
+            name: 'Main Store',
+            address: '',
+          ),
+          currentLocation: Warehouse(
+            id: 'van',
+            name: 'SHINAD',
+            address: '',
+          ),
+          rows: [
+            StockTransferRow(item: item, currentStock: 8, invoiceQty: 3),
+          ],
         ),
-        currentLocation: Warehouse(
-          id: 'van',
-          name: 'SHINAD',
-          address: '',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BlocProvider<StockTransferBloc>.value(
+            value: bloc,
+            child: const IssueToVanPage(),
+          ),
         ),
-        rows: [
-          StockTransferRow(item: item, currentStock: 8, invoiceQty: 3),
-        ],
-      ),
-    );
+      );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: BlocProvider<StockTransferBloc>.value(
-          value: bloc,
-          child: const IssueToVanPage(),
-        ),
-      ),
-    );
+      expect(find.text('Issue to Van'), findsOneWidget);
+      expect(find.text('Main Store'), findsOneWidget);
+      expect(find.text('SHINAD'), findsOneWidget);
+      expect(find.text('Date'), findsOneWidget);
+      expect(
+        find.text(DateFormat('dd MMM yyyy').format(todayDate())),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.event_outlined), findsOneWidget);
 
-    expect(find.text('Issue to Van'), findsOneWidget);
-    expect(find.text('Date'), findsOneWidget);
-    expect(
-      find.text(DateFormat('dd MMM yyyy').format(todayDate())),
-      findsOneWidget,
-    );
-    expect(find.byIcon(Icons.event_outlined), findsOneWidget);
+      // Line tile: item identity + current stock + resulting grand total,
+      // no rate/tax/currency (transfer lines carry no money).
+      expect(find.text('Nellon Ghee'), findsOneWidget);
+      expect(find.textContaining('Current: 8'), findsOneWidget);
+      expect(find.textContaining('Grand:'), findsOneWidget);
 
-    expect(find.text('Item'), findsOneWidget);
-    expect(find.text('Current'), findsOneWidget);
-    expect(find.text('Extra'), findsOneWidget);
-    expect(find.text('Grand'), findsOneWidget);
+      // Notes field is always visible now (was previously hidden).
+      expect(find.widgetWithText(TextField, 'Notes'), findsOneWidget);
 
-    expect(find.text('Invoices'), findsNothing);
-    expect(find.textContaining('Invoices'), findsNothing);
-    expect(find.text('Total'), findsNothing);
-    expect(find.textContaining('Total\n'), findsNothing);
+      // Add Item is available while creating (not read-only).
+      expect(find.widgetWithText(OutlinedButton, 'Add Item'), findsOneWidget);
 
-    expect(find.text('Nellon Ghee'), findsOneWidget);
-    expect(find.text('8'), findsOneWidget);
-
-    await bloc.close();
-  });
+      await bloc.close();
+    },
+  );
 }

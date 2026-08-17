@@ -47,10 +47,18 @@ class CustomerRepositoryImpl implements CustomerRepository {
       return (customer: customer, offlineFallback: false);
     }
 
-    Customer merge(Customer base, {required String trn, required String address}) {
+    Customer merge(
+      Customer base, {
+      required String trn,
+      required String address,
+      double? latitude,
+      double? longitude,
+    }) {
       return base.copyWith(
         trn: base.trn.trim().isNotEmpty ? base.trn : trn,
         address: base.address.trim().isNotEmpty ? base.address : address,
+        latitude: base.latitude ?? latitude,
+        longitude: base.longitude ?? longitude,
       );
     }
 
@@ -61,7 +69,13 @@ class CustomerRepositoryImpl implements CustomerRepository {
     if (_dbService.hasCustomerDetail(id)) {
       final cached = _dbService.getCustomerDetail(id)!;
       return (
-        customer: merge(customer, trn: cached.trn, address: cached.address),
+        customer: merge(
+          customer,
+          trn: cached.trn,
+          address: cached.address,
+          latitude: cached.latitude,
+          longitude: cached.longitude,
+        ),
         offlineFallback: false,
       );
     }
@@ -71,8 +85,22 @@ class CustomerRepositoryImpl implements CustomerRepository {
       final parsed = CustomerModel.fromJson(detail);
       final trn = parsed.trn.trim();
       final address = parsed.address.trim();
-      await _dbService.saveCustomerDetail(id, trn: trn, address: address);
-      final resolved = merge(customer, trn: trn, address: address);
+      final lat = parsed.latitude;
+      final lng = parsed.longitude;
+      await _dbService.saveCustomerDetail(
+        id,
+        trn: trn,
+        address: address,
+        latitude: lat,
+        longitude: lng,
+      );
+      final resolved = merge(
+        customer,
+        trn: trn,
+        address: address,
+        latitude: lat,
+        longitude: lng,
+      );
       await _dbService.upsertCustomer(resolved);
       return (customer: resolved, offlineFallback: false);
     } catch (e) {

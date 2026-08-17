@@ -39,7 +39,7 @@ class LicenseDocument extends Equatable {
       if (value is DateTime) return value;
       // Handle Firestore Timestamp
       try {
-        return value.toDate();
+        return value.toDate() as DateTime;
       } catch (_) {
         // Fallback for string or milliseconds
         if (value is String) {

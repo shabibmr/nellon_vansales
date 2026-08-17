@@ -68,7 +68,7 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
     required bool readOnly,
     ExpenseEntry? expense,
   }) async {
-    await ExpenseEditorPage.open(
+    await ExpenseEditorPage.open<void>(
       context,
       expense: expense,
       readOnly: readOnly,

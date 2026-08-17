@@ -1,4 +1,5 @@
 import '../../domain/models/receipt_voucher.dart';
+import 'json_read.dart';
 
 /// Data transfer object representing a [PaymentAllocation] entry.
 ///
@@ -14,10 +15,9 @@ class PaymentAllocationModel extends PaymentAllocation {
   /// Factory constructor to parse local/remote JSON maps into a [PaymentAllocationModel].
   factory PaymentAllocationModel.fromJson(Map<String, dynamic> json) {
     return PaymentAllocationModel(
-      invoiceId: json['invoice_id'] ?? json['invoiceId'] ?? '',
-      invoiceNumber: json['invoice_number'] ?? json['invoiceNumber'] ?? '',
-      amountApplied: (json['amount_applied'] ?? json['amountApplied'] ?? 0.0)
-          .toDouble(),
+      invoiceId: jsonString(json['invoice_id'] ?? json['invoiceId']),
+      invoiceNumber: jsonString(json['invoice_number'] ?? json['invoiceNumber']),
+      amountApplied: jsonDouble(json['amount_applied'] ?? json['amountApplied']),
     );
   }
 
@@ -72,28 +72,24 @@ class ReceiptVoucherModel extends ReceiptVoucher {
     // see `{prefix}RCT-#####` rather than Zoho's auto payment_number.
     final seriesInReference = referenceNumber.contains('RCT-');
     return ReceiptVoucherModel(
-      id: json['payment_id'] ?? json['id'] ?? '',
+      id: jsonString(json['payment_id'] ?? json['id']),
       paymentNumber:
           seriesInReference && referenceNumber.isNotEmpty
               ? referenceNumber
               : zohoPaymentNumber,
-      customerId: json['customer_id'] ?? json['customerId'] ?? '',
-      customerName: json['customer_name'] ?? json['customerName'] ?? '',
-      // Parses list of dynamic invoice objects into [PaymentAllocationModel] list.
+      customerId: jsonString(json['customer_id'] ?? json['customerId']),
+      customerName: jsonString(json['customer_name'] ?? json['customerName']),
       allocations:
-          (json['invoices'] as List?)
-              ?.map((item) => PaymentAllocationModel.fromJson(item))
-              .toList() ??
-          [],
-      amount: (json['amount'] ?? 0.0).toDouble(),
-      paymentMode: json['payment_mode'] ?? json['paymentMode'] ?? 'Cash',
+          jsonList(json['invoices'])
+              .map((item) => PaymentAllocationModel.fromJson(jsonMap(item)))
+              .toList(),
+      amount: jsonDouble(json['amount']),
+      paymentMode: jsonString(json['payment_mode'] ?? json['paymentMode'], 'Cash'),
       referenceNumber: referenceNumber,
-      date: json['date'] != null
-          ? DateTime.parse(json['date'])
-          : DateTime.now(),
-      isPendingSync: json['isPendingSync'] ?? false,
-      zohoPaymentId: json['zoho_payment_id'] ?? json['zohoPaymentId'],
-      locationId: json['location_id'],
+      date: jsonDate(json['date']),
+      isPendingSync: jsonBool(json['isPendingSync']),
+      zohoPaymentId: jsonStringOrNull(json['zoho_payment_id'] ?? json['zohoPaymentId']),
+      locationId: jsonStringOrNull(json['location_id']),
       // Zoho key is `sales_person_id` (underscore-separated) — different from
       // the `salesperson_id` used by invoices/orders/creditnotes.
       salespersonId: (json['sales_person_id'] ?? json['salespersonId'])

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/customer_ledger.dart';
 import '../../../../domain/repositories/invoice_repository.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
@@ -74,14 +74,14 @@ Future<void> openLedgerTransaction(
     switch (type) {
       case 'invoice':
       case 'debit_note':
-        final invoice = await sl<InvoiceRepository>().fetchInvoiceById(id);
+        final invoice = await context.read<InvoiceRepository>().fetchInvoiceById(id);
         dismissLoading();
         if (!context.mounted) return;
         if (invoice == null) {
           showErrorSnackBar(context, 'Invoice not found.');
           return;
         }
-        await SalesInvoiceEditorPage.open(
+        await SalesInvoiceEditorPage.open<void>(
           context,
           invoice: invoice,
           readOnly: true,
@@ -89,14 +89,14 @@ Future<void> openLedgerTransaction(
         break;
 
       case 'payment':
-        final receipt = await sl<ReceiptRepository>().fetchReceiptById(id);
+        final receipt = await context.read<ReceiptRepository>().fetchReceiptById(id);
         dismissLoading();
         if (!context.mounted) return;
         if (receipt == null) {
           showErrorSnackBar(context, 'Payment receipt not found.');
           return;
         }
-        await ReceiptEditorPage.open(
+        await ReceiptEditorPage.open<void>(
           context,
           receipt: receipt,
           readOnly: true,
@@ -104,7 +104,8 @@ Future<void> openLedgerTransaction(
         break;
 
       case 'credit_note':
-        final salesReturn = await sl<SalesReturnRepository>()
+        final salesReturn = await context
+            .read<SalesReturnRepository>()
             .fetchSalesReturnById(id);
         dismissLoading();
         if (!context.mounted) return;
@@ -112,7 +113,7 @@ Future<void> openLedgerTransaction(
           showErrorSnackBar(context, 'Credit note not found.');
           return;
         }
-        await SalesReturnEditorPage.open(
+        await SalesReturnEditorPage.open<void>(
           context,
           salesReturn: salesReturn,
           readOnly: true,

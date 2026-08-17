@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
@@ -38,7 +37,7 @@ class OrderStatusReportPage extends StatelessWidget {
 
     return ReportBlocHost<SalesOrder>(
       create: (_) => ReportBloc<SalesOrder>(
-        fetchRemote: () => sl<ReportRepository>().fetchSalesOrders(),
+        fetchRemote: () => context.read<ReportRepository>().fetchSalesOrders(),
         initialSortField: OrderStatusSortField.date,
         initialSortAscending: false,
       ),

@@ -42,7 +42,7 @@ class FakeSyncRepository implements SyncRepository {
   @override
   Future<void> clearFailedSyncItems() async {}
   @override
-  Stream<int> get syncCountStream => const Stream.empty();
+  Stream<int> get syncCountStream => const Stream<Never>.empty();
   @override
   bool get isSyncing => false;
   @override
@@ -85,7 +85,7 @@ void main() {
   test('MastersSyncStarted listens to status stream and appends formatted console logs', () async {
     bloc.add(MastersSyncStarted());
     // Give subscription time to attach
-    await Future.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
 
     final logFuture = bloc.stream.first;
     syncRepo.emitStatus('Fetching customers...');

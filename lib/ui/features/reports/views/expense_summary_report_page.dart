@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../data/services/injection.dart';
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/repositories/report_repository.dart';
 import '../../../core/extensions/org_context_extension.dart';
@@ -26,7 +25,7 @@ class ExpenseSummaryReportPage extends StatelessWidget {
 
     return ReportBlocHost<ExpenseEntry>(
       create: (_) => ReportBloc<ExpenseEntry>(
-        fetchRemote: () => sl<ReportRepository>().fetchExpenses(),
+        fetchRemote: () => context.read<ReportRepository>().fetchExpenses(),
         initialSortField: ExpenseSummarySortField.amount,
         initialSortAscending: false,
       ),

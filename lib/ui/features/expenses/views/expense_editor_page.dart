@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/repositories/expense_repository.dart';
-import '../../../../domain/repositories/sync_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
@@ -27,16 +26,14 @@ class ExpenseEditorPage extends StatefulWidget {
     bool readOnly = false,
   }) {
     final expenseRepo = context.read<ExpenseRepository>();
-    final syncRepo = context.read<SyncRepository>();
 
     return Navigator.push<T>(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<T>(
         builder: (_) => BlocProvider(
           create: (_) {
             final bloc = ExpenseEditorBloc(
               expenseRepository: expenseRepo,
-              syncRepository: syncRepo,
             );
             if (expense != null) {
               bloc.add(OpenExpenseEntry(expense));

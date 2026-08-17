@@ -76,6 +76,8 @@ class LineItemList extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -83,6 +85,8 @@ class LineItemList extends StatelessWidget {
                           '${line.uom.isNotEmpty ? ' | UOM: ${line.uom}' : ''}'
                           ' | Rate: ${formatCurrency(line.rate, currencySymbol)} | VAT: ${line.taxPercentage}%'
                           '${line.discount > 0 ? ' | Disc: ${formatCurrency(line.discount, currencySymbol)}' : ''}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11,
                             color: isDark

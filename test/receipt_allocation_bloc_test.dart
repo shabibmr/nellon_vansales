@@ -76,7 +76,6 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
     _counters[tag] = value;
   }
 
-  @override
   int getNextSequence(String key) {
     final next = (_counters[key] ?? 0) + 1;
     _counters[key] = next;

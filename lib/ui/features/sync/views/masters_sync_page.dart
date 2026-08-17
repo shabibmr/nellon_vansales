@@ -155,26 +155,31 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
           return Column(
             children: [
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  children: [
-                    MastersSyncHeader(
-                      state: state,
-                      isDark: isDark,
-                      syncedCount: syncedCount,
-                      totalCount: totalCount,
-                      onLongPressConsole: () {
-                        setState(() => _showConsoleLogs = true);
-                      },
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 680),
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      children: [
+                        MastersSyncHeader(
+                          state: state,
+                          isDark: isDark,
+                          syncedCount: syncedCount,
+                          totalCount: totalCount,
+                          onLongPressConsole: () {
+                            setState(() => _showConsoleLogs = true);
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        MastersSyncCardList(
+                          state: state,
+                          isDark: isDark,
+                          syncedCount: syncedCount,
+                          totalCount: totalCount,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    MastersSyncCardList(
-                      state: state,
-                      isDark: isDark,
-                      syncedCount: syncedCount,
-                      totalCount: totalCount,
-                    ),
-                  ],
+                  ),
                 ),
               ),
               Visibility(
@@ -208,52 +213,57 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: OutlinedButton.icon(
-                onPressed: () => attemptLogout(context),
-                icon: const Icon(Icons.logout),
-                label: const Text('LOG OUT'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  foregroundColor: AppTheme.errorRose,
-                  side: const BorderSide(color: AppTheme.errorRose),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: OutlinedButton.icon(
+                    onPressed: () => attemptLogout(context),
+                    icon: const Icon(Icons.logout),
+                    label: const Text('LOG OUT'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      foregroundColor: AppTheme.errorRose,
+                      side: const BorderSide(color: AppTheme.errorRose),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 3,
-              child: ElevatedButton.icon(
-                onPressed: hasMasters
-                    ? () {
-                        context.read<RouteBloc>().add(LoadRoutes());
-                        // Pushed from Dashboard → pop back. Shown as
-                        // SessionGateway body → LoadRoutes rebuilds gateway
-                        // into Dashboard once masters are present.
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        }
-                      }
-                    : null,
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('PROCEED'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: AppTheme.primaryIndigo,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 3,
+                  child: ElevatedButton.icon(
+                    onPressed: hasMasters
+                        ? () {
+                            context.read<RouteBloc>().add(LoadRoutes());
+                            // Pushed from Dashboard → pop back. Shown as
+                            // SessionGateway body → LoadRoutes rebuilds gateway
+                            // into Dashboard once masters are present.
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            }
+                          }
+                        : null,
+                    icon: const Icon(Icons.arrow_forward),
+                    label: const Text('PROCEED'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: AppTheme.primaryIndigo,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -316,18 +326,24 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
 
         return Column(
           children: [
-            if (failedCount > 0) _buildQueueActionsBar(context, failedCount, syncState),
+            if (failedCount > 0)
+              _buildQueueActionsBar(context, failedCount, syncState),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: list.length,
-                itemBuilder: (context, index) {
-                  final syncItem = list[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _buildQueueCard(syncItem, isDark),
-                  );
-                },
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: list.length,
+                    itemBuilder: (context, index) {
+                      final syncItem = list[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _buildQueueCard(syncItem, isDark),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ],
@@ -340,28 +356,33 @@ class _MastersSyncPageViewState extends State<_MastersSyncPageView>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: AppTheme.errorRose.withValues(alpha: 0.08),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '$failedCount item${failedCount == 1 ? '' : 's'} failed — '
-              'uploads retry automatically when online',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.errorRose,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$failedCount item${failedCount == 1 ? '' : 's'} failed — '
+                  'uploads retry automatically when online',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.errorRose,
+                  ),
+                ),
               ),
-            ),
+              // Queue is view/manage only on this page — never push transactions here.
+              TextButton.icon(
+                onPressed: () =>
+                    context.read<SyncBloc>().add(ClearFailedItemsRequested()),
+                icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                label: const Text('Clear Failed'),
+                style: TextButton.styleFrom(foregroundColor: AppTheme.errorRose),
+              ),
+            ],
           ),
-          // Queue is view/manage only on this page — never push transactions here.
-          TextButton.icon(
-            onPressed: () =>
-                context.read<SyncBloc>().add(ClearFailedItemsRequested()),
-            icon: const Icon(Icons.delete_outline_rounded, size: 16),
-            label: const Text('Clear Failed'),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.errorRose),
-          ),
-        ],
+        ),
       ),
     );
   }

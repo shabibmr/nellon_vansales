@@ -8,14 +8,71 @@
   "operationsTitle": "Operations",
   "reportsTitle": "Reports",
   "customersAndRoutes": "Customers & Routes",
+  "analyticsDashboardTitle": "Analytics & Dashboard",
+  "operationsPanelTitle": "Operations Panel",
+  "reportsStatementsTitle": "Reports & Statements",
   "loginWelcome": "Welcome to Van Sales",
   "enterPhoneNumber": "Enter phone number to receive OTP",
   "phoneNumberLabel": "Phone Number",
   "sendOtpButton": "SEND VERIFICATION CODE",
   "verifyOtpButton": "VERIFY & LOGIN",
+  "brandName": "VAN SALES PRO",
+  "brandSubtitle": "Predefined Routes & Zoho Books Integration",
+  "agentSignIn": "Agent Sign In",
+  "loginPhoneHint": "Enter your registered mobile number to receive a login code.",
+  "mobileNumberLabel": "Mobile Number",
+  "phoneHint": "+<country code><number>",
+  "invalidPhoneFormat": "Enter a valid mobile number in international format (e.g. +971501234567)",
+  "sendCodeButton": "SEND CODE",
+  "enterCodeTitle": "Enter Code",
+  "otpSentTo": "A 6-digit code was sent to {phone}.",
+  "@otpSentTo": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "otpHint": "••••••",
+  "resendCode": "Resend code",
+  "resendInSeconds": "Resend in {seconds}s",
+  "@resendInSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "verifyButton": "VERIFY",
+  "changeNumber": "Change number",
   "syncStatusSynced": "Synced",
   "syncStatusSyncing": "Syncing",
   "syncStatusPending": "Pending",
   "offlineBannerMessage": "Offline — showing cached data",
-  "somethingWentWrong": "Something went wrong. Please try again."
+  "somethingWentWrong": "Something went wrong. Please try again.",
+  "loadingActiveRoute": "Loading active route…",
+  "verifyingSession": "Verifying session…",
+  "salesInvoicesTitle": "Sales Invoices",
+  "salesInvoicesSubtitle": "View, filter, edit, or create offline sales invoices.",
+  "newSalesInvoice": "New Sales Invoice",
+  "salesOrdersTitle": "Sales Orders",
+  "salesOrdersSubtitle": "View, filter, edit, or create offline sales orders.",
+  "newSalesOrder": "New Sales Order",
+  "salesReturnsTitle": "Sales Returns",
+  "salesReturnsSubtitle": "View, filter, edit, or create credit notes for returned goods.",
+  "newSalesReturn": "New Sales Return",
+  "expensesTitle": "Expenses",
+  "expensesSubtitle": "View and log van trip expenses with receipt capture.",
+  "newExpense": "New Expense",
+  "receiptsTitle": "Receipts",
+  "receiptsSubtitle": "View and log customer payment receipt vouchers.",
+  "newReceipt": "New Receipt",
+  "issueToVanTitle": "Issue to Van",
+  "issueToVanSubtitle": "View and plan stock loaded from the default warehouse onto the van.",
+  "newIssueToVan": "New Issue to Van",
+  "stockUnloadingTitle": "Stock Unloading",
+  "stockUnloadingSubtitle": "View and return the van's balance stock back to the default warehouse.",
+  "newStockUnloading": "New Stock Unloading",
+  "dailyCashClosingTitle": "Daily Cash Closing",
+  "dailyCashClosingSubtitle": "End of session cash count, inventory check & Zoho reconciliation."
 }

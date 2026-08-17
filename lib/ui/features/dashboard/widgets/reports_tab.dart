@@ -230,7 +230,6 @@ class ReportsTab extends StatelessWidget {
                         padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                         child: ListGridToggle(
                           isGrid: isGrid,
-                          isDark: isDark,
                           onChanged: (value) =>
                               context.read<ListLayoutCubit>().setGrid(value),
                         ),
@@ -272,7 +271,8 @@ class ReportsTab extends StatelessWidget {
                               crossAxisCount: crossAxisCount,
                               mainAxisSpacing: 10,
                               crossAxisSpacing: 10,
-                              childAspectRatio: 0.95,
+                              childAspectRatio:
+                                  constraints.maxWidth >= 640 ? 1.05 : 0.88,
                             ),
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -282,7 +282,7 @@ class ReportsTab extends StatelessWidget {
                                   subtitle: item.subtitle,
                                   icon: item.icon,
                                   color: item.color,
-                                  isDark: isDark,
+                                 
                                   onTap: item.onTap,
                                   isGrid: true,
                                 );
@@ -312,7 +312,7 @@ class ReportsTab extends StatelessWidget {
                                   subtitle: item.subtitle,
                                   icon: item.icon,
                                   color: item.color,
-                                  isDark: isDark,
+                                 
                                   onTap: item.onTap,
                                 );
                               },
