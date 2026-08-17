@@ -3,9 +3,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../../domain/models/app_update_info.dart';
 import '../cubit/app_update_cubit.dart';
+import '../cubit/app_update_state.dart';
 import 'app_update_panel.dart';
 
-/// Optional (non-forced) update prompt. Dismissible via Later or the barrier.
+/// Optional (non-forced) update prompt.
+///
+/// Before a download starts, Later or the system back button can dismiss it.
+/// The barrier is never tappable so a stray tap cannot hide progress. Once
+/// download/install is in flight, back and Later are both blocked.
 class AppUpdateDialog extends StatelessWidget {
   final AppUpdateInfo updateInfo;
 
@@ -15,14 +20,20 @@ class AppUpdateDialog extends StatelessWidget {
   });
 
   static Future<void> show(BuildContext context, AppUpdateInfo info) {
+    final cubit = context.read<AppUpdateCubit>();
     return showDialog<void>(
       context: context,
-      barrierDismissible: !info.forceUpdate,
-      builder: (dialogCtx) => PopScope(
-        canPop: !info.forceUpdate,
-        child: BlocProvider.value(
-          value: context.read<AppUpdateCubit>(),
-          child: AppUpdateDialog(updateInfo: info),
+      barrierDismissible: false,
+      builder: (dialogCtx) => BlocProvider.value(
+        value: cubit,
+        child: BlocBuilder<AppUpdateCubit, AppUpdateState>(
+          builder: (context, state) {
+            final canDismiss = !info.forceUpdate && !state.isInFlight;
+            return PopScope(
+              canPop: canDismiss,
+              child: AppUpdateDialog(updateInfo: info),
+            );
+          },
         ),
       ),
     );
