@@ -67,6 +67,9 @@ void main() async {
       FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
       return true;
     };
+
+    // Flush previous session logs to Firestore on app startup
+    await DebugFileLogger.flushPreviousSessionIfAny();
   } catch (e) {
     AppLogger.warning('Startup', 'Firebase Initialization Sandbox Warning: $e');
     DebugFileLogger.log('[Startup] Firebase initialization failed: $e');

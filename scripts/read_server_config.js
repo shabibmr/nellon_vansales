@@ -61,13 +61,13 @@ function printDocument(doc) {
   const formatted = { ...decoded };
   if (formatted.client_secret) formatted.client_secret = maskSecret(formatted.client_secret);
   if (formatted.code) formatted.code = maskSecret(formatted.code);
+  if (formatted.refresh_token) formatted.refresh_token = maskSecret(formatted.refresh_token);
 
   console.log(JSON.stringify(formatted, null, 2));
 
   // Sanity validation report
   if (docId === 'zoho') {
-    const hasToken = decoded.refresh_token || decoded.code;
-    const isComplete = decoded.client_id && decoded.client_secret && hasToken && decoded.organization_id;
+    const isComplete = decoded.client_id && decoded.client_secret && (decoded.refresh_token || decoded.code) && decoded.organization_id;
     console.log(`\n[Validation] Status: ${isComplete ? '✅ COMPLETE' : '⚠️ INCOMPLETE'}`);
     console.log(`             Organization: ${decoded.organization_id || '(missing)'}`);
     console.log(`             Mock Mode:    ${decoded.mock_transactions === true ? 'MOCK' : 'LIVE'}`);

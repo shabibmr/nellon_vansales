@@ -82,6 +82,9 @@ dependencies:
   firebase_crashlytics: ^5.2.7
   firebase_analytics: ^12.4.6
 
+  # Hardware key events (Android) — used to toggle the debug console
+  hardware_button_listener: ^0.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

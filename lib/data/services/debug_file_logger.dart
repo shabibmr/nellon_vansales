@@ -17,29 +17,58 @@ class DebugFileLogger {
   const DebugFileLogger._();
 
   static const String _activeLogFileName = 'debug_log.txt';
+
+  /// Android logcat / SurfaceView choke on multi-kilobyte `debugPrint` lines
+  /// (BLASTBufferQueue flood, empty `flutter` tag buffer, UI jank). Keep the
+  /// console and overlay short; the on-device file may retain a bit more.
+  static const int maxConsoleChars = 800;
+  static const int maxStoredChars = 8192;
+
   static Future<void> _tail = Future.value();
   static Directory? _docsDir;
+  static final StreamController<String> _logController =
+      StreamController<String>.broadcast();
 
-  static Future<Directory> _getDirectory() async {
-    return _docsDir ??= await getApplicationDocumentsDirectory();
+  static Future<Directory?> _getDirectory() async {
+    if (_docsDir != null) return _docsDir;
+    try {
+      return _docsDir = await getApplicationDocumentsDirectory();
+    } catch (_) {
+      return null;
+    }
   }
 
-  static Future<File> _getActiveFile() async {
+  static Future<File?> _getActiveFile() async {
     final dir = await _getDirectory();
+    if (dir == null) return null;
     return File('${dir.path}/$_activeLogFileName');
   }
 
-  /// Writes [message] to `debug_log.txt` and outputs to console via [debugPrint].
+  /// Live stream of formatted log lines, for UI consumers like the debug console.
+  static Stream<String> get logStream => _logController.stream;
+
+  /// Truncates [message] for a given sink so huge Zoho JSON never hits logcat.
+  static String clip(String message, int maxChars) {
+    if (message.length <= maxChars) return message;
+    final omitted = message.length - maxChars;
+    return '${message.substring(0, maxChars)}…(+$omitted chars)';
+  }
+
+  /// Writes [message] to `debug_log.txt` and outputs a clipped line to console.
   static void log(String message) {
-    debugPrint(message);
+    final consoleLine = clip(message, maxConsoleChars);
+    debugPrint(consoleLine);
+    _logController.add('${DateTime.now().toIso8601String()} $consoleLine');
     _tail = _tail.then((_) => _appendToFile(message)).catchError((_) {});
   }
 
   static Future<void> _appendToFile(String message) async {
     try {
       final file = await _getActiveFile();
-      final line = '${DateTime.now().toIso8601String()} $message\n';
-      await file.writeAsString(line, mode: FileMode.append, flush: true);
+      if (file == null) return;
+      final line =
+          '${DateTime.now().toIso8601String()} ${clip(message, maxStoredChars)}\n';
+      await file.writeAsString(line, mode: FileMode.append);
     } catch (_) {
       // Logging must never crash the app.
     }
@@ -53,6 +82,7 @@ class DebugFileLogger {
   static Future<void> flushPreviousSessionIfAny() async {
     try {
       final dir = await _getDirectory();
+      if (dir == null) return;
       final activeFile = File('${dir.path}/$_activeLogFileName');
 
       // 1. Rename existing active log file with microsecond timestamp (6 decimal places)
@@ -62,7 +92,6 @@ class DebugFileLogger {
             .replaceAll(RegExp(r'[^0-9]'), ''); // YYYYMMDDTHHMMSSffffff
         final renamedFile = File('${dir.path}/debug_log_$timestampStr.txt');
         await activeFile.rename(renamedFile.path);
-        DebugFileLogger.log('🎬 [Test Check] Favorite Pair: Leonardo DiCaprio & Kate Winslet');
       }
 
       // Legacy cleanup: rename previous debug_logs.txt (plural) if it exists from earlier builds
@@ -135,14 +164,14 @@ class DebugFileLogger {
   /// Returns the current active log file path.
   static Future<String> getActiveFilePath() async {
     final file = await _getActiveFile();
-    return file.path;
+    return file?.path ?? '';
   }
 
   /// Reads the current content of the active log file `debug_log.txt`.
   static Future<String> readActiveLog() async {
     try {
       final file = await _getActiveFile();
-      if (await file.exists()) {
+      if (file != null && await file.exists()) {
         return await file.readAsString();
       }
       return '';
@@ -155,7 +184,7 @@ class DebugFileLogger {
   static Future<void> clearActiveLog() async {
     try {
       final file = await _getActiveFile();
-      if (await file.exists()) {
+      if (file != null && await file.exists()) {
         await file.delete();
       }
     } catch (_) {}
@@ -166,6 +195,9 @@ class DebugFileLogger {
   static Future<Map<String, dynamic>> uploadToFirestoreNow() async {
     try {
       final dir = await _getDirectory();
+      if (dir == null) {
+        return {'success': false, 'error': 'Directory unavailable'};
+      }
       final activeFile = File('${dir.path}/$_activeLogFileName');
 
       if (!await activeFile.exists() || (await activeFile.length()) == 0) {

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/services/app_logger.dart';
+import 'package:van_sales/data/services/debug_file_logger.dart';
 
 void main() {
   group('AppLogger sanitization', () {
@@ -56,6 +57,16 @@ void main() {
         AppLogger.sanitize('Authorization: Zoho-oauthtoken abc.def'),
         contains('[REDACTED]'),
       );
+    });
+
+    test('clips oversized lines before they reach debugPrint', () {
+      final huge = 'x' * 5000;
+      AppLogger.info('ZohoApi', huge);
+      expect(captured, hasLength(1));
+      expect(captured.single.length, lessThan(900));
+      expect(captured.single, contains('(+'));
+      expect(captured.single, contains('chars)'));
+      expect(captured.single, isNot(contains(huge)));
     });
   });
 }

@@ -11,6 +11,7 @@
     - Automatic Git Release Notes: Auto-extracts latest commit message if -Notes is omitted.
     - Local Device Sideload: Pass `-Install` to install immediately to a connected phone via ADB.
     - Safety DryRun: Pass `-DryRun` to verify parameters without executing network/build actions.
+    - Local Console Log: Every run's console output is mirrored to a timestamped file under -LogDir.
 
 .USAGE
     # Fast test deploy with smart pub caching & scp compression
@@ -27,6 +28,9 @@
 
     # Target production channel with custom notes
     pwsh -File super_test_deploy_arm64.ps1 -Channel production -RemoteDir /var/www/html/algo_cloud/nellon -Notes "Hotfix sync worker"
+
+    # Write the console log somewhere other than the default ./logs folder
+    pwsh -File super_test_deploy_arm64.ps1 -LogDir C:\deploy-logs
 #>
 
 [CmdletBinding()]
@@ -47,12 +51,26 @@ param(
     [switch]$SkipUpload,
     [switch]$Install,
     [switch]$VerifySign,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [string]$LogDir = 'logs'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = $PSScriptRoot
 Set-Location $repoRoot
+
+# Mirror everything written to the console (Write-Host, cmdlet output, and
+# stdout/stderr of native commands like flutter/ssh/scp/node) to a local file.
+$resolvedLogDir = if ([System.IO.Path]::IsPathRooted($LogDir)) { $LogDir } else { Join-Path $repoRoot $LogDir }
+if (-not (Test-Path -LiteralPath $resolvedLogDir)) {
+    New-Item -ItemType Directory -Path $resolvedLogDir -Force | Out-Null
+}
+$logTimestamp = (Get-Date).ToString("yyyyMMdd_HHmmss")
+$logFile = Join-Path $resolvedLogDir "deploy_arm64_${Channel}_${logTimestamp}.log"
+Start-Transcript -Path $logFile -Force | Out-Null
+Write-Host "Console log: $logFile" -ForegroundColor DarkGray
+
+try {
 
 function Log-StepStart {
     param([string]$Message)
@@ -151,7 +169,7 @@ if ($Bump -or $Patch -or $Minor -or $Major) {
         if ($Minor) { $bumpArgs['Minor'] = $true }
         if ($Major) { $bumpArgs['Major'] = $true }
         if ($DryRun) { $bumpArgs['DryRun'] = $true }
-        
+
         $newVersion = & $bumpScript @bumpArgs
         Write-Host "Version updated to: $newVersion" -ForegroundColor Green
     } else {
@@ -178,7 +196,7 @@ if (-not $useNoPub) {
 # Step 2: Build ARM64 APK
 if (-not $SkipBuild) {
     $step2Sw = Log-StepStart "Building ARM64 release APK (flutter build apk --release --target-platform android-arm64)..."
-    
+
     if ($DryRun) {
         Write-Host "[DRY RUN] Would execute: flutter build apk --release --target-platform android-arm64 $(if ($useNoPub) { '--no-pub' })" -ForegroundColor Magenta
     } else {
@@ -282,7 +300,7 @@ if (-not $SkipUpload) {
 # Step 6: Update Firestore Metadata
 if (-not $SkipFirestore -and -not $SkipUpload) {
     $stepFireSw = Log-StepStart "Updating $Channel channel version metadata in Firestore..."
-    
+
     # Auto-generate notes from latest git commit if blank
     $effectiveNotes = $Notes
     if ([string]::IsNullOrWhiteSpace($effectiveNotes)) {
@@ -329,4 +347,9 @@ $totalElapsedFormatted = "{0:D2}m {1:D2}s ({2:N2}s total)" -f [int]$totalElapsed
 
 Write-Host "`n==================================================" -ForegroundColor Green
 Write-Host "[$scriptEndTs] Super Fast Deploy Complete! [Total Elapsed: $totalElapsedFormatted]" -ForegroundColor Green
+Write-Host "Console log saved to: $logFile" -ForegroundColor Green
 Write-Host "==================================================" -ForegroundColor Green
+
+} finally {
+    Stop-Transcript | Out-Null
+}

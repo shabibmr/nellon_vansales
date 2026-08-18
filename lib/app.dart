@@ -62,7 +62,7 @@ import 'ui/features/thermal_print/cubit/thermal_printer_cubit.dart';
 import 'data/services/app_update_service.dart';
 import 'ui/features/app_update/cubit/app_update_cubit.dart';
 import 'ui/features/app_update/views/app_update_gate.dart';
-import 'ui/features/debug/views/debug_logger_test_page.dart';
+import 'ui/features/debug/widgets/debug_console_overlay.dart';
 
 /// The root widget of the Van Sales Pro application.
 ///
@@ -243,6 +243,7 @@ class VanSalesApp extends StatelessWidget {
                     child: child ?? const SizedBox.shrink(),
                   ),
                   const VersionBuildWatermark(),
+                  const DebugConsoleOverlay(),
                 ],
               ),
               home: const AppUpdateGate(child: SessionGateway()),
@@ -305,17 +306,7 @@ class SessionGateway extends StatelessWidget {
               statusText: context.l10n.verifyingSession,
             );
           }
-          return const Column(
-            children: [
-              SafeArea(
-                bottom: false,
-                child: DebugLoggerTestPage(),
-              ),
-              Expanded(
-                child: LoginPage(),
-              ),
-            ],
-          );
+          return const LoginPage();
         },
       ),
     );

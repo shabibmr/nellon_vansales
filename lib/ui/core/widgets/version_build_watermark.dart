@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-/// Near-invisible "v{version}+{build}" label pinned to the bottom-right
-/// corner of every screen, mounted once via `MaterialApp.builder`.
+/// Small always-on-top corner label showing the running app version + build
+/// number, for quick identification during QA / support screenshots.
 class VersionBuildWatermark extends StatefulWidget {
   const VersionBuildWatermark({super.key});
 
@@ -24,21 +24,21 @@ class _VersionBuildWatermarkState extends State<VersionBuildWatermark> {
 
   @override
   Widget build(BuildContext context) {
-    final label = _label;
-    if (label == null) return const SizedBox.shrink();
-
-    final baseColor = Theme.of(context).textTheme.bodySmall?.color ??
-        Theme.of(context).colorScheme.onSurface;
-
-    return Positioned(
-      right: 6,
-      bottom: 6 + MediaQuery.paddingOf(context).bottom,
-      child: IgnorePointer(
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: baseColor.withValues(alpha: 0.12),
+    if (_label == null) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: SafeArea(
+        child: Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Text(
+              _label!,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.35),
+                fontSize: 9,
+                fontFamily: 'monospace',
+              ),
+            ),
           ),
         ),
       ),
