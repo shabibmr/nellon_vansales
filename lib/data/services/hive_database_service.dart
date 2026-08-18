@@ -40,6 +40,7 @@ import '../models/open_invoice_model.dart';
 import '../models/sales_order_model.dart';
 import '../models/stock_transfer_model.dart';
 import '../models/sync_queue_item.dart';
+import 'local_storage_service.dart';
 
 /// Database service backing the application's offline-first capabilities using Hive boxes.
 ///
@@ -93,6 +94,7 @@ class HiveDatabaseService {
     _syncQueueBox = await Hive.openBox(_syncQueueBoxName);
     _localHistoryBox = await Hive.openBox(_localHistoryBoxName);
     _itemUomBox = await Hive.openBox(_itemUomBoxName);
+    await Hive.openBox<dynamic>(LocalStorageService.boxName);
   }
 
   /// Clears all local caches, queues, and transaction histories.

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'app_logger.dart';
+import 'debug_file_logger.dart';
 import 'error_classification.dart';
 import 'firebase_telemetry.dart';
 import 'hive_database_service.dart';
@@ -57,6 +58,11 @@ class ZohoApiClient {
     final nextId = clientId.trim();
     final nextSecret = clientSecret.trim();
     final nextRefresh = refreshToken.trim();
+    DebugFileLogger.log(
+      '[ZohoApiClient] 🔑 updateCredentials called: '
+      'clientId="$nextId", clientSecret="$nextSecret", '
+      'refreshToken="$nextRefresh", organizationId="${organizationId.trim()}"',
+    );
     if (nextId.isNotEmpty && nextSecret.isNotEmpty && nextRefresh.isNotEmpty) {
       final changed =
           nextId != _clientId ||
@@ -65,13 +71,29 @@ class ZohoApiClient {
       _clientId = nextId;
       _clientSecret = nextSecret;
       _refreshToken = nextRefresh;
+      DebugFileLogger.log(
+        '[ZohoApiClient] ✅ OAuth triple ACCEPTED (changed=$changed).',
+      );
       if (changed) {
         _accessTokenInvalidated = true;
         unawaited(_clearCachedAccessToken());
+        DebugFileLogger.log(
+          '[ZohoApiClient] ♻️ Credentials changed — cached access token invalidated and cleared.',
+        );
       }
+    } else {
+      DebugFileLogger.log(
+        '[ZohoApiClient] ⚠️ OAuth triple REJECTED (kept previous values) — '
+        'clientId.isEmpty=${nextId.isEmpty}, '
+        'clientSecret.isEmpty=${nextSecret.isEmpty}, '
+        'refreshToken.isEmpty=${nextRefresh.isEmpty}',
+      );
     }
     if (organizationId.trim().isNotEmpty) {
       _organizationId = organizationId.trim();
+      DebugFileLogger.log('[ZohoApiClient] 🏢 organizationId updated: "$_organizationId"');
+    } else {
+      DebugFileLogger.log('[ZohoApiClient] ⚠️ organizationId empty — kept previous value "$_organizationId"');
     }
   }
 
@@ -95,6 +117,13 @@ class ZohoApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onError: (DioException error, handler) {
+          DebugFileLogger.log(
+            '[ZohoApiClient] ❌ Telemetry-interceptor error: '
+            'url="${error.requestOptions.baseUrl}${error.requestOptions.path}", '
+            'statusCode=${error.response?.statusCode}, '
+            'responseData=${error.response?.data}, '
+            'error=${error.error}',
+          );
           unawaited(FirebaseTelemetry.reportZohoApiFailure(error));
           handler.next(error);
         },
@@ -105,9 +134,18 @@ class ZohoApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final String accessToken;
+          final tokenSourceBefore = _accessTokenInvalidated
+              ? 'forced-refresh'
+              : (_dbService.oauthAccessToken == null
+                    ? 'no-cache'
+                    : 'cache-or-refresh');
           try {
             accessToken = await _getOrRefreshAccessToken();
           } on Exception catch (e) {
+            DebugFileLogger.log(
+              '[ZohoApiClient] ❌ onRequest: failed to obtain access token for '
+              '"${options.baseUrl}${options.path}": $e',
+            );
             // Fail the request with the real auth error instead of sending
             // an unauthenticated call that dies as an opaque 401.
             return handler.reject(
@@ -121,15 +159,30 @@ class ZohoApiClient {
           options.headers['Authorization'] = 'Zoho-oauthtoken $accessToken';
           options.headers['JSONString'] = 'true';
           options.queryParameters['organization_id'] = _organizationId;
+          DebugFileLogger.log(
+            '[ZohoApiClient] 🌐 Outgoing request: '
+            '${options.method} "${options.baseUrl}${options.path}", '
+            'queryParameters=${options.queryParameters}, '
+            'tokenSource=$tokenSourceBefore, '
+            'accessTokenLength=${accessToken.length}',
+          );
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401) {
+            DebugFileLogger.log(
+              '[ZohoApiClient] 🔁 401 received for '
+              '"${error.requestOptions.baseUrl}${error.requestOptions.path}" '
+              '— forcing access-token refresh and retrying.',
+            );
             // Force refresh token on 401 Unauthorized
             final String newAccessToken;
             try {
               newAccessToken = await _refreshAccessToken(force: true);
-            } on Exception catch (_) {
+            } on Exception catch (e) {
+              DebugFileLogger.log(
+                '[ZohoApiClient] ❌ 401-retry: forced refresh FAILED: $e — surfacing original 401.',
+              );
               // Refresh failed — surface the original 401.
               return handler.next(error);
             }
@@ -140,8 +193,16 @@ class ZohoApiClient {
             // Retry the original request
             try {
               final response = await _dio.fetch<dynamic>(requestOptions);
+              DebugFileLogger.log(
+                '[ZohoApiClient] ✅ 401-retry: retried '
+                '"${requestOptions.baseUrl}${requestOptions.path}" succeeded '
+                'with statusCode=${response.statusCode}.',
+              );
               return handler.resolve(response);
-            } on Exception catch (_) {
+            } on Exception catch (e) {
+              DebugFileLogger.log(
+                '[ZohoApiClient] ❌ 401-retry: retried request FAILED again: $e',
+              );
               return handler.next(error);
             }
           }
@@ -158,6 +219,12 @@ class ZohoApiClient {
   /// Throws if the refresh workflow fails (see [_refreshAccessToken]).
   Future<String> _getOrRefreshAccessToken() async {
     if (!hasCredentials) {
+      DebugFileLogger.log(
+        '[ZohoApiClient] ❌ _getOrRefreshAccessToken: hasCredentials=false '
+        '(clientId.isEmpty=${_clientId.isEmpty}, '
+        'clientSecret.isEmpty=${_clientSecret.isEmpty}, '
+        'refreshToken.isEmpty=${_refreshToken.isEmpty}) — throwing ZohoNotConfiguredException.',
+      );
       throw const ZohoNotConfiguredException();
     }
 
@@ -169,9 +236,26 @@ class ZohoApiClient {
         final nowMillis = DateTime.now().millisecondsSinceEpoch;
         // Use a 60-second buffer to ensure the token doesn't expire mid-request
         if (nowMillis < (expiryMillis - 60000)) {
+          DebugFileLogger.log(
+            '[ZohoApiClient] 💾 _getOrRefreshAccessToken: using CACHED token, '
+            'expiresInMs=${expiryMillis - nowMillis}.',
+          );
           return cachedToken;
         }
+        DebugFileLogger.log(
+          '[ZohoApiClient] ⏰ _getOrRefreshAccessToken: cached token EXPIRED '
+          '(nowMillis=$nowMillis, expiryMillis=$expiryMillis) — refreshing.',
+        );
+      } else {
+        DebugFileLogger.log(
+          '[ZohoApiClient] 🚫 _getOrRefreshAccessToken: no cached token '
+          '(cachedToken==null=${cachedToken == null}, expiryMillis==null=${expiryMillis == null}) — refreshing.',
+        );
       }
+    } else {
+      DebugFileLogger.log(
+        '[ZohoApiClient] ♻️ _getOrRefreshAccessToken: token INVALIDATED — forcing refresh.',
+      );
     }
 
     return _refreshAccessToken();
@@ -185,18 +269,30 @@ class ZohoApiClient {
   /// than a generic fetch failure.
   Future<String> _refreshAccessToken({bool force = false}) async {
     if (!hasCredentials) {
+      DebugFileLogger.log(
+        '[ZohoApiClient] ❌ _refreshAccessToken: hasCredentials=false — throwing ZohoNotConfiguredException.',
+      );
       throw const ZohoNotConfiguredException();
     }
     final refreshToken = _refreshToken;
+    final requestQueryParams = {
+      'refresh_token': refreshToken,
+      'client_id': _clientId,
+      'client_secret': _clientSecret,
+      'grant_type': 'refresh_token',
+    };
+    DebugFileLogger.log(
+      '[ZohoApiClient] 📤 _refreshAccessToken: POST "$_accountsUrl" (force=$force), '
+      'queryParameters=$requestQueryParams',
+    );
     try {
       final response = await Dio().post<dynamic>(
         _accountsUrl,
-        queryParameters: {
-          'refresh_token': refreshToken,
-          'client_id': _clientId,
-          'client_secret': _clientSecret,
-          'grant_type': 'refresh_token',
-        },
+        queryParameters: requestQueryParams,
+      );
+      DebugFileLogger.log(
+        '[ZohoApiClient] 📥 _refreshAccessToken: response statusCode=${response.statusCode}, '
+        'body=${response.data}',
       );
       final newAccessToken = response.statusCode == 200
           ? response.data['access_token'] as String?
@@ -204,6 +300,10 @@ class ZohoApiClient {
       if (newAccessToken == null) {
         // Zoho returns 200 with an `error` body (e.g. "invalid_code") for
         // bad refresh tokens, so a missing access_token is also a failure.
+        DebugFileLogger.log(
+          '[ZohoApiClient] ❌ _refreshAccessToken: no access_token in response — '
+          'HTTP ${response.statusCode}: ${response.data}',
+        );
         throw Exception(
           'HTTP ${response.statusCode}: ${response.data}',
         );
@@ -218,8 +318,18 @@ class ZohoApiClient {
       await _dbService.setOauthTokenExpiry(expiryMillis);
       _accessTokenInvalidated = false;
 
+      DebugFileLogger.log(
+        '[ZohoApiClient] ✅ _refreshAccessToken: SUCCESS — '
+        'accessTokenLength=${newAccessToken.length}, '
+        'expiresInSeconds=$expiresInSeconds, expiryMillis=$expiryMillis',
+      );
+
       return newAccessToken;
     } on Exception catch (e, stack) {
+      DebugFileLogger.log(
+        '[ZohoApiClient] ❌ _refreshAccessToken: EXCEPTION: $e'
+        '${e is DioException ? ', responseData=${e.response?.data}, statusCode=${e.response?.statusCode}' : ''}',
+      );
       AppLogger.error('ZohoApi', 'OAuth Refresh Error: $e');
       unawaited(
         FirebaseTelemetry.reportZohoApiFailure(
@@ -253,7 +363,13 @@ class ZohoApiClient {
       if (response.statusCode != 200) {
         throw Exception('GET $path failed: ${response.statusCode}');
       }
-      final data = response.data as Map<String, dynamic>;
+      var rawData = response.data;
+      if (rawData is String) {
+        try {
+          rawData = jsonDecode(rawData);
+        } catch (_) {}
+      }
+      final data = jsonMap(rawData);
       List<dynamic>? listVal;
       for (final v in data.values) {
         if (v is List) {
@@ -1157,7 +1273,16 @@ class ZohoApiClient {
       final response = await _dio.get<dynamic>('/locations');
       if (response.statusCode == 200) {
         final list = (response.data['locations'] as List? ?? []);
-        return list.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+        final result =
+            list.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+        AppLogger.info(
+          'ZohoApi',
+          'fetchWarehouses (locations) fetched ${result.length} records: ${jsonEncode(result)}',
+        );
+        DebugFileLogger.log(
+          '[ZohoApi] fetchWarehouses (locations) fetched ${result.length} records: ${jsonEncode(result)}',
+        );
+        return result;
       }
       throw Exception(
         'Failed to fetch locations: Server returned status code ${response.statusCode}',
@@ -1179,7 +1304,16 @@ class ZohoApiClient {
                     response.data['salespersons'] ??
                     <dynamic>[])
                 as List;
-        return list.map((s) => Map<String, dynamic>.from(s as Map)).toList();
+        final result =
+            list.map((s) => Map<String, dynamic>.from(s as Map)).toList();
+        AppLogger.info(
+          'ZohoApi',
+          'fetchSalespersons fetched ${result.length} records: ${jsonEncode(result)}',
+        );
+        DebugFileLogger.log(
+          '[ZohoApi] fetchSalespersons fetched ${result.length} records: ${jsonEncode(result)}',
+        );
+        return result;
       }
       throw Exception(
         'Failed to fetch salespersons: Server returned status code ${response.statusCode}',
@@ -1197,18 +1331,15 @@ class ZohoApiClient {
   // (Zoho quirk) — callers must NOT filter by record status, only `cf_active`.
   Future<List<Map<String, dynamic>>> fetchSalespersonProfiles() async {
     try {
-      final response = await _dio.get<dynamic>('/cm_salesperson_profile');
-      if (response.statusCode == 200) {
-        final list =
-            (response.data['module_records'] ??
-                    response.data['data'] ??
-                    <dynamic>[])
-                as List;
-        return list.map((m) => Map<String, dynamic>.from(m as Map)).toList();
-      }
-      throw Exception(
-        'Failed to fetch salesperson profiles: Server returned status code ${response.statusCode}',
+      final result = await _fetchAllPages('/cm_salesperson_profile', const {});
+      AppLogger.info(
+        'ZohoApi',
+        'fetchSalespersonProfiles fetched ${result.length} records: ${jsonEncode(result)}',
       );
+      DebugFileLogger.log(
+        '[ZohoApi] fetchSalespersonProfiles fetched ${result.length} records: ${jsonEncode(result)}',
+      );
+      return result;
     } on Exception catch (e) {
       AppLogger.error('ZohoApi', 'fetchSalespersonProfiles error: $e');
       throw Exception('Failed to fetch salesperson profiles from Zoho: $e');

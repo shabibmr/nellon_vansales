@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import '../../domain/models/license_document.dart';
 import '../../domain/models/server_config.dart';
 import 'app_logger.dart';
+import 'debug_file_logger.dart';
 import 'error_classification.dart';
 
 /// Pure Dart service to coordinate Firestore read/write tasks for app licensing and control.
@@ -78,15 +78,21 @@ class LicenseService {
   /// the client app, preventing permission-denied errors on devices with read-only rules.
   Future<ServerConfig> fetchServerConfig() async {
     try {
-      debugPrint('[ServerConfig] 🔍 Fetching server_config/zoho from Firestore...');
+      DebugFileLogger.log('[ServerConfig] 🔍 Fetching server_config/zoho from Firestore...');
       final doc = await firestore
           .collection('server_config')
           .doc('zoho')
           .get()
           .timeout(const Duration(seconds: 8));
 
+      DebugFileLogger.log(
+        '[ServerConfig] 📡 server_config/zoho doc.exists=${doc.exists}, '
+        'isFromCache=${doc.metadata.isFromCache}, '
+        'hasPendingWrites=${doc.metadata.hasPendingWrites}',
+      );
+
       if (!doc.exists || doc.data() == null) {
-        debugPrint(
+        DebugFileLogger.log(
           '[ServerConfig] ⚠️ server_config/zoho document DOES NOT EXIST or is null in Firestore!',
         );
         AppLogger.warning(
@@ -102,7 +108,7 @@ class LicenseService {
       }
 
       final data = doc.data()!;
-      debugPrint('[ServerConfig] 📥 Received server_config/zoho from Firestore: $data');
+      DebugFileLogger.log('[ServerConfig] 📥 Received server_config/zoho from Firestore: $data');
       AppLogger.info(
         'ServerConfig',
         'Received server_config/zoho: keys=${data.keys.toList()}, '
@@ -113,7 +119,7 @@ class LicenseService {
       );
 
       final config = ServerConfig.fromMap(data);
-      debugPrint(
+      DebugFileLogger.log(
         '[ServerConfig] ✅ Parsed ServerConfig: '
         'clientId="${config.clientId}", '
         'clientSecretLength=${config.clientSecret.length}, '
@@ -124,7 +130,7 @@ class LicenseService {
 
       return config;
     } catch (e) {
-      debugPrint('[ServerConfig] ❌ Failed to fetch server_config/zoho: $e');
+      DebugFileLogger.log('[ServerConfig] ❌ Failed to fetch server_config/zoho: $e');
       AppLogger.error('ServerConfig', 'Failed to read Zoho server configuration: $e');
       if (isFirestorePermissionDenied(e)) {
         throw Exception(

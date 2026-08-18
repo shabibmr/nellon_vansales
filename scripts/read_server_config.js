@@ -66,7 +66,8 @@ function printDocument(doc) {
 
   // Sanity validation report
   if (docId === 'zoho') {
-    const isComplete = decoded.client_id && decoded.client_secret && decoded.code && decoded.organization_id;
+    const hasToken = decoded.refresh_token || decoded.code;
+    const isComplete = decoded.client_id && decoded.client_secret && hasToken && decoded.organization_id;
     console.log(`\n[Validation] Status: ${isComplete ? '✅ COMPLETE' : '⚠️ INCOMPLETE'}`);
     console.log(`             Organization: ${decoded.organization_id || '(missing)'}`);
     console.log(`             Mock Mode:    ${decoded.mock_transactions === true ? 'MOCK' : 'LIVE'}`);

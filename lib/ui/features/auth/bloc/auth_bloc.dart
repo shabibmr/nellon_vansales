@@ -253,7 +253,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     // bind below would fail and tear down the very session that would have
     // healed on the next boot. Firebase auth has already completed here, so
     // the Firestore read is authorized.
+    AppLogger.info(
+      'Auth',
+      '_bindAfterFirebase: calling ensureCredentialsLoaded() (Path B fallback)...',
+    );
     final configured = await _serverConfigRepository.ensureCredentialsLoaded();
+    AppLogger.info(
+      'Auth',
+      '_bindAfterFirebase: ensureCredentialsLoaded() returned configured=$configured.',
+    );
     if (!configured) {
       AppLogger.error(
         'Auth',

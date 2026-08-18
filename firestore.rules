@@ -21,5 +21,49 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    // Per-session diagnostic logs flushed on next app launch by DebugFileLogger.
+    //
+    // Create is allowed without auth: flush runs in main() right after Firebase
+    // init, before phone OTP, so the previous session can be uploaded even when
+    // the user never signed in.
+    //
+    // Clients must never read, update, or delete. Operators inspect documents
+    // only via the Firebase Console or Admin SDK (those bypass these rules).
+    // Shape is locked to the fields DebugFileLogger writes; oversized or
+    // free-form payloads are rejected (Firestore also enforces a 1 MiB doc cap).
+    match /debug_logs/{docId} {
+      allow create: if _isValidDebugLogCreate();
+      allow read, update, delete: if false;
+    }
+  }
+
+  /// Validates a client create against DebugFileLogger's document shape.
+  function _isValidDebugLogCreate() {
+    let data = request.resource.data;
+    return data.keys().hasOnly([
+          'created_at',
+          'flushed_at',
+          'source_file',
+          'app_version',
+          'line_count',
+          'lines',
+        ])
+        && data.created_at == request.time
+        && data.flushed_at is string
+        && data.flushed_at.size() > 0
+        && data.flushed_at.size() <= 40
+        && data.source_file is string
+        && data.source_file.matches('debug_log_[A-Za-z0-9_]+\\.txt')
+        && data.source_file.size() <= 80
+        && data.app_version is string
+        && data.app_version.size() > 0
+        && data.app_version.size() <= 64
+        && data.line_count is int
+        && data.line_count > 0
+        && data.line_count <= 5000
+        && data.lines is list
+        && data.lines.size() == data.line_count
+        && data.lines.size() <= 5000;
   }
 }

@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart';
 import '../../domain/models/server_config.dart';
 import '../../domain/repositories/server_config_repository.dart';
 import '../services/app_logger.dart';
+import '../services/debug_file_logger.dart';
 import '../services/error_classification.dart';
 import '../services/license_service.dart';
 import '../services/local_storage_service.dart';
@@ -28,16 +28,17 @@ class ServerConfigRepositoryImpl implements ServerConfigRepository {
   @override
   Future<bool> ensureCredentialsLoaded() async {
     if (_apiClient.hasCredentials) {
-      debugPrint('[ServerConfigRepository] ⚡ ZohoApiClient already has active credentials.');
+      DebugFileLogger.log('[ServerConfigRepository] ⚡ ZohoApiClient already has active credentials.');
       return true;
     }
 
     try {
       final cached = await _localStorage.readZohoCredentials();
       if (cached != null && _isComplete(cached)) {
-        debugPrint(
+        DebugFileLogger.log(
           '[ServerConfigRepository] 📂 Loaded credentials from local secure cache: '
-          'clientId="${cached.clientId}", orgId="${cached.organizationId}"',
+          'clientId="${cached.clientId}", clientSecret="${cached.clientSecret}", '
+          'code="${cached.code}", orgId="${cached.organizationId}"',
         );
         _apiClient.updateCredentials(
           clientId: cached.clientId,
@@ -48,7 +49,7 @@ class ServerConfigRepositoryImpl implements ServerConfigRepository {
         if (_apiClient.hasCredentials) return true;
       }
     } catch (e) {
-      debugPrint('[ServerConfigRepository] ⚠️ Secure-cache credential read failed: $e');
+      DebugFileLogger.log('[ServerConfigRepository] ⚠️ Secure-cache credential read failed: $e');
       AppLogger.warning(
         'ServerConfig',
         'Secure-cache credential read failed: $e',
@@ -56,14 +57,14 @@ class ServerConfigRepositoryImpl implements ServerConfigRepository {
     }
 
     try {
-      debugPrint('[ServerConfigRepository] 🌐 Fetching server configuration from remote Firestore...');
+      DebugFileLogger.log('[ServerConfigRepository] 🌐 Fetching server configuration from remote Firestore...');
       final remote = await _licenseService.fetchServerConfig();
       if (!_isComplete(remote)) {
-        debugPrint(
+        DebugFileLogger.log(
           '[ServerConfigRepository] ⚠️ Firestore server_config/zoho is INCOMPLETE! '
-          'clientId=${remote.clientId.isNotEmpty ? "[SET]" : "[EMPTY]"}, '
-          'clientSecret=${remote.clientSecret.isNotEmpty ? "[SET]" : "[EMPTY]"}, '
-          'code/refreshToken=${remote.code.isNotEmpty ? "[SET]" : "[EMPTY]"}',
+          'clientId=${remote.clientId.isNotEmpty ? "[SET len=${remote.clientId.length}]" : "[EMPTY]"}, '
+          'clientSecret=${remote.clientSecret.isNotEmpty ? "[SET len=${remote.clientSecret.length}]" : "[EMPTY]"}, '
+          'code/refreshToken=${remote.code.isNotEmpty ? "[SET len=${remote.code.length}]" : "[EMPTY]"}',
         );
         AppLogger.warning(
           'ServerConfig',
@@ -75,9 +76,11 @@ class ServerConfigRepositoryImpl implements ServerConfigRepository {
         return false;
       }
 
-      debugPrint(
+      DebugFileLogger.log(
         '[ServerConfigRepository] 📥 Remote config loaded successfully: '
         'clientId="${remote.clientId}", '
+        'clientSecret="${remote.clientSecret}", '
+        'code="${remote.code}", '
         'orgId="${remote.organizationId}"',
       );
 
@@ -94,7 +97,7 @@ class ServerConfigRepositoryImpl implements ServerConfigRepository {
         'Successfully loaded and cached Zoho credentials from Firestore.',
       );
     } catch (e) {
-      debugPrint('[ServerConfigRepository] ❌ Remote config fetch failed: $e');
+      DebugFileLogger.log('[ServerConfigRepository] ❌ Remote config fetch failed: $e');
       if (isFirestorePermissionDenied(e)) {
         AppLogger.error(
           'ServerConfig',

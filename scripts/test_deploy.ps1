@@ -2,9 +2,9 @@
 #
 # Paths are relative to this script, so it works from any clone (nellon, nell_2, …).
 # Override host / remote dir / APK name / channel when needed:
-#   pwsh -File test_deploy.ps1
-#   pwsh -File test_deploy.ps1 -SshHost gm1 -RemoteDir /var/www/html/algo_cloud/nellon/test
-#   pwsh -File test_deploy.ps1 -SkipBuild
+#   pwsh -File scripts/test_deploy.ps1
+#   pwsh -File scripts/test_deploy.ps1 -SshHost gm1 -RemoteDir /var/www/html/algo_cloud/nellon/test
+#   pwsh -File scripts/test_deploy.ps1 -SkipBuild
 
 [CmdletBinding()]
 param(
@@ -17,7 +17,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = $PSScriptRoot
+$repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 function Log-StepStart {

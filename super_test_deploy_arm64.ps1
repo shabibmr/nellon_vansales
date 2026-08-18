@@ -141,7 +141,10 @@ Write-Host '==================================================' -ForegroundColor
 # Step 0: Optional Version Bumping
 if ($Bump -or $Patch -or $Minor -or $Major) {
     $bumpSw = Log-StepStart "Bumping version in pubspec.yaml..."
-    $bumpScript = Join-Path $repoRoot 'bump_build.ps1'
+    $bumpScript = Join-Path $repoRoot 'scripts\bump_build.ps1'
+    if (-not (Test-Path $bumpScript)) {
+        $bumpScript = Join-Path $repoRoot 'bump_build.ps1'
+    }
     if (Test-Path $bumpScript) {
         $bumpArgs = @{ Quiet = $true }
         if ($Patch) { $bumpArgs['Patch'] = $true }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../domain/models/salesperson.dart';
 import '../../domain/models/session_bind_result.dart';
 import '../../domain/models/warehouse.dart';
@@ -5,6 +7,8 @@ import '../../domain/repositories/salesperson_repository.dart';
 import '../../domain/utils/phone_normalizer.dart';
 import '../models/salesperson_model.dart';
 import '../models/warehouse_model.dart';
+import '../services/app_logger.dart';
+import '../services/debug_file_logger.dart';
 import '../services/error_classification.dart';
 import '../services/hive_database_service.dart';
 import '../services/zoho_api_client.dart';
@@ -45,6 +49,10 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
     final raw = await _apiClient.fetchSalespersons();
     final salespersons = raw.map((s) => SalespersonModel.fromJson(s)).toList();
     await _dbService.saveSalespersons(salespersons);
+    AppLogger.info(
+      'SalespersonRepo',
+      'Cached ${salespersons.length} salesperson(s) from Zoho: ${jsonEncode(raw)}',
+    );
     return salespersons;
   }
 
@@ -64,6 +72,9 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
   @override
   Future<SessionBindResult> verifyAndBindSession(String phone) async {
     final normalizedPhone = normalizePhone(phone.trim());
+    DebugFileLogger.log(
+      '[SalespersonBind] session phone raw="$phone" normalized="$normalizedPhone"',
+    );
     if (normalizedPhone.isEmpty) {
       return SessionBindResult.failed(SessionBindFailure.notRegistered);
     }
@@ -73,10 +84,26 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
     Warehouse? primary;
     try {
       profiles = await _apiClient.fetchSalespersonProfiles();
+      AppLogger.info(
+        'SalespersonRepo',
+        'Salesperson profiles fetched for verification (${profiles.length} total): ${jsonEncode(profiles)}',
+      );
+      DebugFileLogger.log(
+        '[SalespersonBind] comparing against ${profiles.length} profile(s): '
+        '${jsonEncode(profiles.map((r) => {
+              'record_name': r['record_name'],
+              'normalized': normalizePhone((r['record_name'] ?? '').toString()),
+              'cf_active': r['cf_active'],
+            }).toList())}',
+      );
       await _fetchAndCacheSalespersons();
       final locationRaw = await _apiClient.fetchWarehouses();
       warehouses = locationRaw.map((w) => WarehouseModel.fromJson(w)).toList();
       await _dbService.saveWarehouses(warehouses);
+      AppLogger.info(
+        'SalespersonRepo',
+        'Warehouses/locations fetched for verification (${warehouses.length} total): ${jsonEncode(locationRaw)}',
+      );
       for (final w in warehouses) {
         if (w.isPrimary) {
           primary = w;
@@ -98,17 +125,50 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
 
     Map<String, dynamic>? matched;
     for (final r in profiles) {
-      if (normalizePhone((r['record_name'] ?? '').toString()) ==
-          normalizedPhone) {
+      final recordPhoneRaw = (r['record_name'] ?? '').toString();
+      final recordPhoneNorm = normalizePhone(recordPhoneRaw);
+      final isMatch = recordPhoneNorm == normalizedPhone;
+      DebugFileLogger.log(
+        '[SalespersonBind] Comparing phone: input="$normalizedPhone" vs '
+        'profile record_name="$recordPhoneRaw" (norm="$recordPhoneNorm") => match=$isMatch',
+      );
+      if (isMatch) {
         matched = r;
         break;
       }
     }
     if (matched == null) {
+      AppLogger.warning(
+        'SalespersonRepo',
+        'No matching salesperson profile found for phone: $normalizedPhone',
+      );
+      DebugFileLogger.log(
+        '[SalespersonBind] NO MATCH for normalized="$normalizedPhone" '
+        'against the ${profiles.length} profile(s) logged above.',
+      );
       return SessionBindResult.failed(SessionBindFailure.notRegistered);
     }
 
-    if (!_isActiveFlag(matched['cf_active'])) {
+    DebugFileLogger.log(
+      '[SalespersonBind] MATCHED normalized="$normalizedPhone" '
+      'to record_name="${matched['record_name']}"',
+    );
+
+    AppLogger.info(
+      'SalespersonRepo',
+      'Matched salesperson profile for phone $normalizedPhone: ${jsonEncode(matched)}',
+    );
+
+    final rawActive = matched['cf_active'];
+    final isActive = _isActiveFlag(rawActive);
+    DebugFileLogger.log(
+      '[SalespersonBind] Checking cf_active: raw="$rawActive" (${rawActive.runtimeType}) => isActive=$isActive',
+    );
+
+    if (!isActive) {
+      DebugFileLogger.log(
+        '[SalespersonBind] REJECTED: cf_active is false/disabled for phone $normalizedPhone',
+      );
       return SessionBindResult.failed(SessionBindFailure.disabled);
     }
 
@@ -120,30 +180,78 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
     final vanLocationName = _nonEmpty(matched['cf_van_location_formatted']);
     final seriesPrefix = _nonEmpty(matched['cf_series_prefix']);
 
+    DebugFileLogger.log(
+      '[SalespersonBind] Extracted profile fields: '
+      'cf_salesperson="$salespersonId" (formatted: "$salespersonName"), '
+      'cf_cash_account="$cashAccountId" (formatted: "$cashAccountName"), '
+      'cf_series_prefix="$seriesPrefix", '
+      'cf_van_location="$vanLocationId" (formatted: "$vanLocationName")',
+    );
+
     // Prefix is required for offline document numbering — without it
     // DocumentNumberService.nextNumber throws mid-save. Fail at bind instead.
     if (salespersonId == null || cashAccountId == null || seriesPrefix == null) {
+      DebugFileLogger.log(
+        '[SalespersonBind] REJECTED: Missing required fields: '
+        'salespersonId=${salespersonId != null} ($salespersonId), '
+        'cashAccountId=${cashAccountId != null} ($cashAccountId), '
+        'seriesPrefix=${seriesPrefix != null} ($seriesPrefix)',
+      );
       return SessionBindResult.failed(SessionBindFailure.notFullyMapped);
     }
 
     // Confirm the looked-up salesperson exists & is active in /salespersons
     // (source of truth for name + lifecycle).
     final cachedSalespersons = _dbService.getSalespersons();
+    DebugFileLogger.log(
+      '[SalespersonBind] Checking cf_salesperson="$salespersonId" against '
+      '${cachedSalespersons.length} cached Zoho salesperson(s): '
+      '${jsonEncode(cachedSalespersons.map((s) => {'id': s.id, 'name': s.name, 'status': s.status}).toList())}',
+    );
+
     Salesperson? confirmedSalesperson;
     for (final sp in cachedSalespersons) {
-      if (sp.id == salespersonId) {
+      final idMatch = sp.id == salespersonId;
+      DebugFileLogger.log(
+        '[SalespersonBind] Comparing salesperson ID: target cf_salesperson="$salespersonId" '
+        'vs Zoho salesperson id="${sp.id}" (name="${sp.name}", status="${sp.status}") => match=$idMatch',
+      );
+      if (idMatch) {
         confirmedSalesperson = sp;
         break;
       }
     }
-    if (confirmedSalesperson == null ||
-        confirmedSalesperson.status.toLowerCase() == 'inactive') {
+    if (confirmedSalesperson == null) {
+      DebugFileLogger.log(
+        '[SalespersonBind] REJECTED: cf_salesperson "$salespersonId" NOT FOUND in Zoho /salespersons list.',
+      );
+      return SessionBindResult.failed(SessionBindFailure.notFullyMapped);
+    }
+
+    final isConfirmedActive = confirmedSalesperson.status.toLowerCase() != 'inactive';
+    DebugFileLogger.log(
+      '[SalespersonBind] Checking confirmed salesperson status: '
+      'name="${confirmedSalesperson.name}", status="${confirmedSalesperson.status}" => isActive=$isConfirmedActive',
+    );
+
+    if (!isConfirmedActive) {
+      DebugFileLogger.log(
+        '[SalespersonBind] REJECTED: Confirmed salesperson "${confirmedSalesperson.name}" is inactive in Zoho.',
+      );
       return SessionBindResult.failed(SessionBindFailure.notFullyMapped);
     }
 
     final ordersOnly = vanLocationId == null;
+    DebugFileLogger.log(
+      '[SalespersonBind] Checking van location: cf_van_location="$vanLocationId" '
+      '=> ordersOnlyMode=$ordersOnly, primaryWarehouse="${primary?.id}" (${primary?.name})',
+    );
+
     if (ordersOnly && primary == null) {
       // No van and no primary location resolved — nothing usable to bind.
+      DebugFileLogger.log(
+        '[SalespersonBind] REJECTED: No van location and no primary warehouse resolved.',
+      );
       return SessionBindResult.failed(SessionBindFailure.network);
     }
 
@@ -171,6 +279,15 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
       cashAccountId: cashAccountId,
       cashAccountName: cashAccountName,
       status: 'active',
+    );
+
+    AppLogger.info(
+      'SalespersonRepo',
+      'Bound salesperson session successfully: name="${resolved.name}", '
+      'id="${resolved.id}", phone="${resolved.phone}", '
+      'location="${resolved.locationName}" (id: "${resolved.locationId}"), '
+      'cashAccount="${resolved.cashAccountName}" (id: "${resolved.cashAccountId}"), '
+      'prefix="${resolved.voucherPrefix}", ordersOnly=$ordersOnly',
     );
 
     await _dbService.setSessionPhone(normalizedPhone);

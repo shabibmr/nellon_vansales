@@ -83,7 +83,7 @@ Master/reference data synced from Zoho is enumerated by `MasterType` in `sync_wo
 
 ### Zoho Books Sync
 
-`ZohoApiClient` talks to Zoho Books v3 REST API with OAuth 2.0 (access token auto-refresh via Dio interceptor). Credentials start empty and are injected by `ServerConfigCubit` from Firestore `server_config/zoho` (`client_id`, `client_secret`, `code` = refresh token, `organization_id`), with a `FlutterSecureStorage` cache on `LocalStorageService` so fail-open / offline boots can still refresh. `updateCredentials()` ignores empty remotes so a blank doc cannot wipe a working cache. Changing the OAuth triple clears the Hive access-token cache.
+`ZohoApiClient` talks to Zoho Books v3 REST API with OAuth 2.0 (access token auto-refresh via Dio interceptor). Credentials start empty and are injected by `ServerConfigCubit` from Firestore `server_config/zoho` (`client_id`, `client_secret`, `code` = refresh token, `organization_id`), with a Hive `app_config_box` cache on `LocalStorageService` so fail-open / offline boots can still refresh. `updateCredentials()` ignores empty remotes so a blank doc cannot wipe a working cache. Changing the OAuth triple clears the Hive access-token cache.
 
 **Save flow is online-first, not offline-first.** `SyncWorker.submitOrEnqueue(item)` is what repositories call to save a transaction: if the device is offline it queues immediately; if online it calls Zoho directly and only falls back to the queue (tagged `[Retryable]` for transient errors, `[Needs Attention]` otherwise) if that call fails. `SyncWorker.syncPendingItems()` then drains the queue:
 - Listens for connectivity changes and triggers sync automatically, plus a 60s periodic timer that retries any transient-failed item whose backoff window has elapsed

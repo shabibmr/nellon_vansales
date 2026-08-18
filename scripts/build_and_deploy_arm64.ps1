@@ -5,10 +5,10 @@
 # runs flutter clean.
 #
 # Usage:
-#   pwsh -File build_and_deploy_arm64.ps1
-#   pwsh -File build_and_deploy_arm64.ps1 -SkipPub
-#   pwsh -File build_and_deploy_arm64.ps1 -SkipBuild
-#   pwsh -File build_and_deploy_arm64.ps1 -Notes "ARM64-only sideload"
+#   pwsh -File scripts/build_and_deploy_arm64.ps1
+#   pwsh -File scripts/build_and_deploy_arm64.ps1 -SkipPub
+#   pwsh -File scripts/build_and_deploy_arm64.ps1 -SkipBuild
+#   pwsh -File scripts/build_and_deploy_arm64.ps1 -Notes "ARM64-only sideload"
 
 [CmdletBinding()]
 param(
@@ -22,7 +22,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = $PSScriptRoot
+$repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 function Find-ReleaseApk {

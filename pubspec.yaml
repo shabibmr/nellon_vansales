@@ -56,7 +56,6 @@ dependencies:
   # Device & Licensing Utilities
   device_info_plus: ^13.1.0
   package_info_plus: ^10.1.0
-  flutter_secure_storage: ^10.3.0
   uuid: ^4.3.3
 
   # Location (GPS) for customer coordinates capture + maps navigation

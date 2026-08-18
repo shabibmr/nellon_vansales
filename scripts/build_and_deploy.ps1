@@ -1,8 +1,10 @@
 # Script to build Flutter APK in release mode and scp to remote server.
 $ErrorActionPreference = "Stop"
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
 
 # Define paths
-$apkPath = "E:\work\nellon\build\app\outputs\apk\release\app-nellon-release.apk"
+$apkPath = Join-Path $repoRoot "build\app\outputs\apk\release\app-nellon-release.apk"
 $destination = "gm1:/var/www/html/algo_cloud/nellon/"
 
 Write-Host "==============================================" -ForegroundColor Cyan
@@ -40,7 +42,8 @@ if (Test-Path -Path $apkPath) {
 
     # Automatically update version metadata in Firestore
     Write-Host "`nUpdating version metadata in Firebase Firestore..." -ForegroundColor Cyan
-    & node scripts/update_firestore_version.js
+    $updater = Join-Path $repoRoot 'scripts\update_firestore_version.js'
+    & node $updater
 } else {
     Write-Error "Expected APK file not found at: $apkPath"
     exit 1

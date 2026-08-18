@@ -4,10 +4,10 @@
 # Builds only android-arm64 and never runs flutter clean.
 #
 # Usage:
-#   pwsh -File test_deploy_arm64.ps1
-#   pwsh -File test_deploy_arm64.ps1 -SkipPub
-#   pwsh -File test_deploy_arm64.ps1 -SkipBuild
-#   pwsh -File test_deploy_arm64.ps1 -SshHost gm1 -RemoteDir /var/www/html/algo_cloud/nellon/test
+#   pwsh -File scripts/test_deploy_arm64.ps1
+#   pwsh -File scripts/test_deploy_arm64.ps1 -SkipPub
+#   pwsh -File scripts/test_deploy_arm64.ps1 -SkipBuild
+#   pwsh -File scripts/test_deploy_arm64.ps1 -SshHost gm1 -RemoteDir /var/www/html/algo_cloud/nellon/test
 
 [CmdletBinding()]
 param(
@@ -23,7 +23,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = $PSScriptRoot
+$repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 function Log-StepStart {

@@ -4,6 +4,7 @@
 // This file initializes the application binding, boots remote and local dependencies
 // (Firebase, dependency injection, and local Hive caches), and runs the root application widget.
 
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,6 +13,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'app.dart';
 import 'data/services/app_logger.dart';
+import 'data/services/debug_file_logger.dart';
 import 'data/services/injection.dart';
 import 'firebase_options.dart';
 import 'ui/core/bloc/app_bloc_observer.dart';
@@ -23,6 +25,7 @@ import 'ui/core/bloc/app_bloc_observer.dart';
 /// the [VanSalesApp] root widget.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  DebugFileLogger.log('[Startup] main() begin.');
   Bloc.observer = AppBlocObserver();
   ErrorWidget.builder = (details) {
     return const Material(
@@ -45,9 +48,14 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    DebugFileLogger.log('[Startup] Firebase initialized.');
 
     await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
     await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
+
+    // Carries over any log lines left from the previous app run so they
+    // aren't stranded waiting for the in-session size threshold.
+    unawaited(DebugFileLogger.flushPreviousSessionIfAny());
 
     // Pass all uncaught Flutter framework errors to Crashlytics
     FlutterError.onError = (errorDetails) {
@@ -61,10 +69,13 @@ void main() async {
     };
   } catch (e) {
     AppLogger.warning('Startup', 'Firebase Initialization Sandbox Warning: $e');
+    DebugFileLogger.log('[Startup] Firebase initialization failed: $e');
   }
 
   // Boot Dependency Injection & Local Caches (Hive)
   await setupDependencyInjection();
+  DebugFileLogger.log('[Startup] Dependency injection complete.');
 
   runApp(const VanSalesApp());
+  DebugFileLogger.log('[Startup] runApp() called.');
 }
