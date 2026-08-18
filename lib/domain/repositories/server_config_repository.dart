@@ -9,8 +9,10 @@ abstract class ServerConfigRepository {
   /// Whether usable Zoho credentials are currently loaded.
   bool get hasCredentials;
 
-  /// Ensures credentials are loaded, fetching `server_config/zoho` if the
-  /// in-memory client and the secure cache both come up empty.
+  /// Ensures credentials are loaded. Always tries `server_config/zoho` first
+  /// so a rotated OAuth client is applied before session bind; falls back to
+  /// in-memory / secure-cache credentials when remote is incomplete or
+  /// unreachable.
   ///
   /// Returns whether credentials are usable afterwards. Never throws — a
   /// caller only needs to know if it can proceed.

@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "133071346342-6hpisgur40sem3inmsctue8q6ubtpj2j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nellon.vansales.van_sales",
+            "certificate_hash": "afa437390f9373e80acbb5102075b3e89060d115"
+          }
+        },
+        {
           "client_id": "133071346342-8m89igmgdb5k37h7kgkjit75qmdobgaq.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

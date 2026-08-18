@@ -1,6 +1,7 @@
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
+import 'debug_file_logger.dart';
 import 'error_classification.dart';
 
 /// Severity level for a log line, mirroring common logging framework conventions.
@@ -79,13 +80,12 @@ class AppLogger {
     StackTrace? stackTrace,
   }) {
     final sanitized = sanitize(message);
-    debugPrint('[${level.name.toUpperCase()}] [$tag] $sanitized');
+    final formatted = '[${level.name.toUpperCase()}] [$tag] $sanitized';
+    DebugFileLogger.log(formatted);
 
     // Resilient Crashlytics breadcrumb and error reporting
     try {
-      FirebaseCrashlytics.instance.log(
-        '[${level.name.toUpperCase()}] [$tag] $sanitized',
-      );
+      FirebaseCrashlytics.instance.log(formatted);
 
       if (level == LogLevel.error && tag != 'ZohoApi') {
         final candidate = error ?? Exception('[$tag] $sanitized');
@@ -93,7 +93,7 @@ class AppLogger {
           FirebaseCrashlytics.instance.recordError(
             candidate,
             stackTrace,
-            reason: '[$tag] $sanitized',
+            reason: formatted,
             fatal: false,
           );
         }

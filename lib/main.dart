@@ -12,6 +12,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'app.dart';
 import 'data/services/app_logger.dart';
+import 'data/services/debug_file_logger.dart';
 import 'data/services/injection.dart';
 import 'firebase_options.dart';
 import 'ui/core/bloc/app_bloc_observer.dart';
@@ -59,6 +60,9 @@ void main() async {
       FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
       return true;
     };
+
+    // Flush previous session logs to Firestore on app startup
+    await DebugFileLogger.flushPreviousSessionIfAny();
   } catch (e) {
     AppLogger.warning('Startup', 'Firebase Initialization Sandbox Warning: $e');
   }

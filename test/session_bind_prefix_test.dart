@@ -158,4 +158,22 @@ void main() {
     expect(db.voucherPrefix, 'SHB-');
     expect(db.current?.voucherPrefix, 'SHB-');
   });
+
+  test('matches a draft-status profile by E.164 record_name', () async {
+    api.profiles = [
+      profile(phone: '+971542891249', prefix: 'SND-', van: 'van1')
+        ..['status'] = 'draft',
+    ];
+    db.salespersons = const [
+      Salesperson(
+        id: 'sp1',
+        name: 'Test Agent',
+        email: '',
+        status: 'active',
+      ),
+    ];
+    final result = await repo.verifyAndBindSession('+971542891249');
+    expect(result.isSuccess, isTrue);
+    expect(db.voucherPrefix, 'SND-');
+  });
 }

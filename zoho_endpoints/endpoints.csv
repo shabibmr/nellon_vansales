@@ -20,3 +20,6 @@ id,title,method,path,extra_params,description
 19,fetch_single_expense,GET,/expenses/PLACEHOLDER_EXPENSE_ID,,Fetch full details of the last expense
 20,fetch_single_payment,GET,/customerpayments/PLACEHOLDER_PAYMENT_ID,,Fetch full details of the last customer payment
 21,fetch_single_credit_note,GET,/creditnotes/PLACEHOLDER_CREDIT_NOTE_ID,,Fetch full details of the last credit note
+22,fetch_custom_modules,GET,/settings/modules,,List all custom module configurations in the organization
+23,fetch_salesperson_profile_module_config,GET,/settings/modules/cm_salesperson_profile,,Get field configuration of the cm_salesperson_profile custom module
+24,fetch_salesperson_profile_records,GET,/cm_salesperson_profile,per_page=200,List records of the cm_salesperson_profile custom module

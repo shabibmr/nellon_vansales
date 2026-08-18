@@ -12,6 +12,7 @@ import 'ui/core/extensions/l10n_context_extension.dart';
 import 'ui/core/theme/app_theme.dart';
 import 'ui/core/theme/theme_cubit.dart';
 import 'ui/core/widgets/animated_glow_background.dart';
+import 'ui/core/widgets/version_build_watermark.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/sync_repository.dart';
 import 'domain/repositories/customer_repository.dart';
@@ -61,6 +62,7 @@ import 'ui/features/thermal_print/cubit/thermal_printer_cubit.dart';
 import 'data/services/app_update_service.dart';
 import 'ui/features/app_update/cubit/app_update_cubit.dart';
 import 'ui/features/app_update/views/app_update_gate.dart';
+import 'ui/features/debug/widgets/debug_console_overlay.dart';
 
 /// The root widget of the Van Sales Pro application.
 ///
@@ -234,9 +236,15 @@ class VanSalesApp extends StatelessWidget {
                   ? ThemeMode.light
                   : ThemeMode.dark,
               navigatorObservers: [FirebaseTelemetry.navigatorObserver()],
-              builder: (context, child) => AnimatedGlowBackground(
-                themeMode: appThemeMode,
-                child: child ?? const SizedBox.shrink(),
+              builder: (context, child) => Stack(
+                children: [
+                  AnimatedGlowBackground(
+                    themeMode: appThemeMode,
+                    child: child ?? const SizedBox.shrink(),
+                  ),
+                  const VersionBuildWatermark(),
+                  const DebugConsoleOverlay(),
+                ],
               ),
               home: const AppUpdateGate(child: SessionGateway()),
             );

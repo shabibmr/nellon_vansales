@@ -189,14 +189,20 @@ class ZohoApiClient {
     }
     final refreshToken = _refreshToken;
     try {
+      // Form body (not query string) — same exchange the rest of the app
+      // uses after Firestore/secure-storage injects client id, secret, and
+      // refresh token into [_refreshToken].
       final response = await Dio().post<dynamic>(
         _accountsUrl,
-        queryParameters: {
+        data: {
           'refresh_token': refreshToken,
           'client_id': _clientId,
           'client_secret': _clientSecret,
           'grant_type': 'refresh_token',
         },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+        ),
       );
       final newAccessToken = response.statusCode == 200
           ? response.data['access_token'] as String?
@@ -1196,14 +1202,67 @@ class ZohoApiClient {
   // id and a `_formatted` display name. Records list as `status: draft`
   // (Zoho quirk) — callers must NOT filter by record status, only `cf_active`.
   Future<List<Map<String, dynamic>>> fetchSalespersonProfiles() async {
+    if (!hasCredentials) {
+      throw const ZohoNotConfiguredException();
+    }
+    if (_organizationId.trim().isEmpty) {
+      throw const ZohoNotConfiguredException();
+    }
+
     try {
-      final response = await _dio.get<dynamic>('/cm_salesperson_profile');
+      // Login bind must use the same OAuth triple the app injected
+      // (Firestore `server_config/zoho` / secure cache): client id, secret,
+      // and refresh token. Exchange that refresh token, then GET with the
+      // access token — do not rely on a possibly stale Hive cache from a
+      // previous client. Default list view is not Status.All; records are
+      // stored as `status: draft`, so omitting the filter returns zero rows
+      // and surfaces as SessionBindFailure.notRegistered. Do not dump the
+      // body: jsonEncode of module_records floods logcat / BLASTBufferQueue.
+      final accessToken = await _refreshAccessToken(force: true);
+      AppLogger.info(
+        'ZohoApi',
+        'GET /cm_salesperson_profile using app OAuth '
+        '(orgId=$_organizationId, refreshTokenLen=${_refreshToken.length})',
+      );
+      final response = await Dio().get<dynamic>(
+        '$_apiUrl/cm_salesperson_profile',
+        queryParameters: {
+          'organization_id': _organizationId,
+          'filter_by': 'Status.All',
+          'per_page': 200,
+        },
+        options: Options(
+          headers: {
+            'Authorization': 'Zoho-oauthtoken $accessToken',
+            'JSONString': 'true',
+          },
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
       if (response.statusCode == 200) {
+        final data = response.data;
         final list =
-            (response.data['module_records'] ??
-                    response.data['data'] ??
-                    <dynamic>[])
+            (data is Map
+                    ? (data['module_records'] ?? data['data'] ?? <dynamic>[])
+                    : <dynamic>[])
                 as List;
+        final pageContext = data is Map ? data['page_context'] : null;
+        final appliedFilter = pageContext is Map
+            ? pageContext['applied_filter']
+            : null;
+        final names = <String>[];
+        for (final row in list) {
+          if (row is Map) {
+            names.add('${row['record_name'] ?? ''}');
+          }
+        }
+        AppLogger.info(
+          'ZohoApi',
+          'GET /cm_salesperson_profile http=${response.statusCode} '
+          'applied_filter=$appliedFilter count=${list.length} '
+          'record_names=${names.join(',')}',
+        );
         return list.map((m) => Map<String, dynamic>.from(m as Map)).toList();
       }
       throw Exception(

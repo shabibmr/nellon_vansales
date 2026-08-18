@@ -5,6 +5,7 @@ import '../../domain/repositories/salesperson_repository.dart';
 import '../../domain/utils/phone_normalizer.dart';
 import '../models/salesperson_model.dart';
 import '../models/warehouse_model.dart';
+import '../services/app_logger.dart';
 import '../services/error_classification.dart';
 import '../services/hive_database_service.dart';
 import '../services/zoho_api_client.dart';
@@ -96,15 +97,26 @@ class SalespersonRepositoryImpl implements SalespersonRepository {
       );
     }
 
+    final recordNames = <String>[];
     Map<String, dynamic>? matched;
     for (final r in profiles) {
-      if (normalizePhone((r['record_name'] ?? '').toString()) ==
-          normalizedPhone) {
+      final rawName = (r['record_name'] ?? '').toString();
+      final normalizedName = normalizePhone(rawName);
+      recordNames.add(normalizedName);
+      if (matched == null && normalizedName == normalizedPhone) {
         matched = r;
-        break;
       }
     }
+    AppLogger.info(
+      'SalespersonBind',
+      'loginPhone=$normalizedPhone profileCount=${profiles.length} '
+      'record_names=${recordNames.join(',')}',
+    );
     if (matched == null) {
+      AppLogger.warning(
+        'SalespersonBind',
+        'no record_name matched $normalizedPhone',
+      );
       return SessionBindResult.failed(SessionBindFailure.notRegistered);
     }
 
