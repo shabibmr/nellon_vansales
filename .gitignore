@@ -10,6 +10,7 @@ zoho_endpoints/responses/
 # Miscellaneous
 *.class
 *.log
+*.bak
 *.pyc
 *.swp
 .DS_Store
