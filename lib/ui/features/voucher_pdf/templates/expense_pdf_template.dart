@@ -49,7 +49,7 @@ class ExpensePdfTemplate {
                 'Total Disbursed',
                 '$currencySymbol${expense.amount.toStringAsFixed(2)}',
                 alignment: pw.CrossAxisAlignment.end,
-                valueColor: SharedPdfTemplate.primaryIndigo,
+                valueColor: SharedPdfTemplate.primaryRed,
               ),
             ]),
             pw.SizedBox(height: 20),
@@ -65,7 +65,7 @@ class ExpensePdfTemplate {
                   width: 0.5,
                 ),
                 bottom: pw.BorderSide(
-                  color: SharedPdfTemplate.primaryIndigo,
+                  color: SharedPdfTemplate.primaryRed,
                   width: 1,
                 ),
               ),
@@ -79,7 +79,7 @@ class ExpensePdfTemplate {
                 // Header Row
                 pw.TableRow(
                   decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.primaryIndigo,
+                    color: SharedPdfTemplate.primaryRed,
                   ),
                   children: [
                     SharedPdfTemplate.buildTableHeader('#', alignLeft: true),

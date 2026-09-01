@@ -24,8 +24,9 @@ class PdfInfoEntry {
 /// reusable blocks (Headers, Footers, Info Cards) matching the application's look and feel.
 class SharedPdfTemplate {
   // Premium Theme Color Palette
-  static final PdfColor primaryIndigo = const PdfColor.fromInt(0xFF4F46E5);
-  static final PdfColor primaryLightIndigo = const PdfColor.fromInt(0xFFEEF2FF);
+  static final PdfColor primaryRed = const PdfColor.fromInt(0xFFDC2626);
+  static final PdfColor primaryLightRed = const PdfColor.fromInt(0xFFFEF2F2);
+  static final PdfColor primaryDarkRed = const PdfColor.fromInt(0xFF991B1B);
   static final PdfColor slateText = const PdfColor.fromInt(0xFF0F172A);
   static final PdfColor slateTextSecondary = const PdfColor.fromInt(0xFF64748B);
   static final PdfColor borderSlate = const PdfColor.fromInt(0xFFE2E8F0);
@@ -62,7 +63,7 @@ class SharedPdfTemplate {
                     style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
-                      color: primaryIndigo,
+                      color: primaryRed,
                     ),
                   ),
                   pw.SizedBox(height: 4),
@@ -89,7 +90,7 @@ class SharedPdfTemplate {
                       vertical: 6,
                     ),
                     decoration: pw.BoxDecoration(
-                      color: primaryLightIndigo,
+                      color: primaryLightRed,
                       borderRadius: const pw.BorderRadius.all(
                         pw.Radius.circular(6),
                       ),
@@ -99,7 +100,7 @@ class SharedPdfTemplate {
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
-                        color: primaryIndigo,
+                        color: primaryRed,
                       ),
                     ),
                   ),
@@ -133,7 +134,7 @@ class SharedPdfTemplate {
             height: 4,
             decoration: pw.BoxDecoration(
               gradient: pw.LinearGradient(
-                colors: [primaryIndigo, successEmerald],
+                colors: [primaryRed, primaryDarkRed],
                 begin: pw.Alignment.centerLeft,
                 end: pw.Alignment.centerRight,
               ),
@@ -176,7 +177,7 @@ class SharedPdfTemplate {
             style: pw.TextStyle(
               fontSize: 11,
               fontWeight: pw.FontWeight.bold,
-              color: primaryIndigo,
+              color: primaryRed,
             ),
           ),
           pw.SizedBox(height: 2),
@@ -428,7 +429,7 @@ class SharedPdfTemplate {
                 style: pw.TextStyle(
                   fontSize: grandTotalValueFontSize,
                   fontWeight: pw.FontWeight.bold,
-                  color: primaryIndigo,
+                  color: primaryRed,
                 ),
               ),
             ],

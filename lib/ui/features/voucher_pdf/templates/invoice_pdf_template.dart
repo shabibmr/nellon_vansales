@@ -70,7 +70,7 @@ class InvoicePdfTemplate {
                   width: 0.5,
                 ),
                 bottom: pw.BorderSide(
-                  color: SharedPdfTemplate.primaryIndigo,
+                  color: SharedPdfTemplate.primaryRed,
                   width: 1,
                 ),
               ),
@@ -86,7 +86,7 @@ class InvoicePdfTemplate {
                 // Header Row
                 pw.TableRow(
                   decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.primaryIndigo,
+                    color: SharedPdfTemplate.primaryRed,
                   ),
                   children: [
                     SharedPdfTemplate.buildTableHeader('#', alignLeft: true),

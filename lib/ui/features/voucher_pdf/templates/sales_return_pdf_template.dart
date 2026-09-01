@@ -49,7 +49,7 @@ class SalesReturnPdfTemplate {
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
               decoration: pw.BoxDecoration(
-                color: SharedPdfTemplate.primaryLightIndigo,
+                color: SharedPdfTemplate.primaryLightRed,
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
                 border: pw.Border.all(
                   color: SharedPdfTemplate.borderSlate,
@@ -61,7 +61,7 @@ class SalesReturnPdfTemplate {
                 children: [
                   pw.Icon(
                     const pw.IconData(0xe887), // Help/Info icon equivalent
-                    color: SharedPdfTemplate.primaryIndigo,
+                    color: SharedPdfTemplate.primaryRed,
                     size: 14,
                   ),
                   pw.SizedBox(width: 8),
@@ -74,7 +74,7 @@ class SalesReturnPdfTemplate {
                           style: pw.TextStyle(
                             fontSize: 8,
                             fontWeight: pw.FontWeight.bold,
-                            color: SharedPdfTemplate.primaryIndigo,
+                            color: SharedPdfTemplate.primaryRed,
                           ),
                         ),
                         pw.SizedBox(height: 2),
@@ -107,7 +107,7 @@ class SalesReturnPdfTemplate {
                   width: 0.5,
                 ),
                 bottom: pw.BorderSide(
-                  color: SharedPdfTemplate.primaryIndigo,
+                  color: SharedPdfTemplate.primaryRed,
                   width: 1,
                 ),
               ),
@@ -122,7 +122,7 @@ class SalesReturnPdfTemplate {
                 // Header Row
                 pw.TableRow(
                   decoration: pw.BoxDecoration(
-                    color: SharedPdfTemplate.primaryIndigo,
+                    color: SharedPdfTemplate.primaryRed,
                   ),
                   children: [
                     SharedPdfTemplate.buildTableHeader('#', alignLeft: true),
