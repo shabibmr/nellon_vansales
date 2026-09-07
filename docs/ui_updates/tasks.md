@@ -303,6 +303,14 @@ For each page: remove `sl` + data imports; use repository; extract aggregator if
 
 ## Phase 8 — Localization spike (Track D, partial)
 
+> **Status corrected 2026-09-07:** this phase was marked "skipped by request"
+> below, but the infrastructure subsequently landed and the `[x]` marks are
+> accurate. `AppLocalizations` delegates are wired at `lib/app.dart:228-229`,
+> `lib/l10n/app_en.arb` holds 69 strings, and generated files are committed.
+> What remains is **adoption, not infrastructure**: only 13 `context.l10n`
+> call sites exist across `lib/ui`, so the overwhelming majority of
+> user-facing strings are still hardcoded English.
+
 ### T8.1 — Enable Flutter gen-l10n
 - [x] `pubspec.yaml`: `generate: true` + flutter_localizations / intl as needed
 - [x] Add `l10n.yaml` + `lib/l10n/app_en.arb`
@@ -376,7 +384,7 @@ For each page: remove `sl` + data imports; use repository; extract aggregator if
 3. User-visible errors never show raw exception dumps. — **done**
 4. Largest pages split; dashboard/masters/ledger maintainable. — **mostly** (masters_sync still large)
 5. Analyzer strict flags enabled with clean analyze on main. — **options enabled**
-6. Semantics on primary dashboard actions; l10n infrastructure present. — **a11y done** (VanActionTile, sync chip, theme tile, remove line); **l10n skipped by request**
+6. Semantics on primary dashboard actions; l10n infrastructure present. — **a11y done** (VanActionTile, sync chip, theme tile, remove line); **l10n infrastructure present** (delegates wired, 69-string ARB); strings not yet migrated
 7. Widget tests cover login + one editor + one report path. — **done** (login, report scaffold, semantics smoke + empty/status)
 8. All existing unit tests updated and green; offline + mock flags still work. — **targeted suites green**
 
@@ -394,7 +402,7 @@ For each page: remove `sl` + data imports; use repository; extract aggregator if
 | 5 Splits + analyzer | | | `[x]` / masters still large |
 | 6 Theme | | | `[x]` (as landed) |
 | 7 A11y | | | `[x]` |
-| 8 l10n | | | `[-]` skipped by request |
+| 8 l10n | | | `[x]` infra landed after this table was written; strings not migrated (13 `context.l10n` sites) |
 | 9 Widget tests | | | `[x]` |
 | 10 Polish | | | `[x]` (semantics smoke + test hygiene) |
 
@@ -403,7 +411,7 @@ For each page: remove `sl` + data imports; use repository; extract aggregator if
 - [x] `FakeSalesRepository.fetchCustomerLedger` on test fakes
 - [x] `CreateCustomerCubit` test injects `SyncRepository`
 - [x] Map remaining user-facing `e.toString()` / `$e` via `userFacingMessage`
-- [-] Wire l10n delegates + pilot strings (**skipped**)
+- [x] Wire l10n delegates + pilot strings (~~skipped~~ — delegates landed later at `lib/app.dart:228-229`; pilot strings partially migrated)
 - [x] Dashboard Semantics + Phase 9 widget tests
 - [x] Peel Zoho/Hive from stock transfer, GPS, editors, voucher PDF, daily stats, masters logout gate
 

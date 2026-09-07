@@ -1,6 +1,15 @@
 # Online-first save (queue only on Zoho failure)
 
-**Tasks:** [tasks.md](./tasks.md)
+> **ARCHIVED — delivered.** Every task is done or explicitly cancelled. The
+> behaviour described here is now the app's save path and is documented in
+> `CLAUDE.md` under "Zoho Books Sync": `SyncWorker.submitOrEnqueue(item)` tries
+> Zoho first and queues only on failure, tagged `[Retryable]` or
+> `[Needs Attention]`.
+>
+> **Cancelled, not forgotten:** cash-closing (T1.6, T3.4) was never migrated to
+> `submitOrEnqueue` and still uses the older save-then-enqueue path.
+
+**Tasks:** [online-first-save-tasks.md](./online-first-save-tasks.md)
 
 ## Goal
 

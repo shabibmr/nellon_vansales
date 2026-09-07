@@ -1,17 +1,27 @@
 # Plan: Log Print Server Config Received by Phone
 
+> **ARCHIVED — superseded.** This was a one-off debugging plan for tracing the
+> Firestore `server_config/zoho` document reaching a phone. Structured logging
+> landed generally instead: `lib/data/services/app_logger.dart` provides
+> `AppLogger.{debug,info,warning,error}` with regex redaction of
+> `client_secret` / `refresh_token` / `access_token` / `Bearer` before anything
+> reaches the console, and there are now zero `print()` calls in `lib/`.
+>
+> Kept only as a record of what was being diagnosed. (Links were Windows-era
+> `E:/work/nellon/` absolute paths; rewritten relative at archive time.)
+
 ## 1. Goal
 Add clear, diagnostic log prints throughout the app lifecycle so developers can see the exact `server_config/zoho` document and parsed `ServerConfig` received by the phone from Firestore.
 
 ## 2. Locations for Server Config Log Prints
-1. **[`lib/data/services/license_service.dart`](file:///E:/work/nellon/lib/data/services/license_service.dart)**:
+1. **[`lib/data/services/license_service.dart`](../../lib/data/services/license_service.dart)**:
    - In `fetchServerConfig()`: Log when reading starts, log raw Firestore map keys and values (including document existence, `client_id`, `organization_id`, presence of `refresh_token`/`code`, and `client_secret` preview).
    - Log errors immediately with full error traces if Firestore fails or times out.
-2. **[`lib/data/repositories/server_config_repository_impl.dart`](file:///E:/work/nellon/lib/data/repositories/server_config_repository_impl.dart)**:
+2. **[`lib/data/repositories/server_config_repository_impl.dart`](../../lib/data/repositories/server_config_repository_impl.dart)**:
    - In `ensureCredentialsLoaded()`: Log whether local storage already had credentials or remote Firestore was consulted, log parsed `ServerConfig.isValid`, and log when credentials are saved to local secure storage.
-3. **[`lib/ui/features/licensing/cubit/server_config_cubit.dart`](file:///E:/work/nellon/lib/ui/features/licensing/cubit/server_config_cubit.dart)**:
+3. **[`lib/ui/features/licensing/cubit/server_config_cubit.dart`](../../lib/ui/features/licensing/cubit/server_config_cubit.dart)**:
    - In `setConfig()` and `_hydrate()`: Log when `ServerConfig` is updated and when credentials are set on `ZohoApiClient`.
-4. **[`lib/ui/features/licensing/cubit/license_cubit.dart`](file:///E:/work/nellon/lib/ui/features/licensing/cubit/license_cubit.dart)**:
+4. **[`lib/ui/features/licensing/cubit/license_cubit.dart`](../../lib/ui/features/licensing/cubit/license_cubit.dart)**:
    - In `checkLicense()` and `registerFirstLogin()`: Log the server config received during licensing gate.
 
 ## 3. Implementation Tasks

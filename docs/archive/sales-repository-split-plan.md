@@ -1,6 +1,21 @@
 # SalesRepository Split — Analysis & Plan
 
-> **Status:** Research complete, 4 design decisions still open. No code written yet.
+> **ARCHIVED — this shipped.** `SalesRepository` no longer exists. All nine
+> proposed repositories were built (`CustomerRepository`, `SessionRepository`,
+> `InvoiceRepository`, `SalesOrderRepository`, `StockTransferRepository`,
+> `ReceiptRepository`, `SalesReturnRepository`, `ExpenseRepository`,
+> `ItemRepository`), plus `CashClosingRepository` and `ServerConfigRepository`
+> which this plan did not anticipate. Each has an interface in
+> `lib/domain/repositories/`, an impl in `lib/data/repositories/`, and its own
+> `*_repository_impl_test.dart`.
+>
+> The four "OPEN QUESTIONS" in §6 are **moot** — they were settled during
+> implementation, not in this document. §3's suspected-stale
+> `integration_test/app_test.dart` was resolved by deleting the directory.
+>
+> Kept for the §2 measured-cost analysis and the §5 design rationale, which
+> still explain *why* the repositories are shaped the way they are.
+>
 > **Prerequisite reading:** none — this document is self-contained.
 > **Related:** [`stock-transfer-architecture-review.md`](./stock-transfer-architecture-review.md) (this work grew out of its Candidate 1).
 
