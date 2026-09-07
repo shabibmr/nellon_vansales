@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../../domain/models/organization.dart';
+import '../../../../domain/models/print_settings.dart';
 import '../../../../domain/models/salesperson.dart';
 import '../../../../domain/models/stock_transfer.dart';
 import '../../../core/utils/quantity_format.dart';
@@ -13,7 +14,7 @@ class StockTransferPdfTemplate {
     StockTransfer transfer,
     Organization org, {
     Salesperson? salesperson,
-    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
+    String? supervisorPhone = PrintSettings.fallbackSupervisorPhone,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
     pw.ImageProvider? logoImage,
   }) {

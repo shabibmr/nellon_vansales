@@ -2,7 +2,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import '../../../../domain/models/organization.dart';
+import '../../../../domain/models/print_settings.dart';
 import '../../../../domain/models/salesperson.dart';
+import '../../../../domain/utils/supervisor_label.dart';
 
 /// A single label/value entry rendered inside [SharedPdfTemplate.buildInfoPanel].
 class PdfInfoEntry {
@@ -39,8 +41,8 @@ class SharedPdfTemplate {
   static final DateFormat dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
   static final DateFormat dateOnlyFormat = DateFormat('dd MMM yyyy');
 
-  /// Default supervisor contact line for documents.
-  static const String supervisorContact = 'Supervisor : +971 501880810';
+  /// Default supervisor phone for documents (number only; footer adds the label).
+  static const String supervisorContact = PrintSettings.fallbackSupervisorPhone;
 
   /// Common corporate grid header with billing enforcer typography and vibrant accents.
   static pw.Widget buildHeader({
@@ -546,10 +548,8 @@ class SharedPdfTemplate {
             ? '$salesmanName (Salesman) : $salesmanPhone'
             : '$salesmanName (Salesman)')
         : '';
-    final supervisorLabel = (supervisorPhone != null && supervisorPhone.trim().isNotEmpty)
-        ? (supervisorPhone.toLowerCase().startsWith('supervisor')
-            ? supervisorPhone
-            : 'Supervisor : $supervisorPhone')
+    final supervisorLabel = supervisorPhone != null
+        ? formatSupervisorLine(supervisorPhone)
         : '';
 
     return pw.Container(

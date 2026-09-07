@@ -8,6 +8,7 @@ import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/print_settings_repository.dart';
 import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/salesperson_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
@@ -49,6 +50,7 @@ class VoucherPdfActionsWidget extends StatelessWidget {
     return BlocProvider<VoucherPdfBloc>(
       create: (ctx) => VoucherPdfBloc(
         pdfService: ctx.read<VoucherPdfRepository>(),
+        printSettings: ctx.read<PrintSettingsRepository>(),
         customerRepository: ctx.read<CustomerRepository>(),
         sessionRepository: ctx.read<SessionRepository>(),
         salespersonRepository: ctx.read<SalespersonRepository>(),

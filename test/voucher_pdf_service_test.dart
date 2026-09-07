@@ -5,6 +5,7 @@ import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/print_settings.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
@@ -12,6 +13,7 @@ import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/salesperson.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/voucher_pdf_repository.dart';
+import 'package:van_sales/domain/utils/supervisor_label.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -333,6 +335,71 @@ void main() {
 
       expect(bytes, isNotEmpty);
       expect(bytes.length, greaterThan(1000));
+    });
+  });
+
+  group('VoucherPdfService - supervisor footer', () {
+    late VoucherPdfService service;
+
+    setUp(() {
+      service = VoucherPdfService();
+    });
+
+    SalesInvoice _sampleInvoice() => SalesInvoice(
+      id: 'inv-supervisor',
+      invoiceNumber: 'INV-SUP-001',
+      customerId: customer.id,
+      customerName: customer.name,
+      date: DateTime(2026, 1, 15),
+      dueDate: DateTime(2026, 1, 30),
+      items: const [
+        InvoiceLineItem(
+          item: item,
+          quantity: 1,
+          rate: 100,
+          taxPercentage: 5,
+        ),
+      ],
+      notes: '',
+    );
+
+    test('footer uses explicit supervisor phone from Firestore', () async {
+      const firestorePhone = '+971 50 999 0000';
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+        supervisorPhone: firestorePhone,
+      );
+
+      expect(bytes, isNotEmpty);
+      expect(
+        formatSupervisorLine(firestorePhone),
+        'Supervisor : $firestorePhone',
+      );
+    });
+
+    test('footer falls back to default supervisor phone when not overridden',
+        () async {
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+      );
+
+      expect(bytes, isNotEmpty);
+      expect(
+        VoucherPdfService.defaultSupervisorPhone,
+        PrintSettings.fallbackSupervisorPhone,
+      );
+      expect(
+        formatSupervisorLine(VoucherPdfService.defaultSupervisorPhone),
+        'Supervisor : ${PrintSettings.fallbackSupervisorPhone}',
+      );
     });
   });
 }

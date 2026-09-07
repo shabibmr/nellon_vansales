@@ -14,6 +14,7 @@ import '../../domain/models/expense_entry.dart';
 import '../../domain/models/stock_transfer.dart';
 import '../../domain/models/organization.dart';
 import '../../domain/models/customer.dart';
+import '../../domain/models/print_settings.dart';
 import '../../domain/models/salesperson.dart';
 import '../../domain/repositories/voucher_pdf_repository.dart';
 
@@ -23,13 +24,13 @@ import '../../ui/features/voucher_pdf/templates/sales_return_pdf_template.dart';
 import '../../ui/features/voucher_pdf/templates/receipt_pdf_template.dart';
 import '../../ui/features/voucher_pdf/templates/expense_pdf_template.dart';
 import '../../ui/features/voucher_pdf/templates/stock_transfer_pdf_template.dart';
-import '../../ui/features/voucher_pdf/templates/shared_pdf_template.dart';
 
 /// A comprehensive service responsible for compiling PDFs, writing them to disk as temp files,
 /// and invoking native Android/iOS Print and Share handlers.
 class VoucherPdfService implements VoucherPdfRepository {
-  /// Default supervisor contact for voucher PDFs.
-  static const String defaultSupervisorPhone = SharedPdfTemplate.supervisorContact;
+  /// Default supervisor phone for voucher PDFs (footer adds the label).
+  static const String defaultSupervisorPhone =
+      PrintSettings.fallbackSupervisorPhone;
 
   /// Asset path for the brand logo rendered on voucher PDFs.
   static const String defaultLogoAssetPath =

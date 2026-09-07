@@ -1,5 +1,6 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import '../../../../domain/models/print_settings.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/customer.dart';
@@ -14,7 +15,7 @@ class InvoicePdfTemplate {
     Organization org,
     Customer? customer, {
     Salesperson? salesperson,
-    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
+    String? supervisorPhone = PrintSettings.fallbackSupervisorPhone,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
     pw.ImageProvider? logoImage,
   }) {
@@ -52,24 +53,7 @@ class InvoicePdfTemplate {
               clientPhone: customer?.phone,
               clientAddress: customer?.address ?? 'No physical address listed',
             ),
-            pw.SizedBox(height: 20),
-
-            // Due Date & Payment Method Block
-            SharedPdfTemplate.buildInfoPanel([
-              PdfInfoEntry(
-                'Payment Due Date',
-                SharedPdfTemplate.dateOnlyFormat.format(invoice.dueDate),
-              ),
-              const PdfInfoEntry(
-                'Payment Method',
-                'Credit Terms / Cash',
-                alignment: pw.CrossAxisAlignment.end,
-              ),
-            ]),
-            pw.SizedBox(height: 20),
-
-            // Items Section Title
-            SharedPdfTemplate.buildSectionTitle('Billed Line Items'),
+            pw.SizedBox(height: 16),
 
             // Dynamic Line Items Table
             pw.Table(
