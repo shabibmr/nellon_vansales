@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Editor mockups — Nellon</title>
+  <link rel="stylesheet" href="editor.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 48px 32px 80px;
+      background: #0b1220;
+      color: #f8fafc;
+    }
+    header { max-width: 1280px; margin: 0 auto 36px; }
+    header .eyebrow { background: rgba(79,70,229,.18); color: #a5b4fc; }
+    h1 { font-size: 40px; letter-spacing: -0.05em; margin-top: 10px; }
+    header p { margin-top: 10px; color: #94a3b8; max-width: 640px; line-height: 1.5; }
+    .grid {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 28px;
+    }
+    figure { margin: 0; }
+    figure a {
+      display: block;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px -28px rgba(0,0,0,.7);
+      background: #eef0f4;
+    }
+    figure iframe {
+      width: 390px;
+      height: 844px;
+      border: 0;
+      transform-origin: top left;
+      pointer-events: none;
+    }
+    .frame {
+      width: 100%;
+      aspect-ratio: 390 / 844;
+      overflow: hidden;
+    }
+    figcaption {
+      margin-top: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    figcaption span { display: block; font-size: 11px; font-weight: 500; color: #94a3b8; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="eyebrow">Visual target</span>
+    <h1>Editor forms</h1>
+    <p>Seven transaction editors as a ledger pad: floating header island, double-bezel cards, till-receipt footer. Open a card for the full-size HTML screen, or use the PNG screenshots beside these files.</p>
+  </header>
+  <div class="grid">
+    <figure>
+      <a href="01-sales-invoice.html"><div class="frame"><iframe src="01-sales-invoice.html" loading="lazy"></iframe></div></a>
+      <figcaption>Sales Invoice <span>Indigo · line items</span></figcaption>
+    </figure>
+    <figure>
+      <a href="02-sales-order.html"><div class="frame"><iframe src="02-sales-order.html" loading="lazy"></iframe></div></a>
+      <figcaption>Sales Order <span>Sky · ship-by date</span></figcaption>
+    </figure>
+    <figure>
+      <a href="03-receipt.html"><div class="frame"><iframe src="03-receipt.html" loading="lazy"></iframe></div></a>
+      <figcaption>Receipt <span>Emerald · hero amount</span></figcaption>
+    </figure>
+    <figure>
+      <a href="04-sales-return.html"><div class="frame"><iframe src="04-sales-return.html" loading="lazy"></iframe></div></a>
+      <figcaption>Sales Return <span>Amber · credit note</span></figcaption>
+    </figure>
+    <figure>
+      <a href="05-expense.html"><div class="frame"><iframe src="05-expense.html" loading="lazy"></iframe></div></a>
+      <figcaption>Expense <span>Rose · category + attach</span></figcaption>
+    </figure>
+    <figure>
+      <a href="06-issue-to-van.html"><div class="frame"><iframe src="06-issue-to-van.html" loading="lazy"></iframe></div></a>
+      <figcaption>Issue to Van <span>Indigo · stock cards</span></figcaption>
+    </figure>
+    <figure>
+      <a href="07-stock-unloading.html"><div class="frame"><iframe src="07-stock-unloading.html" loading="lazy"></iframe></div></a>
+      <figcaption>Stock Unloading <span>Sky · end of trip</span></figcaption>
+    </figure>
+  </div>
+  <script>
+    document.querySelectorAll('.frame').forEach((frame) => {
+      const iframe = frame.querySelector('iframe');
+      const scale = () => {
+        const w = frame.clientWidth;
+        iframe.style.transform = `scale(${w / 390})`;
+      };
+      scale();
+      new ResizeObserver(scale).observe(frame);
+    });
+  </script>
+</body>
+</html>
