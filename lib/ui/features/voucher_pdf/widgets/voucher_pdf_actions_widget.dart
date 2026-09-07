@@ -18,6 +18,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/permission_dialogs.dart';
 import '../../../core/utils/snackbars.dart';
+import '../../print_settings/cubit/print_settings_cubit.dart';
 import '../../thermal_print/cubit/thermal_printer_cubit.dart';
 import '../../thermal_print/cubit/thermal_printer_state.dart';
 import '../../thermal_print/widgets/thermal_print_preview_dialog.dart';
@@ -91,6 +92,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   })?
   _thermalContext(BuildContext context) {
     final org = context.org.state;
@@ -112,6 +114,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       customer: customer,
       salespersonName: salesperson?.name,
       salespersonPhone: salesperson?.phone,
+      supervisorPhone: context.read<PrintSettingsCubit>().supervisorPhone,
     );
   }
 
@@ -125,6 +128,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       customer: args.customer,
       salespersonName: args.salespersonName,
       salespersonPhone: args.salespersonPhone,
+      supervisorPhone: args.supervisorPhone,
     );
   }
 
@@ -141,6 +145,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
         customer: args.customer,
         salespersonName: args.salespersonName,
         salespersonPhone: args.salespersonPhone,
+        supervisorPhone: args.supervisorPhone,
       );
       if (!context.mounted) return;
       await ThermalPrintPreviewDialog.show(

@@ -24,6 +24,7 @@ class VoucherTicketBuilder {
     required ThermalPaperSize paperSize,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) async {
     final composed = await _compose(
       type: type,
@@ -33,6 +34,7 @@ class VoucherTicketBuilder {
       paperSize: paperSize,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
     );
     return composed.bytes;
   }
@@ -46,6 +48,7 @@ class VoucherTicketBuilder {
     required ThermalPaperSize paperSize,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) async {
     final composed = await _compose(
       type: type,
@@ -55,6 +58,7 @@ class VoucherTicketBuilder {
       paperSize: paperSize,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
     );
     return composed.preview;
   }
@@ -67,6 +71,7 @@ class VoucherTicketBuilder {
     required ThermalPaperSize paperSize,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) async {
     final profile = await CapabilityProfile.load();
     final escPaper = EscPosTicketBuilder.toEscPosPaperSize(paperSize);
@@ -86,6 +91,7 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
           ),
         );
       case VoucherType.salesOrder:
@@ -97,6 +103,7 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
           ),
         );
       case VoucherType.salesReturn:
@@ -108,6 +115,7 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
           ),
         );
       case VoucherType.paymentReceipt:
@@ -119,6 +127,7 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
           ),
         );
       case VoucherType.expenseVoucher:
@@ -129,6 +138,7 @@ class VoucherTicketBuilder {
             org,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
           ),
         );
       case VoucherType.stockTransfer:
@@ -139,6 +149,7 @@ class VoucherTicketBuilder {
             org,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
           ),
         );
     }
@@ -238,6 +249,7 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -295,6 +307,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -311,6 +324,7 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -374,6 +388,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -390,6 +405,7 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -447,6 +463,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -463,6 +480,7 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -510,6 +528,7 @@ class VoucherTicketBuilder {
         buildTail: (tail) => tail.footer(
           salespersonName: salespersonName,
           salespersonPhone: salespersonPhone,
+          supervisorPhone: supervisorPhone,
         ),
       ),
     );
@@ -522,6 +541,7 @@ class VoucherTicketBuilder {
     Organization org,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -569,6 +589,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -584,6 +605,7 @@ class VoucherTicketBuilder {
     Organization org,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   ) {
     final bytes = <int>[];
     final isLoad = transfer.direction == StockTransferDirection.load;
@@ -668,6 +690,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;

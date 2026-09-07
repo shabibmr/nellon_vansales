@@ -274,6 +274,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     required Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) {
     return _repo.buildVoucherPreview(
       type: type,
@@ -282,6 +283,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       customer: customer,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
     );
   }
 
@@ -296,6 +298,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) {
     return _repo.buildReportPreview(
       title: title,
@@ -307,6 +310,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       summaryStats: summaryStats,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
     );
   }
 
@@ -317,6 +321,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     required Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) async {
     emit(
       state.copyWith(
@@ -338,6 +343,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
         customer: customer,
         salespersonName: salespersonName,
         salespersonPhone: salespersonPhone,
+        supervisorPhone: supervisorPhone,
       );
       emit(
         state.copyWith(
@@ -367,6 +373,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) async {
     emit(
       state.copyWith(
@@ -391,6 +398,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
         summaryStats: summaryStats,
         salespersonName: salespersonName,
         salespersonPhone: salespersonPhone,
+        supervisorPhone: supervisorPhone,
       );
       emit(
         state.copyWith(

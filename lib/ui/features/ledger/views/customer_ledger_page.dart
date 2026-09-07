@@ -9,6 +9,7 @@ import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/date_picker.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import '../../../../ui/core/utils/snackbars.dart';
+import '../../print_settings/cubit/print_settings_cubit.dart';
 import '../../thermal_print/cubit/thermal_printer_cubit.dart';
 import '../../thermal_print/widgets/thermal_print_preview_dialog.dart';
 import '../bloc/customer_ledger_bloc.dart';
@@ -231,6 +232,7 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
             return;
           }
           final salesperson = context.read<SalespersonCubit>().state;
+          final supervisorPhone = context.read<PrintSettingsCubit>().supervisorPhone;
           final printerCubit = context.read<ThermalPrinterCubit>();
           final preview = await printerCubit.previewReport(
             title: 'CUSTOMER LEDGER',
@@ -242,6 +244,7 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
             summaryStats: stats,
             salespersonName: salesperson?.name,
             salespersonPhone: salesperson?.phone,
+            supervisorPhone: supervisorPhone,
           );
           if (!context.mounted) return;
           await ThermalPrintPreviewDialog.show(
@@ -258,6 +261,7 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                 summaryStats: stats,
                 salespersonName: salesperson?.name,
                 salespersonPhone: salesperson?.phone,
+                supervisorPhone: supervisorPhone,
               );
             },
           );
