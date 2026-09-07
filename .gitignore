@@ -3,6 +3,12 @@
 .env*
 .env_zoho
 zoho_endpoints/responses/
+zoho_endpoints/writeoff_runs/
+zoho_endpoints/ar_aging_exports/
+zoho_endpoints/*.csv
+!zoho_endpoints/endpoints.csv
+zoho_endpoints/*.xlsx
+zoho_endpoints/*.json
 
 # Antigravity CLI tool artifacts
 .antigravitycli/
