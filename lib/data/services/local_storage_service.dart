@@ -10,6 +10,7 @@ class LocalStorageService {
   static const String _zohoClientSecretKey = 'zoho_client_secret';
   static const String _zohoRefreshTokenKey = 'zoho_refresh_token';
   static const String _zohoOrganizationIdKey = 'zoho_organization_id';
+  static const String _supervisorPhoneKey = 'supervisor_phone';
 
   final Box<dynamic>? box;
 
@@ -107,6 +108,29 @@ class LocalStorageService {
     } catch (e) {
       DebugFileLogger.log('[LocalStorage] ❌ saveZohoCredentials: write FAILED: $e');
       throw Exception('Failed to write Zoho credentials: $e');
+    }
+  }
+
+  Future<String?> readSupervisorPhone() async {
+    try {
+      final box = await _getBox();
+      final value = (box.get(_supervisorPhoneKey) as String?)?.trim();
+      if (value == null || value.isEmpty) return null;
+      return value;
+    } catch (e) {
+      DebugFileLogger.log('[LocalStorage] ❌ readSupervisorPhone error: $e');
+      return null;
+    }
+  }
+
+  Future<void> saveSupervisorPhone(String phone) async {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      final box = await _getBox();
+      await box.put(_supervisorPhoneKey, trimmed);
+    } catch (e) {
+      DebugFileLogger.log('[LocalStorage] ❌ saveSupervisorPhone FAILED: $e');
     }
   }
 }
