@@ -9,8 +9,6 @@ import '../../../core/utils/currency.dart';
 import '../../../core/utils/date_picker.dart';
 import '../../../core/widgets/customer_selector_sheet.dart';
 import '../../../core/widgets/editor_footer.dart';
-import '../../../../domain/repositories/voucher_pdf_repository.dart';
-import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/sales_return_editor_bloc.dart';
 import '../bloc/sales_return_editor_event.dart';
 import '../bloc/sales_return_editor_state.dart';
@@ -119,20 +117,30 @@ class SalesReturnEditorForm extends StatelessWidget {
     }
   }
 
+  /// Totals breakdown used by both the persistent edit-mode footer and the
+  /// AppBar share icon's [VoucherDetailsSheet] in view mode.
+  static List<({String label, String value, bool emphasize})> buildFooterRows(
+    SalesReturnEditorState state,
+    String currencySymbol,
+  ) {
+    final totalAmount = state.editingItems.fold(
+      0.0,
+      (sum, line) => sum + line.total,
+    );
+    return [
+      (
+        label: 'Total Return Value:',
+        value: formatCurrency(totalAmount, currencySymbol),
+        emphasize: true,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = context.org.currencySymbol;
     final customer = state.editingCustomer;
     final date = state.editingDate ?? DateTime.now();
-
-    final totalAmount = state.editingItems.fold(
-      0.0,
-      (sum, line) => sum + line.total,
-    );
-
-    final showTrailingPdf = !state.isEditingNew &&
-        state.editingReturnId != null &&
-        customer != null;
 
     return Column(
       children: [
@@ -195,34 +203,22 @@ class SalesReturnEditorForm extends StatelessWidget {
             ),
           ),
         ),
-        EditorFooter(
-          rows: [
-            (
-              label: 'Total Return Value:',
-              value: formatCurrency(totalAmount, cs),
-              emphasize: true,
-            ),
-          ],
-          buttonLabel: readOnly ? 'CLOSE' : 'SAVE SALES RETURN',
-          buttonColor: AppTheme.warningAmber,
-          onSave: readOnly
-              ? () => Navigator.pop(context)
-              : (customer == null ||
+        if (!readOnly)
+          EditorFooter(
+            rows: buildFooterRows(state, cs),
+            buttonLabel: 'SAVE SALES RETURN',
+            buttonColor: AppTheme.warningAmber,
+            onSave:
+                (customer == null ||
                     state.editingItems.isEmpty ||
                     state.isSaving)
-              ? null
-              : () {
-                  context.read<SalesReturnEditorBloc>().add(
-                    SaveReturn(reason: reasonController.text),
-                  );
-                },
-          trailing: showTrailingPdf && state.editingReturn != null
-              ? VoucherPdfActionsWidget(
-                  type: VoucherType.salesReturn,
-                  voucher: state.editingReturn!,
-                )
-              : null,
-        ),
+                ? null
+                : () {
+                    context.read<SalesReturnEditorBloc>().add(
+                      SaveReturn(reason: reasonController.text),
+                    );
+                  },
+          ),
       ],
     );
   }

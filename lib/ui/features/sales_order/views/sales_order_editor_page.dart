@@ -6,14 +6,19 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../../ui/core/widgets/empty_state.dart';
+import '../../../../ui/core/widgets/voucher_details_sheet.dart';
 import '../../../../ui/core/widgets/voucher_refresh_action.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/sales_order_editor_bloc.dart';
 import '../bloc/sales_order_editor_event.dart';
 import '../bloc/sales_order_editor_state.dart';
+import '../widgets/sales_order_convert_action.dart';
 import '../widgets/sales_order_editor_form.dart';
 
 class SalesOrderEditorPage extends StatefulWidget {
@@ -125,6 +130,39 @@ class _SalesOrderEditorPageState extends State<SalesOrderEditorPage> {
                 tooltip: 'Edit',
                 icon: const Icon(Icons.edit_outlined),
                 onPressed: () => setState(() => _isViewMode = false),
+              );
+            },
+          ),
+          BlocBuilder<SalesOrderEditorBloc, SalesOrderEditorState>(
+            buildWhen: (p, c) =>
+                p.isEditingNew != c.isEditingNew ||
+                p.editingOrderId != c.editingOrderId ||
+                p.editingCustomer != c.editingCustomer,
+            builder: (context, state) {
+              if (state.isEditingNew) return const SizedBox.shrink();
+              final order = SalesOrderEditorForm.buildTempOrder(state);
+              return IconButton(
+                tooltip: 'Voucher details & actions',
+                icon: const Icon(Icons.share),
+                onPressed: () => VoucherDetailsSheet.show(
+                  context,
+                  rows: SalesOrderEditorForm.buildFooterRows(
+                    state,
+                    context.org.currencySymbol,
+                  ),
+                  actions: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SalesOrderConvertAction(order: order, compact: true),
+                      const SizedBox(height: 10),
+                      VoucherPdfActionsWidget(
+                        type: VoucherType.salesOrder,
+                        voucher: order,
+                        compact: true,
+                      ),
+                    ],
+                  ),
+                ),
               );
             },
           ),

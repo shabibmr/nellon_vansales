@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
+
 import '../../../data/services/report_export_service.dart';
+import '../../features/thermal_print/cubit/thermal_printer_cubit.dart';
+import '../../features/thermal_print/widgets/thermal_print_preview_dialog.dart';
+import '../cubit/salesperson_cubit.dart';
+import '../extensions/org_context_extension.dart';
 import '../theme/app_theme.dart';
 import '../utils/error_mapper.dart';
 import 'date_range_filter_card.dart';
@@ -108,11 +115,65 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
 
   List<List<String>> _exportRows() => rows.map(exportRow!).toList();
 
+  String? _formatDateRange() {
+    if (startDate == null && endDate == null) return null;
+    final df = DateFormat('dd-MMM-yyyy');
+    if (startDate != null && endDate != null) {
+      return '${df.format(startDate!)} to ${df.format(endDate!)}';
+    } else if (startDate != null) {
+      return 'From ${df.format(startDate!)}';
+    } else {
+      return 'Until ${df.format(endDate!)}';
+    }
+  }
+
   Future<void> _handleExport(BuildContext context, String action) async {
     final headers = exportHeaders!;
     final data = _exportRows();
     try {
       switch (action) {
+        case 'thermal':
+          final org = context.org.state;
+          if (org == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No organization details found')),
+            );
+            return;
+          }
+          final salesperson = context.read<SalespersonCubit>().state;
+          final printerCubit = context.read<ThermalPrinterCubit>();
+          final dateRangeText = _formatDateRange();
+          final summaryStats = {
+            for (final chip in summaryChips) chip.label: chip.value,
+          };
+          final preview = await printerCubit.previewReport(
+            title: title,
+            headers: headers,
+            rows: data,
+            org: org,
+            dateRangeText: dateRangeText,
+            summaryStats: summaryStats,
+            salespersonName: salesperson?.name,
+            salespersonPhone: salesperson?.phone,
+          );
+          if (!context.mounted) return;
+          await ThermalPrintPreviewDialog.show(
+            context,
+            preview: preview,
+            onPrint: () {
+              printerCubit.printReport(
+                title: title,
+                headers: headers,
+                rows: data,
+                org: org,
+                dateRangeText: dateRangeText,
+                summaryStats: summaryStats,
+                salespersonName: salesperson?.name,
+                salespersonPhone: salesperson?.phone,
+              );
+            },
+          );
+          break;
         case 'csv':
           await ReportExportService.exportCsv(title, headers, data);
           break;
@@ -126,7 +187,7 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: ${userFacingMessage(e)}')),
+        SnackBar(content: Text('Action failed: ${userFacingMessage(e)}')),
       );
     }
   }
@@ -174,17 +235,27 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
             ),
           if (_canExport)
             PopupMenuButton<String>(
-              tooltip: 'Export report',
+              tooltip: 'Export / Print report',
               icon: const Icon(Icons.ios_share_rounded),
               onSelected: (action) => _handleExport(context, action),
               itemBuilder: (context) => const [
                 PopupMenuItem(
-                  value: 'csv',
+                  value: 'thermal',
                   child: Row(
                     children: [
-                      Icon(Icons.grid_on_rounded, size: 18),
+                      Icon(Icons.receipt_long_rounded, size: 18),
                       SizedBox(width: 10),
-                      Text('Export as Excel (CSV)'),
+                      Text('Thermal Print (Bluetooth)'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'print',
+                  child: Row(
+                    children: [
+                      Icon(Icons.print_outlined, size: 18),
+                      SizedBox(width: 10),
+                      Text('Print (A4 / Spooler)'),
                     ],
                   ),
                 ),
@@ -199,12 +270,12 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
                   ),
                 ),
                 PopupMenuItem(
-                  value: 'print',
+                  value: 'csv',
                   child: Row(
                     children: [
-                      Icon(Icons.print_outlined, size: 18),
+                      Icon(Icons.grid_on_rounded, size: 18),
                       SizedBox(width: 10),
-                      Text('Print'),
+                      Text('Export as Excel (CSV)'),
                     ],
                   ),
                 ),

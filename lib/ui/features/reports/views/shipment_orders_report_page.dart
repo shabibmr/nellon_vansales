@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../data/services/report_export_service.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
+import '../../../core/cubit/salesperson_cubit.dart';
 import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
+import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/quantity_format.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/date_range_filter_card.dart';
@@ -18,6 +21,8 @@ import '../../sales_invoice/bloc/sales_invoice_list_event.dart' as inv;
 import '../../sales_invoice/bloc/sales_invoice_list_state.dart' as inv;
 import '../../sales_order/views/sales_order_editor_page.dart';
 import '../../stock_transfer/views/issue_to_van_page.dart';
+import '../../thermal_print/cubit/thermal_printer_cubit.dart';
+import '../../thermal_print/widgets/thermal_print_preview_dialog.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../bloc/report_state.dart';
@@ -121,6 +126,95 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
     IssueToVanPage.open<void>(context, demand: demand);
   }
 
+  Future<void> _handleExport(
+    BuildContext context,
+    List<SalesOrder> filtered,
+    String action,
+  ) async {
+    final cs = context.org.currencySymbol;
+    final dateFmt = DateFormat('dd MMM yyyy');
+    final headers = const ['Order No', 'Customer', 'Ship Date', 'Status', 'Amount'];
+    final data = filtered
+        .map((o) => [
+              o.orderNumber,
+              o.customerName,
+              dateFmt.format(o.shipmentDate),
+              o.status.name.toUpperCase(),
+              o.total.toStringAsFixed(2),
+            ])
+        .toList();
+
+    final title = 'Orders by Shipment Date';
+    final df = DateFormat('dd-MMM-yyyy');
+    final dateRange = (reportState.startDate != null && reportState.endDate != null)
+        ? '${df.format(reportState.startDate!)} to ${df.format(reportState.endDate!)}'
+        : (reportState.startDate != null
+            ? 'From ${df.format(reportState.startDate!)}'
+            : (reportState.endDate != null ? 'Until ${df.format(reportState.endDate!)}' : null));
+    final totalVal = filtered.fold<double>(0.0, (s, o) => s + o.total);
+    final stats = {
+      'Total Orders': '${filtered.length}',
+      'Total Value': '$cs${totalVal.toStringAsFixed(2)}',
+    };
+
+    try {
+      switch (action) {
+        case 'thermal':
+          final org = context.org.state;
+          if (org == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No organization details found')),
+            );
+            return;
+          }
+          final salesperson = context.read<SalespersonCubit>().state;
+          final printerCubit = context.read<ThermalPrinterCubit>();
+          final preview = await printerCubit.previewReport(
+            title: 'SHIPMENT ORDERS',
+            headers: headers,
+            rows: data,
+            org: org,
+            dateRangeText: dateRange,
+            summaryStats: stats,
+            salespersonName: salesperson?.name,
+            salespersonPhone: salesperson?.phone,
+          );
+          if (!context.mounted) return;
+          await ThermalPrintPreviewDialog.show(
+            context,
+            preview: preview,
+            onPrint: () {
+              printerCubit.printReport(
+                title: 'SHIPMENT ORDERS',
+                headers: headers,
+                rows: data,
+                org: org,
+                dateRangeText: dateRange,
+                summaryStats: stats,
+                salespersonName: salesperson?.name,
+                salespersonPhone: salesperson?.phone,
+              );
+            },
+          );
+          break;
+        case 'print':
+          await ReportExportService.printReport(title, headers, data);
+          break;
+        case 'pdf':
+          await ReportExportService.exportPdf(title, headers, data);
+          break;
+        case 'csv':
+          await ReportExportService.exportCsv(title, headers, data);
+          break;
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Action failed: ${userFacingMessage(e)}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -192,6 +286,54 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
                     icon: const Icon(Icons.deselect_rounded),
                     onPressed: () =>
                         context.read<ShipmentOrdersCubit>().clearSelection(),
+                  ),
+                if (filtered.isNotEmpty)
+                  PopupMenuButton<String>(
+                    tooltip: 'Export / Print report',
+                    icon: const Icon(Icons.ios_share_rounded),
+                    onSelected: (action) => _handleExport(context, filtered, action),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'thermal',
+                        child: Row(
+                          children: [
+                            Icon(Icons.receipt_long_rounded, size: 18),
+                            SizedBox(width: 10),
+                            Text('Thermal Print (Bluetooth)'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'print',
+                        child: Row(
+                          children: [
+                            Icon(Icons.print_outlined, size: 18),
+                            SizedBox(width: 10),
+                            Text('Print (A4 / Spooler)'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'pdf',
+                        child: Row(
+                          children: [
+                            Icon(Icons.picture_as_pdf_outlined, size: 18),
+                            SizedBox(width: 10),
+                            Text('Export as PDF'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'csv',
+                        child: Row(
+                          children: [
+                            Icon(Icons.grid_on_rounded, size: 18),
+                            SizedBox(width: 10),
+                            Text('Export as Excel (CSV)'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
               ],
               bottom: const TabBar(

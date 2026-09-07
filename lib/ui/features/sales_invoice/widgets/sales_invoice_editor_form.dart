@@ -15,8 +15,6 @@ import '../../../core/widgets/editor_footer.dart';
 import '../../../core/widgets/item_line_editor_dialog.dart';
 import '../../../core/widgets/item_search_sheet.dart';
 import '../../dashboard/widgets/create_customer_dialog.dart';
-import '../../../../domain/repositories/voucher_pdf_repository.dart';
-import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/sales_invoice_editor_bloc.dart';
 import '../bloc/sales_invoice_editor_event.dart';
 import '../bloc/sales_invoice_editor_state.dart';
@@ -179,25 +177,60 @@ class SalesInvoiceEditorForm extends StatelessWidget {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final cs = context.org.currencySymbol;
-    final customer = state.editingCustomer;
+  /// Totals breakdown used by both the persistent edit-mode footer and the
+  /// AppBar share icon's [VoucherDetailsSheet] in view mode.
+  static List<({String label, String value, bool emphasize})> buildFooterRows(
+    SalesInvoiceEditorState state,
+    String currencySymbol,
+  ) {
     final date = state.editingDate ?? DateTime.now();
     final tempInvoice = SalesInvoice(
       id: '',
       invoiceNumber: '',
-      customerId: customer?.id ?? '',
-      customerName: customer?.name ?? '',
+      customerId: state.editingCustomer?.id ?? '',
+      customerName: state.editingCustomer?.name ?? '',
       date: date,
       dueDate: date.add(const Duration(days: 7)),
       items: state.editingItems,
       notes: '',
     );
 
-    final showTrailingPdf = !state.isEditingNew &&
-        state.editingInvoiceId != null &&
-        customer != null;
+    return [
+      (
+        label: 'Subtotal:',
+        value: formatCurrency(tempInvoice.subTotal, currencySymbol),
+        emphasize: false,
+      ),
+      if (tempInvoice.discountTotal > 0)
+        (
+          label: 'Discount Total:',
+          value: formatCurrency(tempInvoice.discountTotal, currencySymbol),
+          emphasize: false,
+        ),
+      (
+        label: 'VAT (Tax):',
+        value: formatCurrency(tempInvoice.taxTotal, currencySymbol),
+        emphasize: false,
+      ),
+      if (tempInvoice.roundOff != 0)
+        (
+          label: 'Round Off:',
+          value: formatCurrency(tempInvoice.roundOff, currencySymbol),
+          emphasize: false,
+        ),
+      (
+        label: 'Total Amount:',
+        value: formatCurrency(tempInvoice.total, currencySymbol),
+        emphasize: true,
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.org.currencySymbol;
+    final customer = state.editingCustomer;
+    final date = state.editingDate ?? DateTime.now();
 
     return Column(
       children: [
@@ -257,56 +290,22 @@ class SalesInvoiceEditorForm extends StatelessWidget {
             ),
           ),
         ),
-        EditorFooter(
-          rows: [
-            (
-              label: 'Subtotal:',
-              value: formatCurrency(tempInvoice.subTotal, cs),
-              emphasize: false,
-            ),
-            if (tempInvoice.discountTotal > 0)
-              (
-                label: 'Discount Total:',
-                value: formatCurrency(tempInvoice.discountTotal, cs),
-                emphasize: false,
-              ),
-            (
-              label: 'VAT (Tax):',
-              value: formatCurrency(tempInvoice.taxTotal, cs),
-              emphasize: false,
-            ),
-            if (tempInvoice.roundOff != 0)
-              (
-                label: 'Round Off:',
-                value: formatCurrency(tempInvoice.roundOff, cs),
-                emphasize: false,
-              ),
-            (
-              label: 'Total Amount:',
-              value: formatCurrency(tempInvoice.total, cs),
-              emphasize: true,
-            ),
-          ],
-          buttonLabel: readOnly ? 'CLOSE' : 'SAVE INVOICE',
-          buttonColor: AppTheme.primaryIndigo,
-          onSave: readOnly
-              ? () => Navigator.pop(context)
-              : (customer == null ||
+        if (!readOnly)
+          EditorFooter(
+            rows: buildFooterRows(state, cs),
+            buttonLabel: 'SAVE INVOICE',
+            buttonColor: AppTheme.primaryIndigo,
+            onSave:
+                (customer == null ||
                     state.editingItems.isEmpty ||
                     state.isSaving)
-              ? null
-              : () {
-                  context.read<SalesInvoiceEditorBloc>().add(
-                    SaveInvoice(notes: notesController.text),
-                  );
-                },
-          trailing: showTrailingPdf && state.editingInvoice != null
-              ? VoucherPdfActionsWidget(
-                  type: VoucherType.salesInvoice,
-                  voucher: state.editingInvoice!,
-                )
-              : null,
-        ),
+                ? null
+                : () {
+                    context.read<SalesInvoiceEditorBloc>().add(
+                      SaveInvoice(notes: notesController.text),
+                    );
+                  },
+          ),
       ],
     );
   }

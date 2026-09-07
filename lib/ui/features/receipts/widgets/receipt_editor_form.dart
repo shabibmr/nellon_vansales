@@ -8,8 +8,6 @@ import '../../../core/utils/currency.dart';
 import '../../../core/utils/date_picker.dart';
 import '../../../core/widgets/customer_selector_sheet.dart';
 import '../../../core/widgets/editor_footer.dart';
-import '../../../../domain/repositories/voucher_pdf_repository.dart';
-import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/receipt_editor_bloc.dart';
 import '../bloc/receipt_editor_event.dart';
 import '../bloc/receipt_editor_state.dart';
@@ -29,6 +27,21 @@ class ReceiptEditorForm extends StatefulWidget {
     required this.state,
     required this.readOnly,
   });
+
+  /// Totals breakdown used by both the persistent edit-mode footer and the
+  /// AppBar share icon's [VoucherDetailsSheet] in view mode.
+  static List<({String label, String value, bool emphasize})> buildFooterRows(
+    ReceiptEditorState state,
+    String currencySymbol,
+  ) {
+    return [
+      (
+        label: 'Total Amount Received:',
+        value: formatCurrency(state.editingAmount, currencySymbol),
+        emphasize: true,
+      ),
+    ];
+  }
 
   @override
   State<ReceiptEditorForm> createState() => _ReceiptEditorFormState();
@@ -91,10 +104,6 @@ class _ReceiptEditorFormState extends State<ReceiptEditorForm> {
     final readOnly = widget.readOnly;
     final customer = state.editingCustomer;
     final date = state.editingDate ?? DateTime.now();
-
-    final showTrailingPdf = !state.isEditingNew &&
-        state.editingId != null &&
-        customer != null;
 
     return Column(
       children: [
@@ -215,32 +224,22 @@ class _ReceiptEditorFormState extends State<ReceiptEditorForm> {
             ),
           ),
         ),
-        EditorFooter(
-          rows: [
-            (
-              label: 'Total Amount Received:',
-              value: formatCurrency(state.editingAmount, cs),
-              emphasize: true,
-            ),
-          ],
-          buttonLabel: readOnly ? 'CLOSE' : 'SAVE RECEIPT',
-          buttonColor: AppTheme.successEmerald,
-          onSave: readOnly
-              ? () => Navigator.pop(context)
-              : (customer == null ||
+        if (!readOnly)
+          EditorFooter(
+            rows: ReceiptEditorForm.buildFooterRows(state, cs),
+            buttonLabel: 'SAVE RECEIPT',
+            buttonColor: AppTheme.successEmerald,
+            onSave:
+                (customer == null ||
                     state.editingAmount <= 0 ||
                     state.isSaving)
-              ? null
-              : () {
-                  context.read<ReceiptEditorBloc>().add(const SaveReceipt());
-                },
-          trailing: showTrailingPdf && state.editingReceipt != null
-              ? VoucherPdfActionsWidget(
-                  type: VoucherType.paymentReceipt,
-                  voucher: state.editingReceipt!,
-                )
-              : null,
-        ),
+                ? null
+                : () {
+                    context.read<ReceiptEditorBloc>().add(
+                      const SaveReceipt(),
+                    );
+                  },
+          ),
       ],
     );
   }

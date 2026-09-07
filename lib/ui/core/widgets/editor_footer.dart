@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 /// Bottom footer shared by all editor pages.
-/// Shows totals rows + a full-width save button with optional trailing widget.
+/// Shows totals rows + a full-width save button.
 class EditorFooter extends StatelessWidget {
   final List<({String label, String value, bool emphasize})> rows;
   final String buttonLabel;
   final Color buttonColor;
   final Color accentColor;
   final VoidCallback? onSave;
-  final Widget? trailing;
 
   const EditorFooter({
     super.key,
@@ -18,7 +17,6 @@ class EditorFooter extends StatelessWidget {
     required this.onSave,
     this.buttonColor = AppTheme.primaryIndigo,
     this.accentColor = AppTheme.primaryIndigo,
-    this.trailing,
   });
 
   @override
@@ -54,7 +52,7 @@ class EditorFooter extends StatelessWidget {
                   const Divider(height: 16),
                 if (i > 0 && !(rows[i].emphasize && !rows[i - 1].emphasize))
                   const SizedBox(height: 4),
-                _TotalsRow(
+                VoucherTotalsRow(
                   label: rows[i].label,
                   value: rows[i].value,
                   emphasize: rows[i].emphasize,
@@ -73,7 +71,6 @@ class EditorFooter extends StatelessWidget {
                   child: Text(buttonLabel),
                 ),
               ),
-              if (trailing != null) ...[const SizedBox(height: 16), trailing!],
             ],
           ),
         ),
@@ -82,13 +79,15 @@ class EditorFooter extends StatelessWidget {
   }
 }
 
-class _TotalsRow extends StatelessWidget {
+/// Shared totals-row style used by [EditorFooter] and [VoucherDetailsSheet].
+class VoucherTotalsRow extends StatelessWidget {
   final String label;
   final String value;
   final bool emphasize;
   final Color accentColor;
 
-  const _TotalsRow({
+  const VoucherTotalsRow({
+    super.key,
     required this.label,
     required this.value,
     required this.emphasize,

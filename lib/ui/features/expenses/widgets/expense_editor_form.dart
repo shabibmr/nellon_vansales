@@ -7,8 +7,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../core/utils/date_picker.dart';
 import '../../../core/widgets/editor_footer.dart';
-import '../../../../domain/repositories/voucher_pdf_repository.dart';
-import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/expense_editor_bloc.dart';
 import '../bloc/expense_editor_event.dart';
 import '../bloc/expense_editor_state.dart';
@@ -31,6 +29,21 @@ class ExpenseEditorForm extends StatefulWidget {
     required this.state,
     required this.readOnly,
   });
+
+  /// Totals breakdown used by both the persistent edit-mode footer and the
+  /// AppBar share icon's [VoucherDetailsSheet] in view mode.
+  static List<({String label, String value, bool emphasize})> buildFooterRows(
+    ExpenseEditorState state,
+    String currencySymbol,
+  ) {
+    return [
+      (
+        label: 'Total Expense:',
+        value: formatCurrency(state.editingAmount, currencySymbol),
+        emphasize: true,
+      ),
+    ];
+  }
 
   @override
   State<ExpenseEditorForm> createState() => _ExpenseEditorFormState();
@@ -163,8 +176,6 @@ class _ExpenseEditorFormState extends State<ExpenseEditorForm> {
     final state = widget.state;
     final readOnly = widget.readOnly;
     final date = state.editingDate ?? DateTime.now();
-
-    final showTrailingPdf = !state.isEditingNew && state.editingId != null;
 
     return Column(
       children: [
@@ -327,30 +338,19 @@ class _ExpenseEditorFormState extends State<ExpenseEditorForm> {
             ),
           ),
         ),
-        EditorFooter(
-          rows: [
-            (
-              label: 'Total Expense:',
-              value: formatCurrency(state.editingAmount, cs),
-              emphasize: true,
-            ),
-          ],
-          buttonLabel: readOnly ? 'CLOSE' : 'SAVE EXPENSE',
-          buttonColor: AppTheme.errorRose,
-          onSave: readOnly
-              ? () => Navigator.pop(context)
-              : (state.editingAmount <= 0 || state.isSaving)
-              ? null
-              : () {
-                  context.read<ExpenseEditorBloc>().add(const SaveExpense());
-                },
-          trailing: showTrailingPdf && state.editingExpense != null
-              ? VoucherPdfActionsWidget(
-                  type: VoucherType.expenseVoucher,
-                  voucher: state.editingExpense!,
-                )
-              : null,
-        ),
+        if (!readOnly)
+          EditorFooter(
+            rows: ExpenseEditorForm.buildFooterRows(state, cs),
+            buttonLabel: 'SAVE EXPENSE',
+            buttonColor: AppTheme.errorRose,
+            onSave: (state.editingAmount <= 0 || state.isSaving)
+                ? null
+                : () {
+                    context.read<ExpenseEditorBloc>().add(
+                      const SaveExpense(),
+                    );
+                  },
+          ),
       ],
     );
   }

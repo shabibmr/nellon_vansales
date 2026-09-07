@@ -6,11 +6,15 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/voucher_details_sheet.dart';
 import '../../../core/widgets/voucher_refresh_action.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/receipt_editor_bloc.dart';
 import '../bloc/receipt_editor_event.dart';
 import '../bloc/receipt_editor_state.dart';
@@ -94,6 +98,36 @@ class _ReceiptEditorPageState extends State<ReceiptEditorPage> {
                 visible: state.canRefreshFromZoho,
                 isLoading: state.isRefreshing,
                 onPressed: () => _onRefreshPressed(context),
+              );
+            },
+          ),
+          BlocBuilder<ReceiptEditorBloc, ReceiptEditorState>(
+            buildWhen: (p, c) =>
+                p.isEditingNew != c.isEditingNew ||
+                p.editingId != c.editingId ||
+                p.editingCustomer != c.editingCustomer ||
+                p.editingReceipt != c.editingReceipt,
+            builder: (context, state) {
+              final showDocumentActions = !state.isEditingNew &&
+                  state.editingId != null &&
+                  state.editingCustomer != null &&
+                  state.editingReceipt != null;
+              if (!showDocumentActions) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Voucher details & actions',
+                icon: const Icon(Icons.share),
+                onPressed: () => VoucherDetailsSheet.show(
+                  context,
+                  rows: ReceiptEditorForm.buildFooterRows(
+                    state,
+                    context.org.currencySymbol,
+                  ),
+                  actions: VoucherPdfActionsWidget(
+                    type: VoucherType.paymentReceipt,
+                    voucher: state.editingReceipt!,
+                    compact: true,
+                  ),
+                ),
               );
             },
           ),

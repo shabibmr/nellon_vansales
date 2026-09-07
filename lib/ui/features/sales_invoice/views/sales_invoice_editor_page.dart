@@ -8,11 +8,15 @@ import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/repositories/invoice_repository.dart';
 import '../../../../domain/repositories/sales_order_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/voucher_details_sheet.dart';
 import '../../../core/widgets/voucher_refresh_action.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/sales_invoice_editor_bloc.dart';
 import '../bloc/sales_invoice_editor_event.dart';
 import '../bloc/sales_invoice_editor_state.dart';
@@ -114,6 +118,36 @@ class _SalesInvoiceEditorPageState extends State<SalesInvoiceEditorPage> {
                 visible: state.canRefreshFromZoho,
                 isLoading: state.isRefreshing,
                 onPressed: () => _onRefreshPressed(context),
+              );
+            },
+          ),
+          BlocBuilder<SalesInvoiceEditorBloc, SalesInvoiceEditorState>(
+            buildWhen: (p, c) =>
+                p.isEditingNew != c.isEditingNew ||
+                p.editingInvoiceId != c.editingInvoiceId ||
+                p.editingCustomer != c.editingCustomer ||
+                p.editingInvoice != c.editingInvoice,
+            builder: (context, state) {
+              final showDocumentActions = !state.isEditingNew &&
+                  state.editingInvoiceId != null &&
+                  state.editingCustomer != null &&
+                  state.editingInvoice != null;
+              if (!showDocumentActions) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Voucher details & actions',
+                icon: const Icon(Icons.share),
+                onPressed: () => VoucherDetailsSheet.show(
+                  context,
+                  rows: SalesInvoiceEditorForm.buildFooterRows(
+                    state,
+                    context.org.currencySymbol,
+                  ),
+                  actions: VoucherPdfActionsWidget(
+                    type: VoucherType.salesInvoice,
+                    voucher: state.editingInvoice!,
+                    compact: true,
+                  ),
+                ),
               );
             },
           ),

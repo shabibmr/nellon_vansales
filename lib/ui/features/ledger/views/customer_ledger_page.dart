@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import '../../../../data/services/report_export_service.dart';
 import '../../../../domain/models/customer_ledger.dart';
-import '../../../../ui/core/theme/app_theme.dart';
+import '../../../../ui/core/cubit/salesperson_cubit.dart';
 import '../../../../ui/core/extensions/org_context_extension.dart';
+import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/date_picker.dart';
+import '../../../../ui/core/utils/error_mapper.dart';
 import '../../../../ui/core/utils/snackbars.dart';
+import '../../thermal_print/cubit/thermal_printer_cubit.dart';
+import '../../thermal_print/widgets/thermal_print_preview_dialog.dart';
 import '../bloc/customer_ledger_bloc.dart';
 import '../utils/open_ledger_transaction.dart';
 import '../widgets/customer_ledger_header.dart';
@@ -179,6 +184,102 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
     );
   }
 
+  Future<void> _handleLedgerExport(
+    BuildContext context,
+    CustomerLedger ledger,
+    CustomerLedgerState state,
+    String action,
+  ) async {
+    final cs = context.org.currencySymbol;
+    final headers = const [
+      'Date',
+      'Doc No',
+      'Type',
+      'Debit',
+      'Credit',
+      'Balance',
+    ];
+    final data = ledger.transactions
+        .map((t) => [
+              _shortDate.format(t.date),
+              t.transactionNumber.isNotEmpty ? t.transactionNumber : '-',
+              t.type.toUpperCase(),
+              t.debit > 0 ? t.debit.toStringAsFixed(2) : '-',
+              t.credit > 0 ? t.credit.toStringAsFixed(2) : '-',
+              t.balance.toStringAsFixed(2),
+            ])
+        .toList();
+
+    final title = 'Customer Ledger - ${ledger.customerName}';
+    final dateRange =
+        '${_dateFormat.format(state.startDate)} to ${_dateFormat.format(state.endDate)}';
+    final stats = {
+      'Opening Bal': '$cs${ledger.openingBalance.toStringAsFixed(2)}',
+      'Total Debits': '$cs${ledger.totalDebits.toStringAsFixed(2)}',
+      'Total Credits': '$cs${ledger.totalCredits.toStringAsFixed(2)}',
+      'Closing Bal': '$cs${ledger.closingBalance.toStringAsFixed(2)}',
+    };
+
+    try {
+      switch (action) {
+        case 'thermal':
+          final org = context.org.state;
+          if (org == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No organization details found')),
+            );
+            return;
+          }
+          final salesperson = context.read<SalespersonCubit>().state;
+          final printerCubit = context.read<ThermalPrinterCubit>();
+          final preview = await printerCubit.previewReport(
+            title: 'CUSTOMER LEDGER',
+            subtitle: 'Customer: ${ledger.customerName}',
+            headers: headers,
+            rows: data,
+            org: org,
+            dateRangeText: dateRange,
+            summaryStats: stats,
+            salespersonName: salesperson?.name,
+            salespersonPhone: salesperson?.phone,
+          );
+          if (!context.mounted) return;
+          await ThermalPrintPreviewDialog.show(
+            context,
+            preview: preview,
+            onPrint: () {
+              printerCubit.printReport(
+                title: 'CUSTOMER LEDGER',
+                subtitle: 'Customer: ${ledger.customerName}',
+                headers: headers,
+                rows: data,
+                org: org,
+                dateRangeText: dateRange,
+                summaryStats: stats,
+                salespersonName: salesperson?.name,
+                salespersonPhone: salesperson?.phone,
+              );
+            },
+          );
+          break;
+        case 'print':
+          await ReportExportService.printReport(title, headers, data);
+          break;
+        case 'pdf':
+          await ReportExportService.exportPdf(title, headers, data);
+          break;
+        case 'csv':
+          await ReportExportService.exportCsv(title, headers, data);
+          break;
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Action failed: ${userFacingMessage(e)}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -190,11 +291,68 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
           BlocBuilder<CustomerLedgerBloc, CustomerLedgerState>(
             builder: (context, state) {
               if (state.ledger == null) return const SizedBox.shrink();
-              return IconButton(
-                tooltip: 'Clear Report',
-                icon: const Icon(Icons.clear_all_rounded),
-                onPressed: () =>
-                    context.read<CustomerLedgerBloc>().add(ClearLedger()),
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Clear Report',
+                    icon: const Icon(Icons.clear_all_rounded),
+                    onPressed: () =>
+                        context.read<CustomerLedgerBloc>().add(ClearLedger()),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Export / Print ledger',
+                    icon: const Icon(Icons.ios_share_rounded),
+                    onSelected: (action) => _handleLedgerExport(
+                      context,
+                      state.ledger!,
+                      state,
+                      action,
+                    ),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'thermal',
+                        child: Row(
+                          children: [
+                            Icon(Icons.receipt_long_rounded, size: 18),
+                            SizedBox(width: 10),
+                            Text('Thermal Print (Bluetooth)'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'print',
+                        child: Row(
+                          children: [
+                            Icon(Icons.print_outlined, size: 18),
+                            SizedBox(width: 10),
+                            Text('Print (A4 / Spooler)'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'pdf',
+                        child: Row(
+                          children: [
+                            Icon(Icons.picture_as_pdf_outlined, size: 18),
+                            SizedBox(width: 10),
+                            Text('Export as PDF'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'csv',
+                        child: Row(
+                          children: [
+                            Icon(Icons.grid_on_rounded, size: 18),
+                            SizedBox(width: 10),
+                            Text('Export as Excel (CSV)'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               );
             },
           ),

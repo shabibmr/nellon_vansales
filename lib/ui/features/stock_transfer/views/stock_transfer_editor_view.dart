@@ -13,6 +13,7 @@ import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/editor_footer.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/item_search_sheet.dart';
+import '../../../core/widgets/voucher_details_sheet.dart';
 import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/stock_transfer_bloc.dart';
 import '../widgets/stock_transfer_line_tile.dart';
@@ -84,6 +85,22 @@ class _StockTransferEditorViewState extends State<StockTransferEditorView> {
     super.dispose();
   }
 
+  /// Totals row used by both the persistent edit-mode footer and the
+  /// AppBar share icon's [VoucherDetailsSheet] in view mode.
+  List<({String label, String value, bool emphasize})> _footerRows(
+    StockTransferState state,
+  ) {
+    return [
+      (
+        label: widget.isLoad
+            ? 'Total Quantity to Issue:'
+            : 'Total Quantity to Unload:',
+        value: formatQuantity(state.totalTransferQty),
+        emphasize: true,
+      ),
+    ];
+  }
+
   Future<void> _editRowQty(StockTransferRow row) async {
     final result = await StockTransferQtyDialog.show(
       context,
@@ -151,7 +168,29 @@ class _StockTransferEditorViewState extends State<StockTransferEditorView> {
       backgroundColor: isDark
           ? AppTheme.darkBackground
           : AppTheme.lightBackground,
-      appBar: AppBar(title: Text(_title)),
+      appBar: AppBar(
+        title: Text(_title),
+        actions: [
+          if (widget.existingTransfer != null)
+            BlocBuilder<StockTransferBloc, StockTransferState>(
+              builder: (context, state) {
+                return IconButton(
+                  tooltip: 'Voucher details & actions',
+                  icon: const Icon(Icons.share),
+                  onPressed: () => VoucherDetailsSheet.show(
+                    context,
+                    rows: _footerRows(state),
+                    actions: VoucherPdfActionsWidget(
+                      type: VoucherType.stockTransfer,
+                      voucher: widget.existingTransfer!,
+                      compact: true,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
       body: SafeArea(
         child: BlocConsumer<StockTransferBloc, StockTransferState>(
           listenWhen: (previous, current) =>
@@ -264,70 +303,52 @@ class _StockTransferEditorViewState extends State<StockTransferEditorView> {
                     ),
                   ),
                 ),
-                EditorFooter(
-                  rows: [
-                    (
-                      label: widget.isLoad
-                          ? 'Total Quantity to Issue:'
-                          : 'Total Quantity to Unload:',
-                      value: formatQuantity(state.totalTransferQty),
-                      emphasize: true,
+                if (widget.isLoad && !readOnly)
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 600),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _openAddItemSheet,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Item'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.primaryIndigo,
+                              side: const BorderSide(
+                                color: AppTheme.primaryIndigo,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                  buttonLabel: readOnly
-                      ? 'VIEW ONLY — ${state.status.toUpperCase()}'
-                      : state.isEditingExisting
-                      ? 'UPDATE TRANSFER'
-                      : widget.isLoad
-                      ? 'ISSUE TO VAN'
-                      : 'UNLOAD STOCK',
-                  buttonColor: AppTheme.primaryIndigo,
-                  onSave:
-                      readOnly ||
-                          state.isLoading ||
-                          state.totalTransferQty <= 0 ||
-                          state.defaultWarehouse.id.isEmpty
-                      ? null
-                      : () {
-                          context.read<StockTransferBloc>().add(
-                            SubmitTransfer(notes: _notesController.text),
-                          );
-                        },
-                  trailing: (widget.isLoad && !readOnly) ||
-                          widget.existingTransfer != null
-                      ? Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.isLoad && !readOnly)
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: _openAddItemSheet,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Add Item'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.primaryIndigo,
-                                    side: const BorderSide(
-                                      color: AppTheme.primaryIndigo,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (widget.existingTransfer != null) ...[
-                              if (widget.isLoad && !readOnly)
-                                const SizedBox(height: 12),
-                              VoucherPdfActionsWidget(
-                                type: VoucherType.stockTransfer,
-                                voucher: widget.existingTransfer!,
-                              ),
-                            ],
-                          ],
-                        )
-                      : null,
-                ),
+                  ),
+                if (!readOnly)
+                  EditorFooter(
+                    rows: _footerRows(state),
+                    buttonLabel: state.isEditingExisting
+                        ? 'UPDATE TRANSFER'
+                        : widget.isLoad
+                        ? 'ISSUE TO VAN'
+                        : 'UNLOAD STOCK',
+                    buttonColor: AppTheme.primaryIndigo,
+                    onSave:
+                        state.isLoading ||
+                            state.totalTransferQty <= 0 ||
+                            state.defaultWarehouse.id.isEmpty
+                        ? null
+                        : () {
+                            context.read<StockTransferBloc>().add(
+                              SubmitTransfer(notes: _notesController.text),
+                            );
+                          },
+                  ),
               ],
             );
           },

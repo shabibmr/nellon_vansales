@@ -6,11 +6,15 @@ import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/sales_return_repository.dart';
+import '../../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../core/extensions/org_context_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/snackbars.dart';
 import '../../../core/widgets/confirm_discard_refresh_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/voucher_details_sheet.dart';
 import '../../../core/widgets/voucher_refresh_action.dart';
+import '../../voucher_pdf/widgets/voucher_pdf_actions_widget.dart';
 import '../bloc/sales_return_editor_bloc.dart';
 import '../bloc/sales_return_editor_event.dart';
 import '../bloc/sales_return_editor_state.dart';
@@ -103,6 +107,36 @@ class _SalesReturnEditorPageState extends State<SalesReturnEditorPage> {
                 visible: state.canRefreshFromZoho,
                 isLoading: state.isRefreshing,
                 onPressed: () => _onRefreshPressed(context),
+              );
+            },
+          ),
+          BlocBuilder<SalesReturnEditorBloc, SalesReturnEditorState>(
+            buildWhen: (p, c) =>
+                p.isEditingNew != c.isEditingNew ||
+                p.editingReturnId != c.editingReturnId ||
+                p.editingCustomer != c.editingCustomer ||
+                p.editingReturn != c.editingReturn,
+            builder: (context, state) {
+              final showDocumentActions = !state.isEditingNew &&
+                  state.editingReturnId != null &&
+                  state.editingCustomer != null &&
+                  state.editingReturn != null;
+              if (!showDocumentActions) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Voucher details & actions',
+                icon: const Icon(Icons.share),
+                onPressed: () => VoucherDetailsSheet.show(
+                  context,
+                  rows: SalesReturnEditorForm.buildFooterRows(
+                    state,
+                    context.org.currencySymbol,
+                  ),
+                  actions: VoucherPdfActionsWidget(
+                    type: VoucherType.salesReturn,
+                    voucher: state.editingReturn!,
+                    compact: true,
+                  ),
+                ),
               );
             },
           ),
