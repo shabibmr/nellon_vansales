@@ -13,7 +13,8 @@ service cloud.firestore {
         && resource.data.user_id == request.auth.uid;
     }
 
-    // Zoho OAuth triple (`zoho`) and APK channel docs (`app_version`).
+    // Zoho OAuth triple (`zoho`), APK channel docs (`app_version`), and print
+    // settings (`print` — `supervisor_phone` for invoice/PDF footers).
     // Public read: AppUpdateGate runs before auth; a fresh phone must be able
     // to load `zoho` immediately after OTP. Clients must never write — any
     // authenticated van user used to be able to overwrite the refresh token.
