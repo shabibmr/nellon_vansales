@@ -1,5 +1,14 @@
 # Architecture review: `lib/ui/features/stock_transfer/`
 
+> **ARCHIVED — all three candidates were implemented.** See
+> [stock-transfer-tasks.md](./stock-transfer-tasks.md) for what landed under
+> which name. The feature now reads: `StockTransferRepository` seam,
+> a shared `StockTransferEditorView` behind two thin page wrappers, and a
+> dedicated `StockTransferQtyDialog`. Kept for the design reasoning.
+>
+> `stock_transfer_bloc.dart` is still ~824 lines — the view duplication this
+> review targeted is gone, but the bloc itself was never split.
+
 ## Context
 
 Analysis via `/improve-codebase-architecture`, scoped to `lib/ui/features/stock_transfer/` per request. This is a small feature (3 files: `bloc/stock_transfer_bloc.dart`, `views/issue_to_van_page.dart`, `views/stock_unloading_page.dart`, ~1,388 lines total) that drives both the Issue-to-Van and Stock-Unloading planning grids and submits them as Zoho Transfer Orders. No `CONTEXT.md` or `docs/adr/` exist yet in this repo, so there's no prior domain vocabulary or ADRs to reconcile against.
@@ -156,7 +165,7 @@ Candidate 1 was grilled and **widened materially**. The investigation confirmed 
 
 The user chose to fix the root cause rather than one symptom. That work is now planned as a full 9-repository split:
 
-➡️ **[`sales-repository-split-plan.md`](./sales-repository-split-plan.md)** — full analysis, the proposed split, settled decisions, and 4 open questions.
+➡️ **[`sales-repository-split-plan.md`](./sales-repository-split-plan.md)** — full analysis, the proposed split, and settled decisions. (Its "4 open questions" were resolved during implementation; the split shipped.)
 
 The `StockTransferRepository` carve-out described in Candidate 1 survives intact inside that plan (§5), including its agreed 5-method reshaped interface.
 

@@ -1,6 +1,9 @@
 # Online-first save — Task List
 
-**Source plan:** [plan.md](./plan.md)  
+> **ARCHIVED — complete.** All tasks done except the two cash-closing items
+> (T1.6, T3.4), cancelled during the program.
+
+**Source plan:** [online-first-save-plan.md](./online-first-save-plan.md)  
 **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` cancelled
 
 Work top to bottom. Do not switch an editor to `submitOrEnqueue` until Phase 1 persist upserts land.
