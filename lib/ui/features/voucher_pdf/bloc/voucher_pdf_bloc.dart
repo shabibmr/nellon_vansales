@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdf/pdf.dart';
 import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/session_repository.dart';
+import '../../../../domain/repositories/salesperson_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
@@ -18,11 +19,13 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
   final VoucherPdfRepository pdfService;
   final CustomerRepository customerRepository;
   final SessionRepository sessionRepository;
+  final SalespersonRepository? salespersonRepository;
 
   VoucherPdfBloc({
     required this.pdfService,
     required this.customerRepository,
     required this.sessionRepository,
+    this.salespersonRepository,
   }) : super(VoucherPdfInitial()) {
     on<GenerateVoucherPdfPreviewRequested>(_onPreviewRequested);
     on<PrintVoucherPdfRequested>(_onPrintRequested);
@@ -63,12 +66,14 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
       throw Exception('Organization data not loaded — please sync first');
     }
     final customer = _getCustomer(type, voucher);
+    final salesperson = salespersonRepository?.currentSalesperson;
 
     return pdfService.generateVoucherPdf(
       type: type,
       voucher: voucher,
       org: org,
       customer: customer,
+      salesperson: salesperson,
       pageFormat: pageFormat,
     );
   }

@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../../domain/models/expense_entry.dart';
 import '../../../../domain/models/organization.dart';
+import '../../../../domain/models/salesperson.dart';
 import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Expense Voucher documents.
@@ -9,7 +10,10 @@ class ExpensePdfTemplate {
   static pw.Document generate(
     ExpenseEntry expense,
     Organization org, {
+    Salesperson? salesperson,
+    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
+    pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
     final currencySymbol = org.currencySymbol;
@@ -26,6 +30,7 @@ class ExpensePdfTemplate {
               voucherTitle: 'Expense Voucher',
               voucherNumber: expense.id,
               date: expense.date,
+              logoImage: logoImage,
             ),
             pw.SizedBox(height: 16),
 
@@ -33,11 +38,16 @@ class ExpensePdfTemplate {
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Charged By (Company)',
               companyName: org.name,
-              companyDetails: 'On-Route Operating Expense\nTax-Deductible Log',
-              billToLabel: 'Disbursed To / Vendor',
-              clientName: 'Operational Expense / Driver',
-              clientEmail: '',
-              clientPhone: '',
+              companyPhone: org.phone,
+              companyAddress: org.address,
+              companyTrn: org.trn,
+              companyDetails: 'On-Route Operating Expense',
+              billToLabel: 'Disbursed To / Payee',
+              clientName: (salesperson != null && salesperson.name.trim().isNotEmpty)
+                  ? '${salesperson.name} (Driver/Salesperson)'
+                  : 'Operational Expense / Driver',
+              clientEmail: salesperson?.email,
+              clientPhone: salesperson?.phone,
               clientAddress: 'Logged during route delivery services',
             ),
             pw.SizedBox(height: 20),
@@ -168,7 +178,11 @@ class ExpensePdfTemplate {
             ),
           ];
         },
-        footer: SharedPdfTemplate.buildFooter,
+        footer: (context) => SharedPdfTemplate.buildFooter(
+          context,
+          salesperson: salesperson,
+          supervisorPhone: supervisorPhone,
+        ),
       ),
     );
 

@@ -3,6 +3,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/salesperson.dart';
 import '../../../core/utils/quantity_format.dart';
 import 'shared_pdf_template.dart';
 
@@ -12,7 +13,10 @@ class SalesOrderPdfTemplate {
     SalesOrder order,
     Organization org,
     Customer? customer, {
+    Salesperson? salesperson,
+    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
+    pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
     final currencySymbol = org.currencySymbol;
@@ -29,6 +33,7 @@ class SalesOrderPdfTemplate {
               voucherTitle: 'Sales Order',
               voucherNumber: order.orderNumber,
               date: order.date,
+              logoImage: logoImage,
             ),
             pw.SizedBox(height: 16),
 
@@ -36,9 +41,13 @@ class SalesOrderPdfTemplate {
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Supplier / Dispatcher',
               companyName: org.name,
-              companyDetails: 'On-Route Delivery Van\nTax Registered Vendor',
+              companyPhone: org.phone,
+              companyAddress: org.address,
+              companyTrn: org.trn,
+              companyDetails: 'On-Route Delivery Van',
               billToLabel: 'Ordered By (Customer)',
               clientName: order.customerName,
+              clientTrn: customer?.trn,
               clientEmail: customer?.email,
               clientPhone: customer?.phone,
               clientAddress: customer?.address ?? 'No physical address listed',
@@ -205,7 +214,11 @@ class SalesOrderPdfTemplate {
             ),
           ];
         },
-        footer: SharedPdfTemplate.buildFooter,
+        footer: (context) => SharedPdfTemplate.buildFooter(
+          context,
+          salesperson: salesperson,
+          supervisorPhone: supervisorPhone,
+        ),
       ),
     );
 

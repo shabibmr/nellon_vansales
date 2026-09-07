@@ -9,6 +9,7 @@ import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/customer_repository.dart';
 import '../../../../domain/repositories/session_repository.dart';
+import '../../../../domain/repositories/salesperson_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
 import '../../../core/cubit/salesperson_cubit.dart';
 import '../../../core/extensions/org_context_extension.dart';
@@ -50,6 +51,7 @@ class VoucherPdfActionsWidget extends StatelessWidget {
         pdfService: ctx.read<VoucherPdfRepository>(),
         customerRepository: ctx.read<CustomerRepository>(),
         sessionRepository: ctx.read<SessionRepository>(),
+        salespersonRepository: ctx.read<SalespersonRepository>(),
       ),
       child: _VoucherPdfActionsBody(
         type: type,

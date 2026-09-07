@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import '../../../../domain/models/organization.dart';
+import '../../../../domain/models/salesperson.dart';
 
 /// A single label/value entry rendered inside [SharedPdfTemplate.buildInfoPanel].
 class PdfInfoEntry {
@@ -38,15 +39,19 @@ class SharedPdfTemplate {
   static final DateFormat dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
   static final DateFormat dateOnlyFormat = DateFormat('dd MMM yyyy');
 
+  /// Default supervisor contact line for documents.
+  static const String supervisorContact = 'Supervisor : +971 501880810';
+
   /// Common corporate grid header with billing enforcer typography and vibrant accents.
   static pw.Widget buildHeader({
     required Organization org,
     required String voucherTitle,
     required String voucherNumber,
     required DateTime date,
+    pw.ImageProvider? logoImage,
   }) {
     return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 24),
+      margin: const pw.EdgeInsets.only(bottom: 20),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
@@ -55,32 +60,80 @@ class SharedPdfTemplate {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    org.name.toUpperCase(),
-                    style: pw.TextStyle(
-                      fontSize: 20,
-                      fontWeight: pw.FontWeight.bold,
-                      color: primaryRed,
+              pw.Expanded(
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    if (logoImage != null) ...[
+                      pw.Container(
+                        width: 54,
+                        height: 54,
+                        margin: const pw.EdgeInsets.only(right: 12),
+                        alignment: pw.Alignment.topLeft,
+                        child: pw.Image(
+                          logoImage,
+                          fit: pw.BoxFit.contain,
+                        ),
+                      ),
+                    ],
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            org.name.toUpperCase(),
+                            style: pw.TextStyle(
+                              fontSize: 16,
+                              fontWeight: pw.FontWeight.bold,
+                              color: primaryRed,
+                            ),
+                          ),
+                          if (org.trn.trim().isNotEmpty) ...[
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              'TRN: ${org.trn}',
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold,
+                                color: slateText,
+                              ),
+                            ),
+                          ],
+                          if (org.phone.trim().isNotEmpty) ...[
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              'Phone: ${org.phone}',
+                              style: pw.TextStyle(
+                                fontSize: 8.5,
+                                color: slateTextSecondary,
+                              ),
+                            ),
+                          ],
+                          if (org.address.trim().isNotEmpty) ...[
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              org.address,
+                              style: pw.TextStyle(
+                                fontSize: 8.5,
+                                color: slateTextSecondary,
+                              ),
+                            ),
+                          ],
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            'Zone: ${org.timeZone}',
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              color: slateTextSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    'On-The-Road Smart Invoicing Module',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.normal,
-                      color: slateTextSecondary,
-                    ),
-                  ),
-                  pw.Text(
-                    'Zone: ${org.timeZone}',
-                    style: pw.TextStyle(fontSize: 9, color: slateTextSecondary),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              pw.SizedBox(width: 16),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
@@ -128,10 +181,10 @@ class SharedPdfTemplate {
               ),
             ],
           ),
-          pw.SizedBox(height: 16),
+          pw.SizedBox(height: 12),
           // Accent colored thick divider line
           pw.Container(
-            height: 4,
+            height: 3,
             decoration: pw.BoxDecoration(
               gradient: pw.LinearGradient(
                 colors: [primaryRed, primaryDarkRed],
@@ -141,19 +194,19 @@ class SharedPdfTemplate {
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
             ),
           ),
-          pw.SizedBox(height: 12),
+          pw.SizedBox(height: 8),
           // Sub-metadata block
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
                 'Issued: ${dateFormat.format(date)}',
-                style: pw.TextStyle(fontSize: 10, color: slateText),
+                style: pw.TextStyle(fontSize: 9.5, color: slateText),
               ),
               pw.Text(
                 'Status: CONFIRMED',
                 style: pw.TextStyle(
-                  fontSize: 10,
+                  fontSize: 9.5,
                   fontWeight: pw.FontWeight.bold,
                   color: successEmerald,
                 ),
@@ -194,8 +247,12 @@ class SharedPdfTemplate {
     required String? clientEmail,
     required String? clientPhone,
     required String? clientAddress,
+    String? clientTrn,
     required String billFromLabel,
     required String companyName,
+    String? companyPhone,
+    String? companyAddress,
+    String? companyTrn,
     String? companyDetails,
   }) {
     return pw.Row(
@@ -223,11 +280,36 @@ class SharedPdfTemplate {
                   color: slateText,
                 ),
               ),
-              if (companyDetails != null) ...[
+              if (companyTrn != null && companyTrn.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 2),
+                pw.Text(
+                  'TRN: $companyTrn',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: slateText,
+                  ),
+                ),
+              ],
+              if (companyPhone != null && companyPhone.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 2),
+                pw.Text(
+                  'Phone: $companyPhone',
+                  style: pw.TextStyle(fontSize: 8.5, color: slateText),
+                ),
+              ],
+              if (companyAddress != null && companyAddress.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 2),
+                pw.Text(
+                  'Address: $companyAddress',
+                  style: pw.TextStyle(fontSize: 8.5, color: slateTextSecondary),
+                ),
+              ],
+              if (companyDetails != null && companyDetails.trim().isNotEmpty) ...[
                 pw.SizedBox(height: 2),
                 pw.Text(
                   companyDetails,
-                  style: pw.TextStyle(fontSize: 9, color: slateTextSecondary),
+                  style: pw.TextStyle(fontSize: 8.5, color: slateTextSecondary),
                 ),
               ],
             ],
@@ -256,25 +338,36 @@ class SharedPdfTemplate {
                   color: slateText,
                 ),
               ),
-              if (clientPhone != null && clientPhone.isNotEmpty) ...[
+              if (clientTrn != null && clientTrn.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 2),
+                pw.Text(
+                  'TRN: $clientTrn',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: slateText,
+                  ),
+                ),
+              ],
+              if (clientPhone != null && clientPhone.trim().isNotEmpty) ...[
                 pw.SizedBox(height: 2),
                 pw.Text(
                   'Phone: $clientPhone',
-                  style: pw.TextStyle(fontSize: 9, color: slateText),
+                  style: pw.TextStyle(fontSize: 8.5, color: slateText),
                 ),
               ],
-              if (clientEmail != null && clientEmail.isNotEmpty) ...[
+              if (clientEmail != null && clientEmail.trim().isNotEmpty) ...[
                 pw.SizedBox(height: 2),
                 pw.Text(
                   'Email: $clientEmail',
-                  style: pw.TextStyle(fontSize: 9, color: slateText),
+                  style: pw.TextStyle(fontSize: 8.5, color: slateText),
                 ),
               ],
-              if (clientAddress != null && clientAddress.isNotEmpty) ...[
+              if (clientAddress != null && clientAddress.trim().isNotEmpty) ...[
                 pw.SizedBox(height: 2),
                 pw.Text(
                   'Address: $clientAddress',
-                  style: pw.TextStyle(fontSize: 9, color: slateTextSecondary),
+                  style: pw.TextStyle(fontSize: 8.5, color: slateTextSecondary),
                 ),
               ],
             ],
@@ -439,14 +532,62 @@ class SharedPdfTemplate {
     );
   }
 
-  /// Multi-page footer showing legal taglines and standard page numbering bounds.
-  static pw.Widget buildFooter(pw.Context context) {
+  /// Multi-page footer showing Salesman details, Supervisor contact, legal taglines, and page numbering bounds.
+  static pw.Widget buildFooter(
+    pw.Context context, {
+    Salesperson? salesperson,
+    String? supervisorPhone = supervisorContact,
+  }) {
+    final salesmanName = salesperson?.name.trim() ?? '';
+    final salesmanPhone = salesperson?.phone?.trim() ?? '';
+    final hasSalesman = salesmanName.isNotEmpty || salesmanPhone.isNotEmpty;
+    final salesmanLabel = hasSalesman
+        ? (salesmanPhone.isNotEmpty
+            ? '$salesmanName (Salesman) : $salesmanPhone'
+            : '$salesmanName (Salesman)')
+        : '';
+    final supervisorLabel = (supervisorPhone != null && supervisorPhone.trim().isNotEmpty)
+        ? (supervisorPhone.toLowerCase().startsWith('supervisor')
+            ? supervisorPhone
+            : 'Supervisor : $supervisorPhone')
+        : '';
+
     return pw.Container(
-      margin: const pw.EdgeInsets.only(top: 24),
+      margin: const pw.EdgeInsets.only(top: 20),
       child: pw.Column(
         children: [
           pw.Divider(color: borderSlate, thickness: 1),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: 6),
+          if (hasSalesman || supervisorLabel.isNotEmpty) ...[
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                if (hasSalesman)
+                  pw.Text(
+                    salesmanLabel,
+                    style: pw.TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: pw.FontWeight.bold,
+                      color: slateText,
+                    ),
+                  )
+                else
+                  pw.SizedBox(),
+                if (supervisorLabel.isNotEmpty)
+                  pw.Text(
+                    supervisorLabel,
+                    style: pw.TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: pw.FontWeight.bold,
+                      color: primaryRed,
+                    ),
+                  )
+                else
+                  pw.SizedBox(),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+          ],
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
@@ -457,7 +598,7 @@ class SharedPdfTemplate {
               pw.Text(
                 'Page ${context.pageNumber} of ${context.pagesCount}',
                 style: pw.TextStyle(
-                  fontSize: 9,
+                  fontSize: 8.5,
                   fontWeight: pw.FontWeight.bold,
                   color: slateText,
                 ),

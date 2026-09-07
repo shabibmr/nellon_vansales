@@ -3,6 +3,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/salesperson.dart';
 import 'shared_pdf_template.dart';
 
 /// PDF template for generating professional Payment Receipt documents.
@@ -11,7 +12,10 @@ class ReceiptPdfTemplate {
     ReceiptVoucher receipt,
     Organization org,
     Customer? customer, {
+    Salesperson? salesperson,
+    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
+    pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
     final currencySymbol = org.currencySymbol;
@@ -28,6 +32,7 @@ class ReceiptPdfTemplate {
               voucherTitle: 'Payment Receipt',
               voucherNumber: receipt.paymentNumber,
               date: receipt.date,
+              logoImage: logoImage,
             ),
             pw.SizedBox(height: 16),
 
@@ -35,9 +40,13 @@ class ReceiptPdfTemplate {
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Received By (Merchant)',
               companyName: org.name,
-              companyDetails: 'On-Route Delivery Van\nTax Registered Vendor',
+              companyPhone: org.phone,
+              companyAddress: org.address,
+              companyTrn: org.trn,
+              companyDetails: 'On-Route Delivery Van',
               billToLabel: 'Payer (Customer)',
               clientName: receipt.customerName,
+              clientTrn: customer?.trn,
               clientEmail: customer?.email,
               clientPhone: customer?.phone,
               clientAddress: customer?.address ?? 'No physical address listed',
@@ -170,7 +179,11 @@ class ReceiptPdfTemplate {
             ),
           ];
         },
-        footer: SharedPdfTemplate.buildFooter,
+        footer: (context) => SharedPdfTemplate.buildFooter(
+          context,
+          salesperson: salesperson,
+          supervisorPhone: supervisorPhone,
+        ),
       ),
     );
 

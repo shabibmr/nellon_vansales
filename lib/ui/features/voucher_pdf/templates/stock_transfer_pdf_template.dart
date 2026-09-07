@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../../domain/models/organization.dart';
+import '../../../../domain/models/salesperson.dart';
 import '../../../../domain/models/stock_transfer.dart';
 import '../../../core/utils/quantity_format.dart';
 import 'shared_pdf_template.dart';
@@ -11,7 +12,10 @@ class StockTransferPdfTemplate {
   static pw.Document generate(
     StockTransfer transfer,
     Organization org, {
+    Salesperson? salesperson,
+    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
+    pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
     final isLoad = transfer.direction == StockTransferDirection.load;
@@ -32,6 +36,7 @@ class StockTransferPdfTemplate {
               voucherTitle: voucherTitle,
               voucherNumber: voucherNumber,
               date: transfer.date,
+              logoImage: logoImage,
             ),
             pw.SizedBox(height: 16),
 
@@ -40,19 +45,33 @@ class StockTransferPdfTemplate {
               billFromLabel: isLoad
                   ? 'Source (Warehouse / Depot)'
                   : 'Source (Van / Salesperson)',
-              companyName: isLoad ? org.name : 'Route Delivery Van',
+              companyName: isLoad
+                  ? org.name
+                  : ((salesperson != null && salesperson.name.trim().isNotEmpty)
+                      ? '${salesperson.name} (Van)'
+                      : 'Route Delivery Van'),
+              companyPhone: isLoad ? org.phone : salesperson?.phone,
+              companyAddress: isLoad ? org.address : null,
+              companyTrn: isLoad ? org.trn : null,
               companyDetails: isLoad
                   ? 'Main Inventory Depot\nLocation: ${transfer.fromLocationId}'
                   : 'On-Road Mobile Stock Location\nLocation: ${transfer.fromLocationId}',
               billToLabel: isLoad
                   ? 'Destination (Van / Salesperson)'
                   : 'Destination (Warehouse / Depot)',
-              clientName: isLoad ? 'Route Delivery Van' : org.name,
-              clientPhone: null,
-              clientEmail: null,
+              clientName: isLoad
+                  ? ((salesperson != null && salesperson.name.trim().isNotEmpty)
+                      ? '${salesperson.name} (Van)'
+                      : 'Route Delivery Van')
+                  : org.name,
+              clientPhone: isLoad ? salesperson?.phone : org.phone,
+              clientEmail: isLoad ? salesperson?.email : null,
               clientAddress: isLoad
                   ? 'On-Road Mobile Stock Location\nLocation: ${transfer.toLocationId}'
-                  : 'Main Inventory Depot\nLocation: ${transfer.toLocationId}',
+                  : (org.address.isNotEmpty
+                      ? org.address
+                      : 'Main Inventory Depot\nLocation: ${transfer.toLocationId}'),
+              clientTrn: isLoad ? null : org.trn,
             ),
             pw.SizedBox(height: 20),
 
@@ -198,7 +217,11 @@ class StockTransferPdfTemplate {
             ),
           ];
         },
-        footer: SharedPdfTemplate.buildFooter,
+        footer: (context) => SharedPdfTemplate.buildFooter(
+          context,
+          salesperson: salesperson,
+          supervisorPhone: supervisorPhone,
+        ),
       ),
     );
 

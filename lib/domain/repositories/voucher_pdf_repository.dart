@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import '../models/organization.dart';
 import '../models/customer.dart';
+import '../models/salesperson.dart';
 
 /// Enum representing the supported voucher/document formats in the billing system.
 enum VoucherType {
@@ -23,7 +24,10 @@ abstract class VoucherPdfRepository {
     required dynamic voucher,
     required Organization org,
     required Customer? customer,
+    Salesperson? salesperson,
+    String? supervisorPhone,
     PdfPageFormat pageFormat,
+    Uint8List? logoBytes,
   });
 
   /// Formats a safe, standard filename for the PDF document depending on its unique numbers.
