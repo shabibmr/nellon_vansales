@@ -15,6 +15,7 @@ import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/voucher_pdf_repository.dart';
 import 'package:van_sales/domain/utils/supervisor_label.dart';
 
+import 'pdf_text_test_utils.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -375,10 +376,11 @@ void main() {
       );
 
       expect(bytes, isNotEmpty);
-      expect(
-        formatSupervisorLine(firestorePhone),
-        'Supervisor : $firestorePhone',
-      );
+      final expectedLine = formatSupervisorLine(firestorePhone);
+      expect(expectedLine, 'Supervisor : $firestorePhone');
+
+      final pdfText = extractPdfVisibleText(bytes);
+      expectPdfContainsSupervisorLine(pdfText, firestorePhone);
     });
 
     test('footer falls back to default supervisor phone when not overridden',
@@ -396,9 +398,15 @@ void main() {
         VoucherPdfService.defaultSupervisorPhone,
         PrintSettings.fallbackSupervisorPhone,
       );
-      expect(
-        formatSupervisorLine(VoucherPdfService.defaultSupervisorPhone),
-        'Supervisor : ${PrintSettings.fallbackSupervisorPhone}',
+      final expectedLine = formatSupervisorLine(
+        VoucherPdfService.defaultSupervisorPhone,
+      );
+      expect(expectedLine, 'Supervisor : ${PrintSettings.fallbackSupervisorPhone}');
+
+      final pdfText = extractPdfVisibleText(bytes);
+      expectPdfContainsSupervisorLine(
+        pdfText,
+        VoucherPdfService.defaultSupervisorPhone,
       );
     });
   });
