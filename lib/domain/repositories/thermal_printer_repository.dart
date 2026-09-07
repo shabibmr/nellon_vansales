@@ -59,6 +59,32 @@ abstract class ThermalPrinterRepository {
     String? salespersonPhone,
   });
 
+  /// Builds an ESC/POS report ticket and writes it to the connected printer.
+  Future<void> printReport({
+    required String title,
+    required List<String> headers,
+    required List<List<String>> rows,
+    required Organization org,
+    String? subtitle,
+    String? dateRangeText,
+    Map<String, String>? summaryStats,
+    String? salespersonName,
+    String? salespersonPhone,
+  });
+
+  /// Builds the same report ticket layout as [printReport] as preview lines.
+  Future<ThermalTicketPreview> buildReportPreview({
+    required String title,
+    required List<String> headers,
+    required List<List<String>> rows,
+    required Organization org,
+    String? subtitle,
+    String? dateRangeText,
+    Map<String, String>? summaryStats,
+    String? salespersonName,
+    String? salespersonPhone,
+  });
+
   /// Prints a short calibration ticket showing paper size and connection info.
   Future<void> printTestPage();
 }

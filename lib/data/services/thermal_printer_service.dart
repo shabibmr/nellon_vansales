@@ -7,6 +7,7 @@ import '../../domain/models/thermal_paper_size.dart';
 import '../../domain/models/thermal_ticket_preview.dart';
 import '../../domain/repositories/thermal_printer_repository.dart';
 import '../../domain/repositories/voucher_pdf_repository.dart';
+import 'esc_pos/report_ticket_builder.dart';
 import 'esc_pos/voucher_ticket_builder.dart';
 import 'hive_database_service.dart';
 
@@ -155,6 +156,59 @@ class ThermalPrinterService implements ThermalPrinterRepository {
       org: org,
       customer: customer,
       paperSize: paperSize,
+      salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
+    );
+  }
+
+  @override
+  Future<void> printReport({
+    required String title,
+    required List<String> headers,
+    required List<List<String>> rows,
+    required Organization org,
+    String? subtitle,
+    String? dateRangeText,
+    Map<String, String>? summaryStats,
+    String? salespersonName,
+    String? salespersonPhone,
+  }) async {
+    final bytes = await ReportTicketBuilder.build(
+      title: title,
+      headers: headers,
+      rows: rows,
+      org: org,
+      paperSize: paperSize,
+      subtitle: subtitle,
+      dateRangeText: dateRangeText,
+      summaryStats: summaryStats,
+      salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
+    );
+    await _writeBytes(bytes);
+  }
+
+  @override
+  Future<ThermalTicketPreview> buildReportPreview({
+    required String title,
+    required List<String> headers,
+    required List<List<String>> rows,
+    required Organization org,
+    String? subtitle,
+    String? dateRangeText,
+    Map<String, String>? summaryStats,
+    String? salespersonName,
+    String? salespersonPhone,
+  }) {
+    return ReportTicketBuilder.buildPreview(
+      title: title,
+      headers: headers,
+      rows: rows,
+      org: org,
+      paperSize: paperSize,
+      subtitle: subtitle,
+      dateRangeText: dateRangeText,
+      summaryStats: summaryStats,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
     );

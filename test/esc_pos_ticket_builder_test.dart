@@ -340,7 +340,7 @@ void main() {
         isTrue,
       );
       expect(
-        preview.plainText.contains('Supervisor : +971 528300929'),
+        preview.plainText.contains('Supervisor : +971 501880810'),
         isTrue,
       );
       final texts = preview.lines.map((l) => l.text).toList();
@@ -348,7 +348,7 @@ void main() {
         (t) => t.contains('Shinad ( Salesman ) : +971565124529'),
       );
       final supervisorIdx = texts.indexWhere(
-        (t) => t.contains('Supervisor : +971 528300929'),
+        (t) => t.contains('Supervisor : +971 501880810'),
       );
       final thanksIdx = texts.indexWhere((t) => t.contains('Thank you'));
       expect(salesIdx, greaterThan(-1));
@@ -370,7 +370,7 @@ void main() {
         (t) => t.trim() == 'Shinad ( Salesman ) :',
       );
       expect(salesIdx, greaterThan(-1));
-      expect(texts[salesIdx + 1].trim(), 'Supervisor : +971 528300929');
+      expect(texts[salesIdx + 1].trim(), 'Supervisor : +971 501880810');
     });
 
     test('short invoice pads item table to minimum 8 inch length', () async {
@@ -415,7 +415,7 @@ void main() {
             isTrue,
           );
           expect(
-            preview.plainText.contains('Supervisor : +971 528300929'),
+            preview.plainText.contains('Supervisor : +971 501880810'),
             isTrue,
           );
           expect(
@@ -538,7 +538,7 @@ void main() {
           isTrue,
         );
         expect(
-          preview.plainText.contains('Supervisor : +971 528300929'),
+          preview.plainText.contains('Supervisor : +971 501880810'),
           isTrue,
         );
         expect(preview.plainText.contains('Thank you'), isTrue);

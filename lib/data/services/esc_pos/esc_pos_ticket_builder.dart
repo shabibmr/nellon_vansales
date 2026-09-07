@@ -621,7 +621,7 @@ class EscPosTicketBuilder {
     return bytes;
   }
 
-  static const String supervisorContact = 'Supervisor : +971 528300929';
+  static const String supervisorContact = 'Supervisor : +971 501880810';
 
   List<int> footer({String? salespersonName, String? salespersonPhone}) {
     final bytes = <int>[];

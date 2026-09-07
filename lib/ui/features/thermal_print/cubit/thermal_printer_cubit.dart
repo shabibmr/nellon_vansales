@@ -285,6 +285,31 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     );
   }
 
+  /// Builds a visual report ticket preview.
+  Future<ThermalTicketPreview> previewReport({
+    required String title,
+    required List<String> headers,
+    required List<List<String>> rows,
+    required Organization org,
+    String? subtitle,
+    String? dateRangeText,
+    Map<String, String>? summaryStats,
+    String? salespersonName,
+    String? salespersonPhone,
+  }) {
+    return _repo.buildReportPreview(
+      title: title,
+      headers: headers,
+      rows: rows,
+      org: org,
+      subtitle: subtitle,
+      dateRangeText: dateRangeText,
+      summaryStats: summaryStats,
+      salespersonName: salespersonName,
+      salespersonPhone: salespersonPhone,
+    );
+  }
+
   Future<void> printVoucher({
     required VoucherType type,
     required dynamic voucher,
@@ -319,6 +344,59 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
           isPrinting: false,
           isConnected: true,
           statusMessage: 'Sent to thermal printer',
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(
+          isPrinting: false,
+          errorMessage: userFacingMessage(e),
+          needsAppSettings: _isPermissionError(e),
+        ),
+      );
+    }
+  }
+
+  Future<void> printReport({
+    required String title,
+    required List<String> headers,
+    required List<List<String>> rows,
+    required Organization org,
+    String? subtitle,
+    String? dateRangeText,
+    Map<String, String>? summaryStats,
+    String? salespersonName,
+    String? salespersonPhone,
+  }) async {
+    emit(
+      state.copyWith(
+        isPrinting: true,
+        clearError: true,
+        clearStatus: true,
+        clearNeedsAppSettings: true,
+      ),
+    );
+    try {
+      if (!await _ensurePermissionOrPrompt()) {
+        emit(state.copyWith(isPrinting: false));
+        return;
+      }
+      await _repo.printReport(
+        title: title,
+        headers: headers,
+        rows: rows,
+        org: org,
+        subtitle: subtitle,
+        dateRangeText: dateRangeText,
+        summaryStats: summaryStats,
+        salespersonName: salespersonName,
+        salespersonPhone: salespersonPhone,
+      );
+      emit(
+        state.copyWith(
+          isPrinting: false,
+          isConnected: true,
+          statusMessage: 'Report sent to thermal printer',
         ),
       );
     } catch (e) {
