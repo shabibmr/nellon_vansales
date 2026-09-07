@@ -24,6 +24,7 @@ import '../../domain/repositories/invoice_repository.dart';
 import '../../domain/repositories/sales_order_repository.dart';
 import '../../domain/repositories/item_repository.dart';
 import '../../domain/repositories/server_config_repository.dart';
+import '../../domain/repositories/print_settings_repository.dart';
 import '../repositories/auth_repository_impl.dart';
 import '../repositories/sync_repository_impl.dart';
 import '../repositories/customer_repository_impl.dart';
@@ -39,6 +40,7 @@ import '../repositories/invoice_repository_impl.dart';
 import '../repositories/sales_order_repository_impl.dart';
 import '../repositories/item_repository_impl.dart';
 import '../repositories/server_config_repository_impl.dart';
+import '../repositories/print_settings_repository_impl.dart';
 import 'local_storage_service.dart';
 import 'device_info_service.dart';
 import 'license_service.dart';
@@ -158,6 +160,9 @@ Future<void> setupDependencyInjection() async {
   sl.registerLazySingleton<LocalStorageService>(() => LocalStorageService());
   sl.registerLazySingleton<DeviceInfoService>(() => DeviceInfoService());
   sl.registerLazySingleton<LicenseService>(() => LicenseService());
+  sl.registerLazySingleton<PrintSettingsRepository>(
+    () => PrintSettingsRepositoryImpl(localStorage: sl<LocalStorageService>()),
+  );
   sl.registerLazySingleton<ServerConfigRepository>(
     () => ServerConfigRepositoryImpl(
       apiClient: sl<ZohoApiClient>(),
