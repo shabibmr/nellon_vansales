@@ -21,14 +21,16 @@ class FakeLocalStorageService extends LocalStorageService {
 }
 
 class FakeDeviceInfoService extends DeviceInfoService {
+  String appVersion = '1.0.0+1';
+
   @override
   Future<DeviceDetails> getDeviceDetails() async {
-    return const DeviceDetails(
+    return DeviceDetails(
       id: 'test_device_id',
       model: 'test_model',
       os: 'Android',
       osVersion: '13',
-      appVersion: '1.0.0+1',
+      appVersion: appVersion,
     );
   }
 }
@@ -38,7 +40,13 @@ class FakeLicenseService extends LicenseService {
   ServerConfig? serverConfig;
   bool shouldThrowFetch = false;
   bool shouldThrowCreate = false;
+  bool shouldThrowSync = false;
   Object fetchError = Exception('Network connection timed out');
+
+  int syncCallCount = 0;
+  String? syncUuid;
+  Map<String, dynamic>? syncFields;
+  bool? syncAppVersionChanged;
 
   @override
   Future<LicenseDocument?> fetchLicense(String uuid) async {
@@ -57,7 +65,19 @@ class FakeLicenseService extends LicenseService {
   }
 
   @override
-  Future<void> updateLastLogin(String uuid) async {}
+  Future<void> syncLoginMetadata(
+    String uuid,
+    Map<String, dynamic> fields, {
+    bool appVersionChanged = false,
+  }) async {
+    syncCallCount++;
+    syncUuid = uuid;
+    syncFields = fields;
+    syncAppVersionChanged = appVersionChanged;
+    if (shouldThrowSync) {
+      throw Exception('sync failed');
+    }
+  }
 
   @override
   Future<ServerConfig> fetchServerConfig() async {
@@ -113,6 +133,141 @@ void main() {
     'checkLicense emits checking and then valid when valid license exists remotely',
     () async {
       localService.uuid = 'my-uuid-v4';
+      licenseService.document = LicenseDocument(
+        id: 'my-uuid-v4',
+        userId: 'user_123',
+        userEmail: 'john@sales.com',
+        userName: 'John Agent',
+        deviceId: 'test_device_id',
+        deviceModel: 'test_model',
+        deviceOs: 'Android',
+        deviceOsVersion: '13',
+        appVersion: '1.0.0+1',
+        firstLoginAt: DateTime.now(),
+        lastLoginAt: DateTime.now(),
+        enabled: true,
+        expiryAt: DateTime.now().add(const Duration(days: 10)),
+      );
+      licenseService.serverConfig = const ServerConfig(
+        clientId: 'zoho-id',
+        clientSecret: 'zoho-secret',
+        code: 'zoho-code',
+      );
+
+      final states = <LicenseState>[];
+      cubit.stream.listen(states.add);
+
+      await cubit.checkLicense(testUser);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(states, [
+        LicenseChecking(),
+        const LicenseValid(
+          serverConfig: ServerConfig(
+            clientId: 'zoho-id',
+            clientSecret: 'zoho-secret',
+            code: 'zoho-code',
+          ),
+        ),
+      ]);
+    },
+  );
+
+  test(
+    'checkLicense refreshes login metadata for a valid license',
+    () async {
+      localService.uuid = 'my-uuid-v4';
+      deviceService.appVersion = '2.0.0+40';
+      licenseService.document = LicenseDocument(
+        id: 'my-uuid-v4',
+        userId: 'user_123',
+        userEmail: 'john@sales.com',
+        userName: 'John Agent',
+        deviceId: 'test_device_id',
+        deviceModel: 'test_model',
+        deviceOs: 'Android',
+        deviceOsVersion: '13',
+        appVersion: '1.0.0+1',
+        firstLoginAt: DateTime.now(),
+        lastLoginAt: DateTime.now(),
+        enabled: true,
+        expiryAt: DateTime.now().add(const Duration(days: 10)),
+      );
+
+      await cubit.checkLicense(testUser);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(licenseService.syncCallCount, 1);
+      expect(licenseService.syncUuid, 'my-uuid-v4');
+      expect(licenseService.syncFields!['app_version'], '2.0.0+40');
+      expect(licenseService.syncFields!['previous_app_version'], '1.0.0+1');
+      expect(licenseService.syncAppVersionChanged, isTrue);
+    },
+  );
+
+  test(
+    'checkLicense does not flag an app-version change when the build is unchanged',
+    () async {
+      localService.uuid = 'my-uuid-v4';
+      deviceService.appVersion = '1.0.0+1';
+      licenseService.document = LicenseDocument(
+        id: 'my-uuid-v4',
+        userId: 'user_123',
+        userEmail: 'john@sales.com',
+        userName: 'John Agent',
+        deviceId: 'test_device_id',
+        deviceModel: 'test_model',
+        deviceOs: 'Android',
+        deviceOsVersion: '13',
+        appVersion: '1.0.0+1',
+        firstLoginAt: DateTime.now(),
+        lastLoginAt: DateTime.now(),
+        enabled: true,
+        expiryAt: DateTime.now().add(const Duration(days: 10)),
+      );
+
+      await cubit.checkLicense(testUser);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(licenseService.syncCallCount, 1);
+      expect(licenseService.syncAppVersionChanged, isFalse);
+      expect(licenseService.syncFields!.containsKey('previous_app_version'),
+          isFalse);
+    },
+  );
+
+  test(
+    'checkLicense does not sync login metadata for a disabled license',
+    () async {
+      localService.uuid = 'my-uuid-v4';
+      licenseService.document = LicenseDocument(
+        id: 'my-uuid-v4',
+        userId: 'user_123',
+        userEmail: 'john@sales.com',
+        userName: 'John Agent',
+        deviceId: 'test_device_id',
+        deviceModel: 'test_model',
+        deviceOs: 'Android',
+        deviceOsVersion: '13',
+        appVersion: '1.0.0+1',
+        firstLoginAt: DateTime.now(),
+        lastLoginAt: DateTime.now(),
+        enabled: false,
+        expiryAt: DateTime.now().add(const Duration(days: 10)),
+      );
+
+      await cubit.checkLicense(testUser);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(licenseService.syncCallCount, 0);
+    },
+  );
+
+  test(
+    'checkLicense stays valid when the login-metadata sync throws',
+    () async {
+      localService.uuid = 'my-uuid-v4';
+      licenseService.shouldThrowSync = true;
       licenseService.document = LicenseDocument(
         id: 'my-uuid-v4',
         userId: 'user_123',
@@ -282,6 +437,8 @@ void main() {
       expect(licenseService.document!.userEmail, 'john@sales.com');
       expect(licenseService.document!.deviceId, 'test_device_id');
       expect(licenseService.document!.enabled, isTrue);
+      expect(licenseService.document!.loginCount, 1);
+      expect(licenseService.document!.previousAppVersion, '');
     },
   );
 

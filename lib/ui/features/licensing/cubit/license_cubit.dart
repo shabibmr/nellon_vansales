@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../data/services/app_logger.dart';
@@ -9,7 +11,7 @@ import '../../../../data/services/local_storage_service.dart';
 import '../../../../domain/models/license_document.dart';
 import '../../../../domain/models/server_config.dart';
 import '../../../../domain/models/user.dart';
-import '../../../core/utils/error_mapper.dart';
+import '../../../../domain/utils/login_metadata_update.dart';
 import 'license_state.dart';
 
 /// Cubit managing the App Licensing flow, checking licenses, registering first-time users,
@@ -79,8 +81,9 @@ class LicenseCubit extends Cubit<LicenseState> {
         return;
       }
 
-      // Update last login timestamp in Firestore background
-      _licenseService.updateLastLogin(storedUuid).catchError((_) {});
+      // Refresh device / app-version metadata in the background. Fire-and-forget:
+      // login must never break because this write failed.
+      unawaited(_syncLoginMetadata(storedUuid, licenseDoc, user));
 
       // Retrieve Server configuration credentials
       ServerConfig? serverConfig;
@@ -139,6 +142,43 @@ class LicenseCubit extends Cubit<LicenseState> {
     }
   }
 
+  /// Best-effort refresh of the device / app-version / profile fields on the
+  /// stored `app_licenses` document. Never throws, never emits state — a failure
+  /// here must not affect the login outcome.
+  Future<void> _syncLoginMetadata(
+    String storedUuid,
+    LicenseDocument licenseDoc,
+    User user,
+  ) async {
+    try {
+      final device = await _deviceInfoService.getDeviceDetails();
+      final update = buildLoginMetadataUpdate(
+        current: licenseDoc,
+        appVersion: device.appVersion,
+        deviceId: device.id,
+        deviceModel: device.model,
+        deviceOsVersion: device.osVersion,
+        userName: user.name,
+        userEmail: user.email,
+        userPhone: user.phone,
+      );
+      await _licenseService.syncLoginMetadata(
+        storedUuid,
+        update.fields,
+        appVersionChanged: update.appVersionChanged,
+      );
+      if (update.appVersionChanged) {
+        DebugFileLogger.log(
+          '[LicenseCubit] ⬆️ app_version refreshed on login: '
+          '"${licenseDoc.appVersion}" -> "${device.appVersion}"',
+        );
+      }
+    } catch (e) {
+      DebugFileLogger.log('[LicenseCubit] ⚠️ Failed to sync login metadata: $e');
+      AppLogger.warning('Licensing', 'Failed to sync login metadata: $e');
+    }
+  }
+
   /// Registers a new license document in Firestore on the first login of a device.
   Future<void> registerFirstLogin(User user) async {
     emit(LicenseChecking());
@@ -166,6 +206,9 @@ class LicenseCubit extends Cubit<LicenseState> {
         lastLoginAt: now,
         enabled: true,
         expiryAt: expiry,
+        phone: user.phone,
+        loginCount: 1,
+        previousAppVersion: '',
       );
 
       // Best-effort remote write: fail-open if Firestore write fails
