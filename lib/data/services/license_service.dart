@@ -56,19 +56,33 @@ class LicenseService {
     }
   }
 
-  /// Dynamically updates the `last_login_at` timestamp field to the server current time.
-  Future<void> updateLastLogin(String uuid) async {
+  /// Patches per-login metadata onto an existing `app_licenses` document.
+  ///
+  /// [fields] holds primitive descriptive values (app version, device, profile);
+  /// this method adds the server-side sentinels — `last_login_at` / `updated_at`
+  /// timestamps, a `login_count` increment, and `app_version_updated_at` when
+  /// [appVersionChanged] — so callers never construct `FieldValue`s themselves.
+  Future<void> syncLoginMetadata(
+    String uuid,
+    Map<String, dynamic> fields, {
+    bool appVersionChanged = false,
+  }) async {
     try {
       await firestore
           .collection('app_licenses')
           .doc(uuid)
           .update({
+            ...fields,
             'last_login_at': FieldValue.serverTimestamp(),
+            'updated_at': FieldValue.serverTimestamp(),
+            'login_count': FieldValue.increment(1),
+            if (appVersionChanged)
+              'app_version_updated_at': FieldValue.serverTimestamp(),
           })
           .timeout(const Duration(seconds: 5));
     } catch (e) {
-      AppLogger.warning('LicenseService', 'Failed to update last login timestamp: $e');
-      throw Exception('Failed to update last login timestamp: $e');
+      AppLogger.warning('LicenseService', 'Failed to sync login metadata: $e');
+      throw Exception('Failed to sync login metadata: $e');
     }
   }
 
