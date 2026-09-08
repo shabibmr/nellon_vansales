@@ -93,6 +93,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
     String? salespersonName,
     String? salespersonPhone,
     String? supervisorPhone,
+    String? companyPhone,
   })?
   _thermalContext(BuildContext context) {
     final org = context.org.state;
@@ -115,6 +116,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       salespersonName: salesperson?.name,
       salespersonPhone: salesperson?.phone,
       supervisorPhone: context.read<PrintSettingsCubit>().supervisorPhone,
+      companyPhone: context.read<PrintSettingsCubit>().companyPhone,
     );
   }
 
@@ -129,6 +131,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       salespersonName: args.salespersonName,
       salespersonPhone: args.salespersonPhone,
       supervisorPhone: args.supervisorPhone,
+      companyPhone: args.companyPhone,
     );
   }
 
@@ -146,6 +149,7 @@ class _VoucherPdfActionsBody extends StatelessWidget {
         salespersonName: args.salespersonName,
         salespersonPhone: args.salespersonPhone,
         supervisorPhone: args.supervisorPhone,
+        companyPhone: args.companyPhone,
       );
       if (!context.mounted) return;
       await ThermalPrintPreviewDialog.show(

@@ -383,6 +383,39 @@ void main() {
       expectPdfContainsSupervisorLine(pdfText, firestorePhone);
     });
 
+    test('header uses the Firestore company phone when supplied', () async {
+      const companyPhone = '+971 4 555 1234';
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+        companyPhone: companyPhone,
+      );
+
+      final normalized = extractPdfVisibleText(bytes)
+          .replaceAll(RegExp(r'\s+'), '');
+      expect(normalized, contains('Phone:+97145551234'));
+      // Zoho org phone (+971 4 123 4567) must no longer appear on the document.
+      expect(normalized, isNot(contains('+97141234567')));
+    });
+
+    test('header keeps the org phone when no company phone is supplied',
+        () async {
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+      );
+
+      final normalized = extractPdfVisibleText(bytes)
+          .replaceAll(RegExp(r'\s+'), '');
+      expect(normalized, contains('Phone:+97141234567'));
+    });
+
     test('footer falls back to default supervisor phone when not overridden',
         () async {
       final bytes = await service.generateVoucherPdf(

@@ -372,6 +372,20 @@ void main() {
       expect(preview.plainText.contains('+971 501880810'), isFalse);
     });
 
+    test('header uses the supplied company phone in place of the org phone',
+        () async {
+      final preview = await VoucherTicketBuilder.buildPreview(
+        type: VoucherType.salesInvoice,
+        voucher: invoice,
+        org: org,
+        customer: customer,
+        paperSize: ThermalPaperSize.inch4,
+        companyPhone: '+971455512',
+      );
+      expect(preview.plainText.contains('Phone: +971455512'), isTrue);
+      expect(preview.plainText.contains('Phone: +97141234567'), isFalse);
+    });
+
     test('prints salesman role line when number is missing', () async {
       final preview = await VoucherTicketBuilder.buildPreview(
         type: VoucherType.salesInvoice,

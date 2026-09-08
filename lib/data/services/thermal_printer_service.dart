@@ -129,6 +129,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
     String? salespersonName,
     String? salespersonPhone,
     String? supervisorPhone,
+    String? companyPhone,
   }) async {
     final bytes = await VoucherTicketBuilder.build(
       type: type,
@@ -139,6 +140,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
       supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
     );
     await _writeBytes(bytes);
   }
@@ -152,6 +154,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
     String? salespersonName,
     String? salespersonPhone,
     String? supervisorPhone,
+    String? companyPhone,
   }) {
     return VoucherTicketBuilder.buildPreview(
       type: type,
@@ -162,6 +165,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
       supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
     );
   }
 

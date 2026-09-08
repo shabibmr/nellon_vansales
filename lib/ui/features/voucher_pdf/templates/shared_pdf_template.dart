@@ -51,7 +51,11 @@ class SharedPdfTemplate {
     required String voucherNumber,
     required DateTime date,
     pw.ImageProvider? logoImage,
+    String? companyPhone,
   }) {
+    final headerPhone = (companyPhone != null && companyPhone.trim().isNotEmpty)
+        ? companyPhone.trim()
+        : org.phone;
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 20),
       child: pw.Column(
@@ -101,10 +105,10 @@ class SharedPdfTemplate {
                               ),
                             ),
                           ],
-                          if (org.phone.trim().isNotEmpty) ...[
+                          if (headerPhone.trim().isNotEmpty) ...[
                             pw.SizedBox(height: 2),
                             pw.Text(
-                              'Phone: ${org.phone}',
+                              'Phone: $headerPhone',
                               style: pw.TextStyle(
                                 fontSize: 8.5,
                                 color: slateTextSecondary,

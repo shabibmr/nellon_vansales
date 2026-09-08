@@ -275,6 +275,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     String? salespersonName,
     String? salespersonPhone,
     String? supervisorPhone,
+    String? companyPhone,
   }) {
     return _repo.buildVoucherPreview(
       type: type,
@@ -284,6 +285,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
       supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
     );
   }
 
@@ -322,6 +324,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
     String? salespersonName,
     String? salespersonPhone,
     String? supervisorPhone,
+    String? companyPhone,
   }) async {
     emit(
       state.copyWith(
@@ -344,6 +347,7 @@ class ThermalPrinterCubit extends Cubit<ThermalPrinterState> {
         salespersonName: salespersonName,
         salespersonPhone: salespersonPhone,
         supervisorPhone: supervisorPhone,
+        companyPhone: companyPhone,
       );
       emit(
         state.copyWith(

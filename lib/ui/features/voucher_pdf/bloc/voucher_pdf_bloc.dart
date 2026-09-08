@@ -78,6 +78,7 @@ class VoucherPdfBloc extends Bloc<VoucherPdfEvent, VoucherPdfState> {
       customer: customer,
       salesperson: salesperson,
       supervisorPhone: printSettings.supervisorPhone,
+      companyPhone: printSettings.companyPhone,
       pageFormat: pageFormat,
     );
   }

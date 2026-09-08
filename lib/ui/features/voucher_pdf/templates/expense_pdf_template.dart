@@ -13,6 +13,7 @@ class ExpensePdfTemplate {
     Organization org, {
     Salesperson? salesperson,
     String? supervisorPhone = PrintSettings.fallbackSupervisorPhone,
+    String? companyPhone,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
     pw.ImageProvider? logoImage,
   }) {
@@ -32,6 +33,7 @@ class ExpensePdfTemplate {
               voucherNumber: expense.id,
               date: expense.date,
               logoImage: logoImage,
+              companyPhone: companyPhone,
             ),
             pw.SizedBox(height: 16),
 
@@ -39,7 +41,7 @@ class ExpensePdfTemplate {
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Charged By (Company)',
               companyName: org.name,
-              companyPhone: org.phone,
+              companyPhone: companyPhone ?? org.phone,
               companyAddress: org.address,
               companyTrn: org.trn,
               companyDetails: 'On-Route Operating Expense',

@@ -17,23 +17,28 @@ import 'package:van_sales/ui/features/voucher_pdf/bloc/voucher_pdf_event.dart';
 import 'package:van_sales/ui/features/voucher_pdf/bloc/voucher_pdf_state.dart';
 
 class FakePrintSettingsRepository implements PrintSettingsRepository {
-  FakePrintSettingsRepository(this._phone);
+  FakePrintSettingsRepository(this._phone, [this._companyPhone = '+971000000']);
 
   final String _phone;
+  final String _companyPhone;
 
   @override
   String get supervisorPhone => _phone;
+
+  @override
+  String get companyPhone => _companyPhone;
 
   @override
   Future<void> hydrate() async {}
 
   @override
   Future<PrintSettings> refresh() async =>
-      PrintSettings(supervisorPhone: _phone);
+      PrintSettings(supervisorPhone: _phone, companyPhone: _companyPhone);
 }
 
 class RecordingVoucherPdfRepository implements VoucherPdfRepository {
   String? capturedSupervisorPhone;
+  String? capturedCompanyPhone;
 
   @override
   Future<Uint8List> generateVoucherPdf({
@@ -43,10 +48,12 @@ class RecordingVoucherPdfRepository implements VoucherPdfRepository {
     required Customer? customer,
     Salesperson? salesperson,
     String? supervisorPhone,
+    String? companyPhone,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
     Uint8List? logoBytes,
   }) async {
     capturedSupervisorPhone = supervisorPhone;
+    capturedCompanyPhone = companyPhone;
     return Uint8List.fromList(const [0x25, 0x50, 0x44, 0x46, 0x2D]);
   }
 
@@ -147,12 +154,14 @@ void main() {
     notes: '',
   );
 
-  group('VoucherPdfBloc - supervisor phone wiring', () {
-    test('passes PrintSettingsRepository supervisor phone to generateVoucherPdf',
+  group('VoucherPdfBloc - print settings wiring', () {
+    test('passes PrintSettingsRepository supervisor + company phone to generateVoucherPdf',
         () async {
       const firestorePhone = '+971 50 999 0000';
+      const firestoreCompanyPhone = '+971 4 555 0000';
       final pdfRepo = RecordingVoucherPdfRepository();
-      final printSettings = FakePrintSettingsRepository(firestorePhone);
+      final printSettings =
+          FakePrintSettingsRepository(firestorePhone, firestoreCompanyPhone);
       final bloc = VoucherPdfBloc(
         pdfService: pdfRepo,
         printSettings: printSettings,
@@ -176,6 +185,7 @@ void main() {
       );
 
       expect(pdfRepo.capturedSupervisorPhone, firestorePhone);
+      expect(pdfRepo.capturedCompanyPhone, firestoreCompanyPhone);
       await bloc.close();
     });
   });
