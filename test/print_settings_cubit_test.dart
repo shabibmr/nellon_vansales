@@ -9,21 +9,29 @@ class FakePrintSettingsRepository implements PrintSettingsRepository {
   ]);
 
   String _phone;
+  String _companyPhone = PrintSettings.fallbackCompanyPhone;
   String hydratePhone = '+971 50 111 1111';
   String refreshPhone = '+971 50 222 2222';
+  String hydrateCompanyPhone = '+971 4 111 1111';
+  String refreshCompanyPhone = '+971 4 222 2222';
 
   @override
   String get supervisorPhone => _phone;
 
   @override
+  String get companyPhone => _companyPhone;
+
+  @override
   Future<void> hydrate() async {
     _phone = hydratePhone;
+    _companyPhone = hydrateCompanyPhone;
   }
 
   @override
   Future<PrintSettings> refresh() async {
     _phone = refreshPhone;
-    return PrintSettings(supervisorPhone: _phone);
+    _companyPhone = refreshCompanyPhone;
+    return PrintSettings(supervisorPhone: _phone, companyPhone: _companyPhone);
   }
 }
 
@@ -44,6 +52,7 @@ void main() {
 
       expect(cubit.state.supervisorPhone, repository.refreshPhone);
       expect(cubit.supervisorPhone, repository.refreshPhone);
+      expect(cubit.companyPhone, repository.refreshCompanyPhone);
     });
   });
 }

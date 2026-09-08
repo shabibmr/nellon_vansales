@@ -11,6 +11,7 @@ class LocalStorageService {
   static const String _zohoRefreshTokenKey = 'zoho_refresh_token';
   static const String _zohoOrganizationIdKey = 'zoho_organization_id';
   static const String _supervisorPhoneKey = 'supervisor_phone';
+  static const String _companyPhoneKey = 'company_phone';
 
   final Box<dynamic>? box;
 
@@ -131,6 +132,29 @@ class LocalStorageService {
       await box.put(_supervisorPhoneKey, trimmed);
     } catch (e) {
       DebugFileLogger.log('[LocalStorage] ❌ saveSupervisorPhone FAILED: $e');
+    }
+  }
+
+  Future<String?> readCompanyPhone() async {
+    try {
+      final box = await _getBox();
+      final value = (box.get(_companyPhoneKey) as String?)?.trim();
+      if (value == null || value.isEmpty) return null;
+      return value;
+    } catch (e) {
+      DebugFileLogger.log('[LocalStorage] ❌ readCompanyPhone error: $e');
+      return null;
+    }
+  }
+
+  Future<void> saveCompanyPhone(String phone) async {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      final box = await _getBox();
+      await box.put(_companyPhoneKey, trimmed);
+    } catch (e) {
+      DebugFileLogger.log('[LocalStorage] ❌ saveCompanyPhone FAILED: $e');
     }
   }
 }

@@ -26,6 +26,32 @@ void main() {
         '+971 50 000 0000',
       );
     });
+
+    test('reads company_phone', () {
+      final settings = PrintSettings.fromMap({
+        'company_phone': ' +971 4 123 4567 ',
+      });
+      expect(settings.companyPhone, '+971 4 123 4567');
+    });
+
+    test('empty or missing company_phone yields empty then fallback', () {
+      expect(PrintSettings.fromMap({}).companyPhone, '');
+      expect(
+        PrintSettings.fromMap({}).resolvedCompanyPhone,
+        PrintSettings.fallbackCompanyPhone,
+      );
+      expect(PrintSettings.fallbackCompanyPhone, '+971589642244');
+    });
+
+    test('resolvedCompanyPhone keeps a non-empty value', () {
+      expect(
+        const PrintSettings(
+          supervisorPhone: '',
+          companyPhone: '+971 4 999 8888',
+        ).resolvedCompanyPhone,
+        '+971 4 999 8888',
+      );
+    });
   });
 
   group('formatSupervisorLine', () {

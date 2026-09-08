@@ -16,6 +16,7 @@ class PrintSettingsRepositoryImpl implements PrintSettingsRepository {
   final LocalStorageService _localStorage;
   final FirebaseFirestore? _firestore;
   String _cached = PrintSettings.fallbackSupervisorPhone;
+  String _cachedCompany = PrintSettings.fallbackCompanyPhone;
 
   FirebaseFirestore get firestore =>
       _firestore ?? FirebaseFirestore.instance;
@@ -25,10 +26,19 @@ class PrintSettingsRepositoryImpl implements PrintSettingsRepository {
       _cached.trim().isEmpty ? PrintSettings.fallbackSupervisorPhone : _cached;
 
   @override
+  String get companyPhone => _cachedCompany.trim().isEmpty
+      ? PrintSettings.fallbackCompanyPhone
+      : _cachedCompany;
+
+  @override
   Future<void> hydrate() async {
     final stored = await _localStorage.readSupervisorPhone();
     if (stored != null && stored.isNotEmpty) {
       _cached = stored;
+    }
+    final storedCompany = await _localStorage.readCompanyPhone();
+    if (storedCompany != null && storedCompany.isNotEmpty) {
+      _cachedCompany = storedCompany;
     }
   }
 
@@ -46,6 +56,10 @@ class PrintSettingsRepositoryImpl implements PrintSettingsRepository {
           _cached = remote.supervisorPhone;
           await _localStorage.saveSupervisorPhone(_cached);
         }
+        if (remote.companyPhone.isNotEmpty) {
+          _cachedCompany = remote.companyPhone;
+          await _localStorage.saveCompanyPhone(_cachedCompany);
+        }
       }
     } catch (e) {
       AppLogger.warning(
@@ -59,6 +73,9 @@ class PrintSettingsRepositoryImpl implements PrintSettingsRepository {
         );
       }
     }
-    return PrintSettings(supervisorPhone: supervisorPhone);
+    return PrintSettings(
+      supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
+    );
   }
 }

@@ -11,6 +11,8 @@ import 'package:van_sales/domain/repositories/print_settings_repository.dart';
 class _FakeLocalStorage extends LocalStorageService {
   String? phone;
   int saveCount = 0;
+  String? companyPhone;
+  int saveCompanyCount = 0;
 
   @override
   Future<String?> readSupervisorPhone() async => phone;
@@ -21,6 +23,17 @@ class _FakeLocalStorage extends LocalStorageService {
     if (trimmed.isEmpty) return;
     saveCount++;
     this.phone = trimmed;
+  }
+
+  @override
+  Future<String?> readCompanyPhone() async => companyPhone;
+
+  @override
+  Future<void> saveCompanyPhone(String phone) async {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) return;
+    saveCompanyCount++;
+    companyPhone = trimmed;
   }
 }
 
@@ -96,16 +109,20 @@ class MemoryPrintSettingsRepository implements PrintSettingsRepository {
   ]);
 
   String _phone;
+  String _companyPhone = PrintSettings.fallbackCompanyPhone;
 
   @override
   String get supervisorPhone => _phone;
+
+  @override
+  String get companyPhone => _companyPhone;
 
   @override
   Future<void> hydrate() async {}
 
   @override
   Future<PrintSettings> refresh() async =>
-      PrintSettings(supervisorPhone: _phone);
+      PrintSettings(supervisorPhone: _phone, companyPhone: _companyPhone);
 
   void setPhone(String value) => _phone = value;
 }
@@ -167,6 +184,44 @@ void main() {
       expect(repository.supervisorPhone, '+971 50 222 2222');
       expect(storage.phone, '+971 50 222 2222');
       expect(storage.saveCount, 1);
+    });
+
+    test('company phone: fallback before hydrate, remote overwrites + persists',
+        () async {
+      expect(repository.companyPhone, PrintSettings.fallbackCompanyPhone);
+
+      final firestore = _StubFirestore((collection, doc) async {
+        expect(collection, 'server_config');
+        expect(doc, 'print');
+        return _StubDocumentSnapshot(
+          exists: true,
+          data: {
+            'supervisor_phone': '+971 50 222 2222',
+            'company_phone': '+971 4 888 9999',
+          },
+        );
+      });
+
+      repository = PrintSettingsRepositoryImpl(
+        localStorage: storage,
+        firestore: firestore,
+      );
+
+      final settings = await repository.refresh();
+
+      expect(settings.companyPhone, '+971 4 888 9999');
+      expect(repository.companyPhone, '+971 4 888 9999');
+      expect(storage.companyPhone, '+971 4 888 9999');
+      expect(storage.saveCompanyCount, 1);
+    });
+
+    test('company phone: hydrate loads cached value from local storage',
+        () async {
+      storage.companyPhone = '+971 4 777 6666';
+
+      await repository.hydrate();
+
+      expect(repository.companyPhone, '+971 4 777 6666');
     });
 
     test('empty remote leaves previous cache and does not save', () async {
