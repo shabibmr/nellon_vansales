@@ -3,6 +3,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/organization.dart';
 import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/print_settings.dart';
 import '../../../../domain/models/salesperson.dart';
 import 'shared_pdf_template.dart';
 
@@ -13,7 +14,8 @@ class ReceiptPdfTemplate {
     Organization org,
     Customer? customer, {
     Salesperson? salesperson,
-    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
+    String? supervisorPhone = PrintSettings.fallbackSupervisorPhone,
+    String? companyPhone,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
     pw.ImageProvider? logoImage,
   }) {
@@ -33,6 +35,7 @@ class ReceiptPdfTemplate {
               voucherNumber: receipt.paymentNumber,
               date: receipt.date,
               logoImage: logoImage,
+              companyPhone: companyPhone,
             ),
             pw.SizedBox(height: 16),
 
@@ -40,7 +43,7 @@ class ReceiptPdfTemplate {
             SharedPdfTemplate.buildClientGrid(
               billFromLabel: 'Received By (Merchant)',
               companyName: org.name,
-              companyPhone: org.phone,
+              companyPhone: companyPhone ?? org.phone,
               companyAddress: org.address,
               companyTrn: org.trn,
               companyDetails: 'On-Route Delivery Van',

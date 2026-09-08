@@ -47,6 +47,8 @@ abstract class ThermalPrinterRepository {
     required Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   });
 
   /// Builds the same ticket layout as [printVoucher] without sending bytes.
@@ -57,6 +59,8 @@ abstract class ThermalPrinterRepository {
     required Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   });
 
   /// Builds an ESC/POS report ticket and writes it to the connected printer.
@@ -70,6 +74,7 @@ abstract class ThermalPrinterRepository {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   });
 
   /// Builds the same report ticket layout as [printReport] as preview lines.
@@ -83,6 +88,7 @@ abstract class ThermalPrinterRepository {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   });
 
   /// Prints a short calibration ticket showing paper size and connection info.

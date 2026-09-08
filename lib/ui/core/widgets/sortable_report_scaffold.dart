@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../data/services/report_export_service.dart';
+import '../../features/print_settings/cubit/print_settings_cubit.dart';
 import '../../features/thermal_print/cubit/thermal_printer_cubit.dart';
 import '../../features/thermal_print/widgets/thermal_print_preview_dialog.dart';
 import '../cubit/salesperson_cubit.dart';
@@ -141,6 +142,7 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
             return;
           }
           final salesperson = context.read<SalespersonCubit>().state;
+          final supervisorPhone = context.read<PrintSettingsCubit>().supervisorPhone;
           final printerCubit = context.read<ThermalPrinterCubit>();
           final dateRangeText = _formatDateRange();
           final summaryStats = {
@@ -155,6 +157,7 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
             summaryStats: summaryStats,
             salespersonName: salesperson?.name,
             salespersonPhone: salesperson?.phone,
+            supervisorPhone: supervisorPhone,
           );
           if (!context.mounted) return;
           await ThermalPrintPreviewDialog.show(
@@ -170,6 +173,7 @@ class SortableReportScaffold<T, F extends Enum> extends StatelessWidget {
                 summaryStats: summaryStats,
                 salespersonName: salesperson?.name,
                 salespersonPhone: salesperson?.phone,
+                supervisorPhone: supervisorPhone,
               );
             },
           );

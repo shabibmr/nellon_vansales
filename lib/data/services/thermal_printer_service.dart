@@ -128,6 +128,8 @@ class ThermalPrinterService implements ThermalPrinterRepository {
     required Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   }) async {
     final bytes = await VoucherTicketBuilder.build(
       type: type,
@@ -137,6 +139,8 @@ class ThermalPrinterService implements ThermalPrinterRepository {
       paperSize: paperSize,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
     );
     await _writeBytes(bytes);
   }
@@ -149,6 +153,8 @@ class ThermalPrinterService implements ThermalPrinterRepository {
     required Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   }) {
     return VoucherTicketBuilder.buildPreview(
       type: type,
@@ -158,6 +164,8 @@ class ThermalPrinterService implements ThermalPrinterRepository {
       paperSize: paperSize,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
     );
   }
 
@@ -172,6 +180,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) async {
     final bytes = await ReportTicketBuilder.build(
       title: title,
@@ -184,6 +193,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
       summaryStats: summaryStats,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
     );
     await _writeBytes(bytes);
   }
@@ -199,6 +209,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
   }) {
     return ReportTicketBuilder.buildPreview(
       title: title,
@@ -211,6 +222,7 @@ class ThermalPrinterService implements ThermalPrinterRepository {
       summaryStats: summaryStats,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
     );
   }
 

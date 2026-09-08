@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../../domain/models/organization.dart';
+import '../../../../domain/models/print_settings.dart';
 import '../../../../domain/models/salesperson.dart';
 import '../../../../domain/models/stock_transfer.dart';
 import '../../../core/utils/quantity_format.dart';
@@ -13,7 +14,8 @@ class StockTransferPdfTemplate {
     StockTransfer transfer,
     Organization org, {
     Salesperson? salesperson,
-    String? supervisorPhone = SharedPdfTemplate.supervisorContact,
+    String? supervisorPhone = PrintSettings.fallbackSupervisorPhone,
+    String? companyPhone,
     PdfPageFormat pageFormat = PdfPageFormat.a4,
     pw.ImageProvider? logoImage,
   }) {
@@ -37,6 +39,7 @@ class StockTransferPdfTemplate {
               voucherNumber: voucherNumber,
               date: transfer.date,
               logoImage: logoImage,
+              companyPhone: companyPhone,
             ),
             pw.SizedBox(height: 16),
 
@@ -50,7 +53,9 @@ class StockTransferPdfTemplate {
                   : ((salesperson != null && salesperson.name.trim().isNotEmpty)
                       ? '${salesperson.name} (Van)'
                       : 'Route Delivery Van'),
-              companyPhone: isLoad ? org.phone : salesperson?.phone,
+              companyPhone: isLoad
+                  ? (companyPhone ?? org.phone)
+                  : salesperson?.phone,
               companyAddress: isLoad ? org.address : null,
               companyTrn: isLoad ? org.trn : null,
               companyDetails: isLoad
@@ -64,7 +69,9 @@ class StockTransferPdfTemplate {
                       ? '${salesperson.name} (Van)'
                       : 'Route Delivery Van')
                   : org.name,
-              clientPhone: isLoad ? salesperson?.phone : org.phone,
+              clientPhone: isLoad
+                  ? salesperson?.phone
+                  : (companyPhone ?? org.phone),
               clientEmail: isLoad ? salesperson?.email : null,
               clientAddress: isLoad
                   ? 'On-Road Mobile Stock Location\nLocation: ${transfer.toLocationId}'

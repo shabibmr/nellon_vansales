@@ -8,6 +8,7 @@ import '../../../../domain/models/sales_invoice.dart';
 import '../../../../domain/models/sales_order.dart';
 import '../../../../domain/models/sales_return.dart';
 import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/repositories/print_settings_repository.dart';
 import '../../../../domain/repositories/session_repository.dart';
 import '../../../../domain/repositories/salesperson_repository.dart';
 import '../../../../domain/repositories/voucher_pdf_repository.dart';
@@ -17,6 +18,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/permission_dialogs.dart';
 import '../../../core/utils/snackbars.dart';
+import '../../print_settings/cubit/print_settings_cubit.dart';
 import '../../thermal_print/cubit/thermal_printer_cubit.dart';
 import '../../thermal_print/cubit/thermal_printer_state.dart';
 import '../../thermal_print/widgets/thermal_print_preview_dialog.dart';
@@ -49,6 +51,7 @@ class VoucherPdfActionsWidget extends StatelessWidget {
     return BlocProvider<VoucherPdfBloc>(
       create: (ctx) => VoucherPdfBloc(
         pdfService: ctx.read<VoucherPdfRepository>(),
+        printSettings: ctx.read<PrintSettingsRepository>(),
         customerRepository: ctx.read<CustomerRepository>(),
         sessionRepository: ctx.read<SessionRepository>(),
         salespersonRepository: ctx.read<SalespersonRepository>(),
@@ -89,6 +92,8 @@ class _VoucherPdfActionsBody extends StatelessWidget {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   })?
   _thermalContext(BuildContext context) {
     final org = context.org.state;
@@ -110,6 +115,8 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       customer: customer,
       salespersonName: salesperson?.name,
       salespersonPhone: salesperson?.phone,
+      supervisorPhone: context.read<PrintSettingsCubit>().supervisorPhone,
+      companyPhone: context.read<PrintSettingsCubit>().companyPhone,
     );
   }
 
@@ -123,6 +130,8 @@ class _VoucherPdfActionsBody extends StatelessWidget {
       customer: args.customer,
       salespersonName: args.salespersonName,
       salespersonPhone: args.salespersonPhone,
+      supervisorPhone: args.supervisorPhone,
+      companyPhone: args.companyPhone,
     );
   }
 
@@ -139,6 +148,8 @@ class _VoucherPdfActionsBody extends StatelessWidget {
         customer: args.customer,
         salespersonName: args.salespersonName,
         salespersonPhone: args.salespersonPhone,
+        supervisorPhone: args.supervisorPhone,
+        companyPhone: args.companyPhone,
       );
       if (!context.mounted) return;
       await ThermalPrintPreviewDialog.show(

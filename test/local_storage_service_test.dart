@@ -65,5 +65,18 @@ void main() {
       expect(result.code, equals('test-refresh-token'));
       expect(result.organizationId, equals('test-org-123'));
     });
+
+    test('saveSupervisorPhone persists phone and readSupervisorPhone reads it', () async {
+      const phone = '+971 50 777 8888';
+      await service.saveSupervisorPhone(phone);
+
+      final result = await service.readSupervisorPhone();
+      expect(result, equals(phone));
+    });
+
+    test('saveSupervisorPhone ignores empty values', () async {
+      await service.saveSupervisorPhone('  ');
+      expect(await service.readSupervisorPhone(), isNull);
+    });
   });
 }

@@ -29,6 +29,7 @@ class ReportTicketBuilder {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
     DateTime? generatedAt,
   }) async {
     final composed = await _compose(
@@ -42,6 +43,7 @@ class ReportTicketBuilder {
       summaryStats: summaryStats,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
       generatedAt: generatedAt,
     );
     return composed.bytes;
@@ -59,6 +61,7 @@ class ReportTicketBuilder {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
     DateTime? generatedAt,
   }) async {
     final composed = await _compose(
@@ -72,6 +75,7 @@ class ReportTicketBuilder {
       summaryStats: summaryStats,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
       generatedAt: generatedAt,
     );
     return composed.preview;
@@ -88,6 +92,7 @@ class ReportTicketBuilder {
     Map<String, String>? summaryStats,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
     DateTime? generatedAt,
   }) async {
     final profile = await CapabilityProfile.load();
@@ -230,6 +235,7 @@ class ReportTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;

@@ -1,9 +1,11 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 
+import '../../../domain/models/print_settings.dart';
 import '../../../domain/models/thermal_paper_size.dart';
 import '../../../domain/models/thermal_ticket_preview.dart';
 import '../../../domain/utils/amount_in_words.dart';
+import '../../../domain/utils/supervisor_label.dart';
 
 /// Shared ESC/POS layout helpers for 2" / 4" thermal tickets.
 class EscPosTicketBuilder {
@@ -621,9 +623,11 @@ class EscPosTicketBuilder {
     return bytes;
   }
 
-  static const String supervisorContact = 'Supervisor : +971 501880810';
-
-  List<int> footer({String? salespersonName, String? salespersonPhone}) {
+  List<int> footer({
+    String? salespersonName,
+    String? salespersonPhone,
+    String? supervisorPhone,
+  }) {
     final bytes = <int>[];
     bytes.addAll(divider());
     final name = salespersonName?.trim() ?? '';
@@ -633,7 +637,12 @@ class EscPosTicketBuilder {
         : '$name ( Salesman ) :';
     final salesmanLine = phone.isEmpty ? salesmanRole : '$salesmanRole $phone';
     bytes.addAll(left(truncate(salesmanLine, columns)));
-    bytes.addAll(left(truncate(supervisorContact, columns)));
+    final supervisorLine = formatSupervisorLine(
+      (supervisorPhone == null || supervisorPhone.trim().isEmpty)
+          ? PrintSettings.fallbackSupervisorPhone
+          : supervisorPhone,
+    );
+    bytes.addAll(left(truncate(supervisorLine, columns)));
     bytes.addAll(center('Thank you'));
     bytes.addAll(doubleDivider());
     bytes.addAll(cut());

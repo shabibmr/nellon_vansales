@@ -24,6 +24,8 @@ class VoucherTicketBuilder {
     required ThermalPaperSize paperSize,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   }) async {
     final composed = await _compose(
       type: type,
@@ -33,6 +35,8 @@ class VoucherTicketBuilder {
       paperSize: paperSize,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
     );
     return composed.bytes;
   }
@@ -46,6 +50,8 @@ class VoucherTicketBuilder {
     required ThermalPaperSize paperSize,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   }) async {
     final composed = await _compose(
       type: type,
@@ -55,6 +61,8 @@ class VoucherTicketBuilder {
       paperSize: paperSize,
       salespersonName: salespersonName,
       salespersonPhone: salespersonPhone,
+      supervisorPhone: supervisorPhone,
+      companyPhone: companyPhone,
     );
     return composed.preview;
   }
@@ -67,6 +75,8 @@ class VoucherTicketBuilder {
     required ThermalPaperSize paperSize,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   }) async {
     final profile = await CapabilityProfile.load();
     final escPaper = EscPosTicketBuilder.toEscPosPaperSize(paperSize);
@@ -86,6 +96,8 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
+            companyPhone,
           ),
         );
       case VoucherType.salesOrder:
@@ -97,6 +109,8 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
+            companyPhone,
           ),
         );
       case VoucherType.salesReturn:
@@ -108,6 +122,8 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
+            companyPhone,
           ),
         );
       case VoucherType.paymentReceipt:
@@ -119,6 +135,8 @@ class VoucherTicketBuilder {
             customer,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
+            companyPhone,
           ),
         );
       case VoucherType.expenseVoucher:
@@ -129,6 +147,8 @@ class VoucherTicketBuilder {
             org,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
+            companyPhone,
           ),
         );
       case VoucherType.stockTransfer:
@@ -139,6 +159,8 @@ class VoucherTicketBuilder {
             org,
             salespersonName,
             salespersonPhone,
+            supervisorPhone,
+            companyPhone,
           ),
         );
     }
@@ -206,11 +228,15 @@ class VoucherTicketBuilder {
     required String voucherTitle,
     required String voucherNumber,
     required DateTime date,
+    String? companyPhone,
   }) {
+    final headerPhone = (companyPhone != null && companyPhone.trim().isNotEmpty)
+        ? companyPhone.trim()
+        : org.phone;
     return b.header(
       orgName: org.name,
       orgAddress: org.address,
-      orgPhone: org.phone,
+      orgPhone: headerPhone,
       orgTrn: org.trn,
       voucherTitle: voucherTitle,
       voucherNumber: voucherNumber,
@@ -238,6 +264,8 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -248,6 +276,7 @@ class VoucherTicketBuilder {
         voucherTitle: 'SALES INVOICE',
         voucherNumber: invoice.invoiceNumber,
         date: invoice.date,
+        companyPhone: companyPhone,
       ),
     );
     bytes.addAll(_customer(b, name: invoice.customerName, customer: customer));
@@ -295,6 +324,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -311,6 +341,8 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -321,6 +353,7 @@ class VoucherTicketBuilder {
         voucherTitle: 'SALES ORDER',
         voucherNumber: order.orderNumber,
         date: order.date,
+        companyPhone: companyPhone,
       ),
     );
     bytes.addAll(_customer(b, name: order.customerName, customer: customer));
@@ -374,6 +407,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -390,6 +424,8 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -400,6 +436,7 @@ class VoucherTicketBuilder {
         voucherTitle: 'SALES RETURN',
         voucherNumber: salesReturn.creditNoteNumber,
         date: salesReturn.date,
+        companyPhone: companyPhone,
       ),
     );
     bytes.addAll(
@@ -447,6 +484,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -463,6 +501,8 @@ class VoucherTicketBuilder {
     Customer? customer,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -473,6 +513,7 @@ class VoucherTicketBuilder {
         voucherTitle: 'RECEIPT',
         voucherNumber: receipt.paymentNumber,
         date: receipt.date,
+        companyPhone: companyPhone,
       ),
     );
     bytes.addAll(_customer(b, name: receipt.customerName, customer: customer));
@@ -510,6 +551,7 @@ class VoucherTicketBuilder {
         buildTail: (tail) => tail.footer(
           salespersonName: salespersonName,
           salespersonPhone: salespersonPhone,
+          supervisorPhone: supervisorPhone,
         ),
       ),
     );
@@ -522,6 +564,8 @@ class VoucherTicketBuilder {
     Organization org,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   ) {
     final symbol = org.currencySymbol;
     final bytes = <int>[];
@@ -532,6 +576,7 @@ class VoucherTicketBuilder {
         voucherTitle: 'EXPENSE',
         voucherNumber: expense.id,
         date: expense.date,
+        companyPhone: companyPhone,
       ),
     );
     bytes.addAll(b.divider());
@@ -569,6 +614,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;
@@ -584,6 +630,8 @@ class VoucherTicketBuilder {
     Organization org,
     String? salespersonName,
     String? salespersonPhone,
+    String? supervisorPhone,
+    String? companyPhone,
   ) {
     final bytes = <int>[];
     final isLoad = transfer.direction == StockTransferDirection.load;
@@ -599,6 +647,7 @@ class VoucherTicketBuilder {
         voucherTitle: voucherTitle,
         voucherNumber: voucherNumber,
         date: transfer.date,
+        companyPhone: companyPhone,
       ),
     );
 
@@ -668,6 +717,7 @@ class VoucherTicketBuilder {
             tail.footer(
               salespersonName: salespersonName,
               salespersonPhone: salespersonPhone,
+              supervisorPhone: supervisorPhone,
             ),
           );
           return after;

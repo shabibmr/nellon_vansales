@@ -26,6 +26,7 @@ import 'domain/repositories/invoice_repository.dart';
 import 'domain/repositories/sales_order_repository.dart';
 import 'domain/repositories/item_repository.dart';
 import 'domain/repositories/server_config_repository.dart';
+import 'domain/repositories/print_settings_repository.dart';
 import 'ui/features/auth/bloc/auth_bloc.dart';
 import 'ui/features/sync/bloc/sync_bloc.dart';
 import 'ui/features/route/bloc/route_bloc.dart';
@@ -56,6 +57,7 @@ import 'data/services/device_info_service.dart';
 import 'data/services/license_service.dart';
 import 'ui/features/licensing/cubit/license_cubit.dart';
 import 'ui/features/licensing/cubit/server_config_cubit.dart';
+import 'ui/features/print_settings/cubit/print_settings_cubit.dart';
 import 'ui/features/licensing/views/license_gate.dart';
 import 'domain/repositories/thermal_printer_repository.dart';
 import 'ui/features/thermal_print/cubit/thermal_printer_cubit.dart';
@@ -122,6 +124,9 @@ class VanSalesApp extends StatelessWidget {
         ),
         RepositoryProvider<ServerConfigRepository>(
           create: (context) => sl<ServerConfigRepository>(),
+        ),
+        RepositoryProvider<PrintSettingsRepository>(
+          create: (context) => sl<PrintSettingsRepository>(),
         ),
         RepositoryProvider<VoucherPdfRepository>(
           create: (context) => sl<VoucherPdfRepository>(),
@@ -208,6 +213,11 @@ class VanSalesApp extends StatelessWidget {
             create: (context) => ServerConfigCubit(
               apiClient: sl<ZohoApiClient>(),
               localStorage: sl<LocalStorageService>(),
+            ),
+          ),
+          BlocProvider<PrintSettingsCubit>(
+            create: (context) => PrintSettingsCubit(
+              repository: sl<PrintSettingsRepository>(),
             ),
           ),
           BlocProvider<ThermalPrinterCubit>(

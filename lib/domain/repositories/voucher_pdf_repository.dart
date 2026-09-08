@@ -26,6 +26,7 @@ abstract class VoucherPdfRepository {
     required Customer? customer,
     Salesperson? salesperson,
     String? supervisorPhone,
+    String? companyPhone,
     PdfPageFormat pageFormat,
     Uint8List? logoBytes,
   });

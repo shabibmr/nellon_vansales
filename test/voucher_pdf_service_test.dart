@@ -5,6 +5,7 @@ import 'package:van_sales/domain/models/customer.dart';
 import 'package:van_sales/domain/models/expense_entry.dart';
 import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/organization.dart';
+import 'package:van_sales/domain/models/print_settings.dart';
 import 'package:van_sales/domain/models/receipt_voucher.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
@@ -12,7 +13,9 @@ import 'package:van_sales/domain/models/sales_return.dart';
 import 'package:van_sales/domain/models/salesperson.dart';
 import 'package:van_sales/domain/models/stock_transfer.dart';
 import 'package:van_sales/domain/repositories/voucher_pdf_repository.dart';
+import 'package:van_sales/domain/utils/supervisor_label.dart';
 
+import 'pdf_text_test_utils.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -333,6 +336,111 @@ void main() {
 
       expect(bytes, isNotEmpty);
       expect(bytes.length, greaterThan(1000));
+    });
+  });
+
+  group('VoucherPdfService - supervisor footer', () {
+    late VoucherPdfService service;
+
+    setUp(() {
+      service = VoucherPdfService();
+    });
+
+    SalesInvoice _sampleInvoice() => SalesInvoice(
+      id: 'inv-supervisor',
+      invoiceNumber: 'INV-SUP-001',
+      customerId: customer.id,
+      customerName: customer.name,
+      date: DateTime(2026, 1, 15),
+      dueDate: DateTime(2026, 1, 30),
+      items: const [
+        InvoiceLineItem(
+          item: item,
+          quantity: 1,
+          rate: 100,
+          taxPercentage: 5,
+        ),
+      ],
+      notes: '',
+    );
+
+    test('footer uses explicit supervisor phone from Firestore', () async {
+      const firestorePhone = '+971 50 999 0000';
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+        supervisorPhone: firestorePhone,
+      );
+
+      expect(bytes, isNotEmpty);
+      final expectedLine = formatSupervisorLine(firestorePhone);
+      expect(expectedLine, 'Supervisor : $firestorePhone');
+
+      final pdfText = extractPdfVisibleText(bytes);
+      expectPdfContainsSupervisorLine(pdfText, firestorePhone);
+    });
+
+    test('header uses the Firestore company phone when supplied', () async {
+      const companyPhone = '+971 4 555 1234';
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+        companyPhone: companyPhone,
+      );
+
+      final normalized = extractPdfVisibleText(bytes)
+          .replaceAll(RegExp(r'\s+'), '');
+      expect(normalized, contains('Phone:+97145551234'));
+      // Zoho org phone (+971 4 123 4567) must no longer appear on the document.
+      expect(normalized, isNot(contains('+97141234567')));
+    });
+
+    test('header keeps the org phone when no company phone is supplied',
+        () async {
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+      );
+
+      final normalized = extractPdfVisibleText(bytes)
+          .replaceAll(RegExp(r'\s+'), '');
+      expect(normalized, contains('Phone:+97141234567'));
+    });
+
+    test('footer falls back to default supervisor phone when not overridden',
+        () async {
+      final bytes = await service.generateVoucherPdf(
+        type: VoucherType.salesInvoice,
+        voucher: _sampleInvoice(),
+        org: org,
+        customer: customer,
+        salesperson: salesperson,
+      );
+
+      expect(bytes, isNotEmpty);
+      expect(
+        VoucherPdfService.defaultSupervisorPhone,
+        PrintSettings.fallbackSupervisorPhone,
+      );
+      final expectedLine = formatSupervisorLine(
+        VoucherPdfService.defaultSupervisorPhone,
+      );
+      expect(expectedLine, 'Supervisor : ${PrintSettings.fallbackSupervisorPhone}');
+
+      final pdfText = extractPdfVisibleText(bytes);
+      expectPdfContainsSupervisorLine(
+        pdfText,
+        VoucherPdfService.defaultSupervisorPhone,
+      );
     });
   });
 }

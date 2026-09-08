@@ -77,6 +77,20 @@ void main() {
       expect(allText, contains('Thank you'));
     });
 
+    test('footer uses the supplied supervisor phone', () async {
+      final preview = await ReportTicketBuilder.buildPreview(
+        title: 'Item Sales Report',
+        headers: headers,
+        rows: rows,
+        org: org,
+        paperSize: ThermalPaperSize.inch4,
+        supervisorPhone: '+971 50 111 2222',
+      );
+      final allText = preview.lines.map((l) => l.text).join('\n');
+      expect(allText, contains('Supervisor : +971 50 111 2222'));
+      expect(allText, isNot(contains('+971 501880810')));
+    });
+
     test('generates valid 4" ESC/POS binary command bytes', () async {
       final bytes = await ReportTicketBuilder.build(
         title: 'Item Sales Report',

@@ -16,6 +16,17 @@ class LicenseDocument extends Equatable {
   final bool enabled;
   final DateTime expiryAt;
 
+  /// E.164 phone number the device logs in with. Empty on legacy documents
+  /// created before per-login metadata refresh.
+  final String phone;
+
+  /// Number of successful logins recorded for this device. 0 on legacy docs.
+  final int loginCount;
+
+  /// The `appVersion` value seen on the previous login, recorded only when the
+  /// running build changes. Empty until the device takes its first update.
+  final String previousAppVersion;
+
   const LicenseDocument({
     required this.id,
     required this.userId,
@@ -30,6 +41,9 @@ class LicenseDocument extends Equatable {
     required this.lastLoginAt,
     required this.enabled,
     required this.expiryAt,
+    this.phone = '',
+    this.loginCount = 0,
+    this.previousAppVersion = '',
   });
 
   /// Factory constructor to create a [LicenseDocument] from a Firestore map.
@@ -65,6 +79,9 @@ class LicenseDocument extends Equatable {
       lastLoginAt: parseDateTime(map['last_login_at']),
       enabled: map['enabled'] as bool? ?? true,
       expiryAt: parseDateTime(map['expiry_at']),
+      phone: map['user_phone'] as String? ?? '',
+      loginCount: (map['login_count'] as num?)?.toInt() ?? 0,
+      previousAppVersion: map['previous_app_version'] as String? ?? '',
     );
   }
 
@@ -84,6 +101,9 @@ class LicenseDocument extends Equatable {
       'last_login_at': lastLoginAt,
       'enabled': enabled,
       'expiry_at': expiryAt,
+      'user_phone': phone,
+      'login_count': loginCount,
+      'previous_app_version': previousAppVersion,
     };
   }
 
@@ -102,6 +122,9 @@ class LicenseDocument extends Equatable {
     DateTime? lastLoginAt,
     bool? enabled,
     DateTime? expiryAt,
+    String? phone,
+    int? loginCount,
+    String? previousAppVersion,
   }) {
     return LicenseDocument(
       id: id ?? this.id,
@@ -117,6 +140,9 @@ class LicenseDocument extends Equatable {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       enabled: enabled ?? this.enabled,
       expiryAt: expiryAt ?? this.expiryAt,
+      phone: phone ?? this.phone,
+      loginCount: loginCount ?? this.loginCount,
+      previousAppVersion: previousAppVersion ?? this.previousAppVersion,
     );
   }
 
@@ -135,5 +161,8 @@ class LicenseDocument extends Equatable {
     lastLoginAt,
     enabled,
     expiryAt,
+    phone,
+    loginCount,
+    previousAppVersion,
   ];
 }
