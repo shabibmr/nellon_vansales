@@ -1,0 +1,3 @@
+﻿timestamp,seq,status,invoice_number,customer_name,salesman,current_salesman,ledger_name,invoice_date,age_days,customer_id,invoice_id,sheet_balance,amount_applied,journal_id,journal_line_id,entry_number,invoice_status_after,residual_balance,message,warning
+2026-09-09T19:25:11Z,1,FAIL,KGT-IN-001691,DARL AL ANWAR CAFTERIA,SHAMEER TAYYIL&HASHIM,MR SHAMEER,SHAMEER OLD BALANCE,2022-12-24,1339,3331482000002568353,3331482000003593671,524.42,524.42,,,,,,journal create HTTP 400: Invalid value passed for Notes,
+2026-09-09T19:25:14Z,2,FAIL,KGT-IN-002900,GOLD GAFOORKAS THATTUKADA RESTAURANT L.L.C,SHAMEER TAYYIL&HASHIM,MR SHAMEER,SHAMEER OLD BALANCE,2023-01-31,1301,3331482000001628071,3331482000007256125,75.75,75.75,,,,,,journal create HTTP 400: Invalid value passed for Notes,

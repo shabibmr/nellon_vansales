@@ -1,0 +1,15 @@
+Source : E:\work\nellon\zoho_endpoints\..\data_change\old_bills.xlsx
+Built  : 20260909T191758Z
+Invoices: 1238   Dropped: 0
+Total balance: 314104.25   (expected 314104.25)
+
+Ledger                             Count          Amount
+DILEEP KUMAR OLD BALANCE             185        45684.17
+HASHIM ARAKKAL OLD BALANCE           126        38280.20
+KHALIFA OLD BALANCE                    6        28842.23
+MANSOOR OLD BALANCE                   89        20699.79
+MUHAMMED SHAFI OLD BALANCE           218        45339.22
+OLD SALESMAN OLD BALANCE             205        44797.80
+SHAMEER OLD BALANCE                  289        69879.18
+SHIHAB OLD BALANCE                   108        18211.17
+YOONUS OLD BALANCE                    12         2370.49

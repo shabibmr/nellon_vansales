@@ -1,0 +1,15 @@
+[
+  {
+    "invoice_number": "KGT-IN-001691",
+    "customer_name": "DARL AL ANWAR CAFTERIA",
+    "current_salesman": "MR SHAMEER",
+    "ledger_name": "SHAMEER OLD BALANCE",
+    "balance": 524.42,
+    "customer_id": "3331482000002568353",
+    "invoice_id": "3331482000003593671",
+    "success": false,
+    "payment_id": null,
+    "amount_applied": 524.42,
+    "message": "HTTP 400: Involved account types are not applicable"
+  }
+]

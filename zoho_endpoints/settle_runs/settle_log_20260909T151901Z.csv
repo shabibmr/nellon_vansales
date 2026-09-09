@@ -1,0 +1,2 @@
+﻿timestamp,seq,status,invoice_number,customer_name,current_salesman,ledger_name,customer_id,invoice_id,sheet_balance,amount_applied,payment_id,message,warning
+2026-09-09T15:19:08Z,1,FAIL,KGT-IN-001691,DARL AL ANWAR CAFTERIA,MR SHAMEER,SHAMEER OLD BALANCE,3331482000002568353,3331482000003593671,524.42,524.42,,HTTP 400: Involved account types are not applicable,
