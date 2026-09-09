@@ -52,18 +52,12 @@ floating-point drift from compounding across many line items (e.g. raw
 ## Document-level "Round Off"
 
 `SalesInvoice.total` / `SalesOrder.total` round the summed `rawTotal` to the
-**nearest whole currency unit** (`rawTotal.roundToDouble()`), and expose the
-adjustment as `roundOff = total - rawTotal`. This is a deliberate
-cash-rounding convention (common where physical currency has no sub-unit
-denominations) — `roundOff` is surfaced to the user in the invoice/order
-editors (`sales_invoice_editor_page.dart`, `sales_order_editor_page.dart`)
-whenever it's nonzero, and included in the synced payload.
-
-**Open question — needs verification against a live org:** whether
-whole-unit round-off is the correct convention for every organization using
-this app, or whether some orgs expect 2-decimal-place billing with no
-round-off line, should be confirmed against that org's actual Zoho Books
-invoice template/currency settings.
+**nearest 0.50** (`roundToNearestHalf(rawTotal)`), and expose the
+adjustment as `roundOff = total - rawTotal`. This implements 50-fils / 0.50 step
+rounding (e.g. `.10` -> `.00`, `.40` -> `.50`, `.90` -> `1.00`). `roundOff`
+is surfaced to the user in the invoice/order editors
+(`sales_invoice_editor_page.dart`, `sales_order_editor_page.dart`), PDF
+templates, and thermal ticket printing whenever it is nonzero.
 
 ## Test coverage
 

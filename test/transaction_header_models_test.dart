@@ -24,7 +24,7 @@ void main() {
       expect(order.status, SalesOrderStatus.open);
       expect(order.listedTotal, 1500.5);
       expect(order.items, isEmpty);
-      expect(order.total, 1501.0);
+      expect(order.total, 1500.5);
     });
 
     test('header maps order_status, invoiced_status, reference_number', () {

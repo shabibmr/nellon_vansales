@@ -21,7 +21,7 @@ void main() {
       expect(inv.status, 'partially_paid');
       expect(inv.listedTotal, 1500.5);
       expect(inv.items, isEmpty);
-      expect(inv.total, 1501.0); // listedTotal rounded
+      expect(inv.total, 1500.5); // listedTotal kept on half-fils step
     });
 
     test('line items win over listedTotal for total', () {

@@ -86,16 +86,16 @@ void main() {
       // rawTotal = 22.05 + 20.50 = 42.55
       expect(invoice.rawTotal, equals(42.55));
 
-      // total (rounded to nearest integer) = 43.0
-      expect(invoice.total, equals(43.00));
+      // total (rounded to nearest 0.50) = 42.50
+      expect(invoice.total, equals(42.50));
 
-      // roundOff = total - rawTotal = 43.00 - 42.55 = 0.45
-      expect(invoice.roundOff, closeTo(0.45, 0.0001));
+      // roundOff = total - rawTotal = 42.50 - 42.55 = -0.05
+      expect(invoice.roundOff, closeTo(-0.05, 0.0001));
     });
   });
 
   group('OrderLineItem & SalesOrder calculations', () {
-    test('sales order rounding to nearest integer', () {
+    test('sales order rounding to nearest 0.50', () {
       const line1 = OrderLineItem(
         item: item1,
         quantity: 2, // subtotal = 21.00, tax (5%) = 1.05, total = 22.05
@@ -134,11 +134,11 @@ void main() {
       // rawTotal = 22.05 + 20.40 = 42.45
       expect(order.rawTotal, equals(42.45));
 
-      // total (rounded to nearest integer) = 42.0
-      expect(order.total, equals(42.00));
+      // total (rounded to nearest 0.50) = 42.50
+      expect(order.total, equals(42.50));
 
-      // roundOff = total - rawTotal = 42.00 - 42.45 = -0.45
-      expect(order.roundOff, closeTo(-0.45, 0.0001));
+      // roundOff = total - rawTotal = 42.50 - 42.45 = 0.05
+      expect(order.roundOff, closeTo(0.05, 0.0001));
     });
   });
 
