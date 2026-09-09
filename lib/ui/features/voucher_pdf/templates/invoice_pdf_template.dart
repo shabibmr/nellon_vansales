@@ -55,24 +55,7 @@ class InvoicePdfTemplate {
               clientPhone: customer?.phone,
               clientAddress: customer?.address ?? 'No physical address listed',
             ),
-            pw.SizedBox(height: 20),
-
-            // Due Date & Payment Method Block
-            SharedPdfTemplate.buildInfoPanel([
-              PdfInfoEntry(
-                'Payment Due Date',
-                SharedPdfTemplate.dateOnlyFormat.format(invoice.dueDate),
-              ),
-              const PdfInfoEntry(
-                'Payment Method',
-                'Credit Terms / Cash',
-                alignment: pw.CrossAxisAlignment.end,
-              ),
-            ]),
-            pw.SizedBox(height: 20),
-
-            // Items Section Title
-            SharedPdfTemplate.buildSectionTitle('Billed Line Items'),
+            pw.SizedBox(height: 16),
 
             // Dynamic Line Items Table
             pw.Table(
