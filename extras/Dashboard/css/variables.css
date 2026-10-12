@@ -1,0 +1,208 @@
+/* ==========================================================================
+   Koyson Sales Dashboard - Design Tokens & Variables
+   ========================================================================== */
+
+:root {
+  /* Brand Colors */
+  --brand-nellon: #2563EB;
+  --brand-nellon-hover: #1D4ED8;
+  --brand-nellon-light: #EFF6FF;
+  --brand-nellon-border: #BFDBFE;
+
+  --brand-raviya: #F59E0B;
+  --brand-raviya-hover: #D97706;
+  --brand-raviya-light: #FFFBEB;
+  --brand-raviya-border: #FDE68A;
+
+  --brand-nonbranded: #64748B;
+  --brand-nonbranded-hover: #475569;
+  --brand-nonbranded-light: #F8FAFC;
+  --brand-nonbranded-border: #CBD5E1;
+
+  /* Semantic Status Colors */
+  --status-open: #3B82F6;
+  --status-open-bg: #EFF6FF;
+  --status-open-border: #BFDBFE;
+
+  --status-overdue: #EF4444;
+  --status-overdue-bg: #FEF2F2;
+  --status-overdue-border: #FECACA;
+
+  --status-partial: #8B5CF6;
+  --status-partial-bg: #F5F3FF;
+  --status-partial-border: #DDD6FE;
+
+  --status-closed: #10B981;
+  --status-closed-bg: #ECFDF5;
+  --status-closed-border: #A7F3D0;
+
+  /* Metric & Trend Colors */
+  --trend-up: #10B981;
+  --trend-up-bg: #ECFDF5;
+  --trend-down: #EF4444;
+  --trend-down-bg: #FEF2F2;
+  --trend-neutral: #64748B;
+
+  /* Neutral Surface & Background Colors (Light Theme Default) */
+  --color-bg-canvas: #F8FAFC;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-surface-alt: #F1F5F9;
+  --color-bg-subtle: #F8FAFC;
+  --color-bg-hover: #F1F5F9;
+  --color-bg-active: #E2E8F0;
+
+  /* Border & Divider Colors */
+  --color-border-subtle: #F1F5F9;
+  --color-border: #E2E8F0;
+  --color-border-medium: #CBD5E1;
+  --color-border-strong: #94A3B8;
+
+  /* Text & Content Colors */
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+  --color-text-inverse: #FFFFFF;
+
+  /* Focus Ring */
+  --color-focus-ring: rgba(37, 99, 235, 0.4);
+  --color-focus-border: #2563EB;
+
+  /* Typography Tokens */
+  --font-family-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.8125rem;  /* 13px */
+  --font-size-base: 0.875rem; /* 14px */
+  --font-size-md: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;   /* 18px */
+  --font-size-xl: 1.25rem;    /* 20px */
+  --font-size-2xl: 1.5rem;    /* 24px */
+  --font-size-3xl: 1.875rem;  /* 30px */
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.625;
+
+  /* Numerical Alignment */
+  --font-numeric-tabular: tabular-nums;
+
+  /* Spacing Scale (4px Base Grid) */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+
+  /* Border Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Elevation & Shadows */
+  --shadow-xs: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.06);
+  --shadow-drawer: -4px 0 24px rgba(15, 23, 42, 0.15);
+  --shadow-modal: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+
+  /* Layout Sizing */
+  --header-height: 60px;
+  --filter-bar-height: 52px;
+  --drawer-width: 500px;
+  --max-content-width: 1720px;
+
+  /* Z-Index Hierarchy */
+  --z-base: 1;
+  --z-sticky-filter: 90;
+  --z-sticky-header: 100;
+  --z-dropdown: 200;
+  --z-drawer-backdrop: 300;
+  --z-drawer: 310;
+  --z-modal-backdrop: 400;
+  --z-modal: 410;
+  --z-tooltip: 500;
+
+  /* Motion & Animation Tokens */
+  --motion-fast: 150ms;
+  --motion-standard: 250ms;
+  --motion-slow: 600ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Dark Theme Support */
+[data-theme="dark"],
+.dark-theme,
+html[data-theme="dark"],
+body.dark-theme {
+  --color-bg-canvas: #0B0F19;
+  --color-bg-surface: #131B2E;
+  --color-bg-surface-alt: #1E293B;
+  --color-bg-subtle: #0F172A;
+  --color-bg-hover: #1E293B;
+  --color-bg-active: #334155;
+
+  --color-border-subtle: #1E293B;
+  --color-border: #2A364F;
+  --color-border-medium: #3E4D6C;
+  --color-border-strong: #64748B;
+
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #CBD5E1;
+  --color-text-muted: #64748B;
+  --color-text-inverse: #0F172A;
+
+  --brand-nellon-light: rgba(37, 99, 235, 0.15);
+  --brand-nellon-border: rgba(37, 99, 235, 0.3);
+
+  --brand-raviya-light: rgba(245, 158, 11, 0.15);
+  --brand-raviya-border: rgba(245, 158, 11, 0.3);
+
+  --brand-nonbranded-light: rgba(100, 116, 139, 0.15);
+  --brand-nonbranded-border: rgba(100, 116, 139, 0.3);
+
+  --status-open-bg: rgba(59, 130, 246, 0.15);
+  --status-open-border: rgba(59, 130, 246, 0.3);
+
+  --status-overdue-bg: rgba(239, 68, 68, 0.15);
+  --status-overdue-border: rgba(239, 68, 68, 0.3);
+
+  --status-partial-bg: rgba(139, 92, 246, 0.15);
+  --status-partial-border: rgba(139, 92, 246, 0.3);
+
+  --status-closed-bg: rgba(16, 185, 129, 0.15);
+  --status-closed-border: rgba(16, 185, 129, 0.3);
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+  --shadow-drawer: -4px 0 24px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* Reduced Motion Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms !important;
+    --motion-standard: 0ms !important;
+    --motion-slow: 0ms !important;
+  }
+}
