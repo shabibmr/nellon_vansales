@@ -4,3 +4,4 @@ __pycache__/
 output/
 .env
 .env_*
+.zoho_token*.json

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Nellon MIS reports: Executive Summary, P&L, Balance Sheet and Trial Balance by month.">
+<title>Reports · Nellon MIS</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to report</a>
+
+<div class="app">
+  <div class="page">
+    <header class="appbar">
+      <div class="titles">
+        <h1>MIS Reports</h1>
+      </div>
+      <div class="actions">
+        <a id="exportBtn" class="btn filled" href="api/export.xlsx" aria-disabled="true"
+           title="One workbook with Executive Summary, PL, BS and Trial Balance on separate sheets">
+          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"/></svg>
+          Export Excel
+        </a>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs" aria-label="Reports"></nav>
+
+    <div class="toolbar" id="toolbar"></div>
+
+    <main class="content" id="main" tabindex="-1">
+      <section class="surface" aria-labelledby="reportTitle">
+        <div class="surface-head">
+          <div class="org" id="org"></div>
+          <h2 class="meta" id="reportTitle"></h2>
+        </div>
+        <div class="scroll" id="out" aria-live="polite"></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="snackbar" id="snackbar" role="status" aria-live="polite"></div>
+
+<script src="assets/reports.js"></script>
+</body>
+</html>

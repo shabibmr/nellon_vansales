@@ -80,3 +80,6 @@ terminals/
 scratch/
 
 
+
+# Zoho access-token caches (MIS scripts)
+.zoho_token*.json

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Nellon MIS Category Master: map every Zoho ledger to its P&L or Balance Sheet reporting line.">
+<title>Categories · Nellon MIS</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to accounts</a>
+
+<div class="app">
+  <div class="page">
+    <header class="appbar">
+      <div class="titles">
+        <h1>MIS Reports</h1>
+        <div class="subtitle" id="subtitle">Loading chart of accounts</div>
+      </div>
+      <div class="actions">
+        <button class="btn tonal" id="refresh" type="button" title="Pull the chart of accounts from Zoho Books again">
+          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#refresh"/></svg>
+          Refresh from Zoho
+        </button>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Reports">
+      <a href="./?tab=exec">Executive Summary</a>
+      <a href="./?tab=pl">Profit &amp; Loss</a>
+      <a href="./?tab=bs">Balance Sheet</a>
+      <a href="./?tab=tb">Trial Balance</a>
+      <a href="categories" aria-current="page">Categories</a>
+    </nav>
+
+    <div class="toolbar">
+      <div class="chips" id="chips" role="group" aria-label="Filter by how the category was decided"></div>
+    </div>
+
+    <div class="toolbar tight">
+      <label class="field grow">
+        <span>Search</span>
+        <span class="search">
+          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#search"/></svg>
+          <input class="input" type="search" id="q" autocomplete="off" placeholder="Ledger, path or category">
+        </span>
+      </label>
+      <label class="field">
+        <span>Statement</span>
+        <select class="input" id="fPlbs">
+          <option value="">P&amp;L and BS</option><option value="PL">P&amp;L</option><option value="BS">Balance Sheet</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Category</span>
+        <select class="input" id="fCat"><option value="">All categories</option></select>
+      </label>
+      <label class="switch"><input type="checkbox" id="fGroups"> Show group accounts</label>
+      <span class="count" id="count" aria-live="polite"></span>
+    </div>
+
+    <main class="content split" id="main" tabindex="-1">
+      <section class="surface" aria-label="Accounts">
+        <div class="scroll" id="tableWrap">
+          <div class="skeleton" aria-label="Loading accounts">
+            <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+          </div>
+        </div>
+      </section>
+      <aside class="surface sheet-panel" id="panel" aria-live="polite"></aside>
+    </main>
+  </div>
+</div>
+
+<div class="snackbar" id="snackbar" role="status" aria-live="polite"></div>
+
+<script src="assets/category-master.js"></script>
+</body>
+</html>
