@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Koyson Sales Dashboard | FY 2026 (Jan - Dec)</title>
+  <meta name="description" content="Koyson Sales Intelligence & Zoho Books Analytics Dashboard">
+
+  <!-- Application Stylesheets -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- ====================================================================
+         Main Wrapper & Header (Full-Bleed Canvas)
+         ==================================================================== -->
+    <div class="main-wrapper">
+      
+      <!-- Sticky Top Header -->
+      <header class="header-bar" id="app-header">
+        <div class="header-left">
+          <div class="brand-logo" id="header-brand-logo">
+            <div class="brand-icon-box">K</div>
+            <span class="brand-text">Koyson Sales</span>
+          </div>
+          
+          <div class="header-divider-vertical"></div>
+
+          <div class="header-title-group">
+            <h1 class="header-title">Executive Analytics</h1>
+            <span class="badge-fy" id="header-period-badge">FY 2026 (Jan - Dec)</span>
+          </div>
+
+          <div class="source-indicator" id="header-source-indicator" title="Data Source">
+            <span class="status-dot"></span>
+            <span id="source-name-label">invoice_clean.xlsx</span>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Currency Indicator -->
+          <div class="currency-switch" role="status" aria-label="Operating Currency" title="Currency: AED">
+            <span class="currency-btn active" id="btn-currency-aed" style="cursor: default; user-select: none;">AED</span>
+          </div>
+
+                    <!-- Theme Toggle -->
+          <button type="button" class="btn-header btn-icon-only" id="btn-theme-toggle" title="Toggle Dark/Light Mode" aria-label="Toggle Theme">
+            <svg class="icon icon-sm theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+          </button>
+
+          <!-- Refresh Button with Spin Animation -->
+          <button type="button" class="btn-header btn-icon-only" id="btn-refresh" title="Refresh Dashboard Data" aria-label="Refresh Data">
+            <svg class="icon icon-sm" id="refresh-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+              <path d="M21 3v5h-5"></path>
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+              <path d="M8 16H3v5"></path>
+            </svg>
+          </button>
+
+          <!-- Download All Button -->
+          <button type="button" class="btn-header btn-header-primary" id="btn-download-all">
+            <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" x2="12" y1="15" y2="3"></line>
+            </svg>
+            <span>Download All</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Sticky Global Filter Bar -->
+      <section class="global-filter-bar" id="global-filter-bar" aria-label="Global Filters">
+        <div class="filter-group-container">
+          <!-- Status Filter -->
+          <div class="filter-item">
+            <label for="filter-status" class="filter-label">Status:</label>
+            <select id="filter-status" class="filter-select">
+              <option value="All">All Statuses</option>
+              <option value="Open">Open</option>
+              <option value="Overdue">Overdue</option>
+              <option value="Partially Paid">Partially Paid</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+
+          <!-- Brand Filter -->
+          <div class="filter-item">
+            <label for="filter-brand" class="filter-label">Brand:</label>
+            <select id="filter-brand" class="filter-select">
+              <option value="All">All Brands</option>
+              <option value="Nellon">Nellon</option>
+              <option value="Raviya">Raviya</option>
+              <option value="Non-Branded">Non-Branded</option>
+            </select>
+          </div>
+
+          <!-- FY Filter -->
+          <div class="filter-item">
+            <label for="filter-fy" class="filter-label">FY:</label>
+            <select id="filter-fy" class="filter-select">
+              <option value="FY 2026" selected>FY 2026 (Jan - Dec)</option>
+              <option value="FY 2025">FY 2025 (Jan - Dec)</option>
+            </select>
+          </div>
+
+          <!-- Period Filter -->
+          <div class="filter-item">
+            <label for="filter-period" class="filter-label">Period:</label>
+            <select id="filter-period" class="filter-select">
+              <option value="Full FY" selected>Full Year (Jan - Dec)</option>
+              <option value="Q1">Q1 (Jan - Mar)</option>
+              <option value="Q2">Q2 (Apr - Jun)</option>
+              <option value="Q3">Q3 (Jul - Sep)</option>
+              <option value="Q4">Q4 (Oct - Dec)</option>
+              <option value="H1">H1 (Jan - Jun)</option>
+              <option value="H2">H2 (Jul - Dec)</option>
+            </select>
+          </div>
+
+          <!-- Month Filter -->
+          <div class="filter-item">
+            <label for="filter-month" class="filter-label">Month:</label>
+            <select id="filter-month" class="filter-select">
+              <option value="All" selected>All Months</option>
+              <option value="Jan 2026">Jan 2026</option>
+              <option value="Feb 2026">Feb 2026</option>
+              <option value="Mar 2026">Mar 2026</option>
+              <option value="Apr 2026">Apr 2026</option>
+              <option value="May 2026">May 2026</option>
+              <option value="Jun 2026">Jun 2026</option>
+              <option value="Jul 2026">Jul 2026</option>
+              <option value="Aug 2026">Aug 2026</option>
+              <option value="Sep 2026">Sep 2026</option>
+              <option value="Oct 2026">Oct 2026</option>
+              <option value="Nov 2026">Nov 2026</option>
+              <option value="Dec 2026">Dec 2026</option>
+            </select>
+          </div>
+
+          <!-- Compare Checkbox -->
+          <label class="checkbox-label" for="check-compare-period">
+            <input type="checkbox" id="check-compare-period">
+            <span>Compare Period on Period</span>
+          </label>
+        </div>
+
+        <div class="filter-actions">
+          <button type="button" class="btn-clear-filters" id="btn-clear-filters">
+            <span>Clear Filters</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Active Filter Badges Bar -->
+      <div id="active-filter-badges-bar"></div>
+
+      <!-- ====================================================================
+           Main Dashboard Content
+           ==================================================================== -->
+      <main class="dashboard-content" id="main-dashboard">
+
+        <!-- 1. KPI Cards Row (5x Grid) -->
+        <section class="kpi-grid animate-entry stagger-1" id="section-kpis" aria-label="Key Performance Indicators">
+          
+          <!-- KPI 1: Net Revenue -->
+          <div class="kpi-card" id="kpi-net-revenue">
+            <div class="kpi-header">
+              <span class="kpi-label">Net Revenue</span>
+              <div class="kpi-icon-wrapper">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" x2="12" y1="2" y2="22"></line>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="val-net-revenue">AED 6.88M</span>
+              <span class="kpi-trend-pill trend-up" id="trend-net-revenue">
+                <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                +4.8%
+              </span>
+            </div>
+            <div class="kpi-footer">
+              <span id="sub-net-revenue">vs prev. period (AED 6.56M)</span>
+            </div>
+          </div>
+
+          <!-- KPI 2: Total Invoices -->
+          <div class="kpi-card" id="kpi-invoices">
+            <div class="kpi-header">
+              <span class="kpi-label">Invoices</span>
+              <div class="kpi-icon-wrapper">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="val-invoices">1,284</span>
+              <span class="kpi-trend-pill trend-up" id="trend-invoices">
+                <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                +2.1%
+              </span>
+            </div>
+            <div class="kpi-footer">
+              <span id="sub-invoices">Total invoices raised</span>
+            </div>
+          </div>
+
+          <!-- KPI 3: Active Customers -->
+          <div class="kpi-card" id="kpi-active-customers">
+            <div class="kpi-header">
+              <span class="kpi-label">Active Customers</span>
+              <div class="kpi-icon-wrapper">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="val-active-customers">412</span>
+              <span class="kpi-trend-pill trend-up" id="trend-customers">
+                <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                +6.5%
+              </span>
+            </div>
+            <div class="kpi-footer">
+              <span id="sub-active-customers">Purchasing accounts</span>
+            </div>
+          </div>
+
+          <!-- KPI 4: Avg Order Value (AOV) -->
+          <div class="kpi-card" id="kpi-aov">
+            <div class="kpi-header">
+              <span class="kpi-label">Avg Order Value</span>
+              <div class="kpi-icon-wrapper">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
+                  <path d="M3 6h18"></path>
+                  <path d="M16 10a4 4 0 0 1-8 0"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="val-aov">AED 5,357</span>
+              <span class="kpi-trend-pill trend-up" id="trend-aov">
+                <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                +2.6%
+              </span>
+            </div>
+            <div class="kpi-footer">
+              <span id="sub-aov">Revenue per invoice</span>
+            </div>
+          </div>
+
+          <!-- KPI 5: Avg Credit Period -->
+          <div class="kpi-card" id="kpi-avg-credit">
+            <div class="kpi-header">
+              <span class="kpi-label">Avg Credit Period</span>
+              <div class="kpi-icon-wrapper">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="val-avg-credit">28 Days</span>
+              <span class="kpi-trend-pill trend-neutral" id="trend-credit">
+                Neutral
+              </span>
+            </div>
+            <div class="kpi-footer">
+              <span id="sub-avg-credit">Weighted payment terms</span>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- 2. Brand Summary Cards (3x Grid) -->
+        <section class="brand-grid animate-entry stagger-2" id="section-brands" aria-label="Brand Performance Summaries">
+          
+          <!-- Nellon Brand Card -->
+          <div class="brand-card brand-nellon-card" id="brand-card-nellon" data-brand="Nellon">
+            <div class="brand-card-top">
+              <span class="brand-name">
+                <span class="badge badge-nellon">Nellon</span>
+              </span>
+              <span class="brand-share-badge badge-nellon" id="brand-share-nellon">51.2% Share</span>
+            </div>
+            <div class="brand-revenue" id="brand-rev-nellon">AED 3.52M</div>
+            <div class="brand-progress-bg">
+              <div class="brand-progress-bar nellon" style="width: 51.2%;"></div>
+            </div>
+            <div class="brand-metrics-row">
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">Invoices</span>
+                <span class="mini-stat-value" id="brand-inv-nellon">658</span>
+              </div>
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">Line Items</span>
+                <span class="mini-stat-value" id="brand-lines-nellon">3,420</span>
+              </div>
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">AOV</span>
+                <span class="mini-stat-value" id="brand-aov-nellon">AED 5,349</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Non-Branded Card -->
+          <div class="brand-card brand-nonbranded-card" id="brand-card-nonbranded" data-brand="Non-Branded">
+            <div class="brand-card-top">
+              <span class="brand-name">
+                <span class="badge badge-nonbranded">Non-Branded</span>
+              </span>
+              <span class="brand-share-badge badge-nonbranded" id="brand-share-nonbranded">37.4% Share</span>
+            </div>
+            <div class="brand-revenue" id="brand-rev-nonbranded">AED 2.57M</div>
+            <div class="brand-progress-bg">
+              <div class="brand-progress-bar nonbranded" style="width: 37.4%;"></div>
+            </div>
+            <div class="brand-metrics-row">
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">Invoices</span>
+                <span class="mini-stat-value" id="brand-inv-nonbranded">480</span>
+              </div>
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">Line Items</span>
+                <span class="mini-stat-value" id="brand-lines-nonbranded">2,510</span>
+              </div>
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">AOV</span>
+                <span class="mini-stat-value" id="brand-aov-nonbranded">AED 5,354</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Raviya Brand Card -->
+          <div class="brand-card brand-raviya-card" id="brand-card-raviya" data-brand="Raviya">
+            <div class="brand-card-top">
+              <span class="brand-name">
+                <span class="badge badge-raviya">Raviya</span>
+              </span>
+              <span class="brand-share-badge badge-raviya" id="brand-share-raviya">11.4% Share</span>
+            </div>
+            <div class="brand-revenue" id="brand-rev-raviya">AED 783.3K</div>
+            <div class="brand-progress-bg">
+              <div class="brand-progress-bar raviya" style="width: 11.4%;"></div>
+            </div>
+            <div class="brand-metrics-row">
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">Invoices</span>
+                <span class="mini-stat-value" id="brand-inv-raviya">146</span>
+              </div>
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">Line Items</span>
+                <span class="mini-stat-value" id="brand-lines-raviya">890</span>
+              </div>
+              <div class="brand-mini-stat">
+                <span class="mini-stat-label">AOV</span>
+                <span class="mini-stat-value" id="brand-aov-raviya">AED 5,365</span>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- 3. Charts Row 1: Revenue Trend (Stacked Bar) & Revenue by Brand (Donut) -->
+        <section class="charts-split-grid animate-entry stagger-3" id="section-charts-row1">
+          
+          <!-- Revenue Trend Chart -->
+          <div class="card chart-card" id="card-revenue-trend">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3 class="card-title">Revenue Trend by Brand</h3>
+                <span class="card-subtitle">Monthly stacked revenue with line-items volume overlay</span>
+              </div>
+              <div class="chart-legend-custom" id="legend-revenue-trend">
+                <div class="legend-item" data-series="Nellon">
+                  <span class="legend-color-dot" style="background-color: var(--brand-nellon);"></span>
+                  <span>Nellon</span>
+                </div>
+                <div class="legend-item" data-series="Non-Branded">
+                  <span class="legend-color-dot" style="background-color: var(--brand-nonbranded);"></span>
+                  <span>Non-Branded</span>
+                </div>
+                <div class="legend-item" data-series="Raviya">
+                  <span class="legend-color-dot" style="background-color: var(--brand-raviya);"></span>
+                  <span>Raviya</span>
+                </div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-wrapper">
+                <canvas id="canvas-revenue-trend"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Revenue by Brand Donut Chart -->
+          <div class="card chart-card" id="card-revenue-brand">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3 class="card-title">Revenue by Brand</h3>
+                <span class="card-subtitle">Share of total net revenue</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-wrapper">
+                <canvas id="canvas-revenue-brand"></canvas>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- 4. Month Snapshot Section -->
+        <section class="card animate-entry stagger-4" id="section-month-snapshot">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h3 class="card-title">Month Snapshot</h3>
+              <span class="card-subtitle">Detailed breakdown for selected reporting month</span>
+            </div>
+            <div class="month-tabs-container" id="month-tabs-wrapper" role="tablist">
+              <button type="button" class="month-tab-btn active" data-month="Apr 2026" role="tab" aria-selected="true">Apr 2026</button>
+              <button type="button" class="month-tab-btn" data-month="May 2026" role="tab" aria-selected="false">May 2026</button>
+              <button type="button" class="month-tab-btn" data-month="Jun 2026" role="tab" aria-selected="false">Jun 2026</button>
+              <button type="button" class="month-tab-btn" data-month="Jul 2026" role="tab" aria-selected="false">Jul 2026</button>
+              <button type="button" class="month-tab-btn" data-month="Aug 2026" role="tab" aria-selected="false">Aug 2026</button>
+              <button type="button" class="month-tab-btn" data-month="Sep 2026" role="tab" aria-selected="false">Sep 2026</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="snapshot-grid" id="snapshot-metrics-grid">
+              <div class="snapshot-metric-card">
+                <span class="mini-stat-label">Month Revenue</span>
+                <span class="mini-stat-value" id="snap-revenue" style="font-size: var(--font-size-md);">AED 1.72M</span>
+              </div>
+              <div class="snapshot-metric-card">
+                <span class="mini-stat-label">Invoices Raised</span>
+                <span class="mini-stat-value" id="snap-invoices" style="font-size: var(--font-size-md);">321</span>
+              </div>
+              <div class="snapshot-metric-card">
+                <span class="mini-stat-label">Nellon Contribution</span>
+                <span class="mini-stat-value" id="snap-nellon" style="font-size: var(--font-size-md);">AED 880K (51%)</span>
+              </div>
+              <div class="snapshot-metric-card">
+                <span class="mini-stat-label">Top Category</span>
+                <span class="mini-stat-value" id="snap-category" style="font-size: var(--font-size-md);">Rice & Grains</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. Charts Row 2: Status & Weekly Activity -->
+        <section class="charts-half-grid animate-entry stagger-5" id="section-charts-row2">
+          
+          <!-- Revenue by Invoice Status -->
+          <div class="card chart-card" id="card-invoice-status">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3 class="card-title">Revenue by Invoice Status</h3>
+                <span class="card-subtitle">Overdue, Open, Partially Paid & Closed distribution</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-wrapper">
+                <canvas id="canvas-invoice-status"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Weekly Activity Chart -->
+          <div class="card chart-card" id="card-weekly-activity">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3 class="card-title">Weekly Sales Activity</h3>
+                <span class="card-subtitle">Weekly revenue cadence and invoice volume</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-wrapper">
+                <canvas id="canvas-weekly-activity"></canvas>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- 6. Customer x Product Heatmap Matrix & Credit Breakdown -->
+        <section class="matrix-layout-grid animate-entry stagger-6" id="section-matrix-credit">
+          
+          <!-- Heatmap Matrix -->
+          <div class="card" id="card-matrix">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3 class="card-title">Customer × Product Matrix</h3>
+                <span class="card-subtitle">Top 10 master accounts vs top product categories</span>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="matrix-container" id="matrix-table-container">
+                <!-- Injected via JavaScript tables.js -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Credit Period Breakdown -->
+          <div class="card" id="card-credit-breakdown">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3 class="card-title">Credit Period Breakdown</h3>
+                <span class="card-subtitle">Revenue distribution by payment terms</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="credit-list" id="credit-breakdown-container">
+                <!-- Injected via JavaScript tables.js / demo-data.js -->
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- 7. ASP Trend by Product Section -->
+        <section class="card animate-entry stagger-7" id="section-asp-trend">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h3 class="card-title">ASP Trend by Product</h3>
+              <span class="card-subtitle">Monthly average selling price across selected SKU portfolio</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <!-- Filter & SKU search controls -->
+            <div class="asp-controls-bar">
+              <div class="asp-filter-group">
+                <label for="asp-category-filter" class="filter-label">Category:</label>
+                <select id="asp-category-filter" class="filter-select">
+                  <option value="All">All Categories</option>
+                  <option value="Beverages & Dairy">Beverages & Dairy</option>
+                  <option value="Cooking Oil & Ghee">Cooking Oil & Ghee</option>
+                  <option value="Dry Fruits & Nuts">Dry Fruits & Nuts</option>
+                  <option value="Flour & Milling Products">Flour & Milling Products</option>
+                  <option value="Meat & Poultry (Frozen)">Meat & Poultry (Frozen)</option>
+                  <option value="Packaging & Consumables">Packaging & Consumables</option>
+                  <option value="Pulses & Legumes">Pulses & Legumes</option>
+                  <option value="Rice & Grains">Rice & Grains</option>
+                  <option value="Sauces/Pickles/Condiments">Sauces/Pickles/Condiments</option>
+                  <option value="Snacks">Snacks</option>
+                  <option value="Spices & Seasonings">Spices & Seasonings</option>
+                  <option value="Sugar & Sweeteners">Sugar & Sweeteners</option>
+                  <option value="Uncategorised">Uncategorised</option>
+                </select>
+
+                <input type="search" id="asp-sku-search" class="asp-search-input" placeholder="Search SKU name or code...">
+              </div>
+
+              <div class="asp-actions">
+                <button type="button" class="btn-page" id="btn-asp-select-all">Select All</button>
+                <button type="button" class="btn-page" id="btn-asp-deselect-all">Deselect All</button>
+              </div>
+            </div>
+
+            <!-- SKU Chip Selector Area -->
+            <div class="sku-chips-wrapper" id="asp-chips-container">
+              <!-- Dynamically populated SKU chips -->
+              <span class="sku-more-badge" id="asp-hidden-count">+383 more SKUs not shown</span>
+            </div>
+
+            <!-- ASP Multi-Line Chart Canvas -->
+            <div class="chart-wrapper" style="height: 320px; margin-top: var(--space-4);">
+              <canvas id="canvas-asp-trend"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. Analytical Data Tables Section -->
+        <section class="card animate-entry stagger-8" id="section-tables">
+          <!-- Table Tab Bar -->
+          <div class="table-tab-bar" role="tablist">
+            <button type="button" class="table-tab-btn active" id="tab-customers" data-table="customers" role="tab" aria-selected="true">Top Customers</button>
+            <button type="button" class="table-tab-btn" id="tab-products" data-table="products" role="tab" aria-selected="false">Product Breakdown</button>
+            <button type="button" class="table-tab-btn" id="tab-poc" data-table="poc" role="tab" aria-selected="false">POC Leaderboard</button>
+            <button type="button" class="table-tab-btn" id="tab-invoices" data-table="invoices" role="tab" aria-selected="false">Recent Invoices</button>
+          </div>
+
+          <!-- Table Search & Filters Toolbar -->
+          <div class="table-toolbar">
+            <input type="search" id="table-search-input" class="table-search-input" placeholder="Filter table records...">
+            <div class="table-actions" id="table-custom-actions">
+              <button type="button" class="btn-header" id="btn-export-current-table">
+                <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>
+                <span>Export CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Scrollable Table Container -->
+          <div class="table-container" id="table-container">
+            <!-- Table dynamically injected via tables.js -->
+            <table class="data-table" id="main-data-table">
+              <thead id="data-table-head"></thead>
+              <tbody id="data-table-body"></tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Footer -->
+          <div class="table-pagination" id="table-pagination">
+            <span id="pagination-info">Showing 1 to 10 of 10 records</span>
+            <div class="pagination-controls">
+              <button type="button" class="btn-page" id="btn-page-prev" disabled>Previous</button>
+              <span id="pagination-current-page" style="font-weight: 600;">1</span>
+              <button type="button" class="btn-page" id="btn-page-next" disabled>Next</button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- ====================================================================
+         The Waypoint Spine (Telemetry Rail & Live Hover Cards)
+         ==================================================================== -->
+    <nav class="waypoint-spine" id="waypoint-spine" aria-label="Section Telemetry Navigation">
+      <div class="spine-track">
+        <div class="spine-line"></div>
+        <div class="spine-tracer-bead" id="spine-tracer-bead"></div>
+
+        <!-- Waypoint 1: Executive KPIs & Brand Highlights -->
+        <div class="spine-node active" data-waypoint="section-kpis" role="button" tabindex="0" aria-label="Navigate to Executive Overview">
+          <span class="node-label">Overview</span>
+          <div class="node-marker">
+            <span class="node-pulse"></span>
+            <span class="node-dot"></span>
+          </div>
+          <div class="waypoint-hover-card">
+            <div class="hover-card-header">
+              <span class="hover-card-badge">Section 01</span>
+              <span class="hover-card-title">Executive Overview</span>
+            </div>
+            <div class="hover-card-body">
+              <div class="hover-metric">
+                <span class="metric-label">Net Revenue</span>
+                <span class="metric-val" id="wp-stat-rev">AED 10.43M</span>
+              </div>
+              <div class="hover-metric">
+                <span class="metric-label">Invoices</span>
+                <span class="metric-val" id="wp-stat-inv">1,948</span>
+              </div>
+            </div>
+            <div class="hover-card-hint">Click to jump • Live telemetry</div>
+          </div>
+        </div>
+
+        <!-- Waypoint 2: Sales Trends & Brand Share -->
+        <div class="spine-node" data-waypoint="section-charts-row1" role="button" tabindex="0" aria-label="Navigate to Sales Trends">
+          <span class="node-label">Trends</span>
+          <div class="node-marker">
+            <span class="node-pulse"></span>
+            <span class="node-dot"></span>
+          </div>
+          <div class="waypoint-hover-card">
+            <div class="hover-card-header">
+              <span class="hover-card-badge">Section 02</span>
+              <span class="hover-card-title">Sales Trends</span>
+            </div>
+            <div class="hover-card-body">
+              <div class="hover-metric">
+                <span class="metric-label">Nellon Share</span>
+                <span class="metric-val" id="wp-stat-share">51.2%</span>
+              </div>
+              <div class="hover-metric">
+                <span class="metric-label">AOV</span>
+                <span class="metric-val" id="wp-stat-aov">AED 5,352</span>
+              </div>
+            </div>
+            <div class="hover-card-hint">Stacked bar & Brand share donut</div>
+          </div>
+        </div>
+
+        <!-- Waypoint 3: Month Snapshot -->
+        <div class="spine-node" data-waypoint="section-month-snapshot" role="button" tabindex="0" aria-label="Navigate to Month Snapshot">
+          <span class="node-label">Snapshot</span>
+          <div class="node-marker">
+            <span class="node-pulse"></span>
+            <span class="node-dot"></span>
+          </div>
+          <div class="waypoint-hover-card">
+            <div class="hover-card-header">
+              <span class="hover-card-badge">Section 03</span>
+              <span class="hover-card-title">Month Snapshot</span>
+            </div>
+            <div class="hover-card-body">
+              <div class="hover-metric">
+                <span class="metric-label">Cadence</span>
+                <span class="metric-val">Jan - Dec (12M)</span>
+              </div>
+              <div class="hover-metric">
+                <span class="metric-label">Weekly Vol.</span>
+                <span class="metric-val">~80 Inv/Wk</span>
+              </div>
+            </div>
+            <div class="hover-card-hint">Monthly drilldown & Status health</div>
+          </div>
+        </div>
+
+        <!-- Waypoint 4: Customer x Product Matrix & Credit -->
+        <div class="spine-node" data-waypoint="section-matrix-credit" role="button" tabindex="0" aria-label="Navigate to Matrix & Credit">
+          <span class="node-label">Matrix</span>
+          <div class="node-marker">
+            <span class="node-pulse"></span>
+            <span class="node-dot"></span>
+          </div>
+          <div class="waypoint-hover-card">
+            <div class="hover-card-header">
+              <span class="hover-card-badge">Section 04</span>
+              <span class="hover-card-title">Matrix & Credit</span>
+            </div>
+            <div class="hover-card-body">
+              <div class="hover-metric">
+                <span class="metric-label">Accounts</span>
+                <span class="metric-val" id="wp-stat-accounts">412</span>
+              </div>
+              <div class="hover-metric">
+                <span class="metric-label">Avg Credit</span>
+                <span class="metric-val" id="wp-stat-credit">28 Days</span>
+              </div>
+            </div>
+            <div class="hover-card-hint">Account × Category heatmap</div>
+          </div>
+        </div>
+
+        <!-- Waypoint 5: ASP SKU Trends -->
+        <div class="spine-node" data-waypoint="section-asp-trend" role="button" tabindex="0" aria-label="Navigate to ASP Trends">
+          <span class="node-label">ASP</span>
+          <div class="node-marker">
+            <span class="node-pulse"></span>
+            <span class="node-dot"></span>
+          </div>
+          <div class="waypoint-hover-card">
+            <div class="hover-card-header">
+              <span class="hover-card-badge">Section 05</span>
+              <span class="hover-card-title">ASP Portfolio</span>
+            </div>
+            <div class="hover-card-body">
+              <div class="hover-metric">
+                <span class="metric-label">Active SKUs</span>
+                <span class="metric-val">392 Items</span>
+              </div>
+              <div class="hover-metric">
+                <span class="metric-label">Pricing Trend</span>
+                <span class="metric-val">Multi-Line</span>
+              </div>
+            </div>
+            <div class="hover-card-hint">Interactive SKU chip comparison</div>
+          </div>
+        </div>
+
+        <!-- Waypoint 6: Analytical Tables Ledger -->
+        <div class="spine-node" data-waypoint="section-tables" role="button" tabindex="0" aria-label="Navigate to Data Tables">
+          <span class="node-label">Ledger</span>
+          <div class="node-marker">
+            <span class="node-pulse"></span>
+            <span class="node-dot"></span>
+          </div>
+          <div class="waypoint-hover-card">
+            <div class="hover-card-header">
+              <span class="hover-card-badge">Section 06</span>
+              <span class="hover-card-title">Analytical Ledger</span>
+            </div>
+            <div class="hover-card-body">
+              <div class="hover-metric">
+                <span class="metric-label">Tabs</span>
+                <span class="metric-val">4 Views</span>
+              </div>
+              <div class="hover-metric">
+                <span class="metric-label">Export</span>
+                <span class="metric-val">CSV | Excel</span>
+              </div>
+            </div>
+            <div class="hover-card-hint">Customers, Products, POC, Invoices</div>
+          </div>
+        </div>
+
+      </div>
+    </nav>
+  </div>
+
+  <!-- ====================================================================
+       Slide-Over Detail Drawer (#detail-drawer)
+       ==================================================================== -->
+  <div class="drawer-backdrop" id="drawer-backdrop" aria-hidden="true"></div>
+  <aside class="drawer" id="detail-drawer" aria-label="Details Drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="card-title-group">
+        <h3 class="card-title" id="drawer-title">Record Details</h3>
+        <span class="card-subtitle" id="drawer-subtitle">Comprehensive breakdown</span>
+      </div>
+      <button type="button" class="btn-header btn-icon-only" id="btn-close-drawer" aria-label="Close Drawer">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" x2="6" y1="6" y2="18"></line>
+          <line x1="6" x2="18" y1="6" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="drawer-body" id="drawer-content">
+      <!-- Injected dynamically via drilldown.js -->
+    </div>
+  </aside>
+
+  <!-- ====================================================================
+       External CDN Script Dependencies
+       ==================================================================== -->
+  <!-- Chart.js 4.4.1 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- SheetJS 0.18.5 for Excel & CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Zoho Finance Widget SDK -->
+  <script src="https://js.zohocdn.com/zohofinance/v1/zfwidget.js"></script>
+
+  <!-- ====================================================================
+       Modular Application Scripts (in execution order)
+       ==================================================================== -->
+  <script src="js/demo-data.js"></script>
+  <script src="js/formatters.js"></script>
+  <script src="js/calculations.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/zoho-service.js"></script>
+  <script src="js/data-service.js"></script>
+  <script src="js/filters.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/tables.js"></script>
+  <script src="js/drilldown.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
