@@ -1,6 +1,7 @@
 """Local web editor for the Category Master (stdlib only).
 
     GET  / or /reports           → web/reports.html (report viewer; reads MariaDB only)
+    GET  /cashflow               → web/cashflow.html (day seeker; reads the local cache, no Zoho)
     GET  /categories             → web/category_master.html (Category Master editor)
 
 All page/asset/API URLs in the web files are relative, so the app also works
@@ -10,16 +11,24 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /api/statement?run_id=&name=   Executive Summary | PL | BS
     GET  /api/tb?run_id=         → monthly trial balance
     GET  /api/margin?run_id=&dim=&measure=   margin pivot by month
+    GET  /api/margin-detail?run_id=&view=line|invoice   margin per invoice line / per invoice
     GET  /api/purchases?run_id=&dim=&measure=   bills + purchase orders pivot by month
-    GET  /api/export.xlsx?run_id=        → Excel workbook (Exec Summary, PL, BS, Trial Balance)
+    GET  /api/export.xlsx?run_id=[&margin_run=&purchases_run=]  → Excel workbook (financials, margin, purchases, category master)
     GET  /api/category-master    → rows built from the cached COA snapshot + overrides
+    GET  /api/cashflow           → cash forecast from the COA snapshot and cached documents (no Zoho)
     POST /api/refresh            → re-pull Chart of Accounts from Zoho; returns rebuilt payload
+    POST /api/category-override  → {account_id, pl_bs, category, sub_category, note}: save a mapping override
+    POST /api/category-override/delete → {account_id}: drop the override (back to rule/type)
 
-The Category Master is read-only over HTTP (it is publicly deployed): mappings are
-changed by editing category_overrides.csv and re-running `main.py category-master`.
+Overrides are written to category_overrides.csv (rebuilt from the cached COA, no Zoho call), saved to
+MariaDB, and logged to output/category_audit.log with the Zoho user id. Editing needs the Zoho JWT
+auth to be enabled (MIS_JWT_SECRET); without it the endpoints refuse. Saved financials runs are not
+recomputed: re-run `main.py financials` to apply a changed mapping to a report.
 
-Zoho credentials stay server-side. Binds to 127.0.0.1 by default — there is no
-auth, so don't expose it on a public interface.
+Zoho credentials stay server-side. Binds to 127.0.0.1 by default. Every /api route needs the
+Zoho web-tab JWT as a Bearer header (pages/assets stay open); see reports/web_auth.py and
+web/assets/webtab-auth.js. With MIS_JWT_SECRET unset all /api routes are refused (fail closed);
+MIS_AUTH_DISABLED=1 skips auth for local development only.
 """
 
 from __future__ import annotations
@@ -27,7 +36,7 @@ from __future__ import annotations
 import json
 import re
 import threading
-from datetime import datetime
+from datetime import date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -36,11 +45,13 @@ from urllib.parse import parse_qs, urlsplit
 from exporters import write_csv, write_excel_sheets
 from main import BASE_DIR, COA_SNAPSHOT, OUT_DIR, OVERRIDES_CSV, load_coa_snapshot
 from reports import category_master as cm
-from reports import db
+from reports import cashflow_forecast as cf
+from reports import db, web_auth
 from reports.excel_export import build_workbook
 
 WEB_PAGE = BASE_DIR / "web" / "category_master.html"
 REPORTS_PAGE = BASE_DIR / "web" / "reports.html"
+CASHFLOW_PAGE = BASE_DIR / "web" / "cashflow.html"
 ASSETS_DIR = BASE_DIR / "web" / "assets"
 ASSET_TYPES = {
     ".css": "text/css; charset=utf-8",
@@ -68,6 +79,7 @@ def _payload(*, refresh: bool = False) -> dict[str, Any]:
     summary = cm.category_master_summary(rows)
     _export(rows, summary)
     return {
+        "can_edit": web_auth.enabled(),
         "organization_name": snapshot.get("organization_name", ""),
         "currency_code": snapshot.get("currency_code", ""),
         "snapshot_time": datetime.fromtimestamp(COA_SNAPSHOT.stat().st_mtime).isoformat(timespec="seconds"),
@@ -75,6 +87,62 @@ def _payload(*, refresh: bool = False) -> dict[str, Any]:
         "summary": summary,
         "rows": rows,
     }
+
+
+MAX_BODY = 16 * 1024
+AUDIT_LOG = OUT_DIR / "category_audit.log"
+_CTRL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _text(body: dict[str, Any], key: str, limit: int) -> str:
+    v = body.get(key, "")
+    if not isinstance(v, str):
+        raise ValueError(f"{key} must be text")
+    v = _CTRL.sub(" ", v).strip()
+    if len(v) > limit:
+        raise ValueError(f"{key} is longer than {limit} characters")
+    return v
+
+
+def _save_override(body: dict[str, Any], user: str, *, delete: bool) -> dict[str, Any]:
+    """Validate + persist one override (or delete it), then return the rebuilt payload."""
+    if not web_auth.enabled():
+        raise PermissionError("Editing is disabled until Zoho JWT auth (MIS_JWT_SECRET) is configured")
+    account_id = _text(body, "account_id", 40)
+    snapshot = load_coa_snapshot()
+    account = next((a for a in snapshot.get("accounts", []) if str(a.get("account_id")) == account_id), None)
+    if not account:
+        raise ValueError("unknown account_id")
+    overrides = cm.load_overrides(OVERRIDES_CSV)
+    before = overrides.get(account_id)
+    if delete:
+        if not overrides.pop(account_id, None):
+            raise ValueError("this account has no override")
+        after = None
+    else:
+        pl_bs = _text(body, "pl_bs", 2)
+        category = _text(body, "category", 120)
+        if pl_bs not in cm.CATEGORIES:
+            raise ValueError("pl_bs must be PL or BS")
+        if category not in cm.CATEGORIES[pl_bs]:
+            raise ValueError(f"category must be one of the {pl_bs} reporting lines")
+        after = {
+            "account_id": account_id,
+            "ledger_name": (account.get("account_name") or "").strip(),
+            "pl_bs": pl_bs,
+            "category": category,
+            "sub_category": _text(body, "sub_category", 255),
+            "note": _text(body, "note", 500),
+        }
+        overrides[account_id] = after
+    cm.save_overrides(OVERRIDES_CSV, overrides)
+    payload = _payload()
+    if db.enabled():
+        db.save_category_master(payload["rows"])
+    with AUDIT_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "user": user,
+                            "account_id": account_id, "before": before, "after": after}) + "\n")
+    return payload
 
 
 def _int(q: dict[str, str], key: str) -> int:
@@ -98,15 +166,58 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, status: int, data: Any) -> None:
         self._send(status, json.dumps(data).encode("utf-8"), "application/json; charset=utf-8")
 
+    _claims: dict[str, Any] = {}
+
+    def _read_json(self) -> dict[str, Any]:
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_BODY:
+            raise ValueError("request too large")
+        try:
+            body = json.loads(self.rfile.read(n) or b"{}")
+        except json.JSONDecodeError:
+            raise ValueError("body must be JSON") from None
+        if not isinstance(body, dict):
+            raise ValueError("body must be a JSON object")
+        return body
+
+    def _authorized(self, path: str) -> bool:
+        """Pages and static assets are open (they hold no data); every /api route needs a Zoho JWT."""
+        if not path.startswith("/api/"):
+            return True
+        key = web_auth.secret()
+        if key is None:
+            if web_auth.explicitly_disabled():
+                return True
+            print(f"auth: refusing {path} (MIS_JWT_SECRET not set)")
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Server auth is not configured (MIS_JWT_SECRET)."})
+            return False
+        bearer = self.headers.get("Authorization", "")
+        token = bearer[7:].strip() if bearer.lower().startswith("bearer ") else ""
+        if token:
+            try:
+                self._claims = web_auth.verify_jwt(token, key)
+                return True
+            except ValueError as exc:
+                print(f"auth rejected: {exc}")
+        else:
+            print(f"auth: no bearer token on {path}")
+        self._json(HTTPStatus.UNAUTHORIZED, {"error": "Open this report from the Zoho Books web tab."})
+        return False
+
     def do_GET(self) -> None:  # noqa: N802
         parts = urlsplit(self.path)
         path = parts.path
         q = {k: v[-1] for k, v in parse_qs(parts.query).items()}
+        if not self._authorized(path):
+            return
         if path in ("/", "/index.html", "/reports", "/reports.html"):
             self._send(HTTPStatus.OK, REPORTS_PAGE.read_bytes(), "text/html; charset=utf-8")
             return
         if path in ("/categories", "/category_master.html"):
             self._send(HTTPStatus.OK, WEB_PAGE.read_bytes(), "text/html; charset=utf-8")
+            return
+        if path in ("/cashflow", "/cashflow.html"):
+            self._send(HTTPStatus.OK, CASHFLOW_PAGE.read_bytes(), "text/html; charset=utf-8")
             return
         if path.startswith("/assets/"):
             name = path[len("/assets/"):]
@@ -120,6 +231,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/category-master":
                 with _lock:
                     self._json(HTTPStatus.OK, _payload())
+            elif path == "/api/cashflow":
+                as_of = date.fromisoformat(q["as_of"]) if q.get("as_of") else date.today()
+                self._json(HTTPStatus.OK, cf.load_offline(COA_SNAPSHOT, OUT_DIR / "cache", as_of))
             elif path.startswith("/api/") and not db.enabled():
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "MariaDB not configured (MIS_DB_* in .env)"})
             elif path == "/api/runs":
@@ -138,7 +252,11 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/tb":
                 self._json(HTTPStatus.OK, db.get_trial_balance(_int(q, "run_id")))
             elif path == "/api/export.xlsx":
-                body, filename = build_workbook(_int(q, "run_id"))
+                body, filename = build_workbook(
+                    _int(q, "run_id"),
+                    _int(q, "margin_run") if q.get("margin_run") else None,
+                    _int(q, "purchases_run") if q.get("purchases_run") else None,
+                )
                 self.send_response(HTTPStatus.OK)
                 self.send_header(
                     "Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -152,6 +270,8 @@ class Handler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     db.get_margin_pivot(_int(q, "run_id"), q.get("dim", "item"), q.get("measure", "net_sales")),
                 )
+            elif path == "/api/margin-detail":
+                self._json(HTTPStatus.OK, db.get_margin_detail(_int(q, "run_id"), q.get("view", "line")))
             elif path == "/api/purchases":
                 self._json(
                     HTTPStatus.OK,
@@ -166,12 +286,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
+        if not self._authorized(path):
+            return
         try:
             with _lock:
                 if path == "/api/refresh":
                     self._json(HTTPStatus.OK, _payload(refresh=True))
+                elif path in ("/api/category-override", "/api/category-override/delete"):
+                    user = str(self._claims.get("user_id", "unknown"))
+                    self._json(HTTPStatus.OK, _save_override(self._read_json(), user,
+                                                             delete=path.endswith("/delete")))
                 else:
                     self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+        except PermissionError as exc:
+            self._json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
         except ValueError as exc:
             self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except Exception as exc:
@@ -182,8 +310,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
+    if not web_auth.enabled():
+        print("WARNING: MIS_JWT_SECRET not set — " + (
+            "MIS_AUTH_DISABLED=1, report viewer has NO authentication" if web_auth.explicitly_disabled()
+            else "all /api routes will be refused"))
     httpd = ThreadingHTTPServer((host, port), Handler)
     print(f"Report viewer          → http://{host}:{port}/")
+    print(f"Cashflow seeker        → http://{host}:{port}/cashflow")
     print(f"Category Master editor → http://{host}:{port}/categories  (Ctrl+C to stop)")
     try:
         httpd.serve_forever()

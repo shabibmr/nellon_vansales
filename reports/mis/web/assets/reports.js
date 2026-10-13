@@ -17,6 +17,8 @@
     { id: "bs", label: "Balance Sheet", kind: "financials", statement: "BS" },
     { id: "tb", label: "Trial Balance", kind: "financials" },
     { id: "margin", label: "Margin", kind: "margin", api: "api/margin", pivot: true },
+    { id: "mline", label: "Margin by Line", kind: "margin", detail: "line" },
+    { id: "minv", label: "Margin by Invoice", kind: "margin", detail: "invoice" },
     { id: "purchases", label: "Purchases", kind: "purchases", api: "api/purchases", pivot: true },
   ];
 
@@ -40,6 +42,8 @@
     selected: { financials: null, margin: null, purchases: null },
     pivot: { margin: { dim: "item", measure: "net_sales" }, purchases: { dim: "vendor", measure: "amount" } },
     tbFilter: "",
+    detailFilter: "",
+    detailData: null,
     tbData: null,
   };
   const initialRun = Number(qs.get("run")) || null;
@@ -82,7 +86,7 @@
   }
 
   async function api(path) {
-    const res = await fetch(path, { cache: "no-store" });
+    const res = await MISAuth.fetch(path, { cache: "no-store" });
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
     return body;
@@ -115,9 +119,10 @@
     const btn = $("exportBtn");
     const id = state.selected.financials || (state.runs.financials[0] || {}).id;
     if (id) {
-      btn.href = `api/export.xlsx?run_id=${id}`;
+      const extra = ["margin", "purchases"].map((k) => state.selected[k] ? `&${k}_run=${state.selected[k]}` : "").join("");
+      btn.href = `api/export.xlsx?run_id=${id}${extra}`;
       btn.removeAttribute("aria-disabled");
-      btn.title = `Run #${id}: Executive Summary, PL, BS and Trial Balance, one sheet each`;
+      btn.title = `Run #${id}: Executive Summary, PL, BS, Trial Balance, Margin, Purchases and Category Master`;
     } else {
       btn.href = "api/export.xlsx";
       btn.setAttribute("aria-disabled", "true");
@@ -128,6 +133,16 @@
   function renderTools() {
     const t = tab();
     let html = "";
+    if (t.detail) {
+      const runs = state.runs[t.kind];
+      html = `<label class="field"><span>Run</span><select class="input" id="pvRun">${runs.map((r) =>
+        `<option value="${r.id}"${r.id === state.selected[t.kind] ? " selected" : ""}>` +
+        `#${r.id} · ${esc(r.from_date)} to ${esc(r.to_date)}</option>`).join("")}</select></label>
+        <label class="field grow"><span>Filter</span>
+          <span class="search">${icon("search")}
+            <input class="input" id="dtq" type="search" autocomplete="off"
+                   placeholder="Invoice, customer or item" value="${esc(state.detailFilter)}"></span></label>`;
+    }
     if (t.id === "tb") {
       html = `<label class="field grow"><span>Filter</span>
                 <span class="search">${icon("search")}
@@ -148,9 +163,12 @@
     $("toolbar").innerHTML = html;
     if ($("pvRun")) {
       $("pvRun").onchange = (e) => { state.selected[t.kind] = Number(e.target.value); load(); };
-      $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
-      $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
+      if ($("pvDim")) {
+        $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
+        $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
+      }
     }
+    if ($("dtq")) $("dtq").oninput = (e) => { state.detailFilter = e.target.value; renderDetail(state.detailData, t); };
     if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
   }
 
@@ -199,6 +217,40 @@
       cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`;
     const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
     view(`<table class="data">${headRow(dimLabel, cols, "Total")}<tbody>${body}${foot}</tbody></table>`);
+  }
+
+  function renderDetail(data, t) {
+    if (!data) return;
+    const q = state.detailFilter.trim().toLowerCase();
+    const rows = data.rows.filter((r) => !q || [r.invoice_number, r.customer_name, r.item_name, r.salesperson_name]
+      .some((v) => String(v ?? "").toLowerCase().includes(q)));
+    if (!rows.length) {
+      stateView("search", "Nothing matches", "Try a different invoice number, customer or item.");
+      return;
+    }
+    const byLine = t.detail === "line";
+    const th = (l, n) => `<th scope="col"${n ? ' class="n"' : ""}>${l}</th>`;
+    const head = byLine
+      ? [th("Date"), th("Invoice"), th("Customer"), th("Item"), th("Unit"), th("Qty", 1), th("Rate", 1),
+        th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)]
+      : [th("Date"), th("Invoice"), th("Customer"), th("Salesperson"), th("Lines", 1),
+        th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)];
+    const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
+    const tn = sum("net_sales"), tc = sum("cost"), tm = sum("gross_margin");
+    const flag = (r) => (byLine ? r.flag : r.flagged)
+      ? `<span class="tag review">${byLine ? esc(r.flag) : `${r.flagged} flagged`}</span>` : "";
+    const body = rows.map((r) => byLine
+      ? `<tr><td>${esc(r.date)}</td><td>${esc(r.invoice_number)}</td><td>${esc(r.customer_name)}</td>` +
+        `<td>${esc(r.item_name)}${flag(r)}</td><td>${esc(r.unit)}</td>${numCell(r.quantity)}${numCell(r.rate)}` +
+        `${numCell(r.net_sales)}${numCell(r.cost)}${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`
+      : `<tr><td>${esc(r.date)}</td><td>${esc(r.invoice_number)}${flag(r)}</td><td>${esc(r.customer_name)}</td>` +
+        `<td>${esc(r.salesperson_name)}</td><td class="n">${r.line_count}</td>${numCell(r.net_sales)}${numCell(r.cost)}` +
+        `${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
+    const span = byLine ? 7 : 4;
+    const foot = `<tr class="total"><td colspan="${span}">Total${q ? " of filtered rows" : ""}</td>` +
+      (byLine ? "" : `<td class="n">${rows.reduce((s, r) => s + r.line_count, 0)}</td>`) +
+      `${numCell(tn)}${numCell(tc)}${numCell(tm)}${numCell(tn ? tm / tn : 0, { pct: true })}</tr>`;
+    view(`<table class="data"><thead><tr>${head.join("")}</tr></thead><tbody>${body}${foot}</tbody></table>`);
   }
 
   function renderTb(data) {
@@ -272,7 +324,10 @@
     setHead(runOf(t.kind), t.label);
     skeleton();
     try {
-      if (t.pivot) {
+      if (t.detail) {
+        state.detailData = await api(`api/margin-detail?run_id=${runId}&view=${t.detail}`);
+        renderDetail(state.detailData, t);
+      } else if (t.pivot) {
         const cur = state.pivot[t.id];
         renderPivot(await api(`${t.api}?run_id=${runId}&dim=${cur.dim}&measure=${cur.measure}`), t);
       } else if (t.statement) {
@@ -298,12 +353,23 @@
     load().then(() => $("tabs").querySelector(`[data-tab="${state.tab}"]`)?.focus());
   });
 
-  $("exportBtn").addEventListener("click", (e) => {
-    if ($("exportBtn").getAttribute("aria-disabled") === "true") {
-      e.preventDefault();
-      return;
-    }
+  // The workbook needs the Bearer token, so fetch it and save the blob instead of following a link.
+  $("exportBtn").addEventListener("click", async (e) => {
+    e.preventDefault();
+    const btn = $("exportBtn");
+    if (btn.getAttribute("aria-disabled") === "true") return;
     snackbar("Preparing the Excel workbook");
+    try {
+      const res = await MISAuth.fetch(btn.getAttribute("href"));
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      const m = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+      const a = Object.assign(document.createElement("a"), {
+        href: URL.createObjectURL(await res.blob()), download: m ? m[1] : "mis-report.xlsx" });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    } catch (err) {
+      snackbar(err.message, true);
+    }
   });
 
   renderTabs();

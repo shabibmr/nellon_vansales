@@ -1,5 +1,5 @@
-/* Category Master page: read-only view of the ledger -> PL/BS category mapping.
-   Mappings are changed in category_overrides.csv on the server, not here. */
+/* Category Master page: ledger -> PL/BS category mapping. Select an account to see how it is mapped and,
+   when the server allows it (Zoho JWT auth on), edit it: saved as an override in category_overrides.csv. */
 (() => {
   "use strict";
 
@@ -21,6 +21,7 @@
   let data = null;
   let selectedId = null;
   let sourceFilter = "";
+  let editing = false;
 
   // ---------------------------------------------------------------- helpers
 
@@ -33,7 +34,7 @@
   }
 
   async function api(path, body) {
-    const res = await fetch(path, body === undefined ? { cache: "no-store" } : {
+    const res = await MISAuth.fetch(path, body === undefined ? { cache: "no-store" } : {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -149,12 +150,86 @@
         <dt>Code</dt><dd>${esc(r.account_code) || "None"}</dd>
         <dt>Zoho type</dt><dd>${esc(r.account_type)}</dd>
         <dt>Level</dt><dd>${esc(r.group_ledger)}</dd>
-      </dl>`;
-    $("eClose").onclick = () => { selectedId = null; render(); };
+      </dl>
+      ${editing ? editForm(r) : data.can_edit ? `<div class="actions">
+        <button type="button" class="btn tonal" id="eEdit">${icon("edit")}Edit mapping</button></div>` : ""}`;
+    $("eClose").onclick = () => { selectedId = null; editing = false; render(); };
+    if ($("eEdit")) $("eEdit").onclick = () => { editing = true; renderPanel(); $("fe-cat").focus(); };
+    if (editing) bindEditForm(r);
+  }
+
+  // ---------------------------------------------------------------- edit
+
+  const subsFor = (plbs, cat) =>
+    [...new Set(data.rows.filter((x) => x.pl_bs === plbs && x.category === cat).map((x) => x.sub_category).filter(Boolean))].sort();
+
+  function catOptions(plbs, current) {
+    const list = data.categories[plbs] || [];
+    return list.map((c) => `<option${c === current ? " selected" : ""}>${esc(c)}</option>`).join("");
+  }
+
+  function editForm(r) {
+    const plbs = data.categories[r.pl_bs] ? r.pl_bs : "PL";
+    return `<form id="eForm" class="edit-form" autocomplete="off">
+      <label class="field"><span>Statement</span>
+        <select class="input" id="fe-plbs"><option value="PL"${plbs === "PL" ? " selected" : ""}>P&amp;L</option>
+          <option value="BS"${plbs === "BS" ? " selected" : ""}>Balance Sheet</option></select></label>
+      <label class="field"><span>Category</span>
+        <select class="input" id="fe-cat" required>${catOptions(plbs, r.category)}</select></label>
+      <label class="field"><span>Sub category</span>
+        <input class="input" id="fe-sub" list="fe-subs" maxlength="255" value="${esc(r.sub_category)}">
+        <datalist id="fe-subs">${subsFor(plbs, r.category).map((v) => `<option value="${esc(v)}">`).join("")}</datalist></label>
+      <label class="field"><span>Note (why)</span>
+        <input class="input" id="fe-note" maxlength="500" value="${r.source === "override" ? esc(r.note) : ""}"></label>
+      <div class="actions">
+        <button type="submit" class="btn filled" id="fe-save">Save</button>
+        <button type="button" class="btn text" id="fe-cancel">Cancel</button>
+        ${r.source === "override" ? `<button type="button" class="btn text" id="fe-revert"
+          title="Remove the override; the rule or account type decides again">Revert to rule</button>` : ""}
+      </div>
+      <p class="muted">Applies to this account only. Saved reports are not recomputed; re-run them to pick it up.</p>
+    </form>`;
+  }
+
+  function bindEditForm(r) {
+    const plbs = $("fe-plbs"), cat = $("fe-cat"), sub = $("fe-sub");
+    plbs.onchange = () => {
+      cat.innerHTML = catOptions(plbs.value, "");
+      $("fe-subs").innerHTML = subsFor(plbs.value, cat.value).map((v) => `<option value="${esc(v)}">`).join("");
+    };
+    cat.onchange = () => {
+      $("fe-subs").innerHTML = subsFor(plbs.value, cat.value).map((v) => `<option value="${esc(v)}">`).join("");
+    };
+    $("fe-cancel").onclick = () => { editing = false; renderPanel(); };
+    const submit = async (path, body, done) => {
+      const btns = $("eForm").querySelectorAll("button");
+      btns.forEach((b) => (b.disabled = true));
+      try {
+        setData(await api(path, { account_id: r.account_id, ...body }));
+        editing = false;
+        renderPanel();
+        snackbar(done);
+      } catch (e) {
+        snackbar(e.message, true);
+        btns.forEach((b) => (b.disabled = false));
+      }
+    };
+    $("eForm").onsubmit = (e) => {
+      e.preventDefault();
+      submit("api/category-override", {
+        pl_bs: plbs.value, category: cat.value, sub_category: sub.value.trim(), note: $("fe-note").value.trim(),
+      }, "Mapping saved");
+    };
+    if ($("fe-revert")) {
+      $("fe-revert").onclick = () => {
+        if (confirm(`Remove the override for ${r.ledger_name}?`)) submit("api/category-override/delete", {}, "Override removed");
+      };
+    }
   }
 
   function select(id) {
     selectedId = id === selectedId ? null : id;
+    editing = false;
     render();
     const row = $("tableWrap").querySelector(`tr[data-id="${CSS.escape(id)}"]`);
     row?.focus({ preventScroll: true });

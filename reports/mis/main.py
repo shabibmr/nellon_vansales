@@ -10,6 +10,7 @@ Currently:
   category-master  — ledger → PL/BS category mapping from Chart of Accounts
   db-init / db-load / db-runs — MariaDB storage of processed runs (see reports/db.py)
   webtab           — add the deployed report viewer as a Zoho Books web tab (idempotent)
+  cashflow         — cash forecast from the local cache (no Zoho): bank, cash, bills, orders
   serve            — local web: Category Master editor (/) and report viewer (/reports)
 
 Usage:
@@ -20,6 +21,7 @@ Usage:
   .venv/bin/python main.py financials --from-date 2026-04-01 --to-date 2026-09-30
   .venv/bin/python main.py margin --from-date 2026-09-01 --to-date 2026-09-30
   .venv/bin/python main.py category-master
+  .venv/bin/python main.py cashflow         # local files only; then open /cashflow
   .venv/bin/python main.py serve            # http://127.0.0.1:8765
 """
 
@@ -27,11 +29,13 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from exporters import write_csv, write_excel_sheets, write_statement_workbook
 from reports import category_master as cm
+from reports.cashflow_forecast import balances as cashflow_balances
+from reports.cashflow_forecast import load_offline as load_cashflow
 from reports.financials import build_financials
 from reports.financials import checks as financial_checks
 from reports import db
@@ -275,6 +279,7 @@ def _cmd_margin(args: argparse.Namespace) -> int:
 def _cmd_purchases(args: argparse.Namespace) -> int:
     cache_dir = Path(args.cache_dir) if args.cache_dir else OUT_DIR / "cache"
     source = pu.PurchaseSource(cache_dir, None if args.offline else ZohoClient())
+    source._throttle.min_interval = max(args.delay, 0.7)  # seconds between Zoho calls
     kinds = [args.kind] if args.kind else None
     rows, summaries, summary = pu.generate_purchases(source, args.from_date, args.to_date, kinds)
 
@@ -393,6 +398,47 @@ def _cmd_webtab(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_cashflow(args: argparse.Namespace) -> int:
+    """Write the forecast. --from-zoho calls Zoho and stores the run in MariaDB."""
+    as_of = date.fromisoformat(args.as_of) if args.as_of else date.today()
+    end = date.fromisoformat(args.to_date) if args.to_date else as_of + timedelta(days=args.days)
+    if end < as_of:
+        raise SystemExit("--to-date is before --as-of")
+    org_id = ""
+    api_calls = 0
+    if args.from_zoho:
+        from reports.cashflow_load import load_from_zoho
+
+        payload, org_id, api_calls = load_from_zoho(ZohoClient(), OUT_DIR / "cache", as_of)
+        db.init_schema()
+        run_id = db.save_cashflow_run(
+            payload,
+            organization_id=org_id,
+            api_calls=api_calls,
+            source="GET /chartofaccounts + unpaid invoices/bills + open purchase orders and sales orders",
+        )
+        print(f"MariaDB: cashflow run #{run_id}  ({api_calls} API calls)")
+        published = Path("/var/www/html/algo_cloud/koyson-zoho/cashflow/forecast/forecast.json")
+        if published.parent.is_dir():
+            published.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+            print(f"Page  -> {published}")
+    else:
+        payload = load_cashflow(COA_SNAPSHOT, OUT_DIR / "cache", as_of)
+    rows = cashflow_balances(payload["opening"], payload["events"], as_of, end)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = OUT_DIR / f"cashflow_{as_of.isoformat()}_{end.isoformat()}_{stamp}.json"
+    json_path.write_text(json.dumps({"horizon_end": end.isoformat(), "days": rows, **payload}, indent=1), encoding="utf-8")
+    counts = payload["counts"]
+    print(f"Opening cash:  {payload['opening']:,.2f} {payload['currency']}")
+    print(f"Events:        AR {counts['ar']}  AP {counts['ap']}  PO {counts['po']}  SO {counts['so']}")
+    print(f"Unscheduled:   {len(payload['unscheduled'])}")
+    print(f"Balance {rows[0]['date']}: {rows[0]['balance']:,.2f}")
+    print(f"Balance {rows[-1]['date']}: {rows[-1]['balance']:,.2f}")
+    print(f"JSON  -> {json_path}")
+    print("Seeker -> .venv/bin/python main.py serve   then  /cashflow")
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     from server import serve
 
@@ -454,6 +500,7 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--from-date", required=True, help="YYYY-MM-DD")
     pc.add_argument("--to-date", default=date.today().isoformat(), help="YYYY-MM-DD (default: today)")
     pc.add_argument("--kind", choices=list(pu.KINDS), help="Only bills or only purchase orders (default: both)")
+    pc.add_argument("--delay", type=float, default=2.0, help="Seconds between Zoho calls (default 2, minimum 0.7)")
     pc.add_argument("--offline", action="store_true", help="Use cached documents only (no Zoho calls)")
     pc.add_argument("--cache-dir", help="Cache directory (default: output/cache)")
     pc.add_argument("--no-db", action="store_true", help="Don't save the run to MariaDB")
@@ -493,6 +540,17 @@ def build_parser() -> argparse.ArgumentParser:
     dbr.add_argument("--kind", choices=["financials", "margin", "purchases"])
     dbr.add_argument("--delete", type=int, metavar="RUN_ID", help="Delete a run and its data")
     dbr.set_defaults(func=_cmd_db_runs)
+
+    cf = sub.add_parser(
+        "cashflow",
+        help="Cash forecast from the local cache and COA snapshot (no Zoho calls)",
+    )
+    cf.add_argument("--as-of", help="YYYY-MM-DD (default: today)")
+    cf.add_argument("--to-date", help="Last day on the timeline (default: --days after --as-of)")
+    cf.add_argument("--days", type=int, default=90, help="Horizon in calendar days when --to-date is omitted")
+    cf.add_argument("--from-zoho", action="store_true",
+                    help="Call Zoho, build the forecast, and insert it into MariaDB")
+    cf.set_defaults(func=_cmd_cashflow)
 
     sv = sub.add_parser("serve", help="Local web editor for Category Master overrides")
     sv.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")

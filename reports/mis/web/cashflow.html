@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Cashflow forecast. Drag the seeker to read the projected cash balance on each day.">
+<title>Cashflow forecast · Nellon MIS</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<a class="skip-link" href="#seeker">Skip to the day seeker</a>
+
+<div class="app">
+  <div class="page">
+    <header class="appbar">
+      <div class="titles">
+        <h1>Cashflow forecast</h1>
+        <p class="subtitle" id="subtitle">Projected cash by day</p>
+      </div>
+    </header>
+
+    <main class="content cf-stack" id="main">
+      <p class="cf-banner" id="banner"></p>
+
+      <section class="surface cf-timeline" aria-labelledby="balance">
+        <div class="cf-hero">
+          <div>
+            <p class="cf-kicker" id="kicker">Balance after this day's movements</p>
+            <p class="cf-balance num" id="balance" aria-live="polite">Loading…</p>
+            <p class="cf-delta num" id="delta"></p>
+          </div>
+          <div class="cf-horiz" id="horizon" role="group" aria-label="How far ahead the road runs"></div>
+        </div>
+
+        <div class="cf-chart" id="chart"></div>
+
+        <div class="cf-seek">
+          <div class="cf-seek-row">
+            <button type="button" class="btn outlined" id="prevMove">Previous movement</button>
+            <button type="button" class="btn outlined" id="nextMove">Next movement</button>
+          </div>
+          <label class="cf-seek-label" for="seeker">Drag the road, or move this day seeker</label>
+          <input id="seeker" type="range" min="0" max="0" value="0" step="1" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+          <div class="cf-seek-ends">
+            <span id="seekStart"></span>
+            <span id="seekNow" class="num"></span>
+            <span id="seekEnd"></span>
+          </div>
+        </div>
+
+        <div class="cf-stats" id="stats"></div>
+      </section>
+
+      <section class="surface">
+        <div class="surface-head">
+          <h2 id="dayTitle">Movements on this day</h2>
+          <p class="meta" id="dayMeta"></p>
+        </div>
+        <div class="cf-split" id="dayList"></div>
+      </section>
+
+      <section class="surface" id="accountSection">
+        <div class="surface-head">
+          <h2>Bank and cash</h2>
+          <p class="meta">Leaf accounts. Group totals are not added again.</p>
+        </div>
+        <div class="cf-list" id="accounts"></div>
+      </section>
+
+      <section class="surface" id="laterSection" hidden>
+        <div class="surface-head">
+          <h2>After this window</h2>
+          <p class="meta" id="laterMeta"></p>
+        </div>
+      </section>
+
+      <section class="surface" id="unschedSection" hidden>
+        <div class="surface-head">
+          <h2>No cash date</h2>
+          <p class="meta">These amounts are left out of the balance until they have a due, receipt, delivery, or shipment date.</p>
+        </div>
+        <div class="cf-list" id="unsched"></div>
+      </section>
+
+      <details class="cf-notes">
+        <summary>How a day gets its balance</summary>
+        <ul id="notes"></ul>
+      </details>
+    </main>
+  </div>
+</div>
+
+<script src="assets/webtab-auth.js"></script>
+<script src="assets/cashflow.js"></script>
+</body>
+</html>

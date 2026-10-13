@@ -16,6 +16,10 @@ hangs off `run_id` (ON DELETE CASCADE), so old runs can be dropped cleanly.
     margin_lines       invoice-line margin rows
     purchase_lines     bill / purchase-order line rows
     category_master    current ledger → PL/BS / category mapping
+    cashflow_runs      one forecast pull (as-of date, opening cash, totals)
+    cashflow_accounts  leaf bank and cash balances for that run
+    cashflow_events    dated AR / AP / PO / SO movements
+    cashflow_unscheduled  open items with no cash date
 
 The web viewer reads only from here — it never calls Zoho.
 """
@@ -180,6 +184,67 @@ SCHEMA = [
         current_balance     DECIMAL(18,2) NOT NULL DEFAULT 0,
         is_active           TINYINT(1)    NOT NULL DEFAULT 1,
         updated_at          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cashflow_runs (
+        id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        as_of             DATE         NOT NULL,
+        organization_id   VARCHAR(32)  NOT NULL DEFAULT '',
+        organization_name VARCHAR(200) NOT NULL DEFAULT '',
+        currency_code     VARCHAR(8)   NOT NULL DEFAULT '',
+        opening           DECIMAL(18,2) NOT NULL DEFAULT 0,
+        ar_total          DECIMAL(18,2) NOT NULL DEFAULT 0,
+        ap_total          DECIMAL(18,2) NOT NULL DEFAULT 0,
+        po_total          DECIMAL(18,2) NOT NULL DEFAULT 0,
+        so_total          DECIMAL(18,2) NOT NULL DEFAULT 0,
+        counts_json       TEXT         NOT NULL,
+        notes             TEXT         NOT NULL,
+        api_calls         INT          NOT NULL DEFAULT 0,
+        source            VARCHAR(255) NOT NULL DEFAULT '',
+        created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY ix_cf_asof (as_of)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cashflow_accounts (
+        run_id       BIGINT UNSIGNED NOT NULL,
+        line_no      INT UNSIGNED  NOT NULL,
+        account_name VARCHAR(255)  NOT NULL,
+        account_type VARCHAR(20)   NOT NULL,
+        balance      DECIMAL(18,2) NOT NULL,
+        PRIMARY KEY (run_id, line_no),
+        CONSTRAINT fk_cfa_run FOREIGN KEY (run_id) REFERENCES cashflow_runs (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cashflow_events (
+        run_id      BIGINT UNSIGNED NOT NULL,
+        line_no     INT UNSIGNED  NOT NULL,
+        cash_date   DATE          NOT NULL,
+        source_date DATE          NULL,
+        overdue     TINYINT(1)    NOT NULL DEFAULT 0,
+        kind        VARCHAR(8)    NOT NULL,
+        amount      DECIMAL(18,2) NOT NULL,
+        party       VARCHAR(255)  NOT NULL DEFAULT '',
+        number      VARCHAR(60)   NOT NULL DEFAULT '',
+        label       VARCHAR(120)  NOT NULL DEFAULT '',
+        PRIMARY KEY (run_id, line_no),
+        KEY ix_cfe_date (run_id, cash_date),
+        CONSTRAINT fk_cfe_run FOREIGN KEY (run_id) REFERENCES cashflow_runs (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cashflow_unscheduled (
+        run_id  BIGINT UNSIGNED NOT NULL,
+        line_no INT UNSIGNED  NOT NULL,
+        kind    VARCHAR(8)    NOT NULL,
+        number  VARCHAR(60)   NOT NULL DEFAULT '',
+        party   VARCHAR(255)  NOT NULL DEFAULT '',
+        amount  DECIMAL(18,2) NOT NULL,
+        reason  VARCHAR(255)  NOT NULL DEFAULT '',
+        PRIMARY KEY (run_id, line_no),
+        CONSTRAINT fk_cfu_run FOREIGN KEY (run_id) REFERENCES cashflow_runs (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
 ]
@@ -376,6 +441,84 @@ def save_purchases_run(rows: list[dict[str, Any]], summary: dict[str, Any], *, s
     return run_id
 
 
+def _sql_date(value: Any) -> str | None:
+    text = str(value or "")[:10]
+    return text if len(text) == 10 and text[4] == "-" else None
+
+
+def save_cashflow_run(
+    payload: dict[str, Any],
+    *,
+    organization_id: str,
+    api_calls: int,
+    source: str,
+) -> int:
+    """Store one forecast. Returns cashflow_runs.id."""
+    totals = payload.get("totals") or {}
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO cashflow_runs
+               (as_of, organization_id, organization_name, currency_code, opening,
+                ar_total, ap_total, po_total, so_total, counts_json, notes, api_calls, source)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                payload["as_of"],
+                organization_id,
+                payload.get("organization") or "",
+                payload.get("currency") or "",
+                payload.get("opening") or 0,
+                totals.get("ar") or 0,
+                totals.get("ap") or 0,
+                totals.get("po") or 0,
+                totals.get("so") or 0,
+                json.dumps(payload.get("counts") or {}),
+                json.dumps(payload.get("notes") or []),
+                api_calls,
+                source[:255],
+            ),
+        )
+        run_id = int(cur.lastrowid)
+        accounts = [
+            (run_id, n, (row.get("name") or "")[:255], (row.get("type") or "")[:20], row.get("balance") or 0)
+            for n, row in enumerate(payload.get("accounts") or [], 1)
+        ]
+        if accounts:
+            cur.executemany(
+                """INSERT INTO cashflow_accounts (run_id, line_no, account_name, account_type, balance)
+                   VALUES (%s,%s,%s,%s,%s)""",
+                accounts,
+            )
+        events = [
+            (
+                run_id, n, row["date"], _sql_date(row.get("source_date")), 1 if row.get("overdue") else 0,
+                (row.get("kind") or "")[:8], row.get("amount") or 0,
+                (row.get("party") or "")[:255], (row.get("number") or "")[:60], (row.get("label") or "")[:120],
+            )
+            for n, row in enumerate(payload.get("events") or [], 1)
+        ]
+        if events:
+            cur.executemany(
+                """INSERT INTO cashflow_events
+                   (run_id, line_no, cash_date, source_date, overdue, kind, amount, party, number, label)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                events,
+            )
+        pending = [
+            (
+                run_id, n, (row.get("kind") or "")[:8], (row.get("number") or "")[:60],
+                (row.get("party") or "")[:255], row.get("amount") or 0, (row.get("reason") or "")[:255],
+            )
+            for n, row in enumerate(payload.get("unscheduled") or [], 1)
+        ]
+        if pending:
+            cur.executemany(
+                """INSERT INTO cashflow_unscheduled (run_id, line_no, kind, number, party, amount, reason)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                pending,
+            )
+    return run_id
+
+
 def save_category_master(rows: list[dict[str, Any]]) -> int:
     cols = ", ".join(CATEGORY_DB_COLUMNS)
     marks = ", ".join(["%s"] * len(CATEGORY_DB_COLUMNS))
@@ -391,6 +534,14 @@ def save_category_master(rows: list[dict[str, Any]]) -> int:
                 f"DELETE FROM category_master WHERE account_id NOT IN ({', '.join(['%s'] * len(ids))})", ids
             )
     return len(rows)
+
+
+def get_category_master() -> list[dict[str, Any]]:
+    """Saved ledger → category mapping (empty until `main.py category-master` has saved it)."""
+    cols = ", ".join(CATEGORY_DB_COLUMNS)
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT {cols} FROM category_master ORDER BY pl_bs, category, ledger_name")
+        return [_clean(r) for r in cur.fetchall()]
 
 
 def delete_run(run_id: int) -> bool:
@@ -538,6 +689,35 @@ def get_margin_pivot(run_id: int, dimension: str, measure: str) -> dict[str, Any
     return {"columns": months + ["Total"], "rows": rows, "total": grand,
             "dimension": dimension, "measure": measure}
 
+
+
+def get_margin_detail(run_id: int, view: str) -> dict[str, Any]:
+    """Margin as a flat list: one row per invoice line (`line`) or per invoice (`invoice`)."""
+    if view == "line":
+        sql = """SELECT date, invoice_number, customer_name, item_name, unit, quantity, rate,
+                        net_sales, cost_rate, cost, gross_margin, flag
+                 FROM margin_lines WHERE run_id=%s ORDER BY date, invoice_number, line_no"""
+    elif view == "invoice":
+        sql = """SELECT MIN(date) AS date, invoice_number, MAX(customer_name) AS customer_name,
+                        MAX(salesperson_name) AS salesperson_name, COUNT(*) AS line_count,
+                        SUM(net_sales) AS net_sales, SUM(cost) AS cost, SUM(gross_margin) AS gross_margin,
+                        SUM(flag <> '') AS flagged
+                 FROM margin_lines WHERE run_id=%s GROUP BY invoice_id, invoice_number
+                 ORDER BY MIN(date), invoice_number"""
+    else:
+        raise ValueError("view must be line or invoice")
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(sql, (run_id,))
+        rows = cur.fetchall()
+    for r in rows:
+        r["date"] = r["date"].isoformat() if r["date"] else ""
+        for k, v in r.items():
+            if hasattr(v, "as_tuple"):  # Decimal
+                r[k] = float(v)
+        r["gm_pct"] = round(r["gross_margin"] / r["net_sales"], 4) if r["net_sales"] else 0.0
+    t = {k: sum(r[k] for r in rows) for k in ("net_sales", "cost", "gross_margin")}
+    t["gm_pct"] = round(t["gross_margin"] / t["net_sales"], 4) if t["net_sales"] else 0.0
+    return {"view": view, "rows": rows, "total": t}
 
 
 def get_purchase_pivot(run_id: int, dimension: str, measure: str) -> dict[str, Any]:

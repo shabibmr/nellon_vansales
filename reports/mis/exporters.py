@@ -67,6 +67,7 @@ def write_statement_workbook(
     statements: Sequence[Any],
     path: Path | BinaryIO,
     data_sheets: dict[str, tuple[Sequence[str], Iterable[dict]]] | None = None,
+    sheet_order: Sequence[str] | None = None,
 ) -> None:
     """Formatted MIS workbook: one sheet per `reports.financials.Statement`
     (or anything with name/title/subtitle/columns/lines), then optional plain
@@ -138,5 +139,9 @@ def write_statement_workbook(
         for i, _ in enumerate(columns, start=1):
             ws.column_dimensions[get_column_letter(i)].width = 18
         ws.freeze_panes = "A2"
+
+    if sheet_order:  # listed sheets first in that order; any others keep their relative order after
+        rank = {n[:31]: i for i, n in enumerate(sheet_order)}
+        wb._sheets.sort(key=lambda w: rank.get(w.title, len(rank)))
 
     wb.save(path)
