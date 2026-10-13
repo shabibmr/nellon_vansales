@@ -69,6 +69,18 @@ ASSET_TYPES = {
 }
 
 
+_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _period_label(summary: dict[str, Any]) -> str:
+    """'Apr-26 – Sep-26' (one month when both ends fall in it)."""
+    def mon(iso: Any) -> str:
+        s = str(iso)
+        return f"{_MON[int(s[5:7]) - 1]}-{s[2:4]}"
+    a, b = mon(summary.get("from_date")), mon(summary.get("to_date"))
+    return a if a == b else f"{a} – {b}"
+
+
 @dataclass
 class Line:
     label: str
@@ -253,8 +265,8 @@ def build_profit_and_loss(rows: list[dict[str, Any]], summary: dict[str, Any]) -
                         finance, dep, fx, pbt, tax, net)
     stmt = Statement(
         name="PL",
-        title=summary.get("organization_name", ""),
-        subtitle=f"Profit and Loss {summary.get('from_date')} to {summary.get('to_date')}",
+        title="Profit and Loss",
+        subtitle=_period_label(summary),
         columns=columns,
         lines=lines,
     )
@@ -290,8 +302,8 @@ def build_executive_summary(figures: PLFigures, summary: dict[str, Any]) -> Stat
     ]
     return Statement(
         name="Executive Summary",
-        title=f"{summary.get('organization_name', '')} MIS",
-        subtitle=f"{summary.get('from_date')} to {summary.get('to_date')} · {summary.get('currency_code', '')}",
+        title="Executive Summary",
+        subtitle=f"{_period_label(summary)} · {summary.get('currency_code', '')}",
         columns=_months(summary) + [TOTAL],
         lines=lines,
     )
@@ -356,8 +368,8 @@ def build_balance_sheet(rows: list[dict[str, Any]], summary: dict[str, Any]) -> 
 
     return Statement(
         name="BS",
-        title=summary.get("organization_name", ""),
-        subtitle=f"Balance Sheet as at month end · {summary.get('currency_code', '')}",
+        title="Balance Sheet",
+        subtitle=f"As at month end · {summary.get('currency_code', '')}",
         columns=months,
         lines=lines,
     )

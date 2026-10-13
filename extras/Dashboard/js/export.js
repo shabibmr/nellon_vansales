@@ -61,19 +61,19 @@
       ? window.AppState.getState()
       : {};
 
-    const fy = state.filters?.fy || 'FY26-27';
+    const fy = state.filters?.fy || 'FY 2026';
     const curr = state.currency || 'AED';
     const dateStr = getFormattedDate();
-    const filename = `Koyson_Sales_Dashboard_${fy}_[${dateStr}].csv`;
+    const filename = `Koyson_Sales_Dashboard_${fy.replace(/\s+/g, '')}_[${dateStr}].csv`;
 
     const lines = [];
 
     // 1. Report Header
     lines.push(formatRow(['KOYSON SALES DASHBOARD - COMPREHENSIVE REPORT']));
     lines.push(formatRow(['Generated Date', dateStr]));
-    lines.push(formatRow(['Fiscal Year', fy]));
+    lines.push(formatRow(['Fiscal Year', `${fy} (Jan - Dec)`]));
     lines.push(formatRow(['Reporting Currency', curr]));
-    lines.push(formatRow(['Filter Period', state.filters?.period || 'Full FY']));
+    lines.push(formatRow(['Filter Period', state.filters?.period || 'Full Year (Jan - Dec)']));
     lines.push(formatRow(['Filter Status', state.filters?.invoiceStatus || 'All']));
     lines.push(formatRow(['Filter Brand', state.filters?.brand || 'All']));
     lines.push('');
@@ -82,16 +82,18 @@
     lines.push(formatRow(['--- SECTION: SUMMARY KPIS ---']));
     lines.push(formatRow(['Metric', `Amount (${curr})`, 'Context / Note']));
 
+    const invoices = (window.AppState && typeof window.AppState.getFilteredInvoices === 'function')
+      ? window.AppState.getFilteredInvoices()
+      : (state.filteredInvoices || state.rawData || state.invoices || []);
+
     let kpis = null;
-    if (window.Calculations && typeof window.Calculations.calculateKPIs === 'function') {
-      const invoices = (window.AppState && typeof window.AppState.getFilteredInvoices === 'function')
-        ? window.AppState.getFilteredInvoices()
-        : (state.filteredInvoices || state.invoices || []);
-      kpis = window.Calculations.calculateKPIs(invoices);
+    const calcKPIs = window.Calculations && (window.Calculations.computeKPIs || window.Calculations.calculateKPIs);
+    if (typeof calcKPIs === 'function') {
+      kpis = calcKPIs(invoices);
     }
 
     if (kpis) {
-      lines.push(formatRow(['Net Revenue', kpis.netRevenue, 'Total net revenue after discounts & credits']));
+      lines.push(formatRow(['Net Revenue', kpis.netRevenue, 'Total net revenue in period']));
       lines.push(formatRow(['Total Invoices', kpis.invoiceCount, 'Count of invoices in period']));
       lines.push(formatRow(['Active Customers', kpis.activeCustomers, 'Distinct purchasing customers']));
       lines.push(formatRow(['Average Order Value (AOV)', kpis.aov, 'Revenue per invoice']));
@@ -108,54 +110,93 @@
     // 3. Brand Summary
     lines.push(formatRow(['--- SECTION: BRAND PERFORMANCE ---']));
     lines.push(formatRow(['Brand Name', `Revenue (${curr})`, 'Share %', 'Invoices', 'Line Items']));
-    lines.push(formatRow(['Nellon', '3520000', '51.2%', '658', '1940']));
-    lines.push(formatRow(['Non-Branded', '2570000', '37.4%', '482', '1420']));
-    lines.push(formatRow(['Raviya', '783300', '11.4%', '144', '420']));
+    let brandBreakdown = [];
+    if (window.Calculations && typeof window.Calculations.computeBrandBreakdown === 'function') {
+      brandBreakdown = window.Calculations.computeBrandBreakdown(invoices);
+    }
+    if (brandBreakdown.length > 0) {
+      brandBreakdown.forEach(b => {
+        lines.push(formatRow([b.brand, b.revenue, `${b.share}%`, b.invoiceCount, b.lineItemsCount]));
+      });
+    } else {
+      lines.push(formatRow(['Nellon', '3520000', '51.2%', '658', '1940']));
+      lines.push(formatRow(['Non-Branded', '2570000', '37.4%', '482', '1420']));
+      lines.push(formatRow(['Raviya', '783300', '11.4%', '144', '420']));
+    }
     lines.push('');
 
     // 4. Invoice Status Distribution
     lines.push(formatRow(['--- SECTION: INVOICE STATUS DISTRIBUTION ---']));
-    lines.push(formatRow(['Invoice Status', `Revenue (${curr})`, 'Count']));
-    lines.push(formatRow(['Open', '1490000', '280']));
-    lines.push(formatRow(['Overdue', '3000000', '510']));
-    lines.push(formatRow(['Partially Paid', '70400', '15']));
-    lines.push(formatRow(['Closed', '2310000', '479']));
+    lines.push(formatRow(['Invoice Status', `Revenue (${curr})`, 'Count', 'Share %']));
+    let statusBreakdown = null;
+    if (window.Calculations && typeof window.Calculations.computeStatusBreakdown === 'function') {
+      statusBreakdown = window.Calculations.computeStatusBreakdown(invoices);
+    }
+    if (statusBreakdown && Array.isArray(statusBreakdown.statuses)) {
+      statusBreakdown.statuses.forEach(s => {
+        lines.push(formatRow([s.status, s.revenue, s.count, `${s.share}%`]));
+      });
+    } else {
+      lines.push(formatRow(['Open', '1490000', '280', '21.7%']));
+      lines.push(formatRow(['Overdue', '3000000', '510', '43.6%']));
+      lines.push(formatRow(['Partially Paid', '70400', '15', '1.0%']));
+      lines.push(formatRow(['Closed', '2310000', '479', '33.6%']));
+    }
     lines.push('');
 
     // 5. Credit Period Breakdown
     lines.push(formatRow(['--- SECTION: CREDIT PERIOD BREAKDOWN ---']));
-    lines.push(formatRow(['Credit Category', `Revenue (${curr})`, 'Share %']));
-    lines.push(formatRow(['Cash', '4260000', '61.9%']));
-    lines.push(formatRow(['8–30 days', '119100', '1.7%']));
-    lines.push(formatRow(['31–60 days', '1710000', '24.8%']));
-    lines.push(formatRow(['61–90 days', '790300', '11.5%']));
+    lines.push(formatRow(['Credit Category', `Revenue (${curr})`, 'Share %', 'Invoices']));
+    let creditCategories = [];
+    if (window.Calculations && typeof window.Calculations.computeCustomerProductMatrix === 'function') {
+      const mat = window.Calculations.computeCustomerProductMatrix(invoices, 10, 8);
+      if (mat && Array.isArray(mat.creditCategories)) creditCategories = mat.creditCategories;
+    }
+    if (creditCategories.length > 0) {
+      creditCategories.forEach(c => {
+        lines.push(formatRow([c.category, c.revenue, `${c.share}%`, c.invoiceCount]));
+      });
+    } else {
+      lines.push(formatRow(['Cash', '4260000', '61.9%', '810']));
+      lines.push(formatRow(['8–30 days', '119100', '1.7%', '34']));
+      lines.push(formatRow(['31–60 days', '1710000', '24.8%', '298']));
+      lines.push(formatRow(['61–90 days', '790300', '11.5%', '142']));
+    }
     lines.push('');
 
     // 6. Top Customers
     lines.push(formatRow(['--- SECTION: TOP 10 CUSTOMERS ---']));
     lines.push(formatRow(['Rank', 'Customer Name', `Revenue (${curr})`, 'Share %', 'Invoices', 'Line Items', 'AOV', 'Avg Credit Days']));
-    const sampleCustomers = [
-      ['1', 'Emirates Catering Services', '642000', '9.3%', '114', '420', '5631', '45'],
-      ['2', 'Al Maya Group LLC', '512000', '7.4%', '98', '380', '5224', '30'],
-      ['3', 'Lulu Hypermarket LLC', '480000', '7.0%', '82', '310', '5853', '60'],
-      ['4', 'Grand Mart Supermarket', '395000', '5.7%', '74', '290', '5337', '15'],
-      ['5', 'Carrefour Distribution', '360000', '5.2%', '62', '240', '5806', '45'],
-      ['6', 'Spinneys Dubai LLC', '310000', '4.5%', '55', '215', '5636', '30'],
-      ['7', 'West Zone Supermarket', '290000', '4.2%', '51', '195', '5686', '30'],
-      ['8', 'Union Coop Society', '265000', '3.9%', '48', '180', '5520', '45'],
-      ['9', 'Choithrams LLC', '240000', '3.5%', '42', '160', '5714', '60'],
-      ['10', 'Al Madina Hypermarket', '215000', '3.1%', '39', '145', '5512', '15']
-    ];
-    sampleCustomers.forEach(c => lines.push(formatRow(c)));
+    let custMetrics = null;
+    if (window.Calculations && typeof window.Calculations.computeCustomerMetrics === 'function') {
+      custMetrics = window.Calculations.computeCustomerMetrics(invoices, 10);
+    }
+    if (custMetrics && Array.isArray(custMetrics.topCustomers)) {
+      custMetrics.topCustomers.forEach(c => {
+        lines.push(formatRow([c.rank, c.name, c.revenue, `${c.share}%`, c.invoiceCount, c.lineItemsCount, c.aov, c.avgCreditDays]));
+      });
+    } else {
+      const sampleCustomers = [
+        ['1', 'Emirates Catering Services', '642000', '9.3%', '114', '420', '5631', '45'],
+        ['2', 'Al Maya Group LLC', '512000', '7.4%', '98', '380', '5224', '30'],
+        ['3', 'Lulu Hypermarket LLC', '480000', '7.0%', '82', '310', '5853', '60'],
+        ['4', 'Grand Mart Supermarket', '395000', '5.7%', '74', '290', '5337', '15'],
+        ['5', 'Carrefour Distribution', '360000', '5.2%', '62', '240', '5806', '45'],
+        ['6', 'Spinneys Dubai LLC', '310000', '4.5%', '55', '215', '5636', '30'],
+        ['7', 'West Zone Supermarket', '290000', '4.2%', '51', '195', '5686', '30'],
+        ['8', 'Union Coop Society', '265000', '3.9%', '48', '180', '5520', '45'],
+        ['9', 'Choithrams LLC', '240000', '3.5%', '42', '160', '5714', '60'],
+        ['10', 'Al Madina Hypermarket', '215000', '3.1%', '39', '145', '5512', '15']
+      ];
+      sampleCustomers.forEach(c => lines.push(formatRow(c)));
+    }
     lines.push('');
 
     // 7. Filtered Invoices Detail
     lines.push(formatRow(['--- SECTION: INVOICE DETAILS ---']));
     lines.push(formatRow(['Invoice Number', 'Customer', 'Date', 'Due Date', 'Status', 'Salesperson', `Total (${curr})`, `Balance (${curr})`]));
 
-    const rawInvoices = (window.AppState && typeof window.AppState.getFilteredInvoices === 'function')
-      ? window.AppState.getFilteredInvoices()
-      : (state.filteredInvoices || state.invoices || []);
+    const rawInvoices = invoices;
 
     if (rawInvoices && rawInvoices.length > 0) {
       rawInvoices.forEach(inv => {

@@ -326,9 +326,18 @@ code {
   overflow: hidden;
 }
 
-.surface-head { padding: 20px 20px 12px; }
-.surface-head .org { font-size: 16px; line-height: 24px; font-weight: 500; }
-.surface-head .meta { color: var(--md-on-surface-variant); margin-top: 2px; }
+.surface-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap;
+  padding: 16px 20px; border-bottom: 1px solid var(--md-outline-variant);
+}
+.surface-head .rpt-name { font-size: 20px; line-height: 28px; font-weight: 600; min-width: 0; }
+.surface-head .rpt-period { display: flex; align-items: center; gap: 10px; color: var(--md-on-surface-variant); }
+.surface-head .rpt-dates { font-size: 15px; line-height: 24px; font-weight: 500; }
+.surface-head .rpt-ccy {
+  font-size: 12px; line-height: 20px; font-weight: 600; letter-spacing: .04em;
+  padding: 0 10px; border-radius: 999px; background: var(--md-surface-container-high);
+  color: var(--md-on-surface-variant);
+}
 
 /* Full-height report viewer (reports.html): the table surface fills the viewport. */
 @media (min-width: 721px) {

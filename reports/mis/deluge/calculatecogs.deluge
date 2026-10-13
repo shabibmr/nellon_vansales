@@ -1,0 +1,170 @@
+
+// ============================================================
+// Zoho Books - Actual COGS & Line Items Synchronization
+// ============================================================
+// ------------------------------------------------------------
+// Configuration
+// ------------------------------------------------------------
+organization_id = organization.get("organization_id");
+invoice_id = invoice.get("invoice_id");
+// Target Custom Field IDs
+cogs_field_id = "3331482000187193020";
+// Actual COGS (Decimal)
+cogs_doc_field_id = "3331482000188147019";
+// Line COGS Document (Multiline JSON)
+// ------------------------------------------------------------
+// 1. Get Line Items & Compute Line-Level Valuation COGS
+// ------------------------------------------------------------
+line_items = invoice.get("line_items");
+if(line_items == null || line_items.isEmpty())
+{
+	inv_resp = invokeurl
+	[
+		url :"https://www.zohoapis.com/books/v3/invoices/" + invoice_id + "?organization_id=" + organization_id
+		type :GET
+		connection:"zbooksdeluge"
+	];
+	if(inv_resp.get("code") == 0 && inv_resp.get("invoice") != null)
+	{
+		line_items = inv_resp.get("invoice").get("line_items");
+	}
+}
+lines_list = List();
+line_cogs_sum = 0.0;
+if(line_items != null)
+{
+	for each  line in line_items
+	{
+		qty = ifnull(line.get("quantity"),0).toDecimal();
+		val_cost = ifnull(line.get("purchase_price"),0).toDecimal();
+		if(val_cost == 0)
+		{
+			val_cost = ifnull(line.get("purchase_rate"),0).toDecimal();
+		}
+		item_cogs = (qty * val_cost).round(2);
+		line_cogs_sum = line_cogs_sum + item_cogs;
+		item_map = Map();
+		item_map.put("item_id",ifnull(line.get("item_id"),""));
+		item_map.put("name",ifnull(line.get("name"),""));
+		item_map.put("sku",ifnull(line.get("sku"),""));
+		item_map.put("qty",qty);
+		item_map.put("unit",ifnull(line.get("unit"),""));
+		item_map.put("rate",ifnull(line.get("rate"),0).toDecimal());
+		item_map.put("cost",val_cost);
+		item_map.put("cogs",item_cogs);
+		lines_list.add(item_map);
+	}
+}
+line_cogs_sum = line_cogs_sum.round(2);
+new_cogs_doc = lines_list.toString();
+// ------------------------------------------------------------
+// 2. Get Invoice Journal for Actual COGS
+// ------------------------------------------------------------
+journal_url = "https://www.zohoapis.com/books/v3/transactions/" + invoice_id + "/journals?organization_id=" + organization_id + "&entity_type=invoice";
+journal_response = invokeurl
+[
+	url :journal_url
+	type :GET
+	connection:"zbooksdeluge"
+];
+actual_cogs = 0.0;
+journals = journal_response.get("journals");
+if(journals != null)
+{
+	for each  journal in journals
+	{
+		transaction_details = journal.get("transaction_details");
+		if(transaction_details != null)
+		{
+			for each  jline in transaction_details
+			{
+				account_name = ifnull(jline.get("account_name"),"");
+				debit_amount = ifnull(jline.get("bcy_debit_amount"),0).toDecimal();
+				if(account_name.contains("Cost of Sales") && debit_amount > 0)
+				{
+					actual_cogs = actual_cogs + debit_amount;
+				}
+			}
+		}
+	}
+}
+actual_cogs = actual_cogs.round(2);
+// Fallback to line item COGS sum if journal debit is not yet recorded
+if(actual_cogs == 0.0 && line_cogs_sum > 0.0)
+{
+	actual_cogs = line_cogs_sum;
+}
+// ------------------------------------------------------------
+// 3. Compare with Existing Field Values
+// ------------------------------------------------------------
+existing_cogs = 0.0;
+existing_doc = "";
+invoice_custom_fields = invoice.get("custom_fields");
+if(invoice_custom_fields != null)
+{
+	for each  field in invoice_custom_fields
+	{
+		fid = field.get("customfield_id");
+		fval = ifnull(field.get("value"),"");
+		if(fid == cogs_field_id && fval != "")
+		{
+			existing_cogs = fval.toDecimal().round(2);
+		}
+		if(fid == cogs_doc_field_id)
+		{
+			existing_doc = fval.toString();
+		}
+	}
+}
+info "Invoice ID: " + invoice_id;
+info "Actual COGS: " + actual_cogs + " (Existing: " + existing_cogs + ")";
+info "Lines Count: " + lines_list.size();
+// ------------------------------------------------------------
+// 4. Update Invoice When Changed (Preserving Other Custom Fields)
+// ------------------------------------------------------------
+if(existing_cogs != actual_cogs || existing_doc != new_cogs_doc)
+{
+	updated_fields = List();
+	// Retain other custom fields (Branch, Sales person, etc.)
+	if(invoice_custom_fields != null)
+	{
+		for each  f in invoice_custom_fields
+		{
+			fid = f.get("customfield_id");
+			if(fid != cogs_field_id && fid != cogs_doc_field_id)
+			{
+				fmap = Map();
+				fmap.put("customfield_id",fid);
+				fmap.put("value",f.get("value"));
+				updated_fields.add(fmap);
+			}
+		}
+	}
+	// Set Actual COGS
+	cogs_map = Map();
+	cogs_map.put("customfield_id",cogs_field_id);
+	cogs_map.put("value",actual_cogs.toString());
+	updated_fields.add(cogs_map);
+	// Set Line COGS Document
+	doc_map = Map();
+	doc_map.put("customfield_id",cogs_doc_field_id);
+	doc_map.put("value",new_cogs_doc);
+	updated_fields.add(doc_map);
+	update_url = "https://www.zohoapis.com/books/v3/invoices/" + invoice_id + "?organization_id=" + organization_id;
+	invoice_update = Map();
+	invoice_update.put("custom_fields",updated_fields);
+	update_response = invokeurl
+	[
+		url :update_url
+		type :PUT
+		parameters:invoice_update.toString()
+		headers:{"Content-Type":"application/json"}
+		connection:"zbooksdeluge"
+	];
+	info "Updated Invoice: COGS=" + actual_cogs + ", Lines=" + lines_list.size();
+	info "Update Response: " + update_response;
+}
+else
+{
+	info "COGS and Line Document already up to date. No update required.";
+}

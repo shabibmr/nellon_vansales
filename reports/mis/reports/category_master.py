@@ -243,6 +243,15 @@ def _borrowing_sub(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def fetch_organization(client: ZohoClient) -> dict[str, Any]:
+    """The configured organization's profile (name, currency, fiscal year...) from GET /organizations."""
+    orgs = client.get("/organizations").get("organizations") or []
+    org = next((o for o in orgs if str(o.get("organization_id")) == str(client.org_id)), None)
+    if org is None:
+        raise RuntimeError(f"organization {client.org_id} not in the /organizations response")
+    return org
+
+
 def fetch_coa_snapshot(client: ZohoClient) -> dict[str, Any]:
     """Chart of accounts + organization name, ready to cache as JSON."""
     accounts = client.get("/chartofaccounts", {"showbalance": "true"}).get("chartofaccounts") or []

@@ -8,6 +8,7 @@ Currently:
   purchases        — bills + purchase orders by line (cached)
   margin           — revenue & margin by invoice line, with item/customer/salesperson/van rollups
   category-master  — ledger → PL/BS category mapping from Chart of Accounts
+  org-sync         — store organization name/currency in MariaDB (1 Zoho call)
   db-init / db-load / db-runs — MariaDB storage of processed runs (see reports/db.py)
   webtab           — add the deployed report viewer as a Zoho Books web tab (idempotent)
   cashflow         — cash forecast from the local cache (no Zoho): bank, cash, bills, orders
@@ -247,7 +248,7 @@ def _cmd_financials(args: argparse.Namespace) -> int:
 def _cmd_margin(args: argparse.Namespace) -> int:
     cache_dir = Path(args.cache_dir) if args.cache_dir else OUT_DIR / "cache"
     source = im.MarginSource(cache_dir, None if args.offline else ZohoClient())
-    rows, summaries, summary = im.generate_invoice_margin(source, args.from_date, args.to_date)
+    rows, invoice_rows, summaries, summary = im.generate_invoice_margin(source, args.from_date, args.to_date)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     stem = f"margin_{args.from_date}_{args.to_date}_{stamp}"
@@ -255,11 +256,11 @@ def _cmd_margin(args: argparse.Namespace) -> int:
     xlsx_path = OUT_DIR / f"{stem}.xlsx"
     json_path = OUT_DIR / f"{stem}.json"
     write_csv(rows, im.COLUMNS, csv_path)
-    sheets = {"Lines": (im.COLUMNS, rows)}
+    sheets = {"Invoices": (im.INVOICE_COLUMNS, invoice_rows), "Lines": (im.COLUMNS, rows)}
     sheets.update({name: (im.SUMMARY_COLUMNS, data) for name, data in summaries.items()})
     write_excel_sheets(sheets, xlsx_path)
     json_path.write_text(
-        json.dumps({"summary": summary, "summaries": summaries, "rows": rows}, indent=1), encoding="utf-8"
+        json.dumps({"summary": summary, "summaries": summaries, "invoices": invoice_rows, "rows": rows}, indent=1), encoding="utf-8"
     )
 
     print()
@@ -268,7 +269,7 @@ def _cmd_margin(args: argparse.Namespace) -> int:
     print(f"Cost:         {summary['cost']:,.2f}   ({summary['cost_basis']})")
     print(f"Gross margin: {summary['gross_margin']:,.2f}  ({summary['gross_margin_pct']:.1%})")
     print(f"Flagged lines: {summary['flagged_lines']}  (see 'flag' column)")
-    _db_save(args, lambda src: db.save_margin_run(rows, summary, source=src),
+    _db_save(args, lambda src: db.save_margin_run(rows, summary, source=src, invoices=invoice_rows),
              "cache" if args.offline else "zoho")
     print(f"CSV   -> {csv_path}")
     print(f"Excel -> {xlsx_path}")
@@ -314,6 +315,17 @@ def _cmd_db_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_org_sync(args: argparse.Namespace) -> int:
+    """One Zoho call (GET /organizations): store name, currency etc. in MariaDB for the web UI."""
+    if not db.enabled():
+        raise SystemExit("MariaDB not configured (MIS_DB_* in .env)")
+    db.init_schema()
+    org = cm.fetch_organization(ZohoClient())
+    db.save_organization(org)
+    print(f"Organization saved: {org.get('name')} · {org.get('currency_code')} ({org.get('currency_symbol')})")
+    return 0
+
+
 def _cmd_db_load(args: argparse.Namespace) -> int:
     """Import saved JSON outputs into MariaDB — no Zoho calls."""
     if args.tb_json:
@@ -324,7 +336,8 @@ def _cmd_db_load(args: argparse.Namespace) -> int:
         print(f"Financials run #{run_id}: {len(rows)} TB accounts, {summary['from_date']} → {summary['to_date']}")
     if args.margin_json:
         data = json.loads(Path(args.margin_json).read_text(encoding="utf-8"))
-        run_id = db.save_margin_run(data["rows"], data["summary"], source=args.margin_json)
+        run_id = db.save_margin_run(data["rows"], data["summary"], source=args.margin_json,
+                                    invoices=data.get("invoices"))
         print(f"Margin run #{run_id}: {len(data['rows'])} invoice lines")
     if args.purchases_json:
         data = json.loads(Path(args.purchases_json).read_text(encoding="utf-8"))
@@ -528,6 +541,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     dbi = sub.add_parser("db-init", help="Create the MariaDB database and tables (idempotent)")
     dbi.set_defaults(func=_cmd_db_init)
+
+    osy = sub.add_parser("org-sync", help="Fetch the organization (name, currency…) from Zoho into MariaDB (1 call)")
+    osy.set_defaults(func=_cmd_org_sync)
 
     dbl = sub.add_parser("db-load", help="Import saved JSON outputs into MariaDB (no Zoho calls)")
     dbl.add_argument("--tb-json", help="output/monthly_tb_*.json → financials run (TB + statements)")

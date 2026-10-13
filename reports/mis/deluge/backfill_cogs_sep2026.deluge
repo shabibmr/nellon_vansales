@@ -1,0 +1,191 @@
+// ============================================================
+// Zoho Books - ONE-TIME COGS back-fill, invoices 2026-09-01..2026-09-30
+// Same logic and custom fields as `calculatecogs`, but run by a button click
+// over a date range. Existing values are OVERWRITTEN (always written).
+//
+// Attach to: Invoice DETAIL-page custom button (the clicked invoice is ignored;
+// the function queries the range itself). Connection: zbooksdeluge.
+//
+// HOW TO RUN
+//   1. trial = true  -> processes only the first `trial_count` invoices dated from_date. Check them.
+//   2. trial = false -> processes one page of `page_size` invoices per click.
+//      Click again with page = 2, 3, ... until the result says "no more invoices".
+//      (Custom functions have a ~40 s limit, ~3 API calls per invoice, so keep page_size small.)
+// ============================================================
+trial = true;
+trial_count = 3;                  // invoices processed in trial mode
+page = 1;
+page_size = 10;
+from_date = "2026-09-01";
+to_date = "2026-09-30";
+organization_id = organization.get("organization_id");
+// Target Custom Field IDs (same as calculatecogs)
+cogs_field_id = "3331482000187193020";
+cogs_doc_field_id = "3331482000188147019";
+base = "https://www.zohoapis.com/books/v3/";
+// ------------------------------------------------------------
+// 1. Invoices in range, oldest first
+// ------------------------------------------------------------
+list_url = base + "invoices?organization_id=" + organization_id + "&date_start=" + from_date + "&date_end=" + to_date + "&sort_column=date&sort_order=A";
+if(trial)
+{
+	list_url = list_url + "&page=1&per_page=200";
+}
+else
+{
+	list_url = list_url + "&page=" + page + "&per_page=" + page_size;
+}
+list_resp = invokeurl
+[
+	url :list_url
+	type :GET
+	connection:"zbooksdeluge"
+];
+candidates = ifnull(list_resp.get("invoices"),List());
+batch = List();
+for each  c in candidates
+{
+	if(trial)
+	{
+		if(c.get("date") == from_date && batch.size() < trial_count)
+		{
+			batch.add(c);
+		}
+	}
+	else
+	{
+		batch.add(c);
+	}
+}
+if(batch.isEmpty())
+{
+	return {"message":"No more invoices (trial=" + trial + ", page=" + page + ")"};
+}
+done = 0;
+skipped = 0;
+failed = List();
+// ------------------------------------------------------------
+// 2. Per invoice: same calculation as calculatecogs, then overwrite
+// ------------------------------------------------------------
+for each  row in batch
+{
+	invoice_id = row.get("invoice_id");
+	if(row.get("status") == "void" || row.get("status") == "draft")
+	{
+		skipped = skipped + 1;
+		continue;
+	}
+	inv_resp = invokeurl
+	[
+		url :base + "invoices/" + invoice_id + "?organization_id=" + organization_id
+		type :GET
+		connection:"zbooksdeluge"
+	];
+	if(inv_resp.get("code") != 0 || inv_resp.get("invoice") == null)
+	{
+		failed.add(row.get("invoice_number") + ": fetch failed");
+		continue;
+	}
+	invoice = inv_resp.get("invoice");
+	// ---- line COGS document (as calculatecogs) ----
+	lines_list = List();
+	line_cogs_sum = 0.0;
+	for each  line in ifnull(invoice.get("line_items"),List())
+	{
+		qty = ifnull(line.get("quantity"),0).toDecimal();
+		val_cost = ifnull(line.get("purchase_price"),0).toDecimal();
+		if(val_cost == 0)
+		{
+			val_cost = ifnull(line.get("purchase_rate"),0).toDecimal();
+		}
+		item_cogs = (qty * val_cost).round(2);
+		line_cogs_sum = line_cogs_sum + item_cogs;
+		item_map = Map();
+		item_map.put("item_id",ifnull(line.get("item_id"),""));
+		item_map.put("name",ifnull(line.get("name"),""));
+		item_map.put("sku",ifnull(line.get("sku"),""));
+		item_map.put("qty",qty);
+		item_map.put("unit",ifnull(line.get("unit"),""));
+		item_map.put("rate",ifnull(line.get("rate"),0).toDecimal());
+		item_map.put("cost",val_cost);
+		item_map.put("cogs",item_cogs);
+		lines_list.add(item_map);
+	}
+	line_cogs_sum = line_cogs_sum.round(2);
+	new_cogs_doc = lines_list.toString();
+	// ---- actual COGS from the invoice journal (as calculatecogs) ----
+	journal_response = invokeurl
+	[
+		url :base + "transactions/" + invoice_id + "/journals?organization_id=" + organization_id + "&entity_type=invoice"
+		type :GET
+		connection:"zbooksdeluge"
+	];
+	actual_cogs = 0.0;
+	for each  journal in ifnull(journal_response.get("journals"),List())
+	{
+		for each  jline in ifnull(journal.get("transaction_details"),List())
+		{
+			debit_amount = ifnull(jline.get("bcy_debit_amount"),0).toDecimal();
+			if(ifnull(jline.get("account_name"),"").contains("Cost of Sales") && debit_amount > 0)
+			{
+				actual_cogs = actual_cogs + debit_amount;
+			}
+		}
+	}
+	actual_cogs = actual_cogs.round(2);
+	if(actual_cogs == 0.0 && line_cogs_sum > 0.0)
+	{
+		actual_cogs = line_cogs_sum;
+	}
+	// ---- overwrite the two fields, keep the other custom fields ----
+	existing_cogs = "";
+	updated_fields = List();
+	for each  f in ifnull(invoice.get("custom_fields"),List())
+	{
+		fid = f.get("customfield_id");
+		if(fid == cogs_field_id)
+		{
+			existing_cogs = ifnull(f.get("value"),"");
+		}
+		if(fid != cogs_field_id && fid != cogs_doc_field_id)
+		{
+			fmap = Map();
+			fmap.put("customfield_id",fid);
+			fmap.put("value",f.get("value"));
+			updated_fields.add(fmap);
+		}
+	}
+	cogs_map = Map();
+	cogs_map.put("customfield_id",cogs_field_id);
+	cogs_map.put("value",actual_cogs.toString());
+	updated_fields.add(cogs_map);
+	doc_map = Map();
+	doc_map.put("customfield_id",cogs_doc_field_id);
+	doc_map.put("value",new_cogs_doc);
+	updated_fields.add(doc_map);
+	invoice_update = Map();
+	invoice_update.put("custom_fields",updated_fields);
+	update_response = invokeurl
+	[
+		url :base + "invoices/" + invoice_id + "?organization_id=" + organization_id
+		type :PUT
+		parameters:invoice_update.toString()
+		headers:{"Content-Type":"application/json"}
+		connection:"zbooksdeluge"
+	];
+	if(update_response.get("code") == 0)
+	{
+		done = done + 1;
+		info invoice.get("invoice_number") + " (" + invoice.get("date") + "): COGS " + existing_cogs + " -> " + actual_cogs;
+	}
+	else
+	{
+		failed.add(invoice.get("invoice_number") + ": " + update_response.get("message"));
+		info "Update failed: " + invoice.get("invoice_number") + " " + update_response;
+		break;
+	}
+}
+summary = "trial=" + trial + " page=" + page + " updated=" + done + " skipped=" + skipped + " failed=" + failed.size();
+info summary;
+info failed;
+return {"message":summary};

@@ -23,8 +23,8 @@
 
   // Master Reference Numbers
   const SUMMARY = {
-    fiscalYear: 'FY26-27',
-    previousFiscalYear: 'FY25-26',
+    fiscalYear: 'FY 2026',
+    previousFiscalYear: 'FY 2025',
     currency: 'AED',
     exchangeRateINR: 22.8,
     totalRevenue: 10425000,
@@ -656,13 +656,25 @@
    */
   function generateGranularInvoices() {
     const invoices = [];
-    const customerPool = SUMMARY.topCustomers.map((c) => ({
+    const customerPool = SUMMARY.topCustomers.slice(0, 10).map((c) => ({
       id: c.id,
       name: c.name,
       creditTerms: c.creditTerms,
       creditCategory: c.creditCategory,
       avgDays: c.avgCreditDays
     }));
+
+    // Create 402 distinct additional accounts so total active customers = 412
+    const otherAccounts = [];
+    for (let a = 11; a <= 412; a++) {
+      otherAccounts.push({
+        id: `CUST-${String(a).padStart(3, '0')}`,
+        name: `Retail Account #${a}`,
+        creditTerms: a % 2 === 0 ? 'Cash' : (a % 4 === 1 ? '30 days' : '45 days'),
+        creditCategory: a % 2 === 0 ? 'Cash' : (a % 4 === 1 ? '8–30 days' : '31–60 days'),
+        avgDays: a % 2 === 0 ? 0 : (a % 4 === 1 ? 30 : 45)
+      });
+    }
 
     const pocPool = SUMMARY.pocs.map((p) => p.salesperson);
     const months = [
@@ -678,6 +690,7 @@
 
     let invCounter = 1000;
     let runningTotal = 0;
+    let otherAccountTurn = 0;
     const targetTotal = SUMMARY.totalRevenue;
     const totalTargetInvoices = SUMMARY.totalInvoices;
 
@@ -698,20 +711,24 @@
 
         // Determine Customer
         const custRand = pseudoRandom();
-        let custIndex = 0;
-        if (custRand < 0.14) custIndex = 0; // Al Maya
-        else if (custRand < 0.27) custIndex = 1; // Lulu
-        else if (custRand < 0.38) custIndex = 2; // Choithrams
-        else if (custRand < 0.48) custIndex = 3; // West Zone
-        else if (custRand < 0.57) custIndex = 4; // Grandiose
-        else if (custRand < 0.65) custIndex = 5; // Union Coop
-        else if (custRand < 0.72) custIndex = 6; // Baqer Mohebi
-        else if (custRand < 0.79) custIndex = 7; // Nesto Group
-        else if (custRand < 0.85) custIndex = 8; // Talal Market
-        else if (custRand < 0.91) custIndex = 9; // Safeer Group
-        else custIndex = 10; // Others
-
-        const cust = customerPool[custIndex];
+        let cust;
+        if (custRand < 0.54) {
+          let custIndex = 0;
+          if (custRand < 0.087) custIndex = 0;
+          else if (custRand < 0.168) custIndex = 1;
+          else if (custRand < 0.241) custIndex = 2;
+          else if (custRand < 0.308) custIndex = 3;
+          else if (custRand < 0.366) custIndex = 4;
+          else if (custRand < 0.422) custIndex = 5;
+          else if (custRand < 0.471) custIndex = 6;
+          else if (custRand < 0.517) custIndex = 7;
+          else if (custRand < 0.530) custIndex = 8;
+          else custIndex = 9;
+          cust = customerPool[custIndex];
+        } else {
+          cust = otherAccounts[otherAccountTurn % 402];
+          otherAccountTurn++;
+        }
 
         // Determine Brand
         const brandRand = pseudoRandom();
@@ -737,26 +754,16 @@
         const dateStr = `${m.key}-${dayStr}`;
 
         // Credit terms & Due Date
-        let creditDays = 30;
+        let creditDays = cust.avgDays;
         let creditCat = cust.creditCategory;
         if (cust.creditTerms === 'Cash') {
           creditDays = 0;
           creditCat = 'Cash';
-        } else if (cust.creditTerms === '15 days') {
-          creditDays = 15;
-          creditCat = '8–30 days';
-        } else if (cust.creditTerms === '30 days') {
-          creditDays = 30;
-          creditCat = '8–30 days';
-        } else if (cust.creditTerms === '45 days') {
-          creditDays = 45;
-          creditCat = '31–60 days';
-        } else if (cust.creditTerms === '60 days') {
-          creditDays = 60;
-          creditCat = '31–60 days';
         } else {
-          creditDays = 75;
-          creditCat = '61–90 days';
+          creditDays = Math.round(creditDays + (pseudoRandom() - 0.5) * 4);
+          if (creditDays <= 30) creditCat = '8–30 days';
+          else if (creditDays <= 60) creditCat = '31–60 days';
+          else creditCat = '61–90 days';
         }
 
         const dueDateObj = new Date(`${dateStr}T00:00:00Z`);
@@ -766,15 +773,18 @@
         const dueDay = String(dueDateObj.getUTCDate()).padStart(2, '0');
         const dueDateStr = `${dueYear}-${dueMonth}-${dueDay}`;
 
-        // Amount calculation
+        // Amount calculation - dynamically balanced to avoid negative remaining
         let amount = 0;
+        const remainingInvoices = totalTargetInvoices - invoices.length;
+        const remainingTotal = targetTotal - runningTotal;
+
         if (isAbsoluteLast) {
-          amount = Math.round((targetTotal - runningTotal) * 100) / 100;
+          amount = Math.round(remainingTotal * 100) / 100;
         } else {
-          // Average around 5357 with variation
-          const baseAOV = 5357.81;
-          const variance = (pseudoRandom() - 0.49) * 4200;
-          amount = Math.max(850, Math.round((baseAOV + variance) * 100) / 100);
+          const currentAOV = remainingTotal / remainingInvoices;
+          const variance = (pseudoRandom() - 0.5) * 3800;
+          amount = Math.round((currentAOV + variance) * 100) / 100;
+          amount = Math.max(850, Math.min(amount, 15000));
           runningTotal += amount;
         }
 
@@ -833,7 +843,7 @@
           date: dateStr,
           monthKey: m.key,
           monthLabel: m.label,
-          fiscalYear: 'FY26-27',
+          fiscalYear: 'FY 2026',
           dueDate: dueDateStr,
           status: statusName,
           paymentTerms: cust.creditTerms,
@@ -875,13 +885,15 @@
     let runningTotal = 0;
     for (let i = 0; i < totalCount; i++) {
       const isLast = i === totalCount - 1;
+      const remainingInvoices = totalCount - i;
+      const remainingTotal = targetTotal - runningTotal;
       let amount = 0;
       if (isLast) {
-        amount = Math.round((targetTotal - runningTotal) * 100) / 100;
+        amount = Math.round(remainingTotal * 100) / 100;
       } else {
-        const base = targetTotal / totalCount;
-        amount = Math.round((base + (pseudoRandom() - 0.5) * 3500) * 100) / 100;
-        amount = Math.max(700, amount);
+        const currentAOV = remainingTotal / remainingInvoices;
+        amount = Math.round((currentAOV + (pseudoRandom() - 0.5) * 3500) * 100) / 100;
+        amount = Math.max(700, Math.min(amount, 15000));
         runningTotal += amount;
       }
 
@@ -899,7 +911,7 @@
         invoiceNumber: `INV-2025-${2000 + i}`,
         customerName: custName,
         date: dateStr,
-        fiscalYear: 'FY25-26',
+        fiscalYear: 'FY 2025',
         status: 'Closed',
         brand: brand,
         salesperson: poc,

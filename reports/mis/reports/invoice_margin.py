@@ -60,8 +60,17 @@ COLUMNS = [
     "gross_margin",
     "gross_margin_pct",
     "flag",
+    "cost_source",
     "invoice_id",
     "item_id",
+]
+
+# One row per invoice (header): Zoho header fields plus the totals of its lines.
+INVOICE_COLUMNS = [
+    "month", "date", "invoice_number", "status", "customer_id", "customer_name", "salesperson_name", "van",
+    "currency_code", "exchange_rate", "due_date", "sub_total", "discount_total", "tax_total", "total", "balance",
+    "line_count", "base_quantity", "net_sales", "cost", "gross_margin", "gross_margin_pct",
+    "flagged_lines", "cost_source", "invoice_id",
 ]
 
 SUMMARY_COLUMNS = ["key", "lines", "base_quantity", "net_sales", "cost", "gross_margin", "gross_margin_pct"]
@@ -357,12 +366,65 @@ def build_margin_rows(
                     "gross_margin": round(margin, 2),
                     "gross_margin_pct": round(margin / net_sales, 4) if net_sales else 0.0,
                     "flag": "; ".join(flags),
+                    "cost_source": "booked" if booked is not None else "purchase_rate",
                     "invoice_id": str(inv.get("invoice_id") or ""),
                     "item_id": item_id,
                 }
             )
     rows.sort(key=lambda r: (r["date"], r["invoice_number"]))
     return rows
+
+
+def cost_source_of(sources: set[str]) -> str:
+    return "booked" if sources == {"booked"} else "purchase_rate" if sources == {"purchase_rate"} else "mixed"
+
+
+def build_invoice_rows(invoices: list[dict], rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Invoice header rows: Zoho header fields + sales / cost of sales / margin summed from the lines.
+
+    Header money fields (sub_total, discount_total, tax_total, total, balance) stay in the invoice's
+    own currency as Zoho reports them; net_sales / cost / gross_margin are base currency, like the lines.
+    """
+    by_invoice: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        by_invoice.setdefault(r["invoice_id"], []).append(r)
+    out = []
+    for inv in invoices:
+        lines = by_invoice.get(str(inv.get("invoice_id") or ""), [])
+        net = round(sum(r["net_sales"] for r in lines), 2)
+        cost = round(sum(r["cost"] for r in lines), 2)
+        date = str(inv.get("date") or "")
+        out.append(
+            {
+                "month": date[:7],
+                "date": date,
+                "invoice_number": inv.get("invoice_number", ""),
+                "status": inv.get("status", ""),
+                "customer_id": str(inv.get("customer_id") or ""),
+                "customer_name": inv.get("customer_name", ""),
+                "salesperson_name": inv.get("salesperson_name", "") or "(none)",
+                "van": inv.get("location_name") or (lines[0]["van"] if lines else "(none)"),
+                "currency_code": inv.get("currency_code", ""),
+                "exchange_rate": _f(inv.get("exchange_rate")) or 1.0,
+                "due_date": str(inv.get("due_date") or ""),
+                "sub_total": round(_f(inv.get("sub_total")), 2),
+                "discount_total": round(_f(inv.get("discount_total")), 2),
+                "tax_total": round(_f(inv.get("tax_total")), 2),
+                "total": round(_f(inv.get("total")), 2),
+                "balance": round(_f(inv.get("balance")), 2),
+                "line_count": len(lines),
+                "base_quantity": round(sum(r["base_quantity"] for r in lines), 4),
+                "net_sales": net,
+                "cost": cost,
+                "gross_margin": round(net - cost, 2),
+                "gross_margin_pct": round((net - cost) / net, 4) if net else 0.0,
+                "flagged_lines": sum(1 for r in lines if r["flag"]),
+                "cost_source": cost_source_of({r["cost_source"] for r in lines}) if lines else "",
+                "invoice_id": str(inv.get("invoice_id") or ""),
+            }
+        )
+    out.sort(key=lambda r: (r["date"], r["invoice_number"]))
+    return out
 
 
 def summarise(rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
@@ -397,7 +459,8 @@ def generate_invoice_margin(
     from_date: str,
     to_date: str,
     log: Callable[[str], None] = print,
-) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]], dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    """→ (line rows, invoice header rows, rollups, summary)."""
     log(f"Invoices {from_date} → {to_date}{' (cache only)' if source.client is None else ''}…")
     invoices = source.invoices(from_date, to_date)
     items = source.items()
@@ -409,6 +472,7 @@ def generate_invoice_margin(
     }
     conversions = source.conversions(alt_unit_items)
     rows = build_margin_rows(invoices, items, conversions)
+    invoice_rows = build_invoice_rows(invoices, rows)
     summaries = {name: summarise(rows, key) for name, key in SUMMARY_DIMENSIONS.items()}
     net = round(sum(r["net_sales"] for r in rows), 2)
     cost = round(sum(r["cost"] for r in rows), 2)
@@ -426,4 +490,4 @@ def generate_invoice_margin(
         "invoice_detail_calls": source.detail_calls,
         "cost_basis": "cf_line_cogs_document (booked COGS); item purchase_rate fallback",
     }
-    return rows, summaries, summary
+    return rows, invoice_rows, summaries, summary

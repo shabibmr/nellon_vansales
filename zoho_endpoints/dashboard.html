@@ -890,6 +890,12 @@
       border: 1px solid var(--emerald-100);
     }
 
+    .badge-warn {
+      background: #fef9c3;
+      color: #854d0e;
+      border: 1px solid #fef08a;
+    }
+
     .badge-skip {
       background: var(--amber-50);
       color: var(--amber-700);
@@ -1053,6 +1059,10 @@
             <span id="gauge-ok-tag">0 OK</span>
           </div>
           <div class="gauge-tag">
+            <div class="tag-dot" style="background: #eab308;"></div>
+            <span id="gauge-warn-tag">0 Warn</span>
+          </div>
+          <div class="gauge-tag">
             <div class="tag-dot" style="background: var(--amber-500);"></div>
             <span id="gauge-skip-tag">0 Skipped</span>
           </div>
@@ -1154,6 +1164,7 @@
         <div class="tab-filters">
           <button class="tab-btn active" onclick="setFilter('ALL', this)">All Events</button>
           <button class="tab-btn" onclick="setFilter('OK', this)">OK Settled</button>
+          <button class="tab-btn" onclick="setFilter('WARN', this)">Warnings</button>
           <button class="tab-btn" onclick="setFilter('SKIP', this)">Skipped</button>
         </div>
       </div>
@@ -1305,6 +1316,8 @@
 
       if (state.filter === 'OK') {
         filtered = filtered.filter(r => r.status === 'OK');
+      } else if (state.filter === 'WARN') {
+        filtered = filtered.filter(r => r.status === 'WARN');
       } else if (state.filter === 'SKIP') {
         filtered = filtered.filter(r => r.status === 'SKIP');
       }
@@ -1331,8 +1344,21 @@
       recent.forEach(r => {
         const tr = document.createElement('tr');
         let badgeClass = 'badge-ok';
+        if (r.status === 'WARN') badgeClass = 'badge-warn';
         if (r.status === 'SKIP') badgeClass = 'badge-skip';
         if (r.status === 'FAIL') badgeClass = 'badge-fail';
+
+        const amountAppliedNum = parseFloat(r.amount_applied || 0);
+        let amountText = '-';
+        if (amountAppliedNum > 0) {
+          amountText = `AED ${formatAED(amountAppliedNum)}`;
+        } else if (r.status === 'OK') {
+          amountText = `AED ${formatAED(r.amount_applied || r.sheet_balance || 0)}`;
+        }
+
+        const residualVal = (r.residual_balance !== '' && r.residual_balance !== null && r.residual_balance !== undefined)
+          ? formatAED(r.residual_balance)
+          : '-';
 
         tr.innerHTML = `
           <td class="mono" style="color: var(--text-muted);">${formatTime(r.timestamp)}</td>
@@ -1342,9 +1368,9 @@
           </td>
           <td style="max-width: 240px; overflow: hidden; text-overflow: ellipsis; font-weight: 500;">${r.customer_name || '-'}</td>
           <td>${(r.ledger_name || '').replace(' OLD BALANCE', '')}</td>
-          <td class="mono" style="font-weight: 800; color: var(--text-primary);">AED ${formatAED(r.amount_applied || r.sheet_balance)}</td>
+          <td class="mono" style="font-weight: 800; color: var(--text-primary);">${amountText}</td>
           <td class="mono" style="color: var(--indigo-700); font-weight: 600;">${r.entry_number || '-'}</td>
-          <td class="mono" style="color: var(--emerald-600); font-weight: 700;">${r.residual_balance !== '' ? '0.00' : '-'}</td>
+          <td class="mono" style="color: var(--emerald-600); font-weight: 700;">${residualVal}</td>
           <td style="color: var(--text-secondary); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis;">${r.message || ''}</td>
         `;
         tbody.appendChild(tr);
@@ -1352,12 +1378,18 @@
     }
 
     function updateMetrics(data) {
-      const { rows, totalOk, totalSkip, totalFail, totalApplied, startTimeIso, logFile } = data;
+      const { rows, totalOk, totalWarn = 0, totalSkip, totalFail, totalApplied, startTimeIso, endTimeIso, logFile } = data;
       state.allRows = rows;
       const count = rows.length;
+      const settledCount = totalOk + totalWarn;
 
       if (!state.startTime && startTimeIso) {
         state.startTime = new Date(startTimeIso);
+      }
+      if (endTimeIso) {
+        state.endTime = new Date(endTimeIso);
+      } else if (rows.length && rows[rows.length - 1].timestamp) {
+        state.endTime = new Date(rows[rows.length - 1].timestamp);
       }
 
       if (logFile) {
@@ -1382,34 +1414,42 @@
       document.getElementById('meta-remaining-amt').textContent = `AED ${formatAED(Math.max(0, TOTAL_TARGET_AMT - totalApplied))}`;
 
       // 4. KPIs
-      document.getElementById('kpi-invoices-closed').textContent = count;
+      document.getElementById('kpi-invoices-closed').textContent = settledCount;
       document.getElementById('kpi-invoices-remaining').textContent = Math.max(0, TOTAL_TARGET_INVOICES - count);
       document.getElementById('gauge-ok-tag').textContent = `${totalOk} OK`;
+      const warnTag = document.getElementById('gauge-warn-tag');
+      if (warnTag) warnTag.textContent = `${totalWarn} Warn`;
       document.getElementById('gauge-skip-tag').textContent = `${totalSkip} Skipped`;
       document.getElementById('gauge-fail-tag').textContent = `${totalFail} Failed`;
 
-      const totalValid = totalOk + totalFail;
-      const successRate = totalValid > 0 ? ((totalOk / totalValid) * 100).toFixed(1) : '100.0';
+      const totalValid = settledCount + totalFail;
+      const successRate = totalValid > 0 ? ((settledCount / totalValid) * 100).toFixed(1) : '100.0';
       document.getElementById('kpi-success-rate').textContent = `${successRate}%`;
 
       // 5. Speed & ETA
       if (state.startTime && count > 2) {
-        const elapsedMinutes = (new Date() - state.startTime) / 60000;
-        if (elapsedMinutes > 0.05) {
-          const speed = (count / elapsedMinutes).toFixed(1);
-          document.getElementById('meta-speed').textContent = `${speed} inv/min`;
-          document.getElementById('kpi-rate-val').textContent = `${speed} /min`;
+        let elapsedMinutes;
+        const isCompleted = count >= TOTAL_TARGET_INVOICES || (state.endTime && state.endTime > state.startTime);
+        if (count >= TOTAL_TARGET_INVOICES && state.endTime) {
+          elapsedMinutes = Math.max(0.1, (state.endTime - state.startTime) / 60000);
+        } else {
+          elapsedMinutes = Math.max(0.05, (new Date() - state.startTime) / 60000);
+        }
 
-          const remaining = TOTAL_TARGET_INVOICES - count;
-          if (remaining > 0 && speed > 0) {
-            const etaMinutes = Math.ceil(remaining / speed);
-            document.getElementById('meta-eta').textContent = `~${etaMinutes} mins`;
-          } else if (remaining === 0) {
-            document.getElementById('meta-eta').textContent = `Completed!`;
-            if (!state.hasTriggeredConfetti && typeof confetti === 'function') {
-              state.hasTriggeredConfetti = true;
-              confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-            }
+        const speed = (count / elapsedMinutes).toFixed(1);
+        document.getElementById('meta-speed').textContent = `${speed} inv/min`;
+        document.getElementById('kpi-rate-val').textContent = `${speed} /min`;
+
+        const remaining = TOTAL_TARGET_INVOICES - count;
+        if (remaining > 0 && speed > 0 && !isCompleted) {
+          const etaMinutes = Math.ceil(remaining / speed);
+          document.getElementById('meta-eta').textContent = `~${etaMinutes} mins`;
+        } else {
+          const minsText = Math.round(elapsedMinutes);
+          document.getElementById('meta-eta').textContent = `Completed (${minsText}m)`;
+          if (!state.hasTriggeredConfetti && typeof confetti === 'function') {
+            state.hasTriggeredConfetti = true;
+            confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
           }
         }
       }
@@ -1417,7 +1457,7 @@
       // 6. Salesman distribution
       const salesmenStats = {};
       rows.forEach(r => {
-        if (r.status === 'OK' && r.ledger_name) {
+        if ((r.status === 'OK' || r.status === 'WARN') && r.ledger_name) {
           if (!salesmenStats[r.ledger_name]) salesmenStats[r.ledger_name] = { count: 0, amount: 0 };
           salesmenStats[r.ledger_name].count += 1;
           salesmenStats[r.ledger_name].amount += parseFloat(r.amount_applied || 0);
@@ -1443,7 +1483,10 @@
 
     async function fetchStatus(isManual = false) {
       try {
-        const resp = await fetch('/api/status');
+        let resp = await fetch('status.php');
+        if (!resp.ok) {
+          resp = await fetch('/api/status');
+        }
         if (resp.ok) {
           const data = await resp.json();
           updateMetrics(data);

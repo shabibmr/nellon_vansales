@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>LUXEKNOX // Cinematic 3D Spatial Flight &amp; Ultra Slo-Mo Drop</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    :root {
+      --sc-canvas: #020407;
+      --sc-accent-cyan: #00F0FF;
+      --sc-accent-gold: #D4AF37;
+      --sc-accent-crimson: #FF3366;
+      --sc-ink: #F4F6FA;
+      --sc-ink-soft: #8A9BB2;
+      --font-display: "Cinzel", serif;
+      --font-body: "Plus Jakarta Sans", sans-serif;
+      --font-mono: "JetBrains Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: var(--sc-canvas);
+      color: var(--sc-ink);
+      font-family: var(--font-body);
+      overflow-x: hidden;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Fixed WebGL 3D Canvas */
+    #webgl-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Anamorphic Movie Framing */
+    .knx-anamorphic-bar {
+      position: fixed; left: 0; right: 0; height: 4.5vh;
+      background: #010204; z-index: 95; pointer-events: none;
+    }
+    .knx-bar-top { top: 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .knx-bar-bottom { bottom: 0; border-top: 1px solid rgba(255,255,255,0.08); }
+
+    /* Vignette & Grain */
+    .knx-vignette {
+      position: fixed; inset: 0; z-index: 2; pointer-events: none;
+      background: radial-gradient(circle at center, transparent 35%, rgba(2,3,5,0.88) 95%);
+    }
+    .knx-grain {
+      position: fixed; inset: 0; z-index: 92; pointer-events: none; opacity: 0.04;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* Chromatic Warp & Time Freeze Flash FX */
+    #time-freeze-overlay {
+      position: fixed; inset: 0; z-index: 90; pointer-events: none;
+      background: radial-gradient(circle at center, rgba(0,240,255,0.12) 0%, transparent 80%);
+      opacity: 0; transition: opacity 0.3s;
+      mix-blend-mode: screen;
+    }
+    #time-freeze-overlay.active { opacity: 1; }
+
+    /* Top Chrome */
+    .knx-chrome {
+      position: fixed; top: 4.5vh; left: 0; right: 0; height: 64px;
+      padding: 0 40px; display: flex; align-items: center; justify-content: space-between;
+      z-index: 100; pointer-events: auto;
+    }
+    .knx-brand {
+      display: flex; align-items: center; gap: 12px; text-decoration: none; color: #FFF;
+    }
+    .knx-logo-diamond {
+      width: 26px; height: 26px; border: 1.5px solid var(--sc-accent-gold);
+      transform: rotate(45deg); display: flex; align-items: center; justify-content: center;
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .knx-brand:hover .knx-logo-diamond { transform: rotate(135deg); border-color: var(--sc-accent-cyan); }
+    .knx-logo-core { width: 8px; height: 8px; background: var(--sc-accent-cyan); }
+    .knx-brand-name { font-family: var(--font-display); font-size: 15px; font-weight: 800; letter-spacing: 4px; }
+
+    /* Waypoint Radar Nav */
+    .knx-hud-pill {
+      display: flex; align-items: center; gap: 18px;
+      background: rgba(8, 12, 18, 0.88); border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 40px; padding: 6px 18px 6px 14px; backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    .knx-reticle {
+      width: 20px; height: 20px; border-radius: 50%; border: 1px dashed var(--sc-accent-cyan);
+      display: flex; align-items: center; justify-content: center; animation: spin 18s linear infinite;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    .knx-reticle-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sc-accent-cyan); box-shadow: 0 0 8px var(--sc-accent-cyan); }
+    .knx-hud-text { display: flex; flex-direction: column; text-align: left; }
+    .knx-hud-zone { font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: var(--sc-accent-cyan); }
+    .knx-hud-sub { font-family: var(--font-mono); font-size: 7.5px; color: var(--sc-ink-soft); letter-spacing: 1px; }
+
+    .knx-sector-nav {
+      display: flex; align-items: center; gap: 7px; margin-left: 12px;
+      border-left: 1px solid rgba(255,255,255,0.15); padding-left: 12px;
+    }
+    .knx-sec-btn {
+      width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.25);
+      border: none; padding: 0; cursor: pointer; transition: all 0.3s ease;
+    }
+    .knx-sec-btn:hover { background: var(--sc-accent-gold); transform: scale(1.4); }
+    .knx-sec-btn.active {
+      background: var(--sc-accent-cyan); box-shadow: 0 0 10px var(--sc-accent-cyan); transform: scale(1.5);
+    }
+    .knx-sec-btn.slo-mo-pip {
+      background: var(--sc-accent-gold);
+      box-shadow: 0 0 12px var(--sc-accent-gold);
+    }
+
+    /* Live Telemetry HUD */
+    .knx-flight-telemetry {
+      position: fixed; bottom: 6vh; left: 40px; z-index: 100;
+      font-family: var(--font-mono); font-size: 8px; line-height: 1.7;
+      color: var(--sc-ink-soft); letter-spacing: 1.5px; pointer-events: none;
+      background: rgba(8,12,18,0.75); padding: 12px 16px; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(8px);
+    }
+    .knx-telem-val { color: var(--sc-accent-cyan); font-weight: 700; }
+    .knx-time-warp-alert {
+      color: var(--sc-accent-gold);
+      font-weight: 800;
+      animation: pulse 1s infinite alternate;
+    }
+    @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+
+    /* Audio Toggle */
+    .knx-audio-btn {
+      background: rgba(8,12,18,0.8); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px; padding: 6px 14px; font-family: var(--font-mono);
+      font-size: 9px; letter-spacing: 1px; color: var(--sc-ink-soft);
+      cursor: pointer; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(8px);
+    }
+    .knx-audio-btn.active { color: #FFF; border-color: var(--sc-accent-gold); }
+    .knx-audio-dot { width: 6px; height: 6px; border-radius: 50%; background: #4B5563; }
+    .knx-audio-btn.active .knx-audio-dot { background: #10B981; box-shadow: 0 0 8px #10B981; }
+
+    /* Scroll Height Track (950vh) */
+    #scroll-track {
+      height: 950vh; width: 100%; position: relative; pointer-events: none;
+    }
+
+    /* Narrative Layer */
+    .knx-narrative-layer {
+      position: fixed; inset: 0; z-index: 50; pointer-events: none;
+    }
+    .knx-act-card {
+      position: absolute; padding: 30px; max-width: 640px;
+      opacity: 0; transform: translateY(30px) scale(0.95);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: opacity, transform;
+    }
+    .knx-act-card.active { opacity: 1; transform: translateY(0) scale(1); }
+    .knx-center { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.92); text-align: center; }
+    .knx-center.active { transform: translate(-50%, -50%) scale(1); }
+    .knx-bottom-left { bottom: 8vh; left: 50px; text-align: left; }
+    .knx-bottom-right { bottom: 8vh; right: 50px; text-align: right; }
+    .knx-top-left { top: 14vh; left: 50px; text-align: left; }
+
+    .knx-badge {
+      font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+      letter-spacing: 3px; text-transform: uppercase; color: var(--sc-accent-gold);
+      margin-bottom: 12px; display: inline-block;
+    }
+    .knx-headline {
+      font-family: var(--font-display); font-size: clamp(34px, 5.5vw, 68px);
+      font-weight: 900; line-height: 0.95; letter-spacing: clamp(3px, 1vw, 10px);
+      text-transform: uppercase; color: #FFFFFF; margin: 0 0 16px 0;
+      text-shadow: 0 4px 30px rgba(0,0,0,0.9);
+    }
+    .knx-desc {
+      font-size: clamp(14px, 1.3vw, 17px); line-height: 1.6;
+      color: var(--sc-ink-soft); max-width: 480px; margin: 0;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+    }
+    .knx-center .knx-desc { margin: 0 auto; }
+    .knx-bottom-right .knx-desc { margin-left: auto; }
+
+    /* Ultra Slo-Mo Macro Reticle Overlay */
+    .knx-macro-hud-reticle {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+      width: 260px; height: 260px;
+      border: 1px dashed rgba(212, 175, 55, 0.5);
+      border-radius: 50%;
+      z-index: 60; pointer-events: none;
+      opacity: 0; transition: opacity 0.5s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .knx-macro-hud-reticle.active {
+      opacity: 1; transform: translate(-50%, -50%) scale(1);
+    }
+    .knx-reticle-crosshair {
+      position: absolute; width: 100%; height: 100%;
+      background:
+        linear-gradient(to right, transparent 48%, rgba(0,240,255,0.4) 50%, transparent 52%),
+        linear-gradient(to bottom, transparent 48%, rgba(0,240,255,0.4) 50%, transparent 52%);
+    }
+
+    /* CTA Button */
+    .knx-cta-btn {
+      margin-top: 24px; padding: 16px 36px;
+      background: linear-gradient(90deg, var(--sc-accent-gold) 0%, #ECC94B 100%);
+      color: #030508; font-family: var(--font-display); font-size: 13px; font-weight: 800;
+      letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 40px;
+      cursor: pointer; box-shadow: 0 10px 30px rgba(212, 175, 55, 0.4);
+      pointer-events: auto; transition: all 0.3s; display: inline-flex; align-items: center; gap: 12px;
+    }
+    .knx-cta-btn:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 15px 45px rgba(212, 175, 55, 0.6); }
+
+    /* Modal */
+    .knx-modal {
+      position: fixed; inset: 0; z-index: 200; background: rgba(3,5,8,0.94);
+      backdrop-filter: blur(24px); display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.4s;
+    }
+    .knx-modal.active { opacity: 1; pointer-events: auto; }
+    .knx-modal-box {
+      width: 90%; max-width: 460px; background: #0A0E15;
+      border: 1.5px solid var(--sc-accent-gold); border-radius: 12px; padding: 36px;
+      box-shadow: 0 30px 90px rgba(0,0,0,0.95); position: relative;
+    }
+    .knx-modal-close {
+      position: absolute; top: 18px; right: 20px; background: transparent;
+      border: none; color: var(--sc-ink-soft); font-size: 22px; cursor: pointer;
+    }
+    .knx-input {
+      width: 100%; background: #121822; border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px; padding: 12px 16px; color: #FFF; font-family: var(--font-mono);
+      font-size: 13px; margin-bottom: 16px; outline: none;
+    }
+    .knx-input:focus { border-color: var(--sc-accent-cyan); }
+  </style>
+</head>
+
+<body>
+
+  <!-- WebGL 3D Canvas -->
+  <canvas id="webgl-canvas"></canvas>
+
+  <!-- Atmosphere -->
+  <div class="knx-vignette"></div>
+  <div class="knx-grain"></div>
+  <div id="time-freeze-overlay"></div>
+  <div class="knx-anamorphic-bar knx-bar-top"></div>
+  <div class="knx-anamorphic-bar knx-bar-bottom"></div>
+
+  <!-- Ultra Slo-Mo Optical Reticle -->
+  <div class="knx-macro-hud-reticle" id="macro-reticle">
+    <div class="knx-reticle-crosshair"></div>
+    <div style="font-family: var(--font-mono); font-size: 8px; color: var(--sc-accent-gold); position: absolute; bottom: -24px; letter-spacing: 2px;">
+      MACRO_FOCUS // SPHERICAL DROPLET 0.28MM
+    </div>
+  </div>
+
+  <!-- Persistent Chrome -->
+  <header class="knx-chrome">
+    <a href="#" class="knx-brand">
+      <div class="knx-logo-diamond"><div class="knx-logo-core"></div></div>
+      <span class="knx-brand-name">LUXEKNOX</span>
+    </a>
+
+    <!-- Waypoint Radar Nav with Dedicated Slo-Mo Drop Station -->
+    <nav class="knx-hud-pill">
+      <div class="knx-reticle"><div class="knx-reticle-dot"></div></div>
+      <div class="knx-hud-text">
+        <span class="knx-hud-zone" id="hud-zone">ZONE 01 // THE ATRIUM</span>
+        <span class="knx-hud-sub" id="hud-sub">AZIMUTH: 00.0° • TIME-FLOW: 1.0X</span>
+      </div>
+      <div class="knx-sector-nav">
+        <button class="knx-sec-btn active" data-pos="0.00" title="Zone 1: Atrium"></button>
+        <button class="knx-sec-btn" data-pos="0.14" title="Zone 2: Portal"></button>
+        <button class="knx-sec-btn" data-pos="0.28" title="Zone 3: Crucible"></button>
+        <button class="knx-sec-btn" data-pos="0.40" title="Zone 4: High-Speed Forge"></button>
+        <button class="knx-sec-btn slo-mo-pip" data-pos="0.52" title="THE DROP: Ultra Slo-Mo Sweat"></button>
+        <button class="knx-sec-btn" data-pos="0.66" title="Zone 6: Recovery"></button>
+        <button class="knx-sec-btn" data-pos="0.82" title="Zone 7: Peak Assembly"></button>
+        <button class="knx-sec-btn" data-pos="0.97" title="Zone 8: Sanctum"></button>
+      </div>
+    </nav>
+
+    <!-- Audio Toggle -->
+    <button class="knx-audio-btn" id="audio-btn">
+      <span class="knx-audio-dot"></span>
+      <span id="audio-label">AUDIO: MUTED</span>
+    </button>
+  </header>
+
+  <!-- Real-Time Flight & Time Dilation Telemetry -->
+  <div class="knx-flight-telemetry">
+    <div>CAM_Z: <span class="knx-telem-val" id="telem-z">-000.0 M</span></div>
+    <div>TIME_DILATION: <span class="knx-telem-val" id="telem-time">1.000X NORMAL</span></div>
+    <div>PITCH: <span class="knx-telem-val" id="telem-pitch">+00.0°</span> | ROLL: <span class="knx-telem-val" id="telem-roll">00.0°</span></div>
+    <div id="telem-status-line">STATUS: <span class="knx-telem-val" style="color: #10B981;">3D VELOCITY RIG</span></div>
+  </div>
+
+  <!-- Narrative Layer -->
+  <div class="knx-narrative-layer">
+    
+    <!-- 1. Atrium -->
+    <div class="knx-act-card knx-center active" id="act-1">
+      <div class="knx-badge">CATHEDRAL OF HUMAN PERFORMANCE</div>
+      <h1 class="knx-headline">LUXEKNOX</h1>
+      <p class="knx-desc">
+        A continuous 3D descent into elite human biomechanics. Scroll forward to accelerate camera flight through the brutalist monolith.
+      </p>
+    </div>
+
+    <!-- 2. Portal -->
+    <div class="knx-act-card knx-bottom-left" id="act-2">
+      <div class="knx-badge">ZONE 02 // ARCHITECTURAL GATEWAY</div>
+      <h2 class="knx-headline" style="font-size: clamp(28px, 4.2vw, 50px);">THE PORTAL OPENS</h2>
+      <p class="knx-desc">
+        Concrete monolith slabs part at speed. The camera dives through the threshold.
+      </p>
+    </div>
+
+    <!-- 3. Crucible -->
+    <div class="knx-act-card knx-bottom-right" id="act-3">
+      <div class="knx-badge">ZONE 03 // THE CRUCIBLE</div>
+      <h2 class="knx-headline" style="font-size: clamp(28px, 4.2vw, 50px);">DISCIPLINE IS ARCHITECTURE</h2>
+      <p class="knx-desc">
+        High-velocity banking curve around towering pillars. Velocity surges.
+      </p>
+    </div>
+
+    <!-- 4. Forge High-Speed Sprint -->
+    <div class="knx-act-card knx-top-left" id="act-4">
+      <div class="knx-badge">ZONE 04 // MAXIMUM SPRINT</div>
+      <h2 class="knx-headline" style="font-size: clamp(28px, 4.2vw, 50px);">TERMINAL VELOCITY</h2>
+      <p class="knx-desc">
+        Low-angle dolly tracking at 240 km/h. Rigs blur past. Prepare for the drop.
+      </p>
+    </div>
+
+    <!-- 5. THE DROP: ULTRA SLO-MO MACRO SWEAT -->
+    <div class="knx-act-card knx-center" id="act-5">
+      <div class="knx-badge" style="color: var(--sc-accent-cyan);">TIME DILATION 0.001X // THE DROP</div>
+      <h2 class="knx-headline" style="font-size: clamp(34px, 5.5vw, 68px); color: #FFFFFF;">SUSPENDED IN TIME</h2>
+      <p class="knx-desc" style="max-width: 540px;">
+        The entire universe halts. The camera plunges into extreme macro focus on a single suspended bead of sweat falling in zero gravity. The neon cathedral interior reflects inverted within the liquid sphere.
+      </p>
+    </div>
+
+    <!-- 6. Recovery -->
+    <div class="knx-act-card knx-bottom-right" id="act-6">
+      <div class="knx-badge">ZONE 06 // HYDROTHERMAL SANCTUM</div>
+      <h2 class="knx-headline" style="font-size: clamp(28px, 4.2vw, 50px);">SHOCK &amp; RESTORATION</h2>
+      <p class="knx-desc">
+        Time snaps back into forward motion. Submerged -3°C volcanic cryo-pools and Scandinavian charred cedar saunas.
+      </p>
+    </div>
+
+    <!-- 7. Assembly Peak -->
+    <div class="knx-act-card knx-center" id="act-7">
+      <div class="knx-badge">ZONE 07 // THE PEAK MOMENT</div>
+      <h2 class="knx-headline" style="font-size: clamp(32px, 4.8vw, 60px); color: var(--sc-accent-cyan);">SPATIAL CONVERGENCE</h2>
+      <p class="knx-desc">
+        The entire environment physically transforms around the camera. Louvers rotate 90°, neon tracks sweep, and titanium machines assemble into solid steel.
+      </p>
+    </div>
+
+    <!-- 8. Sanctum Vault -->
+    <div class="knx-act-card knx-center" id="act-8">
+      <div class="knx-badge">SECTOR OMEGA // VAULT DOORS</div>
+      <h2 class="knx-headline" style="font-size: clamp(30px, 4.2vw, 54px);">THE BLACK KEY</h2>
+      <p class="knx-desc">
+        Macro close-up on the floating 3D Black Titanium Access Card. Membership strictly limited to 300 global patrons.
+      </p>
+      <button class="knx-cta-btn" onclick="openModal()">
+        <span>REQUEST ACCESS INVITATION</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Scroll Height Track -->
+  <div id="scroll-track"></div>
+
+  <!-- Modal -->
+  <div class="knx-modal" id="modal">
+    <div class="knx-modal-box">
+      <button class="knx-modal-close" onclick="closeModal()">&times;</button>
+      <div class="knx-badge">CONFIDENTIAL // ACCESS APPLICATION</div>
+      <h3 style="font-family: var(--font-display); font-size: 22px; color: #FFF; margin: 0 0 8px 0; letter-spacing: 2px;">ACQUIRE THE LUXEKNOX KEY</h3>
+      <p style="font-size: 12px; color: var(--sc-ink-soft); line-height: 1.5; margin-bottom: 24px;">
+        Vetted by our Admissions Council. Please provide executive credentials.
+      </p>
+      <form onsubmit="handleApply(event)">
+        <input type="text" class="knx-input" placeholder="FULL LEGAL NAME" required>
+        <input type="email" class="knx-input" placeholder="EXECUTIVE / PRIVATE EMAIL" required>
+        <input type="text" class="knx-input" placeholder="SPONSOR OR REFERRAL CODE" required>
+        <button type="submit" class="knx-cta-btn" style="width: 100%; justify-content: center; margin-top: 8px;">
+          <span>TRANSMIT APPLICATION</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- THREE.JS 3D CINEMATIC ENGINE WITH ULTRA SLO-MO MACRO DIVE         -->
+  <!-- ================================================================= -->
+  <script>
+    // -------------------------------------------------------------
+    // 1. Scene, Camera, Renderer
+    // -------------------------------------------------------------
+    const canvas = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020407, 0.0032);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1600);
+    camera.position.set(0, 0, 50);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // -------------------------------------------------------------
+    // 2. Lighting
+    // -------------------------------------------------------------
+    const ambientLight = new THREE.AmbientLight(0x0a101d, 1.4);
+    scene.add(ambientLight);
+
+    const goldSpot = new THREE.SpotLight(0xD4AF37, 8, 350, Math.PI / 4, 0.4, 1.2);
+    goldSpot.position.set(0, 80, -20);
+    scene.add(goldSpot);
+
+    const cyanSpot = new THREE.SpotLight(0x00F0FF, 7, 450, Math.PI / 3, 0.5, 1.5);
+    cyanSpot.position.set(0, -60, -400);
+    scene.add(cyanSpot);
+
+    // Dedicated Macro Spotlight for the Droplet
+    const macroDropSpot = new THREE.SpotLight(0x00F0FF, 0, 100, Math.PI / 4, 0.2);
+    macroDropSpot.position.set(0, 8, -1280);
+    scene.add(macroDropSpot);
+
+    // -------------------------------------------------------------
+    // 3. Texture Loading & Spatial Environment Plates
+    // -------------------------------------------------------------
+    const texLoader = new THREE.TextureLoader();
+    const atriumTex = texLoader.load('assets/atrium.webp');
+    const forgeTex = texLoader.load('assets/forge.webp');
+    const vaultTex = texLoader.load('assets/vault.webp');
+    const sanctumTex = texLoader.load('assets/sanctum.webp');
+    const macroDropTex = texLoader.load('assets/macro_drop.webp');
+
+    function createBackdrop(tex, zPos, width = 280, height = 158, yOffset = 0, xOffset = 0) {
+      const geom = new THREE.PlaneGeometry(width, height, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.88, depthWrite: false, side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.set(xOffset, yOffset, zPos);
+      scene.add(mesh);
+      return mesh;
+    }
+
+    const plate1 = createBackdrop(atriumTex, -150, 320, 180, 0, 0);
+    const plate2 = createBackdrop(atriumTex, -450, 340, 190, 15, 40);
+    const plate3 = createBackdrop(forgeTex, -850, 360, 200, -10, -50);
+
+    // =============================================================
+    // 4. THE ULTRA SLO-MO MACRO SWEAT DROP RIG (Z = -1300)
+    // =============================================================
+    const macroGroup = new THREE.Group();
+    macroGroup.position.set(0, 0, -1300);
+    scene.add(macroGroup);
+
+    // High-Res Macro Photography Backdrop Plate
+    const macroBackdropGeom = new THREE.PlaneGeometry(160, 90);
+    const macroBackdropMat = new THREE.MeshBasicMaterial({
+      map: macroDropTex,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+    const macroBackdropMesh = new THREE.Mesh(macroBackdropGeom, macroBackdropMat);
+    macroBackdropMesh.position.set(0, 0, -15);
+    macroGroup.add(macroBackdropMesh);
+
+    // 3D Glass Refraction Droplet Sphere
+    const dropletGeom = new THREE.SphereGeometry(3.6, 64, 64);
+    const dropletMat = new THREE.MeshPhysicalMaterial({
+      color: 0xFFFFFF,
+      transmission: 0.95,
+      opacity: 1,
+      transparent: true,
+      roughness: 0.02,
+      ior: 1.333, // Water refractive index
+      metalness: 0.05,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05
+    });
+    const dropletMesh = new THREE.Mesh(dropletGeom, dropletMat);
+    dropletMesh.position.set(0, -2.5, 0);
+    macroGroup.add(dropletMesh);
+
+    // Caustic Inner Glow Ring
+    const causticRingGeom = new THREE.RingGeometry(3.6, 4.0, 64);
+    const causticRingMat = new THREE.MeshBasicMaterial({
+      color: 0x00F0FF, side: THREE.DoubleSide, transparent: true, opacity: 0
+    });
+    const causticRing = new THREE.Mesh(causticRingGeom, causticRingMat);
+    causticRing.position.set(0, -2.5, 0.1);
+    macroGroup.add(causticRing);
+
+    // Floating micro water particles around main drop
+    const microCount = 40;
+    const microGeom = new THREE.BufferGeometry();
+    const microPos = new Float32Array(microCount * 3);
+    for (let i = 0; i < microCount * 3; i += 3) {
+      microPos[i] = (Math.random() - 0.5) * 24;
+      microPos[i+1] = (Math.random() - 0.5) * 20;
+      microPos[i+2] = (Math.random() - 0.5) * 16;
+    }
+    microGeom.setAttribute('position', new THREE.BufferAttribute(microPos, 3));
+    const microMat = new THREE.PointsMaterial({ color: 0x00F0FF, size: 0.8, transparent: true, opacity: 0 });
+    const microParticles = new THREE.Points(microGeom, microMat);
+    macroGroup.add(microParticles);
+
+    // Remaining Tunnel Plates
+    const plate4 = createBackdrop(vaultTex, -1650, 380, 210, -5, 30);
+    const plate5 = createBackdrop(atriumTex, -2050, 440, 240, 0, 0);
+    const plate6 = createBackdrop(sanctumTex, -2500, 320, 180, 0, 0);
+
+    // -------------------------------------------------------------
+    // 5. Architectural Corridor Geometry
+    // -------------------------------------------------------------
+    const gridHelper = new THREE.GridHelper(3400, 85, 0x00F0FF, 0x0C1624);
+    gridHelper.position.set(0, -32, -1450);
+    scene.add(gridHelper);
+
+    // Ceiling Neon Runner Light Beams
+    const beamGeom = new THREE.BoxGeometry(1.5, 1.5, 3200);
+    const leftBeam = new THREE.Mesh(beamGeom, new THREE.MeshBasicMaterial({ color: 0x00F0FF }));
+    leftBeam.position.set(-60, 48, -1450);
+    scene.add(leftBeam);
+
+    const rightBeam = new THREE.Mesh(beamGeom, new THREE.MeshBasicMaterial({ color: 0xD4AF37 }));
+    rightBeam.position.set(60, 48, -1450);
+    scene.add(rightBeam);
+
+    // Parting 3D Portal Slabs
+    const slabGeom = new THREE.BoxGeometry(70, 140, 14);
+    const slabMat = new THREE.MeshStandardMaterial({ color: 0x090E16, roughness: 0.3, metalness: 0.85 });
+    const leftPortalSlab = new THREE.Mesh(slabGeom, slabMat);
+    leftPortalSlab.position.set(-35, 10, -300);
+    scene.add(leftPortalSlab);
+
+    const rightPortalSlab = new THREE.Mesh(slabGeom, slabMat);
+    rightPortalSlab.position.set(35, 10, -300);
+    scene.add(rightPortalSlab);
+
+    // Monolithic Pillars along Track
+    const pillarGeom = new THREE.BoxGeometry(18, 120, 18);
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x0D131D, roughness: 0.6 });
+    for (let i = 0; i < 14; i++) {
+      const z = -400 - i * 140;
+      const side = i % 2 === 0 ? -1 : 1;
+      const pillar = new THREE.Mesh(pillarGeom, pillarMat);
+      pillar.position.set(side * 75, 15, z);
+      scene.add(pillar);
+    }
+
+    // Zone 7: The Kinetic Assembly (THE PEAK)
+    const kineticGroup = new THREE.Group();
+    kineticGroup.position.set(0, 0, -2050);
+    scene.add(kineticGroup);
+
+    const louverGeom = new THREE.BoxGeometry(140, 6, 2);
+    const louverMat = new THREE.MeshStandardMaterial({ color: 0x121A26, metalness: 0.7, roughness: 0.2 });
+    const louvers = [];
+    for (let i = -5; i <= 5; i++) {
+      const louver = new THREE.Mesh(louverGeom, louverMat);
+      louver.position.set(0, i * 16, -10);
+      kineticGroup.add(louver);
+      louvers.push(louver);
+    }
+
+    const plateGeom = new THREE.CylinderGeometry(24, 24, 6, 32);
+    const plateMat = new THREE.MeshStandardMaterial({ color: 0x1E293B, metalness: 0.9, roughness: 0.1 });
+    const leftWeightPlate = new THREE.Mesh(plateGeom, plateMat);
+    leftWeightPlate.rotation.z = Math.PI / 2;
+    leftWeightPlate.position.set(-60, 0, 0);
+    kineticGroup.add(leftWeightPlate);
+
+    const rightWeightPlate = new THREE.Mesh(plateGeom, plateMat);
+    rightWeightPlate.rotation.z = Math.PI / 2;
+    rightWeightPlate.position.set(60, 0, 0);
+    kineticGroup.add(rightWeightPlate);
+
+    const barGeom = new THREE.CylinderGeometry(2.5, 2.5, 160, 16);
+    const olympicBar = new THREE.Mesh(barGeom, new THREE.MeshStandardMaterial({ color: 0xD4AF37, metalness: 1.0 }));
+    olympicBar.rotation.z = Math.PI / 2;
+    kineticGroup.add(olympicBar);
+
+    // Zone 8: 3D Black Titanium Keycard
+    const cardGroup = new THREE.Group();
+    cardGroup.position.set(0, -2, -2440);
+    scene.add(cardGroup);
+
+    const cardShape = new THREE.BoxGeometry(32, 20, 1.2);
+    const cardMat = new THREE.MeshStandardMaterial({ color: 0x0E141E, metalness: 0.95, roughness: 0.15 });
+    const titaniumCard = new THREE.Mesh(cardShape, cardMat);
+    cardGroup.add(titaniumCard);
+
+    const cardEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(cardShape),
+      new THREE.LineBasicMaterial({ color: 0xD4AF37, linewidth: 2 })
+    );
+    titaniumCard.add(cardEdge);
+
+    // Ambient Dust Motes
+    const particleCount = 650;
+    const particleGeom = new THREE.BufferGeometry();
+    const particlePositions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount * 3; i += 3) {
+      particlePositions[i] = (Math.random() - 0.5) * 280;
+      particlePositions[i + 1] = (Math.random() - 0.5) * 160;
+      particlePositions[i + 2] = -Math.random() * 2600;
+    }
+    particleGeom.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    const particles = new THREE.Points(particleGeom, new THREE.PointsMaterial({ color: 0x00F0FF, size: 2.2, transparent: true, opacity: 0.65 }));
+    scene.add(particles);
+
+    // -------------------------------------------------------------
+    // 6. Scroll & Pointer Tracking
+    // -------------------------------------------------------------
+    let scrollProgress = 0;
+    let smoothProgress = 0;
+    let mouseX = 0, mouseY = 0;
+    let targetMouseX = 0, targetMouseY = 0;
+
+    window.addEventListener('pointermove', (e) => {
+      targetMouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+      targetMouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+    });
+
+    window.addEventListener('scroll', () => {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      scrollProgress = Math.min(Math.max(window.scrollY / maxScroll, 0), 1);
+    }, { passive: true });
+
+    const secBtns = document.querySelectorAll('.knx-sec-btn');
+    secBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetPos = parseFloat(btn.getAttribute('data-pos'));
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        window.scrollTo({ top: targetPos * maxScroll, behavior: 'smooth' });
+        playSynth(480, 'triangle');
+      });
+    });
+
+    // -------------------------------------------------------------
+    // 7. Render Loop with High-Speed Surge & Sudden Ultra Slo-Mo Drop
+    // -------------------------------------------------------------
+    const hudZone = document.getElementById('hud-zone');
+    const hudSub = document.getElementById('hud-sub');
+    const telemZ = document.getElementById('telem-z');
+    const telemTime = document.getElementById('telem-time');
+    const telemPitch = document.getElementById('telem-pitch');
+    const telemRoll = document.getElementById('telem-roll');
+    const telemStatus = document.getElementById('telem-status-line');
+    const timeFreezeOverlay = document.getElementById('time-freeze-overlay');
+    const macroReticle = document.getElementById('macro-reticle');
+
+    const actCards = [
+      document.getElementById('act-1'),
+      document.getElementById('act-2'),
+      document.getElementById('act-3'),
+      document.getElementById('act-4'),
+      document.getElementById('act-5'),
+      document.getElementById('act-6'),
+      document.getElementById('act-7'),
+      document.getElementById('act-8')
+    ];
+
+    const zoneNames = [
+      "ZONE 01 // THE ATRIUM",
+      "ZONE 02 // PORTAL PENETRATION",
+      "ZONE 03 // THE CRUCIBLE CURVE",
+      "ZONE 04 // MAXIMUM VELOCITY SPRINT",
+      "THE DROP // ULTRA SLO-MO MACRO SWEAT",
+      "ZONE 06 // HYDROTHERMAL SANCTUM",
+      "ZONE 07 // THE ASSEMBLY (PEAK)",
+      "ZONE 08 // THE SANCTUM VAULT"
+    ];
+
+    let lastActiveAct = 0;
+    let inSloMoZone = false;
+
+    function render() {
+      requestAnimationFrame(render);
+
+      // Smooth Spring Lerp
+      smoothProgress += (scrollProgress - smoothProgress) * 0.068;
+      mouseX += (targetMouseX - mouseX) * 0.05;
+      mouseY += (targetMouseY - mouseY) * 0.05;
+
+      const targetZ = 50 - smoothProgress * 2480;
+      camera.position.z = targetZ;
+
+      let camX = 0, camY = 0, camRoll = 0, camPitch = 0, camYaw = 0;
+
+      // Check for Sudden Ultra Slo-Mo Drop Zone (Between 0.46 and 0.60)
+      if (smoothProgress >= 0.46 && smoothProgress <= 0.60) {
+        if (!inSloMoZone) {
+          inSloMoZone = true;
+          timeFreezeOverlay.classList.add('active');
+          macroReticle.classList.add('active');
+          playSloMoDropTone();
+        }
+
+        // Relative progress inside the Slo-Mo Drop window
+        const dropP = (smoothProgress - 0.46) / 0.14;
+
+        // Severe Time Dilation Readout
+        telemTime.innerHTML = `<span class="knx-time-warp-alert">0.001X // ULTRA SLO-MO</span>`;
+        telemStatus.innerHTML = `STATUS: <span style="color: #00F0FF; font-weight:800;">MACRO REFRACTION LOCK</span>`;
+
+        // Camera dollies and zooms in extreme macro onto the suspended droplet
+        camera.position.z = -1280 + Math.sin(dropP * Math.PI) * 14; // Extreme proximity!
+        camX = 0;
+        camY = -2.5 + Math.sin(dropP * Math.PI) * 0.8;
+        camera.fov = 42; // Telephoto macro lens zoom!
+        camera.updateProjectionMatrix();
+
+        // Droplet surface tension oscillation in zero-g
+        const t = Date.now() * 0.003;
+        dropletMesh.scale.set(
+          1 + Math.sin(t * 1.5) * 0.06,
+          1 + Math.cos(t * 1.8) * 0.08,
+          1 + Math.sin(t * 1.2) * 0.05
+        );
+        dropletMesh.rotation.y = dropP * Math.PI * 0.5 + mouseX * 0.3;
+
+        // Fade in macro photography backdrop and caustics
+        const alpha = Math.sin(dropP * Math.PI);
+        macroBackdropMat.opacity = alpha * 0.95;
+        causticRingMat.opacity = alpha * 0.85;
+        microMat.opacity = alpha * 0.7;
+        macroDropSpot.intensity = alpha * 14;
+
+      } else {
+        // Normal Time-Flow (Fast cinematic travel)
+        if (inSloMoZone) {
+          inSloMoZone = false;
+          timeFreezeOverlay.classList.remove('active');
+          macroReticle.classList.remove('active');
+          camera.fov = 65;
+          camera.updateProjectionMatrix();
+          macroBackdropMat.opacity = 0;
+          causticRingMat.opacity = 0;
+          microMat.opacity = 0;
+          macroDropSpot.intensity = 0;
+          playPopSnapTone();
+        }
+
+        telemTime.textContent = `1.000X NORMAL`;
+        telemStatus.innerHTML = `STATUS: <span class="knx-telem-val" style="color: #10B981;">3D VELOCITY RIG</span>`;
+
+        if (smoothProgress < 0.14) {
+          // Zone 1: Atrium Zoom-In
+          const p = smoothProgress / 0.14;
+          camX = Math.sin(p * Math.PI) * 12;
+          camY = 4 + Math.cos(p * Math.PI) * 4;
+          camPitch = -p * 0.06;
+        } else if (smoothProgress < 0.28) {
+          // Zone 2: Portal Penetration
+          const p = (smoothProgress - 0.14) / 0.14;
+          camX = 0; camY = 2;
+          leftPortalSlab.position.x = -35 - p * 60;
+          rightPortalSlab.position.x = 35 + p * 60;
+        } else if (smoothProgress < 0.40) {
+          // Zone 3: Crucible Banking
+          const p = (smoothProgress - 0.28) / 0.12;
+          camX = Math.sin(p * Math.PI) * 42;
+          camY = 8 - Math.sin(p * Math.PI) * 10;
+          camRoll = Math.sin(p * Math.PI) * 0.22; // 12° banking!
+          camYaw = -Math.sin(p * Math.PI) * 0.16;
+        } else if (smoothProgress < 0.46) {
+          // Zone 4: High-Speed Surge into the Drop!
+          const p = (smoothProgress - 0.40) / 0.06;
+          camX = -15 + p * 15;
+          camY = -18; // Floor tracking
+          camPitch = 0.15;
+          // FOV expands to 80 for speed sensation!
+          camera.fov = 65 + p * 18;
+          camera.updateProjectionMatrix();
+        } else if (smoothProgress > 0.60 && smoothProgress < 0.76) {
+          // Zone 6: Recovery Sanctum after the Drop
+          const p = (smoothProgress - 0.60) / 0.16;
+          camX = 14 + Math.sin(p * Math.PI) * 16;
+          camY = -8;
+          camRoll = -Math.sin(p * Math.PI) * 0.08;
+        } else if (smoothProgress >= 0.76 && smoothProgress < 0.92) {
+          // Zone 7: Peak Assembly Corkscrew
+          const p = (smoothProgress - 0.76) / 0.16;
+          camX = Math.sin(p * Math.PI * 2) * 26;
+          camY = Math.cos(p * Math.PI * 2) * 18;
+          camRoll = Math.sin(p * Math.PI * 2) * 0.26;
+          camPitch = Math.cos(p * Math.PI) * 0.1;
+
+          louvers.forEach((l, idx) => {
+            l.rotation.x = p * (Math.PI / 2);
+            l.position.z = Math.sin(p * Math.PI) * 20 * (idx % 2 === 0 ? 1 : -1);
+          });
+
+          leftWeightPlate.position.x = -60 + (1 - p) * 80;
+          rightWeightPlate.position.x = 60 - (1 - p) * 80;
+        } else if (smoothProgress >= 0.92) {
+          // Zone 8: Vault Landing & Macro Card Zoom
+          camX = 0; camY = -2; camPitch = 0; camRoll = 0;
+          titaniumCard.rotation.y = mouseX * 0.5 + Math.sin(Date.now() * 0.001) * 0.1;
+          titaniumCard.rotation.x = -mouseY * 0.4;
+        }
+      }
+
+      // Parallax Mouse Look-Around
+      camera.position.x = camX + mouseX * 14;
+      camera.position.y = camY - mouseY * 9;
+      camera.rotation.z = camRoll - mouseX * 0.04;
+      camera.rotation.x = camPitch - mouseY * 0.04;
+      camera.rotation.y = camYaw - mouseX * 0.06;
+
+      // Active Section Cards
+      const activeIdx = Math.min(Math.floor(smoothProgress * 8), 7);
+      if (activeIdx !== lastActiveAct) {
+        lastActiveAct = activeIdx;
+        hudZone.textContent = zoneNames[activeIdx];
+        secBtns.forEach((btn, idx) => btn.classList.toggle('active', idx === activeIdx));
+        actCards.forEach((card, idx) => card.classList.toggle('active', idx === activeIdx));
+      }
+
+      hudSub.textContent = `AZIMUTH: ${(smoothProgress * 360).toFixed(1)}° • VELOCITY: ${(Math.abs(scrollProgress - smoothProgress) * 540).toFixed(1)} M/S`;
+      telemZ.textContent = `${camera.position.z.toFixed(1)} M`;
+      telemPitch.textContent = `${(camera.rotation.x * 57.3).toFixed(1)}°`;
+      telemRoll.textContent = `${(camera.rotation.z * 57.3).toFixed(1)}°`;
+
+      renderer.render(scene, camera);
+    }
+
+    render();
+
+    // -------------------------------------------------------------
+    // Audio Synthesizer (Speed Whoosh, Bass Drop, Macro Chime)
+    // -------------------------------------------------------------
+    let audioCtx = null;
+    let isAudioOn = false;
+    const audioBtn = document.getElementById('audio-btn');
+    const audioLabel = document.getElementById('audio-label');
+
+    audioBtn.addEventListener('click', () => {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      isAudioOn = !isAudioOn;
+      audioBtn.classList.toggle('active', isAudioOn);
+      audioLabel.textContent = isAudioOn ? 'AUDIO: ACTIVE' : 'AUDIO: MUTED';
+      if (isAudioOn) playSynth(220, 'sine', 1.2);
+    });
+
+    function playSynth(freq, type = 'sine', duration = 0.5) {
+      if (!isAudioOn || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    // Sub-Bass Time Dilation Drop
+    function playSloMoDropTone() {
+      if (!isAudioOn || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(45, audioCtx.currentTime + 1.2);
+        gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.4);
+      } catch (e) {}
+    }
+
+    function playPopSnapTone() {
+      if (!isAudioOn || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(640, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(140, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      } catch (e) {}
+    }
+
+    // Modal
+    function openModal() {
+      document.getElementById('modal').classList.add('active');
+      playSynth(600, 'triangle');
+    }
+    function closeModal() {
+      document.getElementById('modal').classList.remove('active');
+    }
+    function handleApply(e) {
+      e.preventDefault();
+      alert("Application received. The Admissions Council will review your credential packet.");
+      closeModal();
+    }
+  </script>
+</body>
+</html>

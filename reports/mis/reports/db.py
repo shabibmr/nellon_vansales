@@ -13,7 +13,8 @@ hangs off `run_id` (ON DELETE CASCADE), so old runs can be dropped cleanly.
     tb_monthly         per-account net movement for each month (long format)
     statement_lines    Executive Summary / PL / BS lines in display order
     statement_values   amount per line per column (month or Total)
-    margin_lines       invoice-line margin rows
+    margin_invoices    one row per invoice (header): Zoho totals + sales, cost of sales, margin
+    margin_lines       one row per invoice line, with its own cost of sales (FK run_id + invoice_id -> margin_invoices)
     purchase_lines     bill / purchase-order line rows
     category_master    current ledger → PL/BS / category mapping
     cashflow_runs      one forecast pull (as-of date, opening cash, totals)
@@ -38,6 +39,20 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SCHEMA = [
+    """
+    CREATE TABLE IF NOT EXISTS organization (
+        organization_id   VARCHAR(32)  NOT NULL PRIMARY KEY,
+        name              VARCHAR(200) NOT NULL DEFAULT '',
+        currency_code     VARCHAR(8)   NOT NULL DEFAULT '',
+        currency_symbol   VARCHAR(16)  NOT NULL DEFAULT '',
+        fiscal_year_start_month VARCHAR(16) NOT NULL DEFAULT '',
+        time_zone         VARCHAR(64)  NOT NULL DEFAULT '',
+        date_format       VARCHAR(32)  NOT NULL DEFAULT '',
+        country           VARCHAR(64)  NOT NULL DEFAULT '',
+        raw               LONGTEXT     NOT NULL,
+        synced_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
     """
     CREATE TABLE IF NOT EXISTS report_runs (
         id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -112,6 +127,39 @@ SCHEMA = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
     """
+    CREATE TABLE IF NOT EXISTS margin_invoices (
+        run_id           BIGINT UNSIGNED NOT NULL,
+        invoice_id       VARCHAR(40)   NOT NULL,
+        invoice_number   VARCHAR(60)   NOT NULL DEFAULT '',
+        month            CHAR(7)       NOT NULL,
+        date             DATE          NULL,
+        due_date         DATE          NULL,
+        status           VARCHAR(30)   NOT NULL DEFAULT '',
+        customer_id      VARCHAR(40)   NOT NULL DEFAULT '',
+        customer_name    VARCHAR(255)  NOT NULL DEFAULT '',
+        salesperson_name VARCHAR(255)  NOT NULL DEFAULT '',
+        van              VARCHAR(255)  NOT NULL DEFAULT '',
+        currency_code    VARCHAR(10)   NOT NULL DEFAULT '',
+        exchange_rate    DECIMAL(18,6) NOT NULL DEFAULT 1,
+        sub_total        DECIMAL(18,2) NOT NULL DEFAULT 0,
+        discount_total   DECIMAL(18,2) NOT NULL DEFAULT 0,
+        tax_total        DECIMAL(18,2) NOT NULL DEFAULT 0,
+        total            DECIMAL(18,2) NOT NULL DEFAULT 0,
+        balance          DECIMAL(18,2) NOT NULL DEFAULT 0,
+        line_count       INT UNSIGNED  NOT NULL DEFAULT 0,
+        base_quantity    DECIMAL(18,4) NOT NULL DEFAULT 0,
+        net_sales        DECIMAL(18,2) NOT NULL DEFAULT 0,
+        cost_of_sales    DECIMAL(18,2) NOT NULL DEFAULT 0,
+        gross_margin     DECIMAL(18,2) NOT NULL DEFAULT 0,
+        flagged_lines    INT UNSIGNED  NOT NULL DEFAULT 0,
+        cost_source      VARCHAR(20)   NOT NULL DEFAULT '',
+        PRIMARY KEY (run_id, invoice_id),
+        KEY ix_mi_month (run_id, month),
+        KEY ix_mi_number (run_id, invoice_number),
+        CONSTRAINT fk_mi_run FOREIGN KEY (run_id) REFERENCES report_runs (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
     CREATE TABLE IF NOT EXISTS margin_lines (
         run_id           BIGINT UNSIGNED NOT NULL,
         line_no          INT UNSIGNED  NOT NULL,
@@ -135,12 +183,16 @@ SCHEMA = [
         invoice_discount DECIMAL(18,2) NOT NULL DEFAULT 0,
         net_sales        DECIMAL(18,2) NOT NULL DEFAULT 0,
         cost_rate        DECIMAL(18,4) NOT NULL DEFAULT 0,
-        cost             DECIMAL(18,2) NOT NULL DEFAULT 0,
+        cost_of_sales    DECIMAL(18,2) NOT NULL DEFAULT 0,
         gross_margin     DECIMAL(18,2) NOT NULL DEFAULT 0,
         flag             VARCHAR(255)  NOT NULL DEFAULT '',
+        cost_source      VARCHAR(20)   NOT NULL DEFAULT '',
         PRIMARY KEY (run_id, line_no),
         KEY ix_margin_month (run_id, month),
-        CONSTRAINT fk_ml_run FOREIGN KEY (run_id) REFERENCES report_runs (id) ON DELETE CASCADE
+        KEY ix_margin_invoice (run_id, invoice_id),
+        CONSTRAINT fk_ml_run FOREIGN KEY (run_id) REFERENCES report_runs (id) ON DELETE CASCADE,
+        CONSTRAINT fk_ml_invoice FOREIGN KEY (run_id, invoice_id)
+            REFERENCES margin_invoices (run_id, invoice_id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
     """
@@ -252,9 +304,18 @@ SCHEMA = [
 MARGIN_DB_COLUMNS = [
     "month", "date", "invoice_id", "invoice_number", "customer_name", "salesperson_name", "van",
     "item_id", "item_name", "sku", "unit", "quantity", "conversion_rate", "base_quantity", "rate",
-    "gross_amount", "line_discount", "invoice_discount", "net_sales", "cost_rate", "cost",
-    "gross_margin", "flag",
+    "gross_amount", "line_discount", "invoice_discount", "net_sales", "cost_rate", "cost_of_sales",
+    "gross_margin", "flag", "cost_source",
 ]
+MARGIN_INVOICE_DB_COLUMNS = [
+    "invoice_id", "invoice_number", "month", "date", "due_date", "status", "customer_id", "customer_name",
+    "salesperson_name", "van", "currency_code", "exchange_rate", "sub_total", "discount_total", "tax_total",
+    "total", "balance", "line_count", "base_quantity", "net_sales", "cost_of_sales", "gross_margin",
+    "flagged_lines", "cost_source",
+]
+# Report rows (CSV / JSON / UI) call it `cost`; the tables call it `cost_of_sales`.
+_ROW_KEY = {"cost_of_sales": "cost"}
+_DATE_COLUMNS = {"date", "due_date"}
 MARGIN_DIMENSIONS = {
     "item": "item_name",
     "customer": "customer_name",
@@ -330,7 +391,53 @@ def init_schema() -> str:
     with connect() as conn, conn.cursor() as cur:
         for ddl in SCHEMA:
             cur.execute(ddl)
+        _migrate_margin(cur)
     return name
+
+
+def _migrate_margin(cur: Any) -> None:
+    """Bring a pre-header database up to date, then give old runs their invoice header rows. Idempotent."""
+    cur.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='margin_lines'")
+    cols = {r["COLUMN_NAME"] for r in cur.fetchall()}
+    if "cost" in cols:
+        cur.execute("ALTER TABLE margin_lines CHANGE COLUMN cost cost_of_sales DECIMAL(18,2) NOT NULL DEFAULT 0")
+    if "cost_source" not in cols:
+        cur.execute("ALTER TABLE margin_lines ADD COLUMN cost_source VARCHAR(20) NOT NULL DEFAULT ''")
+    cur.execute("SHOW INDEX FROM margin_lines WHERE Key_name='ix_margin_invoice'")
+    if not cur.fetchall():
+        cur.execute("ALTER TABLE margin_lines ADD KEY ix_margin_invoice (run_id, invoice_id)")
+    cur.execute("""SELECT DISTINCT l.run_id FROM margin_lines l
+                   LEFT JOIN margin_invoices i ON i.run_id=l.run_id WHERE i.run_id IS NULL""")
+    for r in cur.fetchall():
+        _backfill_invoice_headers(cur, r["run_id"])
+    cur.execute("SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() "
+                "AND TABLE_NAME='margin_lines' AND CONSTRAINT_NAME='fk_ml_invoice'")
+    if not cur.fetchall():
+        cur.execute("""INSERT INTO margin_invoices (run_id, invoice_id, month)
+                       SELECT run_id, invoice_id, MIN(month) FROM margin_lines l
+                       WHERE NOT EXISTS (SELECT 1 FROM margin_invoices i
+                                         WHERE i.run_id=l.run_id AND i.invoice_id=l.invoice_id)
+                       GROUP BY run_id, invoice_id""")
+        cur.execute("ALTER TABLE margin_lines ADD CONSTRAINT fk_ml_invoice FOREIGN KEY (run_id, invoice_id) "
+                    "REFERENCES margin_invoices (run_id, invoice_id) ON DELETE CASCADE")
+
+
+def _backfill_invoice_headers(cur: Any, run_id: int) -> None:
+    """Header rows for a run saved before headers existed: sums of its lines (Zoho-only fields stay blank)."""
+    cur.execute(
+        """INSERT INTO margin_invoices
+             (run_id, invoice_id, invoice_number, month, date, customer_name, salesperson_name, van,
+              line_count, base_quantity, net_sales, cost_of_sales, gross_margin, flagged_lines, cost_source)
+           SELECT run_id, invoice_id, MAX(invoice_number), MIN(month), MIN(date), MAX(customer_name),
+                  MAX(salesperson_name), MAX(van), COUNT(*), SUM(base_quantity), SUM(net_sales),
+                  SUM(cost_of_sales), SUM(gross_margin), SUM(flag <> ''),
+                  CASE WHEN SUM(cost_source='booked')=COUNT(*) THEN 'booked'
+                       WHEN SUM(cost_source='purchase_rate')=COUNT(*) THEN 'purchase_rate'
+                       WHEN MAX(cost_source)='' THEN '' ELSE 'mixed' END
+           FROM margin_lines WHERE run_id=%s GROUP BY run_id, invoice_id""",
+        (run_id,),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -409,19 +516,40 @@ def save_financials_run(
     return run_id
 
 
-def save_margin_run(rows: list[dict[str, Any]], summary: dict[str, Any], *, source: str) -> int:
+def _db_value(r: dict[str, Any], col: str) -> Any:
+    v = r.get(_ROW_KEY.get(col, col))
+    if col in _DATE_COLUMNS:
+        return v or None
+    return "" if v is None else v
+
+
+def save_margin_run(rows: list[dict[str, Any]], summary: dict[str, Any], *, source: str,
+                    invoices: list[dict[str, Any]] | None = None) -> int:
+    """Store a margin run: invoice header rows in margin_invoices, line rows in margin_lines.
+
+    `invoices` (header rows) may be omitted for older JSON files; they are then rebuilt from the lines.
+    """
     months = sorted({r["month"] for r in rows if r.get("month")})
     cols = ", ".join(MARGIN_DB_COLUMNS)
     marks = ", ".join(["%s"] * (len(MARGIN_DB_COLUMNS) + 2))
+    icols = ", ".join(MARGIN_INVOICE_DB_COLUMNS)
+    imarks = ", ".join(["%s"] * (len(MARGIN_INVOICE_DB_COLUMNS) + 1))
     with connect() as conn, conn.cursor() as cur:
         run_id = _new_run(cur, "margin", summary, months, source)
+        if not invoices:  # headers are rebuilt from the lines below, so lines go in first
+            cur.execute("SET FOREIGN_KEY_CHECKS=0")
+        if invoices:
+            cur.executemany(
+                f"INSERT INTO margin_invoices (run_id, {icols}) VALUES ({imarks})",
+                [(run_id, *[_db_value(r, c) for c in MARGIN_INVOICE_DB_COLUMNS]) for r in invoices],
+            )
         cur.executemany(
             f"INSERT INTO margin_lines (run_id, line_no, {cols}) VALUES ({marks})",
-            [
-                (run_id, n, *[(r.get(c) or None) if c == "date" else r.get(c, "") for c in MARGIN_DB_COLUMNS])
-                for n, r in enumerate(rows, 1)
-            ],
+            [(run_id, n, *[_db_value(r, c) for c in MARGIN_DB_COLUMNS]) for n, r in enumerate(rows, 1)],
         )
+        if not invoices:
+            _backfill_invoice_headers(cur, run_id)
+            cur.execute("SET FOREIGN_KEY_CHECKS=1")
     return run_id
 
 
@@ -566,6 +694,37 @@ def _clean(row: dict[str, Any]) -> dict[str, Any]:
     return {k: _jsonable(v) for k, v in row.items()}
 
 
+# ---------------------------------------------------------------------------
+# Organization (company profile synced from Zoho; the web UI reads currency/name from here)
+# ---------------------------------------------------------------------------
+
+_ORG_FIELDS = ("name", "currency_code", "currency_symbol", "fiscal_year_start_month",
+               "time_zone", "date_format", "country")
+
+
+def save_organization(org: dict[str, Any]) -> None:
+    vals = [str(org.get(k) or "")[:200] for k in _ORG_FIELDS]
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""INSERT INTO organization (organization_id, {", ".join(_ORG_FIELDS)}, raw)
+                VALUES (%s, {", ".join(["%s"] * len(_ORG_FIELDS))}, %s)
+                ON DUPLICATE KEY UPDATE {", ".join(f"{k}=VALUES({k})" for k in _ORG_FIELDS)}, raw=VALUES(raw)""",
+            (str(org["organization_id"]), *vals, json.dumps(org)),
+        )
+
+
+def get_organization() -> dict[str, Any]:
+    """The most recently synced organization, or {} if `org-sync` has not run."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT organization_id, {', '.join(_ORG_FIELDS)}, synced_at FROM organization "
+                    "ORDER BY synced_at DESC LIMIT 1")
+        r = cur.fetchone()
+    if not r:
+        return {}
+    r["synced_at"] = str(r["synced_at"])
+    return r
+
+
 def list_runs(kind: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
     sql = """SELECT id, kind, organization_name, currency_code, from_date, to_date, fiscal_year_start,
                     months, source, created_at
@@ -652,7 +811,7 @@ def get_margin_pivot(run_id: int, dimension: str, measure: str) -> dict[str, Any
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             f"""SELECT {col} AS dim, month,
-                       SUM(net_sales) AS net_sales, SUM(cost) AS cost,
+                       SUM(net_sales) AS net_sales, SUM(cost_of_sales) AS cost,
                        SUM(gross_margin) AS gross_margin, SUM(base_quantity) AS base_quantity,
                        SUM(flag <> '') AS flagged
                 FROM margin_lines WHERE run_id=%s GROUP BY {col}, month""",
@@ -695,15 +854,13 @@ def get_margin_detail(run_id: int, view: str) -> dict[str, Any]:
     """Margin as a flat list: one row per invoice line (`line`) or per invoice (`invoice`)."""
     if view == "line":
         sql = """SELECT date, invoice_number, customer_name, item_name, unit, quantity, rate,
-                        net_sales, cost_rate, cost, gross_margin, flag
+                        net_sales, cost_rate, cost_of_sales AS cost, gross_margin, flag, cost_source
                  FROM margin_lines WHERE run_id=%s ORDER BY date, invoice_number, line_no"""
     elif view == "invoice":
-        sql = """SELECT MIN(date) AS date, invoice_number, MAX(customer_name) AS customer_name,
-                        MAX(salesperson_name) AS salesperson_name, COUNT(*) AS line_count,
-                        SUM(net_sales) AS net_sales, SUM(cost) AS cost, SUM(gross_margin) AS gross_margin,
-                        SUM(flag <> '') AS flagged
-                 FROM margin_lines WHERE run_id=%s GROUP BY invoice_id, invoice_number
-                 ORDER BY MIN(date), invoice_number"""
+        sql = """SELECT date, invoice_number, status, customer_name, salesperson_name, line_count,
+                        net_sales, cost_of_sales AS cost, gross_margin, flagged_lines AS flagged,
+                        cost_source, total, balance
+                 FROM margin_invoices WHERE run_id=%s ORDER BY date, invoice_number"""
     else:
         raise ValueError("view must be line or invoice")
     with connect() as conn, conn.cursor() as cur:

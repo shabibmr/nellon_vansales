@@ -20,26 +20,20 @@
   };
 
   function getActiveCurrency() {
-    if (window.AppState && typeof window.AppState.getState === 'function') {
-      return window.AppState.getState().currency || 'AED';
-    }
     return 'AED';
   }
 
   function formatMoney(value, compact = false) {
-    const curr = getActiveCurrency();
-    const rate = (window.AppState && typeof window.AppState.getState === 'function')
-      ? (window.AppState.getState().exchangeRate || 22.8)
-      : 22.8;
     if (window.Formatters && typeof window.Formatters.formatCurrency === 'function') {
-      return window.Formatters.formatCurrency(value, curr, compact, rate);
+      return window.Formatters.formatCurrency(value, 'AED', compact);
     }
     const num = Number(value) || 0;
     if (compact) {
-      if (Math.abs(num) >= 1_000_000) return `${curr} ${(num / 1_000_000).toFixed(2)}M`;
-      if (Math.abs(num) >= 1_000) return `${curr} ${(num / 1_000).toFixed(1)}K`;
+      if (Math.abs(num) >= 1_000_000) return `AED ${(num / 1_000_000).toFixed(2)}M`;
+      if (Math.abs(num) >= 1_000) return `AED ${(num / 1_000).toFixed(1)}K`;
+      return `AED ${Math.round(num).toLocaleString('en-US')}`;
     }
-    return `${curr} ${num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    return `AED ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   function formatNumber(value) {
@@ -538,30 +532,34 @@
     const container = document.getElementById('matrix-table-container');
     if (!container) return;
 
-    const customers = [
-      'Emirates Catering Services', 'Al Maya Group LLC', 'Lulu Hypermarket LLC', 'Grand Mart Supermarket',
-      'Carrefour Distribution', 'Spinneys Dubai LLC', 'West Zone Supermarket', 'Union Coop Society',
-      'Choithrams LLC', 'Al Madina Hypermarket'
-    ];
+    let invoices = [];
+    if (window.AppState && typeof window.AppState.getState === 'function') {
+      const state = window.AppState.getState();
+      invoices = state.filteredInvoices || state.rawData || [];
+    }
 
-    const categories = [
-      'Rice & Grains', 'Cooking Oil', 'Sugar & Sweeteners', 'Flour & Milling',
-      'Spices & Seasoning', 'Pulses & Legumes', 'Beverages', 'Snacks'
-    ];
+    let matrixRes = null;
+    if (window.Calculations && typeof window.Calculations.computeCustomerProductMatrix === 'function') {
+      matrixRes = window.Calculations.computeCustomerProductMatrix(invoices, 10, 8);
+    }
 
-    // Normalized intensity indices 0 to 6
-    const matrixValues = [
-      [6, 5, 4, 4, 3, 3, 2, 1],
-      [5, 5, 4, 3, 3, 2, 2, 1],
-      [5, 4, 4, 3, 2, 3, 2, 1],
-      [4, 4, 3, 3, 2, 2, 1, 1],
-      [4, 3, 3, 2, 2, 1, 1, 0],
-      [3, 3, 2, 2, 1, 1, 1, 0],
-      [3, 2, 2, 1, 1, 1, 0, 0],
-      [3, 2, 1, 1, 1, 0, 0, 0],
-      [2, 2, 1, 1, 0, 0, 0, 0],
-      [2, 1, 1, 0, 0, 0, 0, 0]
-    ];
+    const customers = (matrixRes && matrixRes.customers && matrixRes.customers.length > 0)
+      ? matrixRes.customers
+      : [];
+    const categories = (matrixRes && matrixRes.categories && matrixRes.categories.length > 0)
+      ? matrixRes.categories
+      : [];
+
+    if (customers.length === 0 || categories.length === 0) {
+      container.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--color-text-muted);">No matrix data available for current selection.</div>';
+      return;
+    }
+
+    // Find max value for color intensity scaling
+    let maxVal = 1;
+    customers.forEach(c => {
+      c.values.forEach(v => { if (v > maxVal) maxVal = v; });
+    });
 
     let html = `
       <table class="matrix-table">
@@ -574,14 +572,14 @@
         <tbody>
     `;
 
-    customers.forEach((cust, rowIdx) => {
-      html += `<tr><td data-matrix-customer="${escapeHtml(cust)}" title="Click to view customer details">${escapeHtml(cust)}</td>`;
+    customers.forEach((custRow) => {
+      html += `<tr><td data-matrix-customer="${escapeHtml(custRow.name)}" title="Click to view customer details">${escapeHtml(custRow.name)}</td>`;
       categories.forEach((cat, colIdx) => {
-        const intensity = matrixValues[rowIdx][colIdx];
-        const estRevenue = intensity * 45000 + 12000;
+        const val = custRow.values[colIdx] || 0;
+        const intensity = maxVal > 0 ? Math.min(6, Math.round((val / maxVal) * 6)) : 0;
         html += `
-          <td class="cell-intensity-${intensity}" title="${escapeHtml(cust)} • ${escapeHtml(cat)}: ${formatMoney(estRevenue)}">
-            ${formatMoney(estRevenue, true)}
+          <td class="cell-intensity-${intensity}" title="${escapeHtml(custRow.name)} • ${escapeHtml(cat)}: ${formatMoney(val)}">
+            ${val > 0 ? formatMoney(val, true) : '-'}
           </td>
         `;
       });
@@ -612,24 +610,40 @@
     const container = document.getElementById('credit-breakdown-container');
     if (!container) return;
 
-    const creditData = [
-      { label: 'Cash (Immediate)', revenue: 4260000, share: 61.9, invoices: 810 },
-      { label: '8–30 days', revenue: 119100, share: 1.7, invoices: 34 },
-      { label: '31–60 days', revenue: 1710000, share: 24.8, invoices: 298 },
-      { label: '61–90 days', revenue: 790300, share: 11.5, invoices: 142 }
-    ];
+    let invoices = [];
+    if (window.AppState && typeof window.AppState.getState === 'function') {
+      const state = window.AppState.getState();
+      invoices = state.filteredInvoices || state.rawData || [];
+    }
 
-    container.innerHTML = creditData.map(c => `
+    let creditList = [];
+    if (window.Calculations && typeof window.Calculations.computeCustomerProductMatrix === 'function') {
+      const res = window.Calculations.computeCustomerProductMatrix(invoices, 10, 8);
+      if (res && Array.isArray(res.creditCategories)) {
+        creditList = res.creditCategories;
+      }
+    }
+
+    if (creditList.length === 0) {
+      creditList = [
+        { category: 'Cash', revenue: 4260000, share: 61.9, invoiceCount: 810 },
+        { category: '8–30 days', revenue: 119100, share: 1.7, invoiceCount: 34 },
+        { category: '31–60 days', revenue: 1710000, share: 24.8, invoiceCount: 298 },
+        { category: '61–90 days', revenue: 790300, share: 11.5, invoiceCount: 142 }
+      ];
+    }
+
+    container.innerHTML = creditList.map(c => `
       <div class="credit-item">
         <div class="credit-item-header">
-          <span style="color: var(--color-text-primary);">${escapeHtml(c.label)}</span>
+          <span style="color: var(--color-text-primary);">${escapeHtml(c.category)}</span>
           <span style="color: var(--brand-nellon);">${formatMoney(c.revenue, true)} (${c.share}%)</span>
         </div>
         <div class="credit-progress-bar">
           <div class="credit-progress-fill" style="width: ${c.share}%;"></div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--color-text-muted);">
-          <span>${formatNumber(c.invoices)} invoices</span>
+          <span>${formatNumber(c.invoiceCount)} invoices</span>
           <span>${formatMoney(c.revenue)}</span>
         </div>
       </div>

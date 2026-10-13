@@ -11,7 +11,7 @@
   const DEFAULT_FILTERS = {
     status: 'all',
     brand: 'all',
-    fy: 'FY26-27',
+    fy: 'FY 2026',
     period: 'Full FY',
     month: 'all',
     comparePeriod: false
@@ -113,7 +113,7 @@
 
     if (selStatus) selStatus.value = 'All';
     if (selBrand) selBrand.value = 'All';
-    if (selFY) selFY.value = 'FY26-27';
+    if (selFY) selFY.value = 'FY 2026';
     if (selPeriod) selPeriod.value = 'Full FY';
     if (selMonth) selMonth.value = 'All';
     if (checkCompare) checkCompare.checked = false;
@@ -140,6 +140,10 @@
     }
     if (selFY && filters.fy) {
       selFY.value = filters.fy;
+      const headerBadge = document.getElementById('header-period-badge');
+      if (headerBadge) {
+        headerBadge.textContent = `${filters.fy} (Jan - Dec)`;
+      }
     }
     if (selPeriod && filters.period) {
       selPeriod.value = filters.period;
@@ -277,16 +281,26 @@
       }
     }
 
-    // 3. Fiscal Years
-    const fySet = new Set(['FY26-27', 'FY25-26']);
-    invoices.forEach(inv => { if (inv.fiscalYear) fySet.add(inv.fiscalYear); });
+    // 3. Fiscal Years (Jan - Dec)
+    const fySet = new Set(['FY 2026', 'FY 2025']);
+    invoices.forEach(inv => {
+      if (inv.fiscalYear) {
+        if (inv.fiscalYear === 'FY26-27' || inv.fiscalYear.includes('26')) fySet.add('FY 2026');
+        else if (inv.fiscalYear === 'FY25-26' || inv.fiscalYear.includes('25')) fySet.add('FY 2025');
+        else fySet.add(inv.fiscalYear);
+      } else if (inv.date) {
+        fySet.add(`FY ${inv.date.substring(0, 4)}`);
+      }
+    });
     const fys = Array.from(fySet).sort().reverse();
     const selFY = document.getElementById('filter-fy');
     if (selFY) {
       const currentVal = selFY.value;
-      selFY.innerHTML = fys.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+      selFY.innerHTML = fys.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)} (Jan - Dec)</option>`).join('');
       if (fys.includes(currentVal)) {
         selFY.value = currentVal;
+      } else if (fys.length > 0) {
+        selFY.value = fys[0];
       }
     }
 

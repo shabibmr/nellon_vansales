@@ -199,9 +199,9 @@
       'Unassigned'
     );
 
-    // Fiscal Year & Month
+    // Fiscal Year & Month (Financial Period: Jan to Dec)
     const dateParts = dateStr.split('-');
-    let fiscalYear = 'FY26-27';
+    let fiscalYear = 'FY 2026';
     let monthKey = '2026-06';
     let monthLabel = 'Jun 2026';
 
@@ -211,12 +211,7 @@
       monthKey = `${y}-${String(m).padStart(2, '0')}`;
       const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       monthLabel = `${mNames[m - 1] || 'Jun'} ${y}`;
-
-      if (y === 2025 || (y === 2026 && m <= 3)) {
-        fiscalYear = 'FY25-26';
-      } else {
-        fiscalYear = 'FY26-27';
-      }
+      fiscalYear = `FY ${y}`;
     }
 
     // Line items (if invoice row itself contains line item fields)

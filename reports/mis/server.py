@@ -1,12 +1,14 @@
 """Local web editor for the Category Master (stdlib only).
 
     GET  / or /reports           → web/reports.html (report viewer; reads MariaDB only)
+    GET  /sales-dashboard        → loader page; the dashboard files come from /api/sales-dashboard/* (JWT only)
     GET  /cashflow               → web/cashflow.html (day seeker; reads the local cache, no Zoho)
     GET  /categories             → web/category_master.html (Category Master editor)
 
 All page/asset/API URLs in the web files are relative, so the app also works
 behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /assets/<name>.css|.js|.svg → web/assets/ (shared styles, page scripts, icon sprite)
+    GET  /api/org                → organization profile (name, currency) stored by `main.py org-sync`
     GET  /api/runs?kind=         → stored runs
     GET  /api/statement?run_id=&name=   Executive Summary | PL | BS
     GET  /api/tb?run_id=         → monthly trial balance
@@ -34,8 +36,10 @@ MIS_AUTH_DISABLED=1 skips auth for local development only.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
+from pathlib import Path
 from datetime import date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -52,6 +56,10 @@ from reports.excel_export import build_workbook
 WEB_PAGE = BASE_DIR / "web" / "category_master.html"
 REPORTS_PAGE = BASE_DIR / "web" / "reports.html"
 CASHFLOW_PAGE = BASE_DIR / "web" / "cashflow.html"
+DASHBOARD_PAGE = BASE_DIR / "web" / "sales_dashboard.html"
+# The Sales Dashboard sources live in the repo's extras/ folder; override for a deploy that moves them.
+DASHBOARD_DIR = Path(os.getenv("MIS_DASHBOARD_DIR") or BASE_DIR.parents[1] / "extras" / "Dashboard")
+_DASHBOARD_FILE = re.compile(r"^(index\.html|(css|js)/[A-Za-z0-9_.-]+\.(css|js))$")
 ASSETS_DIR = BASE_DIR / "web" / "assets"
 ASSET_TYPES = {
     ".css": "text/css; charset=utf-8",
@@ -73,6 +81,16 @@ def _export(rows: list[dict[str, Any]], summary: dict[str, Any]) -> None:
     )
 
 
+def _org_currency(fallback: str) -> str:
+    """Currency code stored by `org-sync`; the snapshot's value if the DB has none."""
+    try:
+        if db.enabled():
+            return db.get_organization().get("currency_code") or fallback
+    except Exception:  # DB down: the cached snapshot is still good enough for a subtitle
+        pass
+    return fallback
+
+
 def _payload(*, refresh: bool = False) -> dict[str, Any]:
     snapshot = load_coa_snapshot(refresh=refresh)
     rows = cm.build_category_master(snapshot, cm.load_overrides(OVERRIDES_CSV))
@@ -80,8 +98,7 @@ def _payload(*, refresh: bool = False) -> dict[str, Any]:
     _export(rows, summary)
     return {
         "can_edit": web_auth.enabled(),
-        "organization_name": snapshot.get("organization_name", ""),
-        "currency_code": snapshot.get("currency_code", ""),
+        "currency_code": _org_currency(snapshot.get("currency_code", "")),
         "snapshot_time": datetime.fromtimestamp(COA_SNAPSHOT.stat().st_mtime).isoformat(timespec="seconds"),
         "categories": cm.CATEGORIES,
         "summary": summary,
@@ -219,6 +236,18 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/cashflow", "/cashflow.html"):
             self._send(HTTPStatus.OK, CASHFLOW_PAGE.read_bytes(), "text/html; charset=utf-8")
             return
+        if path in ("/sales-dashboard", "/sales_dashboard.html"):
+            self._send(HTTPStatus.OK, DASHBOARD_PAGE.read_bytes(), "text/html; charset=utf-8")
+            return
+        if path.startswith("/api/sales-dashboard/"):  # JWT already verified above
+            name = path[len("/api/sales-dashboard/"):]
+            f = (DASHBOARD_DIR / name).resolve()
+            if _DASHBOARD_FILE.match(name) and f.is_file() and DASHBOARD_DIR.resolve() in f.parents:
+                ctype = {".html": "text/html", ".css": "text/css", ".js": "text/javascript"}[f.suffix]
+                self._send(HTTPStatus.OK, f.read_bytes(), f"{ctype}; charset=utf-8")
+            else:
+                self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
         if path.startswith("/assets/"):
             name = path[len("/assets/"):]
             asset = ASSETS_DIR / name
@@ -233,9 +262,14 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.OK, _payload())
             elif path == "/api/cashflow":
                 as_of = date.fromisoformat(q["as_of"]) if q.get("as_of") else date.today()
-                self._json(HTTPStatus.OK, cf.load_offline(COA_SNAPSHOT, OUT_DIR / "cache", as_of))
+                payload = cf.load_offline(COA_SNAPSHOT, OUT_DIR / "cache", as_of)
+                payload["currency"] = _org_currency(payload.get("currency", ""))
+                payload.pop("organization", None)
+                self._json(HTTPStatus.OK, payload)
             elif path.startswith("/api/") and not db.enabled():
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "MariaDB not configured (MIS_DB_* in .env)"})
+            elif path == "/api/org":
+                self._json(HTTPStatus.OK, db.get_organization())
             elif path == "/api/runs":
                 kind = q.get("kind") or None
                 if kind not in (None, "financials", "margin", "purchases"):

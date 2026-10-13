@@ -18,47 +18,20 @@
   const DEFAULT_EXCHANGE_RATE_INR = 22.8;
 
   /**
-   * Format currency values into standard or compact business representations.
+   * Format currency values strictly in AED.
    * @param {number} amount - The numeric monetary value in AED
-   * @param {string} currency - 'AED' or 'INR' (default 'AED')
+   * @param {string} currency - Ignored or 'AED' (strictly AED)
    * @param {boolean} compact - Whether to abbreviate (e.g. 6.88M, 783.3K) (default true)
-   * @param {number} customRate - Optional custom exchange rate for INR (default 22.8)
-   * @returns {string} Formatted currency string
+   * @returns {string} Formatted currency string in AED
    */
-  function formatCurrency(amount, currency = 'AED', compact = true, customRate = DEFAULT_EXCHANGE_RATE_INR) {
+  function formatCurrency(amount, currency = 'AED', compact = true) {
     if (amount === null || amount === undefined || isNaN(amount)) {
-      return currency === 'INR' ? '₹0' : `${currency} 0`;
+      return 'AED 0';
     }
 
     const isNegative = amount < 0;
     const absVal = Math.abs(amount);
 
-    if (currency === 'INR') {
-      const inrVal = absVal * (customRate || DEFAULT_EXCHANGE_RATE_INR);
-      let formatted = '';
-
-      if (compact) {
-        // Indian Numbering System: Crore (10^7), Lakh (10^5), Thousand (10^3)
-        if (inrVal >= 1e7) {
-          formatted = (inrVal / 1e7).toFixed(2) + 'Cr';
-        } else if (inrVal >= 1e5) {
-          formatted = (inrVal / 1e5).toFixed(2) + 'L';
-        } else if (inrVal >= 1e3) {
-          formatted = (inrVal / 1e3).toFixed(1) + 'K';
-        } else {
-          formatted = Math.round(inrVal).toLocaleString('en-IN');
-        }
-      } else {
-        formatted = inrVal.toLocaleString('en-IN', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        });
-      }
-
-      return `${isNegative ? '-' : ''}INR ${formatted}`;
-    }
-
-    // Default AED / International formatting
     let formatted = '';
     if (compact) {
       if (absVal >= 1e6) {

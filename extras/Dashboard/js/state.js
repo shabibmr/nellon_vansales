@@ -21,9 +21,9 @@
   const DEFAULT_FILTERS = {
     status: 'all', // 'all' | 'Open' | 'Overdue' | 'Partially Paid' | 'Closed'
     brand: 'all', // 'all' | 'Nellon' | 'Non-Branded' | 'Raviya'
-    fy: 'FY26-27', // 'FY26-27' | 'FY25-26'
-    period: 'Full FY', // 'Full FY' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
-    month: 'all', // 'all' | 'Apr 2026' | 'May 2026' | 'Jun 2026' | 'Jul 2026'
+    fy: 'FY 2026', // 'FY 2026' | 'FY 2025' (Jan - Dec)
+    period: 'Full FY', // 'Full FY' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'H1' | 'H2'
+    month: 'all', // 'all' | 'Jan 2026' .. 'Dec 2026'
     comparePeriod: false, // boolean
     search: '' // search term string
   };
@@ -33,7 +33,7 @@
     filteredInvoices: [],
     previousPeriodInvoices: [],
     filters: { ...DEFAULT_FILTERS },
-    currency: 'AED', // 'AED' | 'INR'
+    currency: 'AED', // Strictly AED
     exchangeRate: 22.8,
     activeTab: 'customers', // 'customers' | 'categories' | 'poc' | 'products' | 'matrix' | 'invoices'
     selectedCustomer: null,
@@ -115,10 +115,24 @@
     const searchLower = (search || '').trim().toLowerCase();
 
     state.filteredInvoices = rawData.filter((inv) => {
-      // 1. Fiscal Year
-      if (fy && fy !== 'all') {
-        const invFY = inv.fiscalYear || (inv.date && inv.date.startsWith('2025') ? 'FY25-26' : 'FY26-27');
-        if (invFY !== fy) return false;
+      // 1. Fiscal Year (Jan to Dec)
+      if (fy && fy !== 'all' && fy !== 'All') {
+        const invYear = inv.date ? inv.date.substring(0, 4) : '2026';
+        const invFY = inv.fiscalYear || `FY ${invYear}`;
+
+        const normalizeFY = (val) => {
+          if (!val) return '';
+          const s = String(val).trim();
+          if (s.includes('2026') || s === 'FY26-27' || s === 'FY26') return '2026';
+          if (s.includes('2025') || s === 'FY25-26' || s === 'FY25') return '2025';
+          return s;
+        };
+
+        const targetNorm = normalizeFY(fy);
+        const invNorm = normalizeFY(invFY) || normalizeFY(invYear);
+        if (targetNorm && invNorm && targetNorm !== invNorm) {
+          return false;
+        }
       }
 
       // 2. Invoice Status
@@ -142,32 +156,43 @@
         if (!matchesBrand) return false;
       }
 
-      // 4. Period (Quarter / Full FY)
-      if (period && period !== 'Full FY') {
+      // 4. Period (Financial Period: Jan to Dec)
+      // Q1: Jan - Mar (1..3)
+      // Q2: Apr - Jun (4..6)
+      // Q3: Jul - Sep (7..9)
+      // Q4: Oct - Dec (10..12)
+      // H1: Jan - Jun (1..6)
+      // H2: Jul - Dec (7..12)
+      if (period && period !== 'Full FY' && period !== 'all' && period !== 'All') {
         const dStr = inv.date || '';
         const mNum = parseInt(dStr.split('-')[1], 10);
         if (!isNaN(mNum)) {
-          if (period === 'Q1' && !(mNum >= 4 && mNum <= 6)) return false;
-          if (period === 'Q2' && !(mNum >= 7 && mNum <= 9)) return false;
-          if (period === 'Q3' && !(mNum >= 10 && mNum <= 12)) return false;
-          if (period === 'Q4' && !(mNum >= 1 && mNum <= 3)) return false;
+          if ((period === 'Q1' || period.startsWith('Q1')) && !(mNum >= 1 && mNum <= 3)) return false;
+          if ((period === 'Q2' || period.startsWith('Q2')) && !(mNum >= 4 && mNum <= 6)) return false;
+          if ((period === 'Q3' || period.startsWith('Q3')) && !(mNum >= 7 && mNum <= 9)) return false;
+          if ((period === 'Q4' || period.startsWith('Q4')) && !(mNum >= 10 && mNum <= 12)) return false;
+          if ((period === 'H1' || period.startsWith('H1')) && !(mNum >= 1 && mNum <= 6)) return false;
+          if ((period === 'H2' || period.startsWith('H2')) && !(mNum >= 7 && mNum <= 12)) return false;
         }
       }
 
-      // 5. Month
-      if (month && month !== 'all') {
+      // 5. Month (Jan to Dec)
+      if (month && month !== 'all' && month !== 'All') {
         const label = inv.monthLabel || '';
         const key = inv.monthKey || '';
-        if (label !== month && key !== month) {
-          // If month format is e.g. "Apr 2026" or "2026-04"
-          const dStr = inv.date || '';
-          if (!dStr.includes(month.replace(' ', '-').substring(0, 7))) {
-            const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const parts = dStr.split('-');
-            const invLabel = parts.length >= 2 ? `${mNames[parseInt(parts[1], 10) - 1]} ${parts[0]}` : '';
-            if (invLabel !== month) return false;
-          }
-        }
+        const dStr = inv.date || '';
+        const parts = dStr.split('-');
+        const mNum = parts.length >= 2 ? parseInt(parts[1], 10) : NaN;
+        const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const mName = !isNaN(mNum) ? mNames[mNum - 1] : '';
+        const invFullMonth = !isNaN(mNum) ? `${mName} ${parts[0]}` : '';
+
+        const match = label === month ||
+                      key === month ||
+                      mName === month ||
+                      invFullMonth === month ||
+                      (month.startsWith(mName) && (!month.includes(' ') || month.includes(parts[0])));
+        if (!match) return false;
       }
 
       // 6. Search
@@ -222,14 +247,8 @@
       dataChanged = true;
     }
 
-    if (updates.currency !== undefined && updates.currency !== state.currency) {
-      state.currency = updates.currency;
-      currencyChanged = true;
-    }
-
-    if (updates.exchangeRate !== undefined) {
-      state.exchangeRate = updates.exchangeRate;
-      currencyChanged = true;
+    if (updates.currency !== undefined && updates.currency !== 'AED') {
+      state.currency = 'AED';
     }
 
     if (updates.activeTab !== undefined && updates.activeTab !== state.activeTab) {

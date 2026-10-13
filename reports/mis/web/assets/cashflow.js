@@ -338,7 +338,7 @@
       if (list) list.push(event);
       else byDate.set(event.date, [event]);
     }
-    const org = data.organization ? `${data.organization} · ` : "";
+    const org = "";
     const live = data.mode === "zoho";
     $("subtitle").textContent = live
       ? `${org}${data.currency} · as of ${pretty(data.as_of)}`

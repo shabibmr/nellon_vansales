@@ -51,7 +51,7 @@
   function setData(payload) {
     data = payload;
     $("subtitle").textContent =
-      `${payload.organization_name} · ${payload.currency_code} · snapshot ${payload.snapshot_time.replace("T", " ")}`;
+      `${payload.currency_code} · snapshot ${payload.snapshot_time.replace("T", " ")}`;
     const cats = [...new Set(payload.rows.map((r) => r.category).filter(Boolean))].sort();
     const cur = $("fCat").value;
     $("fCat").innerHTML = `<option value="">All categories</option>` +

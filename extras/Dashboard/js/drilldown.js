@@ -10,26 +10,20 @@
   let lastFocusedElement = null;
 
   function getActiveCurrency() {
-    if (window.AppState && typeof window.AppState.getState === 'function') {
-      return window.AppState.getState().currency || 'AED';
-    }
     return 'AED';
   }
 
   function formatMoney(value, compact = false) {
-    const curr = getActiveCurrency();
-    const rate = (window.AppState && typeof window.AppState.getState === 'function')
-      ? (window.AppState.getState().exchangeRate || 22.8)
-      : 22.8;
     if (window.Formatters && typeof window.Formatters.formatCurrency === 'function') {
-      return window.Formatters.formatCurrency(value, curr, compact, rate);
+      return window.Formatters.formatCurrency(value, 'AED', compact);
     }
     const num = Number(value) || 0;
     if (compact) {
-      if (Math.abs(num) >= 1_000_000) return `${curr} ${(num / 1_000_000).toFixed(2)}M`;
-      if (Math.abs(num) >= 1_000) return `${curr} ${(num / 1_000).toFixed(1)}K`;
+      if (Math.abs(num) >= 1_000_000) return `AED ${(num / 1_000_000).toFixed(2)}M`;
+      if (Math.abs(num) >= 1_000) return `AED ${(num / 1_000).toFixed(1)}K`;
+      return `AED ${Math.round(num).toLocaleString('en-US')}`;
     }
-    return `${curr} ${num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    return `AED ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   function formatNumber(value) {

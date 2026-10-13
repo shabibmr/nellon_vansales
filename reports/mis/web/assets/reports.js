@@ -44,6 +44,7 @@
     tbFilter: "",
     detailFilter: "",
     detailData: null,
+    org: null,
     tbData: null,
   };
   const initialRun = Number(qs.get("run")) || null;
@@ -172,12 +173,24 @@
     if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
   }
 
+  // "2026-04-01" → "Apr-26"; the period reads "Apr-26 – Sep-26", or one month when both ends fall in it.
+  const monthYear = (iso) => {
+    const m = /^(\d{4})-(\d{2})/.exec(iso || "");
+    return m ? `${MON[Number(m[2]) - 1]}-${m[1].slice(2)}` : "";
+  };
+  const periodLabel = (from, to) => {
+    const a = monthYear(from), b = monthYear(to);
+    return !a || a === b ? a || b : `${a} – ${b}`;
+  };
+
   function setHead(run, title) {
-    $("org").textContent = run ? run.organization_name : title;
-    $("reportTitle").textContent = run
-      ? `${title}, ${run.from_date} to ${run.to_date}, currency ${run.currency_code || "not set"}`
-      : "";
-    document.title = `${title} · Nellon MIS`;
+    $("reportTitle").textContent = title;
+    $("period").textContent = run ? periodLabel(run.from_date, run.to_date) : "";
+    const ccy = (state.org && state.org.currency_code) || (run && run.currency_code) || "";
+    $("ccy").textContent = ccy;
+    $("ccy").hidden = !ccy;
+    $("orgName").textContent = (state.org && state.org.name) || "";
+    document.title = `${title} · ${(state.org && state.org.name) || "MIS"}`;
   }
 
   // ---------------------------------------------------------------- reports
@@ -374,8 +387,12 @@
 
   renderTabs();
   skeleton();
-  Promise.all(["financials", "margin", "purchases"].map((k) => api(`api/runs?kind=${k}`)))
-    .then(([fin, mar, pur]) => {
+  Promise.all([
+    ...["financials", "margin", "purchases"].map((k) => api(`api/runs?kind=${k}`)),
+    api("api/org").catch(() => ({})),  // company profile from MariaDB; the page still works without it
+  ])
+    .then(([fin, mar, pur, org]) => {
+      state.org = org && org.name ? org : null;
       state.runs = { financials: fin.runs, margin: mar.runs, purchases: pur.runs };
       for (const k of Object.keys(state.runs)) {
         if (initialRun && state.runs[k].some((r) => r.id === initialRun)) state.selected[k] = initialRun;

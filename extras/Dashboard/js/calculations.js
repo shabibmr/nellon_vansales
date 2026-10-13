@@ -698,9 +698,64 @@
     };
   }
 
+  /**
+   * Compute weekly activity (revenue and invoice counts) dynamically from invoices.
+   */
+  function computeWeeklyActivity(invoices = []) {
+    if (!Array.isArray(invoices) || invoices.length === 0) {
+      return {
+        labels: ['W1 (Apr)', 'W2 (Apr)', 'W3 (May)', 'W4 (May)', 'W5 (Jun)', 'W6 (Jun)', 'W7 (Jul)', 'W8 (Jul)'],
+        revenues: [0, 0, 0, 0, 0, 0, 0, 0],
+        invoices: [0, 0, 0, 0, 0, 0, 0, 0]
+      };
+    }
+
+    const sorted = [...invoices].filter(inv => inv.date).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (sorted.length === 0) {
+      return {
+        labels: ['W1 (Apr)', 'W2 (Apr)', 'W3 (May)', 'W4 (May)', 'W5 (Jun)', 'W6 (Jun)', 'W7 (Jul)', 'W8 (Jul)'],
+        revenues: [0, 0, 0, 0, 0, 0, 0, 0],
+        invoices: [0, 0, 0, 0, 0, 0, 0, 0]
+      };
+    }
+
+    const minTime = new Date(sorted[0].date).getTime();
+    const maxTime = new Date(sorted[sorted.length - 1].date).getTime();
+    const span = Math.max(86400000 * 7, maxTime - minTime);
+    const numBuckets = 8;
+    const bucketDuration = span / numBuckets;
+
+    const revenues = new Array(numBuckets).fill(0);
+    const invCounts = new Array(numBuckets).fill(0);
+    const labels = [];
+    const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    for (let b = 0; b < numBuckets; b++) {
+      const bDate = new Date(minTime + b * bucketDuration);
+      const mStr = mNames[bDate.getMonth()] || '';
+      labels.push(`W${b + 1} (${mStr})`);
+    }
+
+    sorted.forEach(inv => {
+      const t = new Date(inv.date).getTime();
+      let bIdx = Math.floor((t - minTime) / bucketDuration);
+      if (bIdx >= numBuckets) bIdx = numBuckets - 1;
+      if (bIdx < 0) bIdx = 0;
+      revenues[bIdx] += getInvoiceTotal(inv);
+      invCounts[bIdx]++;
+    });
+
+    return {
+      labels,
+      revenues: revenues.map(r => Math.round(r * 100) / 100),
+      invoices: invCounts
+    };
+  }
+
   return {
     getInvoiceTotal,
     computeKPIs,
+    calculateKPIs: computeKPIs,
     computeBrandBreakdown,
     computeStatusBreakdown,
     computeMonthlyTrend,
@@ -709,6 +764,7 @@
     computePOCMetrics,
     computeCustomerProductMatrix,
     computeASPTrend,
-    computePeriodComparison
+    computePeriodComparison,
+    computeWeeklyActivity
   };
 });

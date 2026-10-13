@@ -42,18 +42,22 @@ def get_latest_status():
         print(f"Error reading CSV {latest_csv}: {e}")
 
     total_ok = sum(1 for r in rows if r.get("status") == "OK")
+    total_warn = sum(1 for r in rows if r.get("status") == "WARN")
     total_skip = sum(1 for r in rows if r.get("status") == "SKIP")
     total_fail = sum(1 for r in rows if r.get("status") == "FAIL")
-    total_applied = sum(float(r.get("amount_applied") or 0) for r in rows if r.get("status") == "OK")
+    total_applied = sum(float(r.get("amount_applied") or 0) for r in rows if r.get("status") in ("OK", "WARN"))
     start_time = rows[0].get("timestamp") if rows else None
+    end_time = rows[-1].get("timestamp") if rows else None
 
     return {
         "rows": rows,
         "totalOk": total_ok,
+        "totalWarn": total_warn,
         "totalSkip": total_skip,
         "totalFail": total_fail,
         "totalApplied": round(total_applied, 2),
         "startTimeIso": start_time,
+        "endTimeIso": end_time,
         "logFile": os.path.basename(latest_csv),
     }
 

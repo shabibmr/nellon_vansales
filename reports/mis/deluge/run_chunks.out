@@ -1,0 +1,13 @@
+423 invoices, 11 chunks, resuming at chunk 1
+chunk 1/11 SMR-INV-00038..KGT-IN-066200: trial=false updated=40 skipped=0 failed=0
+chunk 2/11 KGT-IN-066201..SMR-INV-00048: trial=false updated=40 skipped=0 failed=0
+chunk 3/11 YNS-INV-00007..KGT-IN-066240: trial=false updated=40 skipped=0 failed=0
+chunk 4/11 KGT-IN-066241..KGT-IN-066253: trial=false updated=40 skipped=0 failed=0
+chunk 5/11 KGT-IN-066255..KGT-IN-066277: trial=false updated=40 skipped=0 failed=0
+chunk 6/11 SMR-INV-00098..SMR-INV-00104: trial=false updated=40 skipped=0 failed=0
+chunk 7/11 SMR-INV-00112..KGT-IN-066304: trial=false updated=40 skipped=0 failed=0
+chunk 8/11 KGT-IN-066305..YNS-INV-00069: trial=false updated=40 skipped=0 failed=0
+chunk 9/11 YNS-INV-00057..KGT-IN-066337: trial=false updated=40 skipped=0 failed=0
+chunk 10/11 KGT-IN-066338..KGT-IN-066362: trial=false updated=40 skipped=0 failed=0
+chunk 11/11 KGT-IN-066363..SMR-INV-00146: trial=false updated=23 skipped=0 failed=0
+ALL DONE; full-range script restored

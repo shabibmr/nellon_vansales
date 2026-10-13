@@ -143,3 +143,22 @@ class ZohoClient:
                 f"{endpoint} failed: HTTP {resp.status_code} code={body.get('code')} msg={body.get('message')}"
             )
         return body
+
+    def delete(self, endpoint: str, params: dict[str, Any] | None = None, timeout: int = 120) -> dict:
+        params = dict(params or {})
+        params["organization_id"] = self.org_id
+        url = f"{API_BASE}{endpoint}"
+        resp = self.session.delete(url, params=params, timeout=timeout)
+        if resp.status_code == 401:
+            self._authenticate(force=True)
+            resp = self.session.delete(url, params=params, timeout=timeout)
+        try:
+            body = resp.json()
+        except Exception as exc:
+            raise RuntimeError(f"{endpoint} returned non-JSON HTTP {resp.status_code}: {resp.text[:300]}") from exc
+        if resp.status_code != 200 or body.get("code") not in (0, None):
+            raise RuntimeError(
+                f"{endpoint} failed: HTTP {resp.status_code} code={body.get('code')} msg={body.get('message')}"
+            )
+        return body
+

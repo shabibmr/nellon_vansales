@@ -1,7 +1,7 @@
 /**
  * Koyson Sales Dashboard - Main Application Orchestrator
  * Bootstraps Zoho service, data service, state subscriptions, KPI count-up animations,
- * currency switcher (AED/INR), refresh control, theme toggle, month snapshot panel,
+ * currency display (AED), refresh control, theme toggle, month snapshot panel,
  * ASP SKU selector, and sidebar interactions.
  * (Note: Per user requirement, upload modal/button handling is excluded.)
  * Attaches to: window.DashboardApp
@@ -11,26 +11,20 @@
   'use strict';
 
   function getActiveCurrency() {
-    if (window.AppState && typeof window.AppState.getState === 'function') {
-      return window.AppState.getState().currency || 'AED';
-    }
     return 'AED';
   }
 
   function formatMoney(value, compact = false) {
-    const curr = getActiveCurrency();
-    const rate = (window.AppState && typeof window.AppState.getState === 'function')
-      ? (window.AppState.getState().exchangeRate || 22.8)
-      : 22.8;
     if (window.Formatters && typeof window.Formatters.formatCurrency === 'function') {
-      return window.Formatters.formatCurrency(value, curr, compact, rate);
+      return window.Formatters.formatCurrency(value, 'AED', compact);
     }
     const num = Number(value) || 0;
     if (compact) {
-      if (Math.abs(num) >= 1_000_000) return `${curr} ${(num / 1_000_000).toFixed(2)}M`;
-      if (Math.abs(num) >= 1_000) return `${curr} ${(num / 1_000).toFixed(1)}K`;
+      if (Math.abs(num) >= 1_000_000) return `AED ${(num / 1_000_000).toFixed(2)}M`;
+      if (Math.abs(num) >= 1_000) return `AED ${(num / 1_000).toFixed(1)}K`;
+      return `AED ${Math.round(num).toLocaleString('en-US')}`;
     }
-    return `${curr} ${num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    return `AED ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   function formatNumber(value) {
@@ -194,54 +188,17 @@
   }
 
   /**
-   * 2. CURRENCY SWITCHER (AED vs INR)
+   * 2. CURRENCY DISPLAY (Strictly AED)
    */
   function initCurrencySwitcher() {
-    const btnAED = document.getElementById('btn-currency-aed');
-    const btnINR = document.getElementById('btn-currency-inr');
     const switchContainer = document.querySelector('.currency-switch');
-
-    // Asynchronously fetch live rate (Zoho Books settings or Open Exchange API)
-    if (window.ZohoService && typeof window.ZohoService.fetchExchangeRate === 'function') {
-      window.ZohoService.fetchExchangeRate('INR')
-        .then((rateInfo) => {
-          if (rateInfo && rateInfo.rate) {
-            if (window.AppState && typeof window.AppState.setState === 'function') {
-              window.AppState.setState({ exchangeRate: rateInfo.rate });
-            }
-            if (switchContainer) {
-              switchContainer.setAttribute('title', `1 AED = ${rateInfo.rate.toFixed(2)} INR (${rateInfo.source})`);
-            }
-            if (getActiveCurrency() === 'INR') {
-              refreshDashboardViews();
-            }
-          }
-        })
-        .catch((err) => {
-          console.warn('Live FX rate fetch error:', err);
-        });
+    if (switchContainer) {
+      switchContainer.setAttribute('title', 'Operating Currency: AED');
     }
 
-    function setCurrency(curr) {
-      if (btnAED && btnINR) {
-        if (curr === 'AED') {
-          btnAED.classList.add('active');
-          btnINR.classList.remove('active');
-        } else {
-          btnINR.classList.add('active');
-          btnAED.classList.remove('active');
-        }
-      }
-
-      if (window.AppState && typeof window.AppState.setState === 'function') {
-        window.AppState.setState({ currency: curr });
-      }
-
-      refreshDashboardViews();
+    if (window.AppState && typeof window.AppState.setState === 'function') {
+      window.AppState.setState({ currency: 'AED' });
     }
-
-    if (btnAED) btnAED.addEventListener('click', () => setCurrency('AED'));
-    if (btnINR) btnINR.addEventListener('click', () => setCurrency('INR'));
   }
 
   /**

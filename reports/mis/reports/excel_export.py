@@ -38,8 +38,17 @@ class Sheet:
     first_header: str = "Particulars"
 
 
+def _mon(iso: str) -> str:
+    y, m = str(iso)[:4], int(str(iso)[5:7])
+    return f"{_MONTH_ABBR[m - 1]}-{y[2:]}"
+
+
+_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
 def _period(run: dict[str, Any]) -> str:
-    return f"{run['from_date']} to {run['to_date']} · Currency ({run.get('currency_code') or '-'})"
+    a, b = _mon(run["from_date"]), _mon(run["to_date"])
+    return f"{a if a == b else f'{a} – {b}'} · {run.get('currency_code') or '-'}"
 
 
 def _statement_sheets(run: dict[str, Any]) -> list[Sheet]:
@@ -47,7 +56,7 @@ def _statement_sheets(run: dict[str, Any]) -> list[Sheet]:
     for name, title in STATEMENT_SHEETS:
         data = db.get_statement(run["id"], name)
         sheets.append(
-            Sheet(name, run["organization_name"], f"{title} · {_period(run)}", data["columns"],
+            Sheet(name, title, _period(run), data["columns"],
                   [Line(ln["label"], ln["kind"], ln["values"]) for ln in data["lines"]])
         )
     return sheets
@@ -75,8 +84,8 @@ def _trial_balance_sheet(run: dict[str, Any]) -> Sheet:
             lines.append(Line(label, "sub", vals(r)))
         grand = {c: round(grand[c] + sub[c], 2) for c in columns}
     lines.append(Line("Total (Dr + / Cr −, should be 0)", "check", grand))
-    return Sheet("Trial Balance", run["organization_name"],
-                 f"Monthly Trial Balance · {_period(run)} · Dr + / Cr −", columns, lines, "Account")
+    return Sheet("Trial Balance", "Monthly Trial Balance",
+                 f"{_period(run)} · Dr + / Cr −", columns, lines, "Account")
 
 
 def _matching_run(kind: str, fin: dict[str, Any], run_id: int | None) -> dict[str, Any] | None:
@@ -109,8 +118,8 @@ def _pivot_sheets(run: dict[str, Any], prefix: str, dims: list[tuple[str, str]],
             lines += [Line(r["label"], kind, r["values"]) for r in data["rows"]]
             lines.append(Line(f"Total {label}", "pct" if measure == "gm_pct" else "total", data["total"]))
         name = prefix if prefix == "Purchases" else f"{prefix} by {dim_label}"
-        sheets.append(Sheet(name, run["organization_name"],
-                            f"{prefix} by {dim_label} · {_period(run)} · run #{run['id']}", columns, lines, dim_label))
+        sheets.append(Sheet(name, f"{prefix} by {dim_label}",
+                            f"{_period(run)} · run #{run['id']}", columns, lines, dim_label))
     return sheets
 
 

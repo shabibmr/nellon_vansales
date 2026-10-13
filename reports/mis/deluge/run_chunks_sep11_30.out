@@ -1,0 +1,24 @@
+1103 invoices, 34 chunks, resuming at chunk 1
+chunk 1/34 KGT-IN-065645..MNS-INV-00059: trial=false updated=33 skipped=0 failed=0
+chunk 2/34 KGT-IN-066372..SMR-INV-00173: trial=false updated=33 skipped=0 failed=0
+chunk 3/34 MNS-INV-00069..SMR-INV-00177: trial=false updated=33 skipped=0 failed=0
+chunk 4/34 SMR-INV-00178..YNS-INV-00110: trial=false updated=33 skipped=0 failed=0
+chunk 5/34 SMR-INV-00203..YNS-INV-00126: trial=false updated=33 skipped=0 failed=0
+chunk 6/34 SMR-INV-00188..KGT-IN-066423: trial=false updated=33 skipped=0 failed=0
+chunk 7/34 KGT-IN-066424..YNS-INV-00129: trial=false updated=33 skipped=0 failed=0
+chunk 8/34 YNS-INV-00130..YNS-INV-00137: trial=false updated=33 skipped=0 failed=0
+chunk 9/34 KGT-IN-066469..SMR-INV-00235: trial=false updated=33 skipped=0 failed=0
+chunk 10/34 SMR-INV-00236..SMR-INV-00241: trial=false updated=33 skipped=0 failed=0
+chunk 11/34 YNS-INV-00149..KGT-IN-066502: trial=false updated=33 skipped=0 failed=0
+chunk 12/34 KGT-IN-066504..MNS-INV-00115: trial=false updated=33 skipped=0 failed=0
+chunk 13/34 SMR-INV-00265..YNS-INV-00173: trial=false updated=33 skipped=0 failed=0
+chunk 14/34 MNS-INV-00117..KGT-IN-066542: trial=false updated=33 skipped=0 failed=0
+chunk 15/34 KGT-IN-066543..YNS-INV-00191: trial=false updated=33 skipped=0 failed=0
+chunk 16/34 SMR-INV-00304..KGT-IN-066558: trial=false updated=33 skipped=0 failed=0
+chunk 17/34 KGT-IN-066559..MNS-INV-00140: trial=false updated=33 skipped=0 failed=0
+chunk 18/34 MNS-INV-00135..SMR-INV-00335: trial=false updated=33 skipped=0 failed=0
+chunk 19/34 KGT-IN-066574..KGT-IN-066592: trial=false updated=33 skipped=0 failed=0
+chunk 20/34 KGT-IN-066593..MNS-INV-00151: trial=false updated=33 skipped=0 failed=0
+chunk 21/34 SMR-INV-00340..KGT-IN-066636: trial=false updated=33 skipped=0 failed=0
+chunk 22/34 MNS-INV-00156..YNS-INV-00218: trial=false updated=33 skipped=0 failed=0
+chunk 23/34 MNS-INV-00154..YNS-INV-00237: trial=false updated=33 skipped=0 failed=0

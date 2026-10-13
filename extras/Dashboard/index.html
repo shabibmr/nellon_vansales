@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Koyson Sales Dashboard | FY26-27</title>
+  <title>Koyson Sales Dashboard | FY 2026 (Jan - Dec)</title>
   <meta name="description" content="Koyson Sales Intelligence & Zoho Books Analytics Dashboard">
 
   <!-- Application Stylesheets -->
@@ -33,7 +33,7 @@
 
           <div class="header-title-group">
             <h1 class="header-title">Executive Analytics</h1>
-            <span class="badge-fy" id="header-period-badge">FY26-27</span>
+            <span class="badge-fy" id="header-period-badge">FY 2026 (Jan - Dec)</span>
           </div>
 
           <div class="source-indicator" id="header-source-indicator" title="Data Source">
@@ -43,10 +43,9 @@
         </div>
 
         <div class="header-right">
-          <!-- Currency Switcher -->
-          <div class="currency-switch" role="group" aria-label="Currency Selector">
-            <button type="button" class="currency-btn active" id="btn-currency-aed" data-currency="AED">AED</button>
-            <button type="button" class="currency-btn" id="btn-currency-inr" data-currency="INR">INR</button>
+          <!-- Currency Indicator -->
+          <div class="currency-switch" role="status" aria-label="Operating Currency" title="Currency: AED">
+            <span class="currency-btn active" id="btn-currency-aed" style="cursor: default; user-select: none;">AED</span>
           </div>
 
                     <!-- Theme Toggle -->
@@ -116,8 +115,8 @@
           <div class="filter-item">
             <label for="filter-fy" class="filter-label">FY:</label>
             <select id="filter-fy" class="filter-select">
-              <option value="FY26-27" selected>FY26-27</option>
-              <option value="FY25-26">FY25-26</option>
+              <option value="FY 2026" selected>FY 2026 (Jan - Dec)</option>
+              <option value="FY 2025">FY 2025 (Jan - Dec)</option>
             </select>
           </div>
 
@@ -125,11 +124,13 @@
           <div class="filter-item">
             <label for="filter-period" class="filter-label">Period:</label>
             <select id="filter-period" class="filter-select">
-              <option value="Full FY" selected>Full FY</option>
-              <option value="Q1">Q1</option>
-              <option value="Q2">Q2</option>
-              <option value="Q3">Q3</option>
-              <option value="Q4">Q4</option>
+              <option value="Full FY" selected>Full Year (Jan - Dec)</option>
+              <option value="Q1">Q1 (Jan - Mar)</option>
+              <option value="Q2">Q2 (Apr - Jun)</option>
+              <option value="Q3">Q3 (Jul - Sep)</option>
+              <option value="Q4">Q4 (Oct - Dec)</option>
+              <option value="H1">H1 (Jan - Jun)</option>
+              <option value="H2">H2 (Jul - Dec)</option>
             </select>
           </div>
 
@@ -138,12 +139,18 @@
             <label for="filter-month" class="filter-label">Month:</label>
             <select id="filter-month" class="filter-select">
               <option value="All" selected>All Months</option>
+              <option value="Jan 2026">Jan 2026</option>
+              <option value="Feb 2026">Feb 2026</option>
+              <option value="Mar 2026">Mar 2026</option>
               <option value="Apr 2026">Apr 2026</option>
               <option value="May 2026">May 2026</option>
               <option value="Jun 2026">Jun 2026</option>
               <option value="Jul 2026">Jul 2026</option>
               <option value="Aug 2026">Aug 2026</option>
               <option value="Sep 2026">Sep 2026</option>
+              <option value="Oct 2026">Oct 2026</option>
+              <option value="Nov 2026">Nov 2026</option>
+              <option value="Dec 2026">Dec 2026</option>
             </select>
           </div>
 
@@ -160,6 +167,9 @@
           </button>
         </div>
       </section>
+
+      <!-- Active Filter Badges Bar -->
+      <div id="active-filter-badges-bar"></div>
 
       <!-- ====================================================================
            Main Dashboard Content
@@ -703,7 +713,7 @@
             <div class="hover-card-body">
               <div class="hover-metric">
                 <span class="metric-label">Cadence</span>
-                <span class="metric-val">6 Months (H1)</span>
+                <span class="metric-val">Jan - Dec (12M)</span>
               </div>
               <div class="hover-metric">
                 <span class="metric-label">Weekly Vol.</span>
