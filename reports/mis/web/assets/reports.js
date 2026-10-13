@@ -16,13 +16,29 @@
     { id: "pl", label: "Profit & Loss", kind: "financials", statement: "PL" },
     { id: "bs", label: "Balance Sheet", kind: "financials", statement: "BS" },
     { id: "tb", label: "Trial Balance", kind: "financials" },
+    { id: "margin", label: "Margin", kind: "margin", api: "api/margin", pivot: true },
+    { id: "purchases", label: "Purchases", kind: "purchases", api: "api/purchases", pivot: true },
   ];
+
+  // Pivot tabs (margin, purchases): rows = chosen dimension, columns = months + Total.
+  const PIVOTS = {
+    margin: {
+      dims: [["item", "Item"], ["customer", "Customer"], ["salesperson", "Salesperson"], ["van", "Van"]],
+      measures: [["net_sales", "Net sales"], ["cost", "Cost"], ["gross_margin", "Gross margin"],
+        ["gm_pct", "GM %"], ["base_quantity", "Base quantity"]],
+    },
+    purchases: {
+      dims: [["vendor", "Vendor"], ["item", "Item"], ["kind", "Bills / POs"]],
+      measures: [["amount", "Amount"], ["quantity", "Quantity"], ["documents", "Documents"]],
+    },
+  };
 
   const qs = new URLSearchParams(location.search);
   const state = {
     tab: TABS.some((t) => t.id === qs.get("tab")) ? qs.get("tab") : "exec",
-    runs: { financials: [] },
-    selected: { financials: null },
+    runs: { financials: [], margin: [], purchases: [] },
+    selected: { financials: null, margin: null, purchases: null },
+    pivot: { margin: { dim: "item", measure: "net_sales" }, purchases: { dim: "vendor", measure: "amount" } },
     tbFilter: "",
     tbData: null,
   };
@@ -74,7 +90,7 @@
 
   function syncUrl() {
     const p = new URLSearchParams({ tab: state.tab });
-    if (initialRun && state.selected.financials === initialRun) p.set("run", initialRun);
+    if (initialRun && state.selected[tab().kind] === initialRun) p.set("run", initialRun);
     history.replaceState(null, "", `?${p}`);
   }
 
@@ -87,9 +103,10 @@
   }
 
   function pickRun() {
-    const runs = state.runs.financials;
+    const kind = tab().kind;
+    const runs = state.runs[kind];
     if (!runs.length) return false;
-    if (!runs.some((r) => r.id === state.selected.financials)) state.selected.financials = runs[0].id;
+    if (!runs.some((r) => r.id === state.selected[kind])) state.selected[kind] = runs[0].id;
     return true;
   }
 
@@ -117,7 +134,23 @@
                   <input class="input" id="tbq" type="search" autocomplete="off"
                          placeholder="Account, code or category" value="${esc(state.tbFilter)}"></span></label>`;
     }
+    if (t.pivot) {
+      const cfg = PIVOTS[t.id], cur = state.pivot[t.id];
+      const opts = (list, sel) => list.map(([v, l]) =>
+        `<option value="${v}"${v === sel ? " selected" : ""}>${esc(l)}</option>`).join("");
+      const runs = state.runs[t.kind];
+      html = `<label class="field"><span>Run</span><select class="input" id="pvRun">${runs.map((r) =>
+        `<option value="${r.id}"${r.id === state.selected[t.kind] ? " selected" : ""}>` +
+        `#${r.id} · ${esc(r.from_date)} to ${esc(r.to_date)}</option>`).join("")}</select></label>
+        <label class="field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
+        <label class="field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`;
+    }
     $("toolbar").innerHTML = html;
+    if ($("pvRun")) {
+      $("pvRun").onchange = (e) => { state.selected[t.kind] = Number(e.target.value); load(); };
+      $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
+      $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
+    }
     if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
   }
 
@@ -150,6 +183,22 @@
         `</tr>`;
     }).join("");
     view(`<table class="data">${headRow("Particulars", cols, "Total")}<tbody>${body}</tbody></table>`);
+  }
+
+  function renderPivot(data, t) {
+    if (!data.rows.length) {
+      stateView("database", "Nothing in this run", "This run has no lines.");
+      return;
+    }
+    const pct = data.measure === "gm_pct";
+    const cols = data.columns;
+    const body = data.rows.map((r) =>
+      `<tr><td>${esc(r.label)}${r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : ""}</td>` +
+      cols.map((c) => numCell(r.values[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`).join("");
+    const foot = `<tr class="total"><td>Total</td>` +
+      cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`;
+    const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
+    view(`<table class="data">${headRow(dimLabel, cols, "Total")}<tbody>${body}${foot}</tbody></table>`);
   }
 
   function renderTb(data) {
@@ -210,8 +259,11 @@
       stateView(
         "database",
         "No report runs saved yet",
-        "Run <code>main.py financials --from-date … --to-date …</code>, or import a saved trial balance " +
-          "with <code>main.py db-load --tb-json …</code>.",
+        t.kind === "financials"
+          ? "Run <code>main.py financials --from-date … --to-date …</code>, or import a saved trial balance " +
+            "with <code>main.py db-load --tb-json …</code>."
+          : `Run <code>main.py ${t.kind === "margin" ? "margin" : "purchases"} --from-date … --to-date …</code>, ` +
+            `or import a saved file with <code>main.py db-load --${t.kind}-json …</code>.`,
       );
       return;
     }
@@ -220,7 +272,10 @@
     setHead(runOf(t.kind), t.label);
     skeleton();
     try {
-      if (t.statement) {
+      if (t.pivot) {
+        const cur = state.pivot[t.id];
+        renderPivot(await api(`${t.api}?run_id=${runId}&dim=${cur.dim}&measure=${cur.measure}`), t);
+      } else if (t.statement) {
         renderStatement(await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`));
       } else {
         state.tbData = await api(`api/tb?run_id=${runId}`);
@@ -253,10 +308,12 @@
 
   renderTabs();
   skeleton();
-  api("api/runs?kind=financials")
-    .then((fin) => {
-      state.runs.financials = fin.runs;
-      if (initialRun && fin.runs.some((r) => r.id === initialRun)) state.selected.financials = initialRun;
+  Promise.all(["financials", "margin", "purchases"].map((k) => api(`api/runs?kind=${k}`)))
+    .then(([fin, mar, pur]) => {
+      state.runs = { financials: fin.runs, margin: mar.runs, purchases: pur.runs };
+      for (const k of Object.keys(state.runs)) {
+        if (initialRun && state.runs[k].some((r) => r.id === initialRun)) state.selected[k] = initialRun;
+      }
       load();
     })
     .catch((e) => stateView("error", "Could not reach the report database", esc(e.message), "error"));

@@ -8,12 +8,13 @@ Every `financials` / `margin` run is stored as a `report_runs` row; its data
 hangs off `run_id` (ON DELETE CASCADE), so old runs can be dropped cleanly.
 `category_master` holds the current mapping (upserted).
 
-    report_runs        one row per run (kind = financials | margin)
+    report_runs        one row per run (kind = financials | margin | purchases)
     tb_accounts        monthly TB per account: opening, period Dr/Cr, movement, closing
     tb_monthly         per-account net movement for each month (long format)
     statement_lines    Executive Summary / PL / BS lines in display order
     statement_values   amount per line per column (month or Total)
     margin_lines       invoice-line margin rows
+    purchase_lines     bill / purchase-order line rows
     category_master    current ledger → PL/BS / category mapping
 
 The web viewer reads only from here — it never calls Zoho.
@@ -139,6 +140,29 @@ SCHEMA = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
     """
+    CREATE TABLE IF NOT EXISTS purchase_lines (
+        run_id      BIGINT UNSIGNED NOT NULL,
+        line_no     INT UNSIGNED  NOT NULL,
+        month       CHAR(7)       NOT NULL,
+        date        DATE          NULL,
+        kind        VARCHAR(20)   NOT NULL DEFAULT '',
+        number      VARCHAR(60)   NOT NULL DEFAULT '',
+        vendor_name VARCHAR(255)  NOT NULL DEFAULT '',
+        status      VARCHAR(40)   NOT NULL DEFAULT '',
+        item_id     VARCHAR(40)   NOT NULL DEFAULT '',
+        item_name   VARCHAR(255)  NOT NULL DEFAULT '',
+        sku         VARCHAR(100)  NOT NULL DEFAULT '',
+        unit        VARCHAR(40)   NOT NULL DEFAULT '',
+        quantity    DECIMAL(18,4) NOT NULL DEFAULT 0,
+        rate        DECIMAL(18,4) NOT NULL DEFAULT 0,
+        amount      DECIMAL(18,2) NOT NULL DEFAULT 0,
+        doc_id      VARCHAR(40)   NOT NULL DEFAULT '',
+        PRIMARY KEY (run_id, line_no),
+        KEY ix_purchase_month (run_id, month),
+        CONSTRAINT fk_pl_run FOREIGN KEY (run_id) REFERENCES report_runs (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
     CREATE TABLE IF NOT EXISTS category_master (
         account_id          VARCHAR(40)   NOT NULL PRIMARY KEY,
         account_code        VARCHAR(40)   NOT NULL DEFAULT '',
@@ -172,6 +196,12 @@ MARGIN_DIMENSIONS = {
     "salesperson": "salesperson_name",
     "van": "van",
 }
+PURCHASE_DB_COLUMNS = [
+    "month", "date", "kind", "number", "vendor_name", "status", "item_id", "item_name", "sku", "unit",
+    "quantity", "rate", "amount", "doc_id",
+]
+PURCHASE_DIMENSIONS = {"vendor": "vendor_name", "item": "item_name", "kind": "kind"}
+PURCHASE_MEASURES = {"amount", "quantity", "documents"}
 MARGIN_MEASURES = {"net_sales", "cost", "gross_margin", "base_quantity", "gm_pct"}
 
 CATEGORY_DB_COLUMNS = [
@@ -324,6 +354,22 @@ def save_margin_run(rows: list[dict[str, Any]], summary: dict[str, Any], *, sour
             f"INSERT INTO margin_lines (run_id, line_no, {cols}) VALUES ({marks})",
             [
                 (run_id, n, *[(r.get(c) or None) if c == "date" else r.get(c, "") for c in MARGIN_DB_COLUMNS])
+                for n, r in enumerate(rows, 1)
+            ],
+        )
+    return run_id
+
+
+def save_purchases_run(rows: list[dict[str, Any]], summary: dict[str, Any], *, source: str) -> int:
+    months = sorted({r["month"] for r in rows if r.get("month")})
+    cols = ", ".join(PURCHASE_DB_COLUMNS)
+    marks = ", ".join(["%s"] * (len(PURCHASE_DB_COLUMNS) + 2))
+    with connect() as conn, conn.cursor() as cur:
+        run_id = _new_run(cur, "purchases", summary, months, source)
+        cur.executemany(
+            f"INSERT INTO purchase_lines (run_id, line_no, {cols}) VALUES ({marks})",
+            [
+                (run_id, n, *[(r.get(c) or None) if c == "date" else r.get(c, "") for c in PURCHASE_DB_COLUMNS])
                 for n, r in enumerate(rows, 1)
             ],
         )
@@ -492,3 +538,53 @@ def get_margin_pivot(run_id: int, dimension: str, measure: str) -> dict[str, Any
     return {"columns": months + ["Total"], "rows": rows, "total": grand,
             "dimension": dimension, "measure": measure}
 
+
+
+def get_purchase_pivot(run_id: int, dimension: str, measure: str) -> dict[str, Any]:
+    """Rows = dimension values, columns = months + Total (same shape as the margin pivot)."""
+    if dimension not in PURCHASE_DIMENSIONS or measure not in PURCHASE_MEASURES:
+        raise ValueError("unknown dimension or measure")
+    col = PURCHASE_DIMENSIONS[dimension]
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT {col} AS dim, month, SUM(amount) AS amount, SUM(quantity) AS quantity,
+                       COUNT(DISTINCT kind, doc_id) AS documents
+                FROM purchase_lines WHERE run_id=%s GROUP BY {col}, month""",
+            (run_id,),
+        )
+        data = cur.fetchall()
+        cur.execute(
+            f"""SELECT {col} AS dim, SUM(amount) AS amount, SUM(quantity) AS quantity,
+                       COUNT(DISTINCT kind, doc_id) AS documents
+                FROM purchase_lines WHERE run_id=%s GROUP BY {col}""",
+            (run_id,),
+        )
+        dim_totals = {(r["dim"] or "(none)"): r for r in cur.fetchall()}
+        cur.execute(
+            "SELECT SUM(amount) AS amount, SUM(quantity) AS quantity, COUNT(DISTINCT kind, doc_id) AS documents "
+            "FROM purchase_lines WHERE run_id=%s",
+            (run_id,),
+        )
+        grand_total = cur.fetchone() or {}
+        cur.execute(
+            "SELECT month, SUM(amount) AS amount, SUM(quantity) AS quantity, COUNT(DISTINCT kind, doc_id) AS documents "
+            "FROM purchase_lines WHERE run_id=%s GROUP BY month",
+            (run_id,),
+        )
+        month_totals = {r["month"]: r for r in cur.fetchall()}
+
+    def val(r: dict[str, Any]) -> float:
+        return round(float(r.get(measure) or 0), 4)
+
+    months = sorted({r["month"] for r in data})
+    by_dim: dict[str, dict[str, float]] = {}
+    for r in data:
+        by_dim.setdefault(r["dim"] or "(none)", {})[r["month"]] = val(r)
+    rows = []
+    for dim, values in by_dim.items():
+        values["Total"] = val(dim_totals[dim])
+        rows.append({"label": dim, "values": values, "amount": float(dim_totals[dim]["amount"] or 0)})
+    rows.sort(key=lambda r: r["amount"], reverse=True)
+    total = {m: val(month_totals[m]) for m in months}
+    total["Total"] = val(grand_total)
+    return {"columns": months + ["Total"], "rows": rows, "total": total, "dimension": dimension, "measure": measure}

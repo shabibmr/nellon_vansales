@@ -5,6 +5,7 @@ Currently:
   trial-balance    — period TB from General Ledger + Chart of Accounts
   monthly-tb       — monthly TB: opening, one column per month, closing + categories
   financials       — Executive Summary + P&L + Balance Sheet workbook (from a saved TB or live)
+  purchases        — bills + purchase orders by line (cached)
   margin           — revenue & margin by invoice line, with item/customer/salesperson/van rollups
   category-master  — ledger → PL/BS category mapping from Chart of Accounts
   db-init / db-load / db-runs — MariaDB storage of processed runs (see reports/db.py)
@@ -35,6 +36,7 @@ from reports.financials import build_financials
 from reports.financials import checks as financial_checks
 from reports import db
 from reports import invoice_margin as im
+from reports import purchases as pu
 from reports.monthly_trial_balance import generate_monthly_trial_balance
 from reports.trial_balance import COLUMNS, generate_trial_balance
 from zoho_client import ZohoClient
@@ -270,6 +272,28 @@ def _cmd_margin(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_purchases(args: argparse.Namespace) -> int:
+    cache_dir = Path(args.cache_dir) if args.cache_dir else OUT_DIR / "cache"
+    source = pu.PurchaseSource(cache_dir, None if args.offline else ZohoClient())
+    kinds = [args.kind] if args.kind else None
+    rows, summaries, summary = pu.generate_purchases(source, args.from_date, args.to_date, kinds)
+
+    stem = f"purchases_{args.from_date}_{args.to_date}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    write_csv(rows, pu.COLUMNS, OUT_DIR / f"{stem}.csv")
+    sheets = {"Lines": (pu.COLUMNS, rows)}
+    sheets.update({name: (pu.SUMMARY_COLUMNS, data) for name, data in summaries.items()})
+    write_excel_sheets(sheets, OUT_DIR / f"{stem}.xlsx")
+    (OUT_DIR / f"{stem}.json").write_text(
+        json.dumps({"summary": summary, "summaries": summaries, "rows": rows}, indent=1), encoding="utf-8"
+    )
+    print(f"Documents: {summary['documents']}   Lines: {summary['lines']}   Zoho calls: {summary['api_calls']}")
+    print(f"Amount by kind: {summary['amount_by_kind']}")
+    _db_save(args, lambda src: db.save_purchases_run(rows, summary, source=src),
+             "cache" if args.offline else "zoho")
+    print(f"Excel -> {OUT_DIR / (stem + '.xlsx')}")
+    return 0
+
+
 def _db_save(args: argparse.Namespace, save, source: str) -> None:
     if getattr(args, "no_db", False):
         return
@@ -297,11 +321,15 @@ def _cmd_db_load(args: argparse.Namespace) -> int:
         data = json.loads(Path(args.margin_json).read_text(encoding="utf-8"))
         run_id = db.save_margin_run(data["rows"], data["summary"], source=args.margin_json)
         print(f"Margin run #{run_id}: {len(data['rows'])} invoice lines")
+    if args.purchases_json:
+        data = json.loads(Path(args.purchases_json).read_text(encoding="utf-8"))
+        run_id = db.save_purchases_run(data["rows"], data["summary"], source=args.purchases_json)
+        print(f"Purchases run #{run_id}: {len(data['rows'])} lines")
     if args.category_json:
         data = json.loads(Path(args.category_json).read_text(encoding="utf-8"))
         print(f"category_master upserted: {db.save_category_master(data['rows'])} accounts")
-    if not (args.tb_json or args.margin_json or args.category_json):
-        raise SystemExit("Pass --tb-json, --margin-json and/or --category-json")
+    if not (args.tb_json or args.margin_json or args.purchases_json or args.category_json):
+        raise SystemExit("Pass --tb-json, --margin-json, --purchases-json and/or --category-json")
     return 0
 
 
@@ -422,6 +450,15 @@ def build_parser() -> argparse.ArgumentParser:
     mg.add_argument("--no-db", action="store_true", help="Don't save the run to MariaDB")
     mg.set_defaults(func=_cmd_margin)
 
+    pc = sub.add_parser("purchases", help="Purchases by line from Zoho bills and purchase orders")
+    pc.add_argument("--from-date", required=True, help="YYYY-MM-DD")
+    pc.add_argument("--to-date", default=date.today().isoformat(), help="YYYY-MM-DD (default: today)")
+    pc.add_argument("--kind", choices=list(pu.KINDS), help="Only bills or only purchase orders (default: both)")
+    pc.add_argument("--offline", action="store_true", help="Use cached documents only (no Zoho calls)")
+    pc.add_argument("--cache-dir", help="Cache directory (default: output/cache)")
+    pc.add_argument("--no-db", action="store_true", help="Don't save the run to MariaDB")
+    pc.set_defaults(func=_cmd_purchases)
+
     cmp = sub.add_parser(
         "category-master",
         help="Ledger → PL/BS category mapping from /chartofaccounts + category_overrides.csv",
@@ -448,11 +485,12 @@ def build_parser() -> argparse.ArgumentParser:
     dbl = sub.add_parser("db-load", help="Import saved JSON outputs into MariaDB (no Zoho calls)")
     dbl.add_argument("--tb-json", help="output/monthly_tb_*.json → financials run (TB + statements)")
     dbl.add_argument("--margin-json", help="output/margin_*.json → margin run")
+    dbl.add_argument("--purchases-json", help="output/purchases_*.json → purchases run")
     dbl.add_argument("--category-json", help="output/category_master.json → category_master table")
     dbl.set_defaults(func=_cmd_db_load)
 
     dbr = sub.add_parser("db-runs", help="List stored runs (or delete one)")
-    dbr.add_argument("--kind", choices=["financials", "margin"])
+    dbr.add_argument("--kind", choices=["financials", "margin", "purchases"])
     dbr.add_argument("--delete", type=int, metavar="RUN_ID", help="Delete a run and its data")
     dbr.set_defaults(func=_cmd_db_runs)
 

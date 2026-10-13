@@ -10,6 +10,7 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /api/statement?run_id=&name=   Executive Summary | PL | BS
     GET  /api/tb?run_id=         → monthly trial balance
     GET  /api/margin?run_id=&dim=&measure=   margin pivot by month
+    GET  /api/purchases?run_id=&dim=&measure=   bills + purchase orders pivot by month
     GET  /api/export.xlsx?run_id=        → Excel workbook (Exec Summary, PL, BS, Trial Balance)
     GET  /api/category-master    → rows built from the cached COA snapshot + overrides
     POST /api/refresh            → re-pull Chart of Accounts from Zoho; returns rebuilt payload
@@ -123,8 +124,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "MariaDB not configured (MIS_DB_* in .env)"})
             elif path == "/api/runs":
                 kind = q.get("kind") or None
-                if kind not in (None, "financials", "margin"):
-                    raise ValueError("kind must be financials or margin")
+                if kind not in (None, "financials", "margin", "purchases"):
+                    raise ValueError("kind must be financials, margin or purchases")
                 self._json(HTTPStatus.OK, {"runs": db.list_runs(kind)})
             elif path == "/api/run":
                 run = db.get_run(_int(q, "run_id"))
@@ -150,6 +151,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(
                     HTTPStatus.OK,
                     db.get_margin_pivot(_int(q, "run_id"), q.get("dim", "item"), q.get("measure", "net_sales")),
+                )
+            elif path == "/api/purchases":
+                self._json(
+                    HTTPStatus.OK,
+                    db.get_purchase_pivot(_int(q, "run_id"), q.get("dim", "vendor"), q.get("measure", "amount")),
                 )
             else:
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})

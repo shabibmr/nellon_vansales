@@ -137,12 +137,13 @@ git-ignored `.env`: `MIS_DB_HOST/PORT/USER/PASSWORD/NAME`). Schema lives in
 Tables: `report_runs` (one per financials/margin run) → `tb_accounts`, `tb_monthly`,
 `statement_lines`, `statement_values`, `margin_lines` (all cascade-delete with the run),
 plus `category_master` (current mapping, upserted by `category-master`).
-Pass `--no-db` to `financials` / `margin` / `category-master` to skip saving.
+Pass `--no-db` to `financials` / `margin` / `purchases` / `category-master` to skip saving.
 
 Web UI (served by `main.py serve`): `web/reports.html` (`/reports`) and `web/category_master.html` (`/`), sharing `web/assets/app.css` (Material 3-inspired tokens, nav rail, components) and the Material Symbols sprite `web/assets/icons.svg`; page logic in `web/assets/reports.js` / `category-master.js`. The report viewer reads only MariaDB, never Zoho. Tabs: Executive Summary,
 Profit & Loss, Balance Sheet, Trial Balance (by category, opening → months → closing),
 Margin (rows by item / customer / salesperson / van × months; net sales, margin, GM %,
-cost or quantity). Month columns are labelled like the template (`Apr-26 … Total`).
+cost or quantity), Purchases (bills + purchase orders; rows by vendor / item / kind × months;
+amount, quantity or document count). Run `main.py db-init` once to create the `purchase_lines` table. Month columns are labelled like the template (`Apr-26 … Total`).
 **Export Excel** (financials tabs) downloads one workbook built from MariaDB with a sheet
 per report: Executive Summary, PL, BS, Trial Balance (`/api/export.xlsx?run_id=`).
 
@@ -155,7 +156,27 @@ per report: Executive Summary, PL, BS, Trial Balance (`/api/export.xlsx?run_id=`
 Uses `POST /settings/tabs` (scope `ZohoBooks.settings.CREATE`), shared with all users. Idempotent: lists
 tabs first and skips if one with the same name exists (1-2 calls). Note the live API returns
 `tabs` / `tab_id`, not `web_tabs` / `webtab_id` as the published docs say. The web tab shows
-Executive Summary, P&L, BS and Trial Balance; the margin report is not in the web UI.
+Executive Summary, P&L, BS, Trial Balance, Margin and Purchases.
+
+## Ledger postings (Cost of Sales - Nellon ↔ Inventory)
+
+```bash
+.venv/bin/python fetch_cost_of_sales_nellon.py --from-date 2026-10-01 --to-date 2026-10-31
+.venv/bin/python fetch_inventory.py           --from-date 2026-10-01 --to-date 2026-10-31
+```
+
+Both page through `GET /chartofaccounts/transactions` (200 per page) and upsert one row per posting
+(key `account_id, categorized_transaction_id`); shared code in `reports/account_postings.py`.
+
+- `cost_of_sales_nellon`: 5.1.1000. Invoice postings are type `inventory_valuation_for_invoice`
+  (filtering on `invoice` returns nothing).
+- `inventory_postings`: Inventory 1.5.1000 + Other Inventory 1.5.9000, every type (bills,
+  valuations, credit notes, adjustments). Always pass a date range.
+- View `cos_inventory_match` pairs the two by `transaction_id`: `cos_amount + inventory_amount =
+  difference` (should be 0); `status` is matched / cos_only / inventory_only.
+
+`--from-json` (repeatable) loads saved responses with no Zoho call; each script refuses postings for
+any account other than its own.
 
 ## Planned next
 

@@ -17,8 +17,12 @@ Invoice and item details are cached under output/cache/ and only re-fetched when
 the invoice's `last_modified_time` changes, so re-runs are cheap. `--offline`
 builds purely from that cache with no Zoho calls.
 
-Cost basis: the item's *current* `purchase_rate` × base quantity. That is a
-standard-cost view; the P&L COGS from the ledger (weighted/FIFO) can differ.
+Cost basis: the invoice custom field `cf_line_cogs_document` (booked per-line COGS, JSON:
+`{"item_id","name","sku","qty","unit","rate","cost","cogs"}` — one object, a list, or one per
+line). When the *list* response already carries it and its sales (Σ qty×rate) match the
+list's `sub_total`, the invoice is built from the list alone (no per-invoice GET). Otherwise
+the detail is fetched and the document's `cogs` overrides the line cost by item_id. Invoices
+without the field fall back to the item's *current* `purchase_rate` × base quantity.
 Amounts are in base currency (invoice amounts × `exchange_rate`), net of tax.
 Credit notes / returns are not netted here.
 """
@@ -73,6 +77,60 @@ SKIP_STATUSES = {"void", "draft"}
 MIN_SECONDS_BETWEEN_CALLS = 0.7  # Zoho Books allows ~100 requests/min per org
 
 
+CF_LINE_COGS = "cf_line_cogs_document"
+CF_ACTUAL_COGS = "cf_actual_cogs"
+
+
+def _cf(inv: dict, name: str) -> Any:
+    """Custom-field value from a list/detail invoice (top-level, hash, or custom_fields[])."""
+    val = inv.get(name)
+    if val in (None, ""):
+        val = (inv.get("custom_field_hash") or {}).get(name)
+    if val in (None, ""):
+        for f in inv.get("custom_fields") or []:
+            if f.get("api_name") == name:
+                return f.get("value")
+    return val
+
+
+def parse_cogs_doc(raw: Any) -> list[dict]:
+    """Tolerant parse of cf_line_cogs_document → list of line dicts ([] if absent/invalid)."""
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return []
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            out = []
+            for chunk in raw.splitlines():  # one JSON object per line
+                try:
+                    out.append(json.loads(chunk))
+                except ValueError:
+                    return []
+            raw = out
+    if isinstance(raw, dict):
+        raw = raw.get("lines") or raw.get("line_items") or raw.get("items") or [raw]
+    return [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
+
+
+def _invoice_from_doc(head: dict, doc: list[dict]) -> dict | None:
+    """Synthesise a detail-shaped invoice from a list row + COGS doc, or None if sales don't reconcile."""
+    sub_total = head.get("sub_total")
+    sales = sum(_f(d.get("qty")) * _f(d.get("rate")) for d in doc)
+    if sub_total in (None, "") or abs(sales - _f(sub_total)) > 0.05 or head.get("is_inclusive_tax"):
+        return None
+    lines = [
+        {
+            "item_id": d.get("item_id"), "name": d.get("name"), "sku": d.get("sku"), "unit": d.get("unit"),
+            "quantity": _f(d.get("qty")), "rate": _f(d.get("rate")),
+            "item_total": _f(d.get("qty")) * _f(d.get("rate")), "_cogs": _f(d.get("cogs")),
+        }
+        for d in doc
+    ]
+    return {**head, "line_items": lines, "_from_list": True}
+
+
 def _f(val: Any) -> float:
     try:
         return float(val or 0)
@@ -108,6 +166,7 @@ class MarginSource:
         self.item_dir.mkdir(parents=True, exist_ok=True)
         self._throttle = _Throttle(MIN_SECONDS_BETWEEN_CALLS)
         self.api_calls = 0
+        self.detail_calls = 0
 
     def _get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict:
         assert self.client is not None
@@ -158,9 +217,16 @@ class MarginSource:
             if cached and cached.get("last_modified_time") == head.get("last_modified_time"):
                 out.append(cached)
                 continue
+            doc = parse_cogs_doc(_cf(head, CF_LINE_COGS))
+            fast = _invoice_from_doc(head, doc) if doc else None
+            if fast:
+                self._write(path, fast)
+                out.append(fast)
+                continue
             detail = self._get(f"/invoices/{invoice_id}").get("invoice") or {}
             self._write(path, detail)
             out.append(detail)
+            self.detail_calls += 1
             if n % 50 == 0:
                 print(f"  fetched {n}/{len(listed)} invoice details…")
         return out
@@ -228,6 +294,10 @@ def build_margin_rows(
             inv_discount *= net_total / gross_incl  # discount was entered tax-inclusive
 
         date = str(inv.get("date") or "")
+        # booked COGS per item_id from the invoice custom field (detail path); list path has _cogs on lines
+        doc_cogs: dict[str, list[float]] = {}
+        for d in parse_cogs_doc(_cf(inv, CF_LINE_COGS)):
+            doc_cogs.setdefault(str(d.get("item_id") or ""), []).append(_f(d.get("cogs")))
         for ln, net in zip(lines, nets):
             item_id = str(ln.get("item_id") or "")
             item = items.get(item_id) or {}
@@ -245,14 +315,20 @@ def build_margin_rows(
             net_sales = (net - alloc) * fx
             purchase_rate = _f(item.get("purchase_rate"))
             cost = purchase_rate * base_qty
+            booked = ln.get("_cogs")
+            if booked is None and doc_cogs.get(item_id):
+                booked = doc_cogs[item_id].pop(0)
+            if booked is not None:
+                cost = booked
+                purchase_rate = cost / base_qty if base_qty else 0.0
             margin = net_sales - cost
 
             flags = []
             if not item_id:
                 flags.append("no item")
-            elif not item:
+            elif not item and booked is None:
                 flags.append("item not in item list")
-            elif not purchase_rate:
+            elif not purchase_rate and booked is None:
                 flags.append("no purchase rate")
             if conv_id and conv_id not in conversions.get(item_id, {}):
                 flags.append("unknown unit conversion")
@@ -276,7 +352,7 @@ def build_margin_rows(
                     "line_discount": round(line_discount * fx, 2),
                     "invoice_discount": round(alloc * fx, 2),
                     "net_sales": round(net_sales, 2),
-                    "cost_rate": round(purchase_rate * conv, 4),
+                    "cost_rate": round(purchase_rate if booked is not None else purchase_rate * conv, 4),
                     "cost": round(cost, 2),
                     "gross_margin": round(margin, 2),
                     "gross_margin_pct": round(margin / net_sales, 4) if net_sales else 0.0,
@@ -347,6 +423,7 @@ def generate_invoice_margin(
         "gross_margin_pct": round((net - cost) / net, 4) if net else 0.0,
         "flagged_lines": sum(1 for r in rows if r["flag"]),
         "api_calls": source.api_calls,
-        "cost_basis": "item purchase_rate (current) x base quantity",
+        "invoice_detail_calls": source.detail_calls,
+        "cost_basis": "cf_line_cogs_document (booked COGS); item purchase_rate fallback",
     }
     return rows, summaries, summary
