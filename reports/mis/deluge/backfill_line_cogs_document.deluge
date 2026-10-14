@@ -1,0 +1,153 @@
+// ============================================================
+// backfill_line_cogs_document
+// Manual fill of cf_line_cogs_document from an invoice-id list.
+// Line value is the same string calculatecogs writes (bracketed JSON,
+// conversion_rate, base_qty = qty x conversion_rate, cogs = base_qty x purchase_price).
+// Does not read the invoice journal and does not write Actual COGS.
+//
+// Entity: invoice. The triggering invoice is ignored.
+// Connection: zbooksdeluge. Return type: void.
+//
+// One run handles chunk_size ids from start_index.
+// After a clean run, set start_index to the logged next_index and run again.
+// A failed GET or PUT stops the chunk. next_index stays on that id.
+// ============================================================
+invoice_ids = List();
+// Paste ids here, one add per id:
+// invoice_ids.add("3331482000183964602");
+start_index = 0;
+chunk_size = 15;
+cogs_doc_field_id = "3331482000188147019";
+organization_id = organization.get("organization_id");
+base = "https://www.zohoapis.com/books/v3/";
+if(invoice_ids.isEmpty())
+{
+	info "No invoice ids. Add them to invoice_ids, then run again.";
+	return;
+}
+updated = 0;
+unchanged = 0;
+failed = 0;
+processed = 0;
+next_index = start_index;
+i = 0;
+for each  invoice_id in invoice_ids
+{
+	if(i >= start_index && processed < chunk_size)
+	{
+		next_index = i;
+		inv_resp = invokeurl
+		[
+			url :base + "invoices/" + invoice_id + "?organization_id=" + organization_id
+			type :GET
+			connection:"zbooksdeluge"
+		];
+		if(inv_resp.get("code") != 0 || inv_resp.get("invoice") == null)
+		{
+			failed = failed + 1;
+			info "GET failed at index " + i + " id " + invoice_id + ": " + inv_resp.get("message");
+			break;
+		}
+		invoice = inv_resp.get("invoice");
+		lines_list = List();
+		goods_lines = 0;
+		goods_missing_cost = 0;
+		for each  line in ifnull(invoice.get("line_items"),List())
+		{
+			qty = ifnull(line.get("quantity"),0).toDecimal();
+			val_cost = ifnull(line.get("purchase_price"),0).toDecimal();
+			conv = ifnull(line.get("conversion_rate"),1).toDecimal();
+			if(conv <= 0)
+			{
+				conv = 1;
+			}
+			base_qty = qty * conv;
+			item_cogs = (base_qty * val_cost).round(2);
+			item_map = Map();
+			item_map.put("item_id",ifnull(line.get("item_id"),""));
+			item_map.put("name",ifnull(line.get("name"),""));
+			item_map.put("sku",ifnull(line.get("sku"),""));
+			item_map.put("qty",qty);
+			item_map.put("unit",ifnull(line.get("unit"),""));
+			item_map.put("conversion_rate",conv);
+			item_map.put("base_qty",base_qty);
+			item_map.put("rate",ifnull(line.get("rate"),0).toDecimal());
+			item_map.put("cost",val_cost);
+			item_map.put("cogs",item_cogs);
+			if(ifnull(line.get("product_type"),"").toString().toLowerCase() == "goods")
+			{
+				goods_lines = goods_lines + 1;
+				if(val_cost <= 0)
+				{
+					goods_missing_cost = goods_missing_cost + 1;
+					item_map.put("cost_missing",true);
+				}
+			}
+			lines_list.add(item_map);
+		}
+		new_cogs_doc = "[" + lines_list.toString() + "]";
+		existing_doc = "";
+		updated_fields = List();
+		for each  f in ifnull(invoice.get("custom_fields"),List())
+		{
+			fid = f.get("customfield_id");
+			if(fid == cogs_doc_field_id)
+			{
+				existing_doc = ifnull(f.get("value"),"").toString();
+			}
+			else
+			{
+				fmap = Map();
+				fmap.put("customfield_id",fid);
+				fmap.put("value",f.get("value"));
+				updated_fields.add(fmap);
+			}
+		}
+		if(goods_lines > 0 && goods_missing_cost == goods_lines)
+		{
+			unchanged = unchanged + 1;
+			processed = processed + 1;
+			next_index = i + 1;
+			info invoice.get("invoice_number") + " ALL GOODS LINES LACK COST, not written";
+		}
+		else if(existing_doc.trim() == new_cogs_doc.trim())
+		{
+			unchanged = unchanged + 1;
+			processed = processed + 1;
+			next_index = i + 1;
+			info invoice.get("invoice_number") + " unchanged, lines=" + lines_list.size();
+		}
+		else
+		{
+			doc_map = Map();
+			doc_map.put("customfield_id",cogs_doc_field_id);
+			doc_map.put("value",new_cogs_doc);
+			updated_fields.add(doc_map);
+			invoice_update = Map();
+			invoice_update.put("custom_fields",updated_fields);
+			update_response = invokeurl
+			[
+				url :base + "invoices/" + invoice_id + "?organization_id=" + organization_id
+				type :PUT
+				parameters:invoice_update.toString()
+				headers:{"Content-Type":"application/json"}
+				connection:"zbooksdeluge"
+			];
+			if(update_response.get("code") == 0)
+			{
+				updated = updated + 1;
+				processed = processed + 1;
+				next_index = i + 1;
+				info invoice.get("invoice_number") + " updated, lines=" + lines_list.size();
+			}
+			else
+			{
+				failed = failed + 1;
+				info "PUT failed at index " + i + " " + invoice.get("invoice_number") + ": " + update_response.get("message");
+				break;
+			}
+		}
+	}
+	i = i + 1;
+}
+info "updated=" + updated + " unchanged=" + unchanged + " failed=" + failed + " next_index=" + next_index;

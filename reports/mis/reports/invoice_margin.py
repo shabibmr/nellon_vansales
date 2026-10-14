@@ -108,16 +108,20 @@ def parse_cogs_doc(raw: Any) -> list[dict]:
         raw = raw.strip()
         if not raw:
             return []
+        text = raw
         try:
-            raw = json.loads(raw)
+            raw = json.loads(text)
         except ValueError:
-            out = []
-            for chunk in raw.splitlines():  # one JSON object per line
-                try:
-                    out.append(json.loads(chunk))
-                except ValueError:
-                    return []
-            raw = out
+            try:  # legacy "{..},{..}" (List.toString() without brackets)
+                raw = json.loads("[" + text + "]")
+            except ValueError:
+                out = []
+                for chunk in text.splitlines():  # one JSON object per line
+                    try:
+                        out.append(json.loads(chunk))
+                    except ValueError:
+                        return []
+                raw = out
     if isinstance(raw, dict):
         raw = raw.get("lines") or raw.get("line_items") or raw.get("items") or [raw]
     return [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
@@ -134,6 +138,7 @@ def _invoice_from_doc(head: dict, doc: list[dict]) -> dict | None:
             "item_id": d.get("item_id"), "name": d.get("name"), "sku": d.get("sku"), "unit": d.get("unit"),
             "quantity": _f(d.get("qty")), "rate": _f(d.get("rate")),
             "item_total": _f(d.get("qty")) * _f(d.get("rate")), "_cogs": _f(d.get("cogs")),
+            "_conv": _f(d.get("conversion_rate")) or 1.0,
         }
         for d in doc
     ]
@@ -312,7 +317,7 @@ def build_margin_rows(
             item = items.get(item_id) or {}
             qty = _f(ln.get("quantity"))
             conv_id = str(ln.get("unit_conversion_id") or "")
-            conv = conversions.get(item_id, {}).get(conv_id, 1.0) if conv_id else 1.0
+            conv = conversions.get(item_id, {}).get(conv_id, 1.0) if conv_id else (ln.get("_conv") or 1.0)
             base_qty = qty * conv
             rate = _f(ln.get("rate"))
             gross = rate * qty
