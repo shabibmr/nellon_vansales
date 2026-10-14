@@ -56,6 +56,17 @@ _FILL_CHECK_BAD = PatternFill("solid", fgColor="FBE3E1")
 _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
+MARGIN_TEXT_MAX = 50  # Margin sheets: text columns are 50 chars wide; longer values are cut with "…"
+
+
+def _is_margin(name: str) -> bool:
+    return name.startswith("Margin")
+
+
+def _ellide(v: Any, limit: int = MARGIN_TEXT_MAX) -> Any:
+    return v[: limit - 1] + "…" if isinstance(v, str) and len(v) > limit else v
+
+
 def month_label(col: str) -> str:
     """'2026-04' -> 'Apr-26' (template style); anything else unchanged."""
     if len(col) == 7 and col[4] == "-" and col[:4].isdigit() and col[5:].isdigit():
@@ -96,7 +107,7 @@ def write_statement_workbook(
                 ws.append([])
                 continue
             values = [] if ln.kind == "title" else [ln.values.get(c, 0.0) for c in st.columns]
-            ws.append([ln.label, *values])
+            ws.append([_ellide(ln.label) if _is_margin(st.name) else ln.label, *values])
             r = ws.max_row
             label = ws.cell(row=r, column=1)
             if ln.kind == "title":
@@ -124,7 +135,7 @@ def write_statement_workbook(
                 if fill:
                     cell.fill = fill
 
-        ws.column_dimensions["A"].width = 44
+        ws.column_dimensions["A"].width = MARGIN_TEXT_MAX if _is_margin(st.name) else 44
         for col in range(2, len(st.columns) + 2):
             ws.column_dimensions[get_column_letter(col)].width = 16
         ws.freeze_panes = "B5"
@@ -134,10 +145,16 @@ def write_statement_workbook(
         ws.append(list(columns))
         for cell in ws[1]:
             cell.font = Font(bold=True)
+        margin = _is_margin(sheet_name)
         for row in rows:
-            ws.append([row.get(c, "") for c in columns])
-        for i, _ in enumerate(columns, start=1):
-            ws.column_dimensions[get_column_letter(i)].width = 18
+            ws.append([_ellide(row.get(c, "")) if margin else row.get(c, "") for c in columns])
+        for i, c in enumerate(columns, start=1):
+            width = 18
+            if margin:  # fit the longest text value (header included), capped at 50 chars
+                longest = max([len(str(c))] + [len(str(cell.value)) for cell in ws[get_column_letter(i)][1:]
+                                               if isinstance(cell.value, str)])
+                width = max(width, min(longest + 2, MARGIN_TEXT_MAX))
+            ws.column_dimensions[get_column_letter(i)].width = width
         ws.freeze_panes = "A2"
 
     if sheet_order:  # listed sheets first in that order; any others keep their relative order after

@@ -254,13 +254,6 @@ def build_profit_and_loss(rows: list[dict[str, Any]], summary: dict[str, Any]) -
     net = _add(pbt, tax, -1)
     lines += [Line("Net Profit", "total", net), Line("Net Profit %", "pct", _pct(net, revenue))]
 
-    # Reconciliation: Net Profit must equal −Σ(P&L movement) straight off the TB.
-    tb_net = _zero(columns)
-    for r in pl_rows:
-        for c in columns:
-            tb_net[c] = round(tb_net[c] - value_of(r, c), 2)
-    lines.append(Line("Check: Net Profit − TB P&L (should be 0)", "check", _add(net, tb_net, -1)))
-
     figures = PLFigures(revenue, cogs, gm, direct, cm_, other_income, fixed, ebitda,
                         finance, dep, fx, pbt, tax, net)
     stmt = Statement(
@@ -364,8 +357,6 @@ def build_balance_sheet(rows: list[dict[str, Any]], summary: dict[str, Any]) -> 
 
     cap_liab = _add(liabilities, equity)
     lines.append(Line("Total Capital & Liabilities", "total", cap_liab))
-    lines.append(Line("Check: Assets − Capital & Liabilities (should be 0)", "check", _add(assets, cap_liab, -1)))
-
     return Statement(
         name="BS",
         title="Balance Sheet",

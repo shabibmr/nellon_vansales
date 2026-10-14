@@ -47,7 +47,6 @@
     org: null,
     tbData: null,
   };
-  const initialRun = Number(qs.get("run")) || null;
 
   // ---------------------------------------------------------------- helpers
 
@@ -95,7 +94,6 @@
 
   function syncUrl() {
     const p = new URLSearchParams({ tab: state.tab });
-    if (initialRun && state.selected[tab().kind] === initialRun) p.set("run", initialRun);
     history.replaceState(null, "", `?${p}`);
   }
 
@@ -135,11 +133,7 @@
     const t = tab();
     let html = "";
     if (t.detail) {
-      const runs = state.runs[t.kind];
-      html = `<label class="field"><span>Run</span><select class="input" id="pvRun">${runs.map((r) =>
-        `<option value="${r.id}"${r.id === state.selected[t.kind] ? " selected" : ""}>` +
-        `#${r.id} · ${esc(r.from_date)} to ${esc(r.to_date)}</option>`).join("")}</select></label>
-        <label class="field grow"><span>Filter</span>
+      html = `<label class="field grow"><span>Filter</span>
           <span class="search">${icon("search")}
             <input class="input" id="dtq" type="search" autocomplete="off"
                    placeholder="Invoice, customer or item" value="${esc(state.detailFilter)}"></span></label>`;
@@ -154,20 +148,13 @@
       const cfg = PIVOTS[t.id], cur = state.pivot[t.id];
       const opts = (list, sel) => list.map(([v, l]) =>
         `<option value="${v}"${v === sel ? " selected" : ""}>${esc(l)}</option>`).join("");
-      const runs = state.runs[t.kind];
-      html = `<label class="field"><span>Run</span><select class="input" id="pvRun">${runs.map((r) =>
-        `<option value="${r.id}"${r.id === state.selected[t.kind] ? " selected" : ""}>` +
-        `#${r.id} · ${esc(r.from_date)} to ${esc(r.to_date)}</option>`).join("")}</select></label>
-        <label class="field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
+      html = `<label class="field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
         <label class="field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`;
     }
     $("toolbar").innerHTML = html;
-    if ($("pvRun")) {
-      $("pvRun").onchange = (e) => { state.selected[t.kind] = Number(e.target.value); load(); };
-      if ($("pvDim")) {
-        $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
-        $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
-      }
+    if ($("pvDim")) {
+      $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
+      $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
     }
     if ($("dtq")) $("dtq").oninput = (e) => { state.detailFilter = e.target.value; renderDetail(state.detailData, t); };
     if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
@@ -216,6 +203,14 @@
     view(`<table class="data">${headRow("Particulars", cols, "Total")}<tbody>${body}</tbody></table>`);
   }
 
+  // Margin text cells: max 50 chars, longer values cut with "…" (full text in the tooltip).
+  const TXT_MAX = 50;
+  const txt = (v, extra = "") => {
+    const t = String(v ?? "");
+    const cut = t.length > TXT_MAX ? `${t.slice(0, TXT_MAX - 1)}…` : t;
+    return `<td class="txt"${t.length > TXT_MAX ? ` title="${esc(t)}"` : ""}>${esc(cut)}${extra}</td>`;
+  };
+
   function renderPivot(data, t) {
     if (!data.rows.length) {
       stateView("database", "Nothing in this run", "This run has no lines.");
@@ -224,7 +219,8 @@
     const pct = data.measure === "gm_pct";
     const cols = data.columns;
     const body = data.rows.map((r) =>
-      `<tr><td>${esc(r.label)}${r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : ""}</td>` +
+      `<tr>${t.kind === "margin" ? txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")
+        : `<td>${esc(r.label)}${r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : ""}</td>`}` +
       cols.map((c) => numCell(r.values[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`).join("");
     const foot = `<tr class="total"><td>Total</td>` +
       cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`;
@@ -253,11 +249,11 @@
     const flag = (r) => (byLine ? r.flag : r.flagged)
       ? `<span class="tag review">${byLine ? esc(r.flag) : `${r.flagged} flagged`}</span>` : "";
     const body = rows.map((r) => byLine
-      ? `<tr><td>${esc(r.date)}</td><td>${esc(r.invoice_number)}</td><td>${esc(r.customer_name)}</td>` +
-        `<td>${esc(r.item_name)}${flag(r)}</td><td>${esc(r.unit)}</td>${numCell(r.quantity)}${numCell(r.rate)}` +
+      ? `<tr><td>${esc(r.date)}</td>${txt(r.invoice_number)}${txt(r.customer_name)}` +
+        `${txt(r.item_name, flag(r))}${txt(r.unit)}${numCell(r.quantity)}${numCell(r.rate)}` +
         `${numCell(r.net_sales)}${numCell(r.cost)}${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`
-      : `<tr><td>${esc(r.date)}</td><td>${esc(r.invoice_number)}${flag(r)}</td><td>${esc(r.customer_name)}</td>` +
-        `<td>${esc(r.salesperson_name)}</td><td class="n">${r.line_count}</td>${numCell(r.net_sales)}${numCell(r.cost)}` +
+      : `<tr><td>${esc(r.date)}</td>${txt(r.invoice_number, flag(r))}${txt(r.customer_name)}` +
+        `${txt(r.salesperson_name)}<td class="n">${r.line_count}</td>${numCell(r.net_sales)}${numCell(r.cost)}` +
         `${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
     const span = byLine ? 7 : 4;
     const foot = `<tr class="total"><td colspan="${span}">Total${q ? " of filtered rows" : ""}</td>` +
@@ -299,10 +295,7 @@
       }
     }
     const totals = Object.fromEntries(keys.map((key) => [key, sum(rows, key)]));
-    const balanced = keys.every((key) => Math.abs(totals[key]) < 0.015);
-    body += q
-      ? `<tr class="total"><td>Total of filtered accounts</td>${cells(totals)}</tr>`
-      : `<tr class="check ${balanced ? "ok" : "bad"}"><td>Total, Dr + / Cr - (should be 0)</td>${cells(totals)}</tr>`;
+    if (q) body += `<tr class="total"><td>Total of filtered accounts</td>${cells(totals)}</tr>`;
 
     view(`<table class="data"><thead><tr><th scope="col">Account</th>${labels.map((l, i) =>
       `<th scope="col" class="${i === labels.length - 1 ? "tot" : ""}">${esc(colLabel(l))}</th>`).join("")}</tr></thead>` +
@@ -394,9 +387,6 @@
     .then(([fin, mar, pur, org]) => {
       state.org = org && org.name ? org : null;
       state.runs = { financials: fin.runs, margin: mar.runs, purchases: pur.runs };
-      for (const k of Object.keys(state.runs)) {
-        if (initialRun && state.runs[k].some((r) => r.id === initialRun)) state.selected[k] = initialRun;
-      }
       load();
     })
     .catch((e) => stateView("error", "Could not reach the report database", esc(e.message), "error"));

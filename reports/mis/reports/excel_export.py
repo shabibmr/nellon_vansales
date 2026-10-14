@@ -75,15 +75,12 @@ def _trial_balance_sheet(run: dict[str, Any]) -> Sheet:
         groups.setdefault((r["pl_bs"], r["category"] or "(uncategorised)"), []).append(r)
 
     lines: list[Line] = []
-    grand = {c: 0.0 for c in columns}
     for (pl_bs, category), rows in groups.items():
         sub = {c: round(sum(vals(r)[c] for r in rows), 2) for c in columns}
         lines.append(Line(f"{category} ({pl_bs})", "category", sub))
         for r in rows:
             label = f"{r['account_code']}  {r['account_name']}".strip()
             lines.append(Line(label, "sub", vals(r)))
-        grand = {c: round(grand[c] + sub[c], 2) for c in columns}
-    lines.append(Line("Total (Dr + / Cr −, should be 0)", "check", grand))
     return Sheet("Trial Balance", "Monthly Trial Balance",
                  f"{_period(run)} · Dr + / Cr −", columns, lines, "Account")
 

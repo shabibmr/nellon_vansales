@@ -753,3 +753,6 @@ table.data {
   .cf-row { grid-template-columns: 1fr auto; }
   .cf-why { display: none; }
 }
+
+/* Margin tables: text cells hold at most 50 chars (cut in JS); this keeps them on one line. */
+td.txt { max-width: 50ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
