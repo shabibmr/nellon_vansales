@@ -5,7 +5,7 @@
 // 2. Journal Cost of Sales is checked first; if none exists, nothing is updated.
 //    cf_actual_cogs comes from the invoice journal.
 // 3. cf_line_cogs_document comes from GET /invoices/{id}.
-//    Line COGS = quantity x conversion_rate x purchase_price (cost is per base unit).
+//    Line COGS = quantity x purchase_price (purchase_price is per sale unit; matches the ledger for Sept 2026).
 // ------------------------------------------------------------
 // Configuration
 // ------------------------------------------------------------
@@ -95,7 +95,7 @@ for each  line in ifnull(full_invoice.get("line_items"),List())
 		conv = 1;
 	}
 	base_qty = qty * conv;
-	item_cogs = (base_qty * val_cost).round(2);
+	item_cogs = (qty * val_cost).round(2);
 	item_map = Map();
 	item_map.put("item_id",ifnull(line.get("item_id"),""));
 	item_map.put("name",ifnull(line.get("name"),""));
