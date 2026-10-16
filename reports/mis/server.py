@@ -10,7 +10,7 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /assets/<name>.css|.js|.svg → web/assets/ (shared styles, page scripts, icon sprite)
     GET  /api/org                → organization profile (name, currency) stored by `main.py org-sync`
     GET  /api/runs?kind=         → stored runs
-    GET  /api/statement?run_id=&name=   Executive Summary | PL | BS
+    GET  /api/statement?run_id=&name=   Executive Summary | PL | BS (+ expandable `tree` for the first two)
     GET  /api/tb?run_id=         → monthly trial balance
     GET  /api/margin?run_id=&dim=&measure=   margin pivot by month
     GET  /api/margin-detail?run_id=&view=line|invoice   margin per invoice line / per invoice
@@ -282,7 +282,10 @@ class Handler(BaseHTTPRequestHandler):
                 name = q.get("name", "")
                 if name not in STATEMENTS:
                     raise ValueError(f"name must be one of {sorted(STATEMENTS)}")
-                self._json(HTTPStatus.OK, db.get_statement(_int(q, "run_id"), name))
+                run_id = _int(q, "run_id")
+                data = db.get_statement(run_id, name)
+                data["tree"] = db.get_statement_tree(run_id, name)
+                self._json(HTTPStatus.OK, data)
             elif path == "/api/tb":
                 self._json(HTTPStatus.OK, db.get_trial_balance(_int(q, "run_id")))
             elif path == "/api/export.xlsx":

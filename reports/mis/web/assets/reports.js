@@ -12,8 +12,8 @@
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   const TABS = [
-    { id: "exec", label: "Executive Summary", kind: "financials", statement: "Executive Summary" },
-    { id: "pl", label: "Profit & Loss", kind: "financials", statement: "PL" },
+    { id: "exec", label: "Executive Summary", kind: "financials", statement: "Executive Summary", tree: 1 },
+    { id: "pl", label: "Profit & Loss", kind: "financials", statement: "PL", tree: 2 },
     { id: "bs", label: "Balance Sheet", kind: "financials", statement: "BS" },
     { id: "tb", label: "Trial Balance", kind: "financials" },
     { id: "margin", label: "Margin", kind: "margin", api: "api/margin", pivot: true },
@@ -46,6 +46,8 @@
     detailData: null,
     org: null,
     tbData: null,
+    // Expandable statements: `tree` on a tab is its default outline level.
+    tree: { nodes: null, cols: [], open: new Set(), q: "", sort: "statement", reveal: null },
   };
 
   // ---------------------------------------------------------------- helpers
@@ -139,6 +141,17 @@
             <input class="input" id="dtq" type="search" autocomplete="off"
                    placeholder="Invoice, customer or item" value="${esc(state.detailFilter)}"></span></label>`;
     }
+    if (t.tree) {
+      html = `<div class="field"><span id="lvlLabel">Outline level</span>
+                <div class="outline" id="treeLevels" role="group" aria-labelledby="lvlLabel"></div></div>
+        <label class="field"><span>Order</span><select class="input" id="treeSort">
+          <option value="statement"${state.tree.sort === "statement" ? " selected" : ""}>Statement order</option>
+          <option value="size"${state.tree.sort === "size" ? " selected" : ""}>Largest first</option></select></label>
+        <label class="field grow"><span>Find</span>
+          <span class="search">${icon("search")}
+            <input class="input" id="treeq" type="search" autocomplete="off"
+                   placeholder="Category, sub-category, account or code" value="${esc(state.tree.q)}"></span></label>`;
+    }
     if (t.id === "tb") {
       html = `<label class="field grow"><span>Filter</span>
                 <span class="search">${icon("search")}
@@ -159,6 +172,14 @@
     }
     if ($("dtq")) $("dtq").oninput = (e) => { state.detailFilter = e.target.value; renderDetail(state.detailData, t); };
     if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
+    if ($("treeq")) {
+      $("treeq").oninput = (e) => { state.tree.q = e.target.value; renderTree(); };
+      $("treeSort").onchange = (e) => { state.tree.sort = e.target.value; renderTree(); };
+      $("treeLevels").onclick = (e) => {
+        const b = e.target.closest("[data-level]");
+        if (b) setLevel(Number(b.dataset.level));
+      };
+    }
   }
 
   // "2026-04-01" → "Apr-26"; the period reads "Apr-26 – Sep-26", or one month when both ends fall in it.
@@ -211,6 +232,164 @@
     const cut = t.length > TXT_MAX ? `${t.slice(0, TXT_MAX - 1)}…` : t;
     return `<td class="txt"${t.length > TXT_MAX ? ` title="${esc(t)}"` : ""}>${esc(cut)}${extra}</td>`;
   };
+
+  // ---------------------------------------------------------------- expandable statements
+
+  // Each node gets a stable key (its label path), its depth and its parent.
+  function prepTree(nodes, parent = null, depth = 0, byKey = new Map()) {
+    for (const n of nodes) {
+      n.children = n.children || [];
+      n.parent = parent;
+      n.depth = depth;
+      n.key = parent ? `${parent.key} › ${n.label}` : n.label;
+      byKey.set(n.key, n);
+      prepTree(n.children, n, depth + 1, byKey);
+    }
+    state.tree.byKey = byKey;
+    return nodes;
+  }
+
+  const parentNodes = (nodes, out = []) => {
+    for (const n of nodes) if (n.children.length) { out.push(n); parentNodes(n.children, out); }
+    return out;
+  };
+  // Outline levels: 1 = top rows only, each step opens one more level of children.
+  const levelCount = (nodes) =>
+    1 + nodes.reduce((m, n) => Math.max(m, n.children.length ? levelCount(n.children) : 0), 0);
+  const nodeTotal = (n) => Number(n.values.Total ?? 0);
+
+  // Open rows live in this browser only, per tab; a blocked storage just means the default level.
+  const treeStore = () => `mis.tree.${state.tab}`;
+  function saveOpen() {
+    try { localStorage.setItem(treeStore(), JSON.stringify([...state.tree.open])); } catch { /* storage blocked */ }
+  }
+  function loadOpen() {
+    try {
+      const v = JSON.parse(localStorage.getItem(treeStore()) || "null");
+      return Array.isArray(v) ? new Set(v) : null;
+    } catch { return null; }
+  }
+
+  function setLevel(level, { save = true } = {}) {
+    state.tree.open = new Set(parentNodes(state.tree.nodes).filter((n) => n.depth < level - 1).map((n) => n.key));
+    state.tree.reveal = null;
+    if (save) saveOpen();
+    renderTree();
+  }
+
+  function currentLevel() {
+    const ps = parentNodes(state.tree.nodes);
+    for (let l = 1; l <= levelCount(state.tree.nodes); l++) {
+      if (ps.every((n) => state.tree.open.has(n.key) === n.depth < l - 1)) return l;
+    }
+    return 0;
+  }
+
+  // → true when the row changed state.
+  function toggle(key, want) {
+    const open = state.tree.open;
+    const next = want ?? !open.has(key);
+    if (next === open.has(key)) return false;
+    if (next) open.add(key); else open.delete(key);
+    state.tree.reveal = next ? key : null;
+    saveOpen();
+    renderTree();
+    return true;
+  }
+
+  const focusTwisty = (key) =>
+    $("out").querySelector(`tr[data-key="${CSS.escape(key)}"] .twisty`)?.focus();
+
+  const highlight = (text, q) => {
+    const s = String(text ?? "");
+    const i = q ? s.toLowerCase().indexOf(q) : -1;
+    return i < 0 ? esc(s)
+      : `${esc(s.slice(0, i))}<mark>${esc(s.slice(i, i + q.length))}</mark>${esc(s.slice(i + q.length))}`;
+  };
+
+  function showTree(data, t) {
+    const tr = state.tree;
+    tr.nodes = prepTree(data.tree);
+    tr.cols = data.columns;
+    tr.reveal = null;
+    const saved = loadOpen();
+    if (!saved) return setLevel(t.tree, { save: false });
+    tr.open = saved;
+    renderTree();
+  }
+
+  function renderTree() {
+    const { nodes, cols, open, sort, reveal } = state.tree;
+    if (!nodes) return;
+    const q = state.tree.q.trim().toLowerCase();
+
+    // With a search, a row shows when it, an ancestor or a descendant matches; ancestors of a match open.
+    const mark = (n, underHit) => {
+      n.hit = !!q && (n.label.toLowerCase().includes(q) || String(n.meta || "").toLowerCase().includes(q));
+      n.under = underHit;
+      n.holds = false;
+      for (const c of n.children) n.holds = mark(c, underHit || n.hit) || n.holds;
+      return n.hit || n.holds;
+    };
+    const found = nodes.map((n) => mark(n, false)).some(Boolean);
+
+    const levels = levelCount(nodes), lv = currentLevel();
+    if ($("treeLevels")) $("treeLevels").innerHTML = Array.from({ length: levels }, (_, k) => k + 1).map((l) =>
+      `<button type="button" data-level="${l}" aria-pressed="${l === lv}" title="${
+        l === 1 ? "Collapse everything" : l === levels ? "Expand down to accounts" : `Open ${l - 1} level${l > 2 ? "s" : ""} down`
+      }">${l}</button>`).join("");
+
+    if (q && !found) {
+      stateView("search", "Nothing matches", "Try a different category, account name or code.");
+      return;
+    }
+
+    const order = (list) => sort === "size" && list[0]?.depth > 0
+      ? [...list].sort((a, b) => Math.abs(nodeTotal(b)) - Math.abs(nodeTotal(a))) : list;
+
+    let seq = 0;
+    const row = (n, { isOpen = false, kids = false, revealing = false, dim = false } = {}) => {
+      const p = n.parent;
+      const cls = [n.kind, `d${n.depth}`, kids && "parent", isOpen && "open", revealing && "reveal", dim && "dim"];
+      const guides = Array.from({ length: n.depth }, (_, g) => `<span class="guide" style="--g:${g}"></span>`).join("");
+      const twisty = kids
+        ? `<button type="button" class="twisty" aria-expanded="${isOpen}" ` +
+          `aria-label="${isOpen ? "Collapse" : "Expand"} ${esc(n.label)}">${icon("chevron_right")}</button>`
+        : `<span class="twisty-sp"></span>`;
+      // Share of the parent's Total; red when the row pulls against its parent (e.g. a refund inside revenue).
+      let share = "";
+      if (p && Math.abs(nodeTotal(p)) >= 0.005 && Math.abs(nodeTotal(n)) >= 0.005) {
+        const r = nodeTotal(n) / nodeTotal(p);
+        share = `<span class="share${r < 0 ? " contra" : ""}" title="${(r * 100).toFixed(1)}% of ${esc(p.label)}">` +
+          `<i style="--share:${Math.min(1, Math.abs(r)).toFixed(3)}"></i><b>${r < 0 ? `(${Math.round(-r * 100)}%)` : `${Math.round(r * 100)}%`}</b></span>`;
+      }
+      const label = `<td class="tl" style="--depth:${n.depth}">${guides}<span class="tl-in">${twisty}` +
+        `<span class="lbl">${highlight(n.label, q)}</span>` +
+        (n.meta ? `<span class="code">${highlight(n.meta, q)}</span>` : "") +
+        (kids && !isOpen ? `<span class="kids" title="${n.children.length} rows inside">${n.children.length}</span>` : "") +
+        `${share}</span></td>`;
+      return `<tr class="${cls.filter(Boolean).join(" ")}"${kids ? ` data-key="${esc(n.key)}"` : ""}` +
+        `${revealing ? ` style="--i:${seq++}"` : ""}>${label}` +
+        cols.map((c) => numCell(n.values[c] ?? 0, { pct: n.kind === "pct", total: c === "Total" })).join("") + `</tr>`;
+    };
+
+    let body = "";
+    const walk = (list, revealing) => {
+      for (const n of order(list)) {
+        const kids = n.children.length > 0;
+        if (q && !n.hit && !n.holds && !n.under) {
+          if (n.depth === 0 && !kids) body += row(n, { dim: true });  // result lines stay for context
+          continue;
+        }
+        const isOpen = kids && (open.has(n.key) || (!!q && n.holds));
+        body += row(n, { isOpen, kids, revealing });
+        if (isOpen) walk(n.children, revealing || n.key === reveal);
+      }
+    };
+    walk(nodes, false);
+    state.tree.reveal = null;
+    view(`<table class="data tree">${headRow("Particulars", cols, "Total")}<tbody>${body}</tbody></table>`);
+  }
 
   function renderPivot(data, t) {
     if (!data.rows.length) {
@@ -338,7 +517,14 @@
         const cur = state.pivot[t.id];
         renderPivot(await api(`${t.api}?run_id=${runId}&dim=${cur.dim}&measure=${cur.measure}`), t);
       } else if (t.statement) {
-        renderStatement(await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`));
+        const data = await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`);
+        state.tree.nodes = null;
+        if (t.tree && data.tree?.length) {
+          showTree(data, t);
+        } else {
+          if (t.tree) $("toolbar").innerHTML = "";  // no stored TB to expand from: plain statement
+          renderStatement(data);
+        }
       } else {
         state.tbData = await api(`api/tb?run_id=${runId}`);
         renderTb(state.tbData);
@@ -358,6 +544,29 @@
     if (a.dataset.tab === state.tab) return;
     state.tab = a.dataset.tab;
     load().then(() => $("tabs").querySelector(`[data-tab="${state.tab}"]`)?.focus());
+  });
+
+  // Expandable statements: click a parent row (or its chevron) to open it; arrow keys walk the chevrons.
+  $("out").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-key]");
+    if (!tr || (!e.target.closest(".twisty") && String(getSelection()))) return;  // a text drag isn't a click
+    const fromButton = !!e.target.closest(".twisty");
+    toggle(tr.dataset.key);
+    if (fromButton) focusTwisty(tr.dataset.key);
+  });
+  $("out").addEventListener("keydown", (e) => {
+    const b = e.target.closest(".twisty");
+    if (!b || !["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+    e.preventDefault();
+    const key = b.closest("tr").dataset.key;
+    const all = [...$("out").querySelectorAll(".twisty")];
+    const at = all.indexOf(b);
+    if (e.key === "ArrowDown") return all[at + 1]?.focus();
+    if (e.key === "ArrowUp") return all[at - 1]?.focus();
+    if (e.key === "ArrowRight") return toggle(key, true) ? focusTwisty(key) : all[at + 1]?.focus();
+    if (toggle(key, false)) return focusTwisty(key);
+    const parent = state.tree.byKey.get(key)?.parent;  // already closed: step out to the parent
+    if (parent) focusTwisty(parent.key);
   });
 
   // The workbook needs the Bearer token, so fetch it and save the blob instead of following a link.

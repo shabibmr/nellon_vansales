@@ -12,6 +12,10 @@ TB amounts are signed debit-positive. Statements flip signs for display:
 
 Each statement is a list of `Line`s; `values` maps column label → amount
 (P&L: one column per month + "Total"; BS: one column per month end).
+
+The P&L and Executive Summary also carry a `tree` of `Node`s for the web
+viewer's expandable rows: section → category → sub-category → account. The
+flat `lines` stay the source for the stored statement and the Excel export.
 """
 
 from __future__ import annotations
@@ -95,12 +99,32 @@ class Line:
 
 
 @dataclass
+class Node:
+    """One row of the expandable statement: its values are the sum of its children's."""
+
+    label: str
+    kind: str  # section | category | sub | account | total | pct
+    values: dict[str, float] = field(default_factory=dict)
+    children: list[Node] = field(default_factory=list)
+    meta: str = ""  # account code on account rows
+
+    def as_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"label": self.label, "kind": self.kind, "values": self.values}
+        if self.meta:
+            d["meta"] = self.meta
+        if self.children:
+            d["children"] = [c.as_dict() for c in self.children]
+        return d
+
+
+@dataclass
 class Statement:
     name: str
     title: str
     subtitle: str
     columns: list[str]
     lines: list[Line]
+    tree: list[Node] = field(default_factory=list)
 
     def rows(self) -> list[dict[str, Any]]:
         return [ln.as_row(self.columns) for ln in self.lines]
@@ -139,8 +163,14 @@ def _is_zero(values: dict[str, float]) -> bool:
     return all(abs(v) < 0.005 for v in values.values())
 
 
-def _group(rows: list[dict[str, Any]], columns: list[str], value_of) -> dict[str, dict[str, dict[str, float]]]:
-    """category → sub_category → {column: debit-positive amount}."""
+# (category, sub) → [(account name, account code, {column: debit-positive amount})]
+Accounts = dict[tuple[str, str], list[tuple[str, str, dict[str, float]]]]
+
+
+def _group(
+    rows: list[dict[str, Any]], columns: list[str], value_of, accounts: Accounts | None = None,
+) -> dict[str, dict[str, dict[str, float]]]:
+    """category → sub_category → {column: debit-positive amount}; fills `accounts` when given."""
     out: dict[str, dict[str, dict[str, float]]] = {}
     for r in rows:
         cat = r.get("category") or ""
@@ -148,7 +178,21 @@ def _group(rows: list[dict[str, Any]], columns: list[str], value_of) -> dict[str
         bucket = out.setdefault(cat, {}).setdefault(sub, _zero(columns))
         for c in columns:
             bucket[c] = round(bucket[c] + value_of(r, c), 2)
+        if accounts is not None:
+            accounts.setdefault((cat, sub), []).append(
+                (r.get("account_name") or "", r.get("account_code") or "",
+                 {c: round(value_of(r, c), 2) for c in columns}))
     return out
+
+
+def _account_nodes(accts: list[tuple[str, str, dict[str, float]]], sub: str, sign: float) -> list[Node]:
+    """Accounts under a sub-category; none when the sub is just one account of the same name."""
+    nodes = [Node(name, "account", _scale(vals, sign), meta=code)
+             for name, code, vals in sorted(accts, key=lambda a: a[0].lower())]
+    nodes = [n for n in nodes if not _is_zero(n.values)]
+    if len(nodes) == 1 and nodes[0].label == sub:
+        return []
+    return nodes
 
 
 def _section(
@@ -159,8 +203,13 @@ def _section(
     sign: float,
     *,
     with_subs: bool,
+    node: Node | None = None,
+    accounts: Accounts | None = None,
 ) -> dict[str, float]:
-    """Append category (+ sub) lines; return the section total (display sign)."""
+    """Append category (+ sub) lines; return the section total (display sign).
+
+    With `node`, also hang category → sub → account nodes under it.
+    """
     total = _zero(columns)
     for cat in categories:
         subs = grouped.get(cat) or {}
@@ -170,11 +219,16 @@ def _section(
         if not subs:
             continue
         lines.append(Line(cat, "category", cat_total))
+        cat_node = Node(cat, "category", cat_total)
         if with_subs:
             for sub in sorted(subs, key=str.lower):
                 vals = _scale(subs[sub], sign)
                 if not _is_zero(vals):
                     lines.append(Line(sub, "sub", vals))
+                    cat_node.children.append(
+                        Node(sub, "sub", vals, _account_nodes((accounts or {}).get((cat, sub), []), sub, sign)))
+        if node is not None:
+            node.children.append(cat_node)
         total = _add(total, cat_total)
     return total
 
@@ -200,6 +254,7 @@ class PLFigures:
     profit_before_tax: dict[str, float]
     income_tax: dict[str, float]
     net_profit: dict[str, float]
+    sections: dict[str, Node] = field(default_factory=dict)  # P&L block title → its tree node
 
 
 def _pl_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -225,43 +280,62 @@ def build_profit_and_loss(rows: list[dict[str, Any]], summary: dict[str, Any]) -
     def value_of(r: dict[str, Any], c: str) -> float:
         return float(r.get("movement" if c == TOTAL else c) or 0.0)
 
-    g = _group(pl_rows, columns, value_of)
+    accounts: Accounts = {}
+    g = _group(pl_rows, columns, value_of, accounts)
     lines: list[Line] = []
+    tree: list[Node] = []
+    sections: dict[str, Node] = {}
 
     def block(title: str, cats: list[str], sign: float) -> dict[str, float]:
         lines.append(Line(title, "title"))
-        return _section(lines, g, cats, columns, sign, with_subs=True)
+        node = Node(title, "section")
+        node.values = _section(lines, g, cats, columns, sign, with_subs=True, node=node, accounts=accounts)
+        if len(cats) == 1 and node.children:  # one-category block: its subs sit straight under the section
+            node.children = node.children[0].children
+        tree.append(node)
+        sections[title] = node
+        return node.values
+
+    def result(label: str, kind: str, values: dict[str, float], *, in_tree: bool = True) -> None:
+        lines.append(Line(label, kind, values))
+        if in_tree:
+            tree.append(Node(label, kind, values))
 
     revenue = block("Revenue", REVENUE_CATS, -1)
-    lines.append(Line("Total Revenue", "total", revenue))
+    result("Total Revenue", "total", revenue, in_tree=False)  # the tree's section row carries it
     cogs = block("Cost of Goods Sold", COGS_CATS, +1)
     gm = _add(revenue, cogs, -1)
-    lines += [Line("Gross Margin (GM)", "total", gm), Line("GM %", "pct", _pct(gm, revenue))]
+    result("Gross Margin (GM)", "total", gm)
+    result("GM %", "pct", _pct(gm, revenue))
     direct = block("Direct Expenses", DIRECT_EXP_CATS, +1)
     cm_ = _add(gm, direct, -1)
-    lines += [Line("Contribution Margin (CM)", "total", cm_), Line("CM %", "pct", _pct(cm_, revenue))]
+    result("Contribution Margin (CM)", "total", cm_)
+    result("CM %", "pct", _pct(cm_, revenue))
     other_income = block("Other Income", OTHER_INCOME_CATS, -1)
     fixed = block("Fixed Expenses", FIXED_EXP_CATS + [UNMAPPED_PL], +1)
-    lines.append(Line("Total Fixed Expenses", "total", fixed))
+    result("Total Fixed Expenses", "total", fixed, in_tree=False)
     ebitda = _add(_add(cm_, other_income), fixed, -1)
-    lines += [Line("EBITDA", "total", ebitda), Line("EBITDA %", "pct", _pct(ebitda, revenue))]
+    result("EBITDA", "total", ebitda)
+    result("EBITDA %", "pct", _pct(ebitda, revenue))
     finance = block("Finance Cost", FINANCE_CATS, +1)
     dep = block("Depreciation", DEPRECIATION_CATS, +1)
     fx = block("Foreign Exchange", FX_CATS, -1)
     pbt = _add(_add(_add(ebitda, finance, -1), dep, -1), fx)
-    lines.append(Line("Profit Before Tax", "total", pbt))
+    result("Profit Before Tax", "total", pbt)
     tax = block("Tax", TAX_CATS, +1)
     net = _add(pbt, tax, -1)
-    lines += [Line("Net Profit", "total", net), Line("Net Profit %", "pct", _pct(net, revenue))]
+    result("Net Profit", "total", net)
+    result("Net Profit %", "pct", _pct(net, revenue))
 
     figures = PLFigures(revenue, cogs, gm, direct, cm_, other_income, fixed, ebitda,
-                        finance, dep, fx, pbt, tax, net)
+                        finance, dep, fx, pbt, tax, net, sections)
     stmt = Statement(
         name="PL",
         title="Profit and Loss",
         subtitle=_period_label(summary),
         columns=columns,
         lines=lines,
+        tree=tree,
     )
     return stmt, figures
 
@@ -269,6 +343,19 @@ def build_profit_and_loss(rows: list[dict[str, Any]], summary: dict[str, Any]) -
 # ---------------------------------------------------------------------------
 # Executive summary
 # ---------------------------------------------------------------------------
+
+# Executive Summary line → the P&L block whose breakdown it expands into.
+EXEC_DRILLDOWN = {
+    "Revenue Booked": "Revenue",
+    "COGS": "Cost of Goods Sold",
+    "Direct Expenses": "Direct Expenses",
+    "Other Income": "Other Income",
+    "Fixed Expenses": "Fixed Expenses",
+    "Finance Cost": "Finance Cost",
+    "Depreciation": "Depreciation",
+    "FX Gain/loss": "Foreign Exchange",
+    "Income Tax": "Tax",
+}
 
 
 def build_executive_summary(figures: PLFigures, summary: dict[str, Any]) -> Statement:
@@ -293,12 +380,17 @@ def build_executive_summary(figures: PLFigures, summary: dict[str, Any]) -> Stat
         Line("Net Profit", "total", f.net_profit),
         Line("Net Profit %", "pct", _pct(f.net_profit, rev)),
     ]
+    tree = []
+    for ln in lines:
+        section = f.sections.get(EXEC_DRILLDOWN.get(ln.label, ""))
+        tree.append(Node(ln.label, ln.kind, ln.values, list(section.children) if section else []))
     return Statement(
         name="Executive Summary",
         title="Executive Summary",
         subtitle=f"{_period_label(summary)} · {summary.get('currency_code', '')}",
         columns=_months(summary) + [TOTAL],
         lines=lines,
+        tree=tree,
     )
 
 

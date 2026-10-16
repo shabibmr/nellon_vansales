@@ -781,6 +781,24 @@ def get_statement(run_id: int, statement: str) -> dict[str, Any]:
     }
 
 
+def get_statement_tree(run_id: int, statement: str) -> list[dict[str, Any]]:
+    """Expandable P&L / Executive Summary rebuilt from the run's stored TB (the same rows the
+    saved statement was built from, so the totals tie out). [] for other statements."""
+    from reports import financials
+
+    if statement not in ("PL", "Executive Summary"):
+        return []
+    run = get_run(run_id)
+    tb = get_trial_balance(run_id)
+    if not run or not tb["rows"]:
+        return []
+    summary = {**run["summary"], "months": tb["months"],
+               "from_date": run["from_date"], "to_date": run["to_date"]}
+    pl, figures = financials.build_profit_and_loss(tb["rows"], summary)
+    stmt = pl if statement == "PL" else financials.build_executive_summary(figures, summary)
+    return [n.as_dict() for n in stmt.tree]
+
+
 def get_trial_balance(run_id: int) -> dict[str, Any]:
     run = get_run(run_id)
     months = run["months"] if run else []

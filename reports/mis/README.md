@@ -73,6 +73,10 @@ MonthlyTB, Category Master.
 - Each statement ends with a check row (P&L vs TB, Assets vs Capital & Liabilities);
   exit code 1 if any check is off. Categories a statement doesn't know land in an
   "Unmapped …" line instead of disappearing.
+- Web viewer: P&L and Executive Summary are expandable trees (section → category →
+  sub-category → account), rebuilt from the run's stored TB so every parent equals the
+  sum of its children. Outline level 1–4, Largest-first order, and Find (auto-expands
+  to matches). The Excel export keeps the flat layout.
 
 ## Invoice margin
 

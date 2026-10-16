@@ -757,3 +757,144 @@ table.data {
 /* Margin tables: text cells hold at most 50 chars (cut in JS); this keeps them on one line. */
 td.txt { max-width: 50ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 th.date, td.date { width: 11ch; min-width: 11ch; white-space: nowrap; }
+
+/* ------------------------------------------------------------------ expandable statements (Executive Summary, P&L) */
+
+/* Outline level: Excel-style 1 2 3 4 buttons; 1 collapses everything, the last opens every account. */
+.outline {
+  display: inline-flex;
+  height: 40px;
+  border-radius: var(--shape-ctl);
+  box-shadow: inset 0 0 0 1px var(--md-outline);
+  overflow: hidden;
+}
+.outline button {
+  min-width: 40px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--md-on-surface-variant);
+  font: 500 14px/20px var(--font);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease);
+}
+.outline button + button { box-shadow: inset 1px 0 0 var(--md-outline-variant); }
+.outline button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.outline button[aria-pressed="true"] { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.outline button:focus-visible { outline-offset: -2px; }
+
+/* Label cell: indent per depth, a guide line under every ancestor's chevron. */
+table.data.tree tr td.tl { padding-left: calc(8px + var(--depth, 0) * 22px); }
+.tl-in { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tl-in .lbl { flex: 0 1 auto; min-width: 0; }
+.data .guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(20px + var(--g) * 22px);
+  width: 1px;
+  background: var(--md-outline-variant);
+  pointer-events: none;
+}
+
+.twisty {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--shape-ctl);
+  background: transparent;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+  transition: background-color 150ms var(--ease);
+}
+.twisty .icon { width: 20px; height: 20px; transition: transform 180ms var(--ease); }
+.twisty[aria-expanded="true"] .icon { transform: rotate(90deg); }
+.twisty:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.twisty-sp { flex: none; width: 24px; }
+
+/* Collapsed parents say how many rows they hold. */
+.data .kids {
+  flex: none;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--md-surface-container-highest);
+  color: var(--md-on-surface-variant);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
+  font-style: normal;
+}
+.data .code {
+  flex: none;
+  color: var(--md-on-surface-variant);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+/* Share of the parent's Total: a short bar plus the percentage, right of the label. */
+.data .share {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--md-on-surface-variant);
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.data .share i {
+  position: relative;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--md-surface-container-highest);
+  overflow: hidden;
+}
+.data .share i::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--share) * 100%);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--md-primary) 75%, transparent);
+}
+.data .share.contra i::after { background: var(--md-error); }
+.data .share b { min-width: 30px; text-align: right; font-weight: 500; }
+
+/* Rows: parents read as heads, each level down sits on a slightly deeper tint. */
+table.data.tree tr.parent { cursor: pointer; }
+table.data.tree tr.section td { font-weight: 600; }
+table.data.tree tr.d0.section td { border-top: 1px solid var(--md-outline-variant); }
+table.data.tree tr.category td { font-weight: 500; color: var(--md-on-surface); }
+table.data.tree tr.sub td { font-weight: 400; color: var(--md-on-surface); }
+table.data.tree tr.account td { color: var(--md-on-surface-variant); }
+table.data.tree tr.d1 td { background: var(--md-surface-container-low); }
+table.data.tree tr.d2 td { background: var(--md-surface-container); }
+table.data.tree tr.d3 td, table.data.tree tr.d4 td { background: #f2f4f7; }
+table.data.tree tr td.neg { color: var(--md-error); }
+table.data.tree tr.open > td:first-child { box-shadow: inset 3px 0 0 var(--md-primary); }
+table.data.tree tr.open .lbl { color: var(--md-primary); }
+table.data.tree tbody tr:hover td { background: color-mix(in srgb, var(--md-primary) 6%, var(--md-surface-container-lowest)); }
+table.data.tree tr.total:hover td { background: var(--md-surface-container-high); }
+table.data.tree tr.dim td { opacity: 0.45; }
+.data mark { background: var(--md-warning-container); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* Rows that just opened slide in under their parent. */
+@keyframes tree-in { from { opacity: 0; transform: translateY(-6px); } }
+table.data.tree tr.reveal td { animation: tree-in 220ms var(--ease) both; animation-delay: calc(min(var(--i), 12) * 16ms); }
+
+@media print {
+  .data .guide, .twisty, .data .share i { display: none; }
+  table.data.tree tr td.tl { padding-left: calc(6px + var(--depth, 0) * 14px) !important; }
+}
