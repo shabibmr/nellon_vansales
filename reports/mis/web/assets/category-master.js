@@ -110,7 +110,7 @@
       <td class="l">${esc(r.category) || '<span class="muted">Not set</span>'}</td>
       <td class="l">${esc(r.sub_category)}</td>
       <td class="l"><span class="tag ${r.source}" title="${esc(r.note)}">${r.source}</span></td>
-      <td class="n hide-sm${bal < 0 ? " neg" : ""}">${bal ? NUM.format(bal) : ""}</td>
+      <td class="n hide-sm${bal < 0 ? " neg" : ""}">${bal ? (bal < 0 ? `(${NUM.format(-bal)})` : NUM.format(bal)) : ""}</td>
     </tr>`;
   }
 

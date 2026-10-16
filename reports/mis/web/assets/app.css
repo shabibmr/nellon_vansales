@@ -387,7 +387,7 @@ table.data {
 }
 .data thead th:first-child { z-index: 3; background: var(--md-surface-container); }
 .data td.n { text-align: right; }
-.data td.neg { color: var(--md-error); }
+.data td.neg, .data tbody tr td.neg { color: var(--md-error); }  /* beats the sub/pct row colours */
 .data .tot { border-left: 1px solid var(--md-outline-variant); font-weight: 500; }
 
 .data tbody tr { transition: background-color 120ms var(--ease); }
@@ -756,3 +756,4 @@ table.data {
 
 /* Margin tables: text cells hold at most 50 chars (cut in JS); this keeps them on one line. */
 td.txt { max-width: 50ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+th.date, td.date { width: 11ch; min-width: 11ch; white-space: nowrap; }

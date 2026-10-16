@@ -61,8 +61,9 @@
   const fmt = (v, pct) => {
     if (v === "" || v === null || v === undefined) return "";
     const n = Number(v);
-    if (pct) return `${(n * 100).toFixed(1)}%`;
-    return Math.abs(n) < 0.005 ? "-" : NUM.format(n);
+    if (pct) return n < 0 ? `(${(-n * 100).toFixed(1)}%)` : `${(n * 100).toFixed(1)}%`;  // accounting: negatives in brackets
+    if (Math.abs(n) < 0.005) return "-";
+    return n < 0 ? `(${NUM.format(-n)})` : NUM.format(n);
   };
 
   const numCell = (v, { pct = false, total = false } = {}) =>
@@ -238,21 +239,21 @@
       return;
     }
     const byLine = t.detail === "line";
-    const th = (l, n) => `<th scope="col"${n ? ' class="n"' : ""}>${l}</th>`;
+    const th = (l, n, c) => `<th scope="col"${n ? ' class="n"' : c ? ` class="${c}"` : ""}>${l}</th>`;
     const head = byLine
-      ? [th("Date"), th("Invoice"), th("Customer"), th("Item"), th("Unit"), th("Qty", 1), th("Rate", 1),
+      ? [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Item"), th("Unit"), th("Qty", 1), th("Rate", 1),
         th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)]
-      : [th("Date"), th("Invoice"), th("Customer"), th("Salesperson"), th("Lines", 1),
+      : [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Salesperson"), th("Lines", 1),
         th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)];
     const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
     const tn = sum("net_sales"), tc = sum("cost"), tm = sum("gross_margin");
     const flag = (r) => (byLine ? r.flag : r.flagged)
       ? `<span class="tag review">${byLine ? esc(r.flag) : `${r.flagged} flagged`}</span>` : "";
     const body = rows.map((r) => byLine
-      ? `<tr><td>${esc(r.date)}</td>${txt(r.invoice_number)}${txt(r.customer_name)}` +
+      ? `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number)}${txt(r.customer_name)}` +
         `${txt(r.item_name, flag(r))}${txt(r.unit)}${numCell(r.quantity)}${numCell(r.rate)}` +
         `${numCell(r.net_sales)}${numCell(r.cost)}${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`
-      : `<tr><td>${esc(r.date)}</td>${txt(r.invoice_number, flag(r))}${txt(r.customer_name)}` +
+      : `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, flag(r))}${txt(r.customer_name)}` +
         `${txt(r.salesperson_name)}<td class="n">${r.line_count}</td>${numCell(r.net_sales)}${numCell(r.cost)}` +
         `${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
     const span = byLine ? 7 : 4;

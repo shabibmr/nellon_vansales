@@ -37,7 +37,7 @@
 
   function money(n) {
     const abs = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return `${payload.currency} ${n < 0 ? "−" : ""}${abs}`;
+    return n < 0 ? `${payload.currency} (${abs})` : `${payload.currency} ${abs}`;
   }
 
   function getJson(path) {
