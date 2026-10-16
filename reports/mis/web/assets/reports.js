@@ -141,7 +141,6 @@
             <input class="input" id="dtq" type="search" autocomplete="off"
                    placeholder="Invoice, customer or item" value="${esc(state.detailFilter)}"></span></label>`;
     }
-    }
     if (t.id === "tb") {
       html = `<label class="field grow"><span>Filter</span>
                 <span class="search">${icon("search")}
