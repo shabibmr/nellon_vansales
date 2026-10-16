@@ -84,7 +84,7 @@ class TreeTest(unittest.TestCase):
                          ["Employee Costs", "Office Expenses", "Unmapped P&L accounts"])
         self.assertEqual(by["Revenue Booked"].values[TOTAL], 2050)
         self.assertEqual(by["GM"].children, [])
-        self.assertEqual(by["Income Tax"].children, [])  # no tax accounts
+        self.assertEqual(by["Corporate Tax"].children, [])  # no tax accounts
         self.assertEqual([n.label for n in self.ex.tree], [ln.label for ln in self.ex.lines])
 
     def test_as_dict_omits_empty(self) -> None:

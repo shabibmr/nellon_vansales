@@ -354,7 +354,7 @@ EXEC_DRILLDOWN = {
     "Finance Cost": "Finance Cost",
     "Depreciation": "Depreciation",
     "FX Gain/loss": "Foreign Exchange",
-    "Income Tax": "Tax",
+    "Corporate Tax": "Tax",
 }
 
 
@@ -376,7 +376,7 @@ def build_executive_summary(figures: PLFigures, summary: dict[str, Any]) -> Stat
         Line("Finance Cost", "category", f.finance_cost),
         Line("Depreciation", "category", f.depreciation),
         Line("FX Gain/loss", "category", f.fx),
-        Line("Income Tax", "category", f.income_tax),
+        Line("Corporate Tax", "category", f.income_tax),
         Line("Net Profit", "total", f.net_profit),
         Line("Net Profit %", "pct", _pct(f.net_profit, rev)),
     ]

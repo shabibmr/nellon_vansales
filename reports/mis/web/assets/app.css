@@ -183,13 +183,25 @@ code {
   place-items: center;
   width: 40px;
   height: 40px;
+  padding: 0;
   border: 0;
   border-radius: var(--shape-ctl);
   background: transparent;
   color: var(--md-on-surface-variant);
   cursor: pointer;
+  text-decoration: none;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
 }
+.icon-btn .icon { width: 24px; height: 24px; margin: 0; }
 .icon-btn:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.icon-btn.filled { background: var(--md-primary); color: var(--md-on-primary); }
+.icon-btn.filled:hover { background: color-mix(in srgb, var(--md-primary) 92%, black); }
+.icon-btn.tonal { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.icon-btn[disabled], .icon-btn[aria-disabled="true"] {
+  background: color-mix(in srgb, var(--md-on-surface) 12%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface) 38%, transparent);
+  pointer-events: none;
+}
 
 /* ------------------------------------------------------------------ fields */
 

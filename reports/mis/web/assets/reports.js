@@ -141,16 +141,6 @@
             <input class="input" id="dtq" type="search" autocomplete="off"
                    placeholder="Invoice, customer or item" value="${esc(state.detailFilter)}"></span></label>`;
     }
-    if (t.tree) {
-      html = `<div class="field"><span id="lvlLabel">Outline level</span>
-                <div class="outline" id="treeLevels" role="group" aria-labelledby="lvlLabel"></div></div>
-        <label class="field"><span>Order</span><select class="input" id="treeSort">
-          <option value="statement"${state.tree.sort === "statement" ? " selected" : ""}>Statement order</option>
-          <option value="size"${state.tree.sort === "size" ? " selected" : ""}>Largest first</option></select></label>
-        <label class="field grow"><span>Find</span>
-          <span class="search">${icon("search")}
-            <input class="input" id="treeq" type="search" autocomplete="off"
-                   placeholder="Category, sub-category, account or code" value="${esc(state.tree.q)}"></span></label>`;
     }
     if (t.id === "tb") {
       html = `<label class="field grow"><span>Filter</span>
@@ -172,14 +162,6 @@
     }
     if ($("dtq")) $("dtq").oninput = (e) => { state.detailFilter = e.target.value; renderDetail(state.detailData, t); };
     if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
-    if ($("treeq")) {
-      $("treeq").oninput = (e) => { state.tree.q = e.target.value; renderTree(); };
-      $("treeSort").onchange = (e) => { state.tree.sort = e.target.value; renderTree(); };
-      $("treeLevels").onclick = (e) => {
-        const b = e.target.closest("[data-level]");
-        if (b) setLevel(Number(b.dataset.level));
-      };
-    }
   }
 
   // "2026-04-01" → "Apr-26"; the period reads "Apr-26 – Sep-26", or one month when both ends fall in it.
@@ -332,12 +314,6 @@
       return n.hit || n.holds;
     };
     const found = nodes.map((n) => mark(n, false)).some(Boolean);
-
-    const levels = levelCount(nodes), lv = currentLevel();
-    if ($("treeLevels")) $("treeLevels").innerHTML = Array.from({ length: levels }, (_, k) => k + 1).map((l) =>
-      `<button type="button" data-level="${l}" aria-pressed="${l === lv}" title="${
-        l === 1 ? "Collapse everything" : l === levels ? "Expand down to accounts" : `Open ${l - 1} level${l > 2 ? "s" : ""} down`
-      }">${l}</button>`).join("");
 
     if (q && !found) {
       stateView("search", "Nothing matches", "Try a different category, account name or code.");
