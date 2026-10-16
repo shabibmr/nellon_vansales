@@ -126,7 +126,14 @@ def write_statement_workbook(
             if ln.kind == "title":
                 label.font = Font(bold=True, color="1F4E79")
                 continue
-            if ln.kind == "sub":
+            level = getattr(ln, "level", None) if getattr(st, "open_level", 0) else None
+            if level is not None:
+                ws.row_dimensions[r].outline_level = level
+                if level >= st.open_level:
+                    ws.row_dimensions[r].hidden = True
+                if level and ln.kind != "total":
+                    label.alignment = Alignment(indent=2 * level)
+            if ln.kind == "sub" and level is None:
                 label.alignment = Alignment(indent=2)
                 label.font = Font(color="555555")
             elif ln.kind == "pct":
@@ -152,6 +159,9 @@ def write_statement_workbook(
         for col in range(2, len(st.columns) + 2):
             ws.column_dimensions[get_column_letter(col)].width = 16
         ws.freeze_panes = "B5"
+        if getattr(st, "open_level", 0):
+            ws.sheet_properties.outlinePr.summaryBelow = False  # +/- sits on the parent row above its children
+            ws.sheet_format.outlineLevelRow = max(getattr(ln, "level", 0) for ln in st.lines)
 
     for sheet_name, (columns, rows) in (data_sheets or {}).items():
         ws = wb.create_sheet(sheet_name[:31])

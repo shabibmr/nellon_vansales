@@ -36,6 +36,7 @@ class Sheet:
     columns: list[str]
     lines: list[Line] = field(default_factory=list)
     first_header: str = "Particulars"
+    open_level: int = 0  # >0: lines carry `.level`; rows deeper than this start collapsed
 
 
 def _mon(iso: str) -> str:
@@ -55,11 +56,27 @@ def _statement_sheets(run: dict[str, Any]) -> list[Sheet]:
     sheets = []
     for name, title in STATEMENT_SHEETS:
         data = db.get_statement(run["id"], name)
-        sheets.append(
-            Sheet(name, title, _period(run), data["columns"],
-                  [Line(ln["label"], ln["kind"], ln["values"]) for ln in data["lines"]])
-        )
+        lines = [Line(ln["label"], ln["kind"], ln["values"]) for ln in data["lines"]]
+        open_level = 0
+        tree = db.get_statement_tree(run["id"], name)
+        if tree:  # same outline as the web view: parents carry sums, children group beneath
+            lines = []
+            _flatten(tree, 0, lines)
+            open_level = TREE_OPEN_LEVEL[name]
+        sheets.append(Sheet(name, title, _period(run), data["columns"], lines, open_level=open_level))
     return sheets
+
+
+# Default visible outline depth, same as the web tabs (1 = top rows only).
+TREE_OPEN_LEVEL = {"Executive Summary": 1, "PL": 2}
+
+
+def _flatten(nodes: list[dict[str, Any]], depth: int, out: list[Line]) -> None:
+    for n in nodes:
+        ln = Line(n["label"], n["kind"], n["values"])
+        ln.level = depth  # type: ignore[attr-defined]
+        out.append(ln)
+        _flatten(n.get("children", []), depth + 1, out)
 
 
 def _trial_balance_sheet(run: dict[str, Any]) -> Sheet:
