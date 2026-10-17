@@ -5,3 +5,4 @@ output/
 .env
 .env_*
 .zoho_token*.json
+zoho_api_tools/out/
