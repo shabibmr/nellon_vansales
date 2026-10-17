@@ -20,7 +20,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from zoho_client import ZohoClient
 
-PAYLOAD = Path(__file__).resolve().parent / "test_invoice_TEST-INV-1111.json"
+PAYLOAD = Path(__file__).resolve().parent / "data" / "test_invoice_TEST-INV-1111.json"
+if not PAYLOAD.exists():
+    PAYLOAD = Path(__file__).resolve().parent / "test_invoice_TEST-INV-1111.json"
 
 
 def main() -> int:
