@@ -23,7 +23,7 @@
     render(nav, active) {
       nav.innerHTML = TABS.map((t) =>
         `<a href="./?tab=${t.id}" data-tab="${t.id}"${current(t.id === active)}>${esc(t.label)}</a>`)
-        .join("") + `<a href="categories"${current(active === "categories")}>Categories</a>`;
+        .join("") + `<a href="category_master.html"${current(active === "categories")}>Categories</a>`;
     },
   };
 })();
