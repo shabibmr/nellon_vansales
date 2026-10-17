@@ -10,6 +10,8 @@ Draft and void documents stay in the tables. Revenue reports skip them. Purchase
 
 Vendor credits are not in these tables. A customer credit note reduces sales. A customer debit note increases sales. Both are stored as positive amounts on their own tables. Net sales is invoices, plus debit notes, minus credit notes. Net COGS uses the same signs.
 
+The general ledger is one row per posting in `gl_journals`. The trial balance is the sum of those rows.
+
 ## sales_invoices
 
 One row per Zoho invoice. Primary key `invoice_id`.
@@ -230,28 +232,62 @@ One row per Zoho chart-of-accounts record. Primary key `account_id`. This replac
 
 `group_ledger`, `pl_bs`, `category`, `sub_category`, `source`, and `note` are MIS fields. Zoho does not send them. A hand edit in `category_overrides.csv` wins, then the name rules, then the parent chain, then `account_type`. A row with `source = review` still has a suggested category.
 
-`current_balance` stays off this table. A balance is a general-ledger figure and changes with every posting. `gl_monthly` holds the movement.
+`current_balance` stays off this table. A balance is a general-ledger figure and changes with every posting. `gl_journals` holds the postings.
 
-## gl_monthly
+## gl_journals
 
-One row per account per month. Primary key (`account_id`, `month`). `account_id` references `accounts`. This replaces `tb_accounts` and `tb_monthly`. The name, type, and category stay on `accounts`.
+One row per account posting. Primary key (`account_id`, `categorized_transaction_id`). `account_id` references `accounts`. This replaces `tb_accounts` and `tb_monthly`. The trial balance is a sum of these rows. A month is `DATE_FORMAT(transaction_date, '%Y-%m')` at read time. There is no stored month row and no baseline row `0000-00`.
+
+`fetch_cost_of_sales_nellon.py` already stores this row for one account. It calls `GET /chartofaccounts/transactions?account_id=3331482000000034003` (Cost of Sales - Nellon, code `5.1.1000`) and upserts `cost_of_sales_nellon`, one row per `categorized_transaction_id`. `amount` is debit minus credit. The same call, once per ledger account and with no `transaction_type` filter, fills `gl_journals`. `account_id` is required. A group account has no postings.
+
+`/generalledger/journals` is not in this repo and not in `zohodocs`. `GET /journals` returns manual journals only (`entity_type=journal`) and leaves out invoices, bills, expenses, and receipts. `GET /reports/generalledger` returns one debit total and one credit total per account. `GET /transactions/{id}/journals` is one document. The row that already sums an account is the `/chartofaccounts/transactions` posting. If a later call shows `/generalledger/journals` returns these same fields for every account at once, store that response here and stop calling once per account.
 
 | Column | What it holds |
 |---|---|
-| `account_id` | Zoho account id |
-| `month` | `YYYY-MM`. The row `0000-00` is the baseline: all movement before the first month stored |
-| `debit` | Debit total for that month, in AED. Empty when only `net` is known |
-| `credit` | Credit total for that month, in AED. Empty when only `net` is known |
-| `net` | `debit − credit`. Debit-positive: a debit is positive and a credit is negative |
-| `synced_at` | When this month was fetched |
+| `account_id` | Zoho account id. References `accounts` |
+| `categorized_transaction_id` | Zoho id of this posting line. With `account_id`, the primary key |
+| `account_name`, `account_code` | Copied from the fetch page, as `cost_of_sales_nellon` does |
+| `transaction_id` | Document id. An invoice, a bill, a payment, a credit note, a vendor credit, or a manual journal |
+| `transaction_type`, `transaction_type_formatted` | Zoho type, for example `inventory_valuation_for_invoice` |
+| `transaction_date` | Posting date |
+| `entry_number`, `reference_number` | Document number and reference |
+| `customer_id` | Zoho's field name. On a vendor credit it is still called `customer_id` |
+| `payee`, `description` | Party name and narration |
+| `debit_or_credit` | `debit` or `credit` |
+| `debit_amount`, `credit_amount` | AED. The empty side arrives as blank and is stored as 0 |
+| `amount` | `debit_amount − credit_amount`. Debit-positive |
+| `fcy_debit_amount`, `fcy_credit_amount`, `currency_id`, `currency_code` | Document-currency amounts. The trial balance uses the AED columns |
+| `offset_account_name` | The other account's name. Zoho does not send an offset account id on this row |
+| `raw_json` | The posting Zoho returned. The trial balance does not read it |
+| `fetched_at` | Local write time. A posting has no `last_modified_time` |
 
-Zoho's `GET /reports/generalledger` returns the movement for the dates you ask for. It does not return an opening balance. Opening and closing are sums of these rows, built when a report is read.
+`pl_bs` and `category` stay on `accounts`. A category override then shows on the next report without rewriting the postings.
 
-`nellon_mis` and `nellon_mis_dev` hold the same financials run, 1 Apr 2026 through 30 Sep 2026: 169 accounts and 635 month rows. Each month's nets add up to 0.00. `nellon_mis_test` has the tables and no rows. `tb_monthly` stores `net` only. Debit and credit are kept for the whole six-month run, not for each month, so that run can seed `net` and cannot seed `debit` or `credit`.
+Two rows can share `transaction_id` and `account_id`. The double Cost of Sales debit on one invoice is that case. Key the row by `categorized_transaction_id`. Do not key it by `transaction_id`.
 
-A balance-sheet opening is the baseline plus every month before the report. A profit-and-loss opening counts only the months since 1 January of the report's year. The profit and loss from the baseline, which is every year before that January, is one synthetic balance-sheet row, account id `__prior_years_pl__`, named "Prior years P&L (retained)", under Reserves and surplus. That row is computed when the report is built. It is not a Zoho account and it is not stored in `gl_monthly`.
+Do not filter `transaction_type`. Invoice cost arrives as `inventory_valuation_for_invoice`. A filter of `invoice` returns nothing. Credit notes, vendor credits, bills, expenses, receipts, adjustments, and manual journals stay in the sum.
 
-`cost_of_sales_nellon` and `inventory_postings` stay the posting-level ledger for those accounts. `gl_monthly` does not replace them.
+`nellon_mis.cost_of_sales_nellon` is this shape for one account: 10,057 rows. `inventory_postings` is the same shape for the inventory asset accounts. Copy both into `gl_journals`. After that load, the trial balance reads `gl_journals` only.
+
+### Trial balance
+
+For `from_date` through `to_date`, for each `account_id`:
+
+- Period debit is `SUM(debit_amount)`.
+- Period credit is `SUM(credit_amount)`.
+- Movement is `SUM(amount)`, which is period debit minus period credit.
+- Opening is `SUM(amount)` on dates before `from_date`. A balance-sheet account uses every earlier row. A profit-and-loss account uses only the rows since 1 January of the report year. `organization.fiscal_year_start_month` is 1.
+- Closing is opening plus movement.
+
+Show a positive opening or closing in the debit column. Show a negative one in the credit column as a positive number. The stored `amount` stays debit-positive.
+
+Prior-year profit and loss is one computed balance-sheet row, account id `__prior_years_pl__`, named "Prior years P&L (retained)", under Reserves and surplus. It is the sum of `amount` on accounts whose `pl_bs` is `PL`, for dates before 1 January of the report year. It is not a Zoho account and it is not stored.
+
+A complete set of postings in a period has `SUM(amount) = 0` across every account. One account does not. `GET /reports/trialbalance` is the check. Do not write a difference back into the table. A gap means postings were not loaded, including an opening balance Zoho did not return as a transaction.
+
+`tb_monthly` for Apr–Sep 2026 can check a month's net. Each of those months sums to 0.00. It cannot seed `gl_journals`. It has no posting id, and debit and credit exist only as a six-month total on `tb_accounts`.
+
+`sales_invoices.cogs` stays the sum of the line costs. The Cost of Sales account sum is a check. An invoice can have two debit rows, and then the account sum is about twice the invoice.
 
 ## items
 
@@ -373,7 +409,7 @@ A location that is only a warehouse stays in `locations` and has no `vans` row. 
 These are calculated, copied from the header, or belong to another table:
 
 - `month`, `line_count`, header `base_quantity`, `gross_margin`, and `cost_rate`
-- Account name, category, opening, and closing copied onto each general-ledger row. Opening and closing are sums of `gl_monthly`
+- `pl_bs`, `category`, opening, and closing on `gl_journals`. Opening and closing are sums of `amount`. Category is read from `accounts`
 - `customer_name`, `salesperson_name`, and `invoice_number` repeated on every sales line
 - `run_id` and `line_no`
 - `cost_source`
@@ -384,7 +420,7 @@ These are calculated, copied from the header, or belong to another table:
 - On a contact: `outstanding_receivable_amount`, `outstanding_payable_amount`, route, GPS, and contact persons. The amounts change with every invoice, bill, and payment. Route and GPS belong to the van-sales app
 - The organisation payload in `organization.raw`. The base currency and the fiscal-year month are columns
 
-`cost_of_sales_nellon` stays the Cost of Sales ledger. One invoice can have more than one posting, so `sales_invoices.cogs` does not replace it. `inventory_postings` stays the inventory asset side.
+`cost_of_sales_nellon` and `inventory_postings` are the same posting row for named accounts. Once `gl_journals` is loaded, the trial balance reads that table. One invoice can have more than one Cost of Sales posting, so `sales_invoices.cogs` does not replace the ledger.
 
 ## Sync
 
@@ -408,9 +444,7 @@ Load masters before documents. The organisation is the exception: fetch it once 
 
 `GET /journals` does not feed these tables. That endpoint returns manual journals and leaves out invoices, bills, credit notes, debit notes, expenses, and receipts.
 
-`cost_of_sales_nellon` and `inventory_postings` stay a separate load from `GET /chartofaccounts/transactions`. That load does not write `sales_invoices.cogs` or `gl_monthly`.
-
-`gl_monthly` is its own load, after `accounts` and `organization`. One `GET /reports/generalledger` call per calendar month, plus one call for the baseline. It does not wait on the invoices or the bills.
+`gl_journals` is its own load, after `accounts`. It does not wait on the invoices or the bills, and it does not write `sales_invoices.cogs`.
 
 ### Organisation
 
@@ -446,15 +480,15 @@ Do not write `current_balance` onto `accounts`.
 
 ### General ledger
 
-Call `GET /reports/generalledger` with `filter_by=TransactionDate.CustomDate` for one calendar month at a time. Store `debit_total` and `credit_total` on `gl_monthly`, and set `net` to debit minus credit. Replace that month's rows on each fetch. A closed month can be skipped once `synced_at` is set. The current month is fetched again, because Zoho is still posting into it.
+Call `GET /chartofaccounts/transactions` once per ledger account, `per_page=200`, with `date.start` and `date.end` when the load is a window. Leave `transaction_type` unset. Skip accounts whose `group_ledger` is `Group`. There are 309 ledgers on the current chart. This design does not start that fetch.
 
-The first stored month is January 2026, the start of the financial year. The baseline row `0000-00` is one call from 2000-01-01 through 31 Dec 2025. Prior-year profit and loss then sits entirely in that baseline, and the retained-earnings row can be the sum of baseline `net` for accounts whose `pl_bs` is `PL`.
+Upsert by (`account_id`, `categorized_transaction_id`). On a reload of a date window, also delete rows in that window, for the accounts just fetched, whose `categorized_transaction_id` was not in the response. `reports/account_postings.py` updates and does not delete. A voided posting would stay in the trial balance.
 
-Do not copy `account_name`, `pl_bs`, or `category` onto `gl_monthly`. A category override then shows on the next report without a reload. Do not write `__prior_years_pl__` into the table.
+`account_name` and `account_code` come from the page context, which is how `to_row` fills `cost_of_sales_nellon`. Do not copy `pl_bs` or `category` onto the posting. Do not write `__prior_years_pl__` into the table. Do not reuse `check_account` for this load. That guard refuses any account outside the one-account script.
 
-`tb_monthly` for Apr–Sep 2026 can fill `net` for those six months. Leave `debit` and `credit` empty until a general-ledger call returns them. An empty debit is not a zero. The report can show the net, and it cannot show a debit or credit column for a month that was only seeded.
+`cost_of_sales_nellon` and `inventory_postings` can be copied in for the accounts they already hold. A later full fetch replaces those accounts' rows for the dates it covers.
 
-`GET /journals` does not fill this table. `statement_lines` and `statement_values` are the profit and loss and balance sheet built for one run. Rebuild those from `gl_monthly` and `accounts` when someone opens the report.
+`statement_lines` and `statement_values` are the profit and loss and balance sheet built for one run. Rebuild those from `gl_journals` and `accounts` when someone opens the report.
 
 ### Customers and vendors
 
