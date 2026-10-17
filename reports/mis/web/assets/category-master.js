@@ -281,6 +281,7 @@
     }
   });
 
+  MISTabs.render($("tabs"), "categories");
   api("api/category-master").then(setData).catch((e) => {
     $("subtitle").textContent = "Could not load the chart of accounts";
     $("tableWrap").innerHTML = `<div class="state error">${icon("error", "xl")}
