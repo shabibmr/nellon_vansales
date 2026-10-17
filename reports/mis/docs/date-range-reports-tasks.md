@@ -28,6 +28,17 @@ What we keep: the fetchers (`invoice_margin.MarginSource`, `purchases.PurchaseSo
 
 ---
 
+## Status
+
+| Task | State | Notes |
+|---|---|---|
+| T1.1–T1.5 | done (worktree `mis-date-range`) | table is `purchase_doc_lines`; coverage rows are trimmed, not merged, so each range keeps its own `synced_at` / `source` |
+| T1.3 | done | **dual write** during rollout: `margin` / `purchases` still save a run (fetch log, Excel export) *and* replace the range in the dated tables; `db-load` does both too |
+| T1.4 | done | dev DB: Sep = run #7, Oct = #9 + #8, purchases = #3 to the cent; re-run is identical |
+| T1.6–T1.7 | done | day grain for Margin / Purchases, month grain unchanged for financials; comparison of a range starting on the 1st steps by months (1–17 Oct ↔ 1–17 Sep) |
+| T1.8 | done | `tests/test_date_columns.py`, `tests/test_sync_replace.py` (`MIS_TEST_DB_NAME=nellon_mis_test`) |
+| Phase 2+ | not started | |
+
 ## Phase 1 — Margin & Purchases by date (fixes "where is September")
 
 ### T1.1 New date-keyed tables (`reports/db.py` SCHEMA)

@@ -12,9 +12,11 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /api/runs?kind=         → stored runs
     GET  /api/statement?run_id=&name=   Executive Summary | PL | BS (+ expandable `tree` for the first two)
     GET  /api/tb?run_id=         → monthly trial balance
-    GET  /api/margin?run_id=&dim=&measure=   margin pivot by month
-    GET  /api/margin-detail?run_id=&view=line|invoice   margin per invoice line / per invoice
-    GET  /api/purchases?run_id=&dim=&measure=   bills + purchase orders pivot by month
+    GET  /api/coverage?dataset=sales|purchases  → loaded date ranges and gaps
+    GET  /api/margin?from=&to=[&cols=key:from:to,…]&dim=&measure=   margin pivot over any dates
+         (columns = the given ranges, default one per month + Total; `run_id=` still reads a stored run)
+    GET  /api/margin-detail?from=&to=&view=line|invoice   margin per invoice line / per invoice (or run_id=)
+    GET  /api/purchases?from=&to=[&cols=…]&dim=&measure=   bills + purchase orders pivot (or run_id=)
     GET  /api/export.xlsx?run_id=[&margin_run=&purchases_run=]  → Excel workbook (financials, margin, purchases, category master)
     GET  /api/category-master    → rows built from the cached COA snapshot + overrides
     GET  /api/cashflow           → cash forecast from the COA snapshot and cached documents (no Zoho)
@@ -50,7 +52,7 @@ from exporters import write_csv, write_excel_sheets
 from main import BASE_DIR, COA_SNAPSHOT, OUT_DIR, OVERRIDES_CSV, load_coa_snapshot
 from reports import category_master as cm
 from reports import cashflow_forecast as cf
-from reports import db, web_auth
+from reports import db, periods, web_auth
 from reports.excel_export import build_workbook
 
 WEB_PAGE = BASE_DIR / "web" / "category_master.html"
@@ -167,6 +169,13 @@ def _int(q: dict[str, str], key: str) -> int:
         return int(q.get(key, ""))
     except ValueError:
         raise ValueError(f"{key} must be an integer") from None
+
+
+def _cols(q: dict[str, str]) -> list[periods.Col]:
+    """Report columns: `cols=key:from:to,…` from the date filter, else one per month of from..to + Total."""
+    if q.get("cols"):
+        return periods.parse_cols(q["cols"])
+    return periods.month_cols(*periods.parse_range(q.get("from"), q.get("to")))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -302,13 +311,24 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+            elif path == "/api/coverage":
+                self._json(HTTPStatus.OK, db.get_coverage(q.get("dataset", "")))
+            elif path == "/api/margin" and "run_id" not in q:
+                self._json(HTTPStatus.OK, db.get_margin_pivot_range(
+                    _cols(q), q.get("dim", "item"), q.get("measure", "net_sales")))
             elif path == "/api/margin":
                 self._json(
                     HTTPStatus.OK,
                     db.get_margin_pivot(_int(q, "run_id"), q.get("dim", "item"), q.get("measure", "net_sales")),
                 )
+            elif path == "/api/margin-detail" and "run_id" not in q:
+                start, end = periods.parse_range(q.get("from"), q.get("to"))
+                self._json(HTTPStatus.OK, db.get_margin_detail_range(start, end, q.get("view", "line")))
             elif path == "/api/margin-detail":
                 self._json(HTTPStatus.OK, db.get_margin_detail(_int(q, "run_id"), q.get("view", "line")))
+            elif path == "/api/purchases" and "run_id" not in q:
+                self._json(HTTPStatus.OK, db.get_purchase_pivot_range(
+                    _cols(q), q.get("dim", "vendor"), q.get("measure", "amount")))
             elif path == "/api/purchases":
                 self._json(
                     HTTPStatus.OK,

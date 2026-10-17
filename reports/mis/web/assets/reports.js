@@ -28,10 +28,14 @@
   };
 
   const qs = new URLSearchParams(location.search);
+  // Margin and purchases read the dated tables for any range; financials still read one stored run.
+  const DATASET = { margin: "sales", purchases: "purchases" };
+  const COMMAND = { margin: "margin", purchases: "purchases" };
   const state = {
     tab: TABS.some((t) => t.id === qs.get("tab")) ? qs.get("tab") : "exec",
-    runs: { financials: [], margin: [], purchases: [] },
-    selected: { financials: null, margin: null, purchases: null },
+    runs: { financials: [] },
+    selected: { financials: null },
+    coverage: { sales: null, purchases: null },  // /api/coverage per dataset
     pivot: { margin: { dim: "item", measure: "net_sales" }, purchases: { dim: "vendor", measure: "amount" } },
     tbFilter: "",
     detailFilter: "",
@@ -89,8 +93,11 @@
     return body;
   }
 
+  // A dated tab's link carries its range, so it reproduces the view.
   function syncUrl() {
     const p = new URLSearchParams({ tab: state.tab });
+    const r = DATASET[tab().kind] && DF.isoRange();
+    if (r) { p.set("from", r.from); p.set("to", r.to); }
     history.replaceState(null, "", `?${p}`);
   }
 
@@ -109,12 +116,11 @@
   }
 
   function renderExport() {
-    // The workbook covers the selected financials run.
+    // The workbook covers the selected financials run (margin / purchases: the run matching its period).
     const btn = $("exportBtn");
     const id = state.selected.financials || (state.runs.financials[0] || {}).id;
     if (id) {
-      const extra = ["margin", "purchases"].map((k) => state.selected[k] ? `&${k}_run=${state.selected[k]}` : "").join("");
-      btn.href = `api/export.xlsx?run_id=${id}${extra}`;
+      btn.href = `api/export.xlsx?run_id=${id}`;
       btn.removeAttribute("aria-disabled");
       btn.title = `Run #${id}: Executive Summary, PL, BS, Trial Balance, Margin, Purchases and Category Master`;
     } else {
@@ -360,7 +366,7 @@
 
   function renderPivot(data, t) {
     if (!data.rows.length) {
-      stateView("database", "Nothing in this run", "This run has no lines.");
+      stateView("database", "Nothing in this period", "No lines were loaded for these dates.");
       return;
     }
     if (data.multi) return renderMarginPivot(data, t);
@@ -497,26 +503,14 @@
     return data;
   }
 
-  function pivotAgg(data, L) {
-    return {
-      ...data,
-      columns: L.cols.map((c) => c.key),
-      rows: data.rows.map((r) => ({ ...r, values: DF.aggregate(r.values, L.cols) })),
-      total: DF.aggregate(data.total, L.cols),
-    };
-  }
-
-  async function loadPivot(t, runId) {
+  // Dated pivots: the server buckets the lines into the filter's columns (months, Total, comparisons).
+  async function loadPivot(t, L) {
     const cur = state.pivot[t.id];
-    const L = DF.layout();
-    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
-    $("period").textContent = L.summary;
-    if (L.empty) return null;
-    const get = (measure) => api(`${t.api}?run_id=${runId}&dim=${cur.dim}&measure=${measure}`);
+    const get = (measure) => api(`${t.api}?cols=${DF.colsParam(L.cols)}&dim=${cur.dim}&measure=${measure}`);
     if (t.id === "margin") {
       // Every measure side by side: Net sales, Cost, Margin, GM % for each period.
-      const [ns, cost, gm] = (await Promise.all(MARGIN_MEASURES.slice(0, 3).map(([m]) => get(m)))).map((d) => pivotAgg(d, L));
-      const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? g[c.key] / n[c.key] : 0]));
+      const [ns, cost, gm] = await Promise.all(MARGIN_MEASURES.slice(0, 3).map(([m]) => get(m)));
+      const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? (g[c.key] || 0) / n[c.key] : 0]));
       const by = (d) => new Map(d.rows.map((r) => [r.label, r]));
       const cm = by(cost), gmm = by(gm);
       const rows = ns.rows.map((r) => {
@@ -528,18 +522,9 @@
       tot.gm_pct = ratio(tot.gross_margin, tot.net_sales);
       return { ...ns, multi: true, rows, mtotal: tot };
     }
-    if (cur.measure !== "gm_pct") {
-      const out = pivotAgg(await get(cur.measure), L);
-      out.rows = out.rows.filter((r) => L.cols.some((c) => Math.abs(r.values[c.key]) > 0.004));
-      return out;
-    }
-    // GM % is a ratio: aggregate margin and sales separately, then divide.
-    const [gm, ns] = (await Promise.all([get("gross_margin"), get("net_sales")])).map((d) => pivotAgg(d, L));
-    const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? g[c.key] / n[c.key] : 0]));
-    const sales = new Map(ns.rows.map((r) => [r.label, r]));
-    const rows = gm.rows.filter((r) => sales.get(r.label) && L.cols.some((c) => Math.abs(sales.get(r.label).values[c.key]) > 0.004))
-      .map((r) => ({ ...r, values: ratio(r.values, sales.get(r.label).values) }));
-    return { ...gm, measure: "gm_pct", rows, total: ratio(gm.total, ns.total) };
+    const out = await get(cur.measure);  // gm % arrives as a ratio of sums per column
+    out.rows = out.rows.filter((r) => L.cols.some((c) => Math.abs(r.values[c.key] || 0) > 0.004));
+    return out;
   }
 
   // Trial balance: opening rolls forward over the months before the range, closing over the range.
@@ -556,22 +541,56 @@
     return { months: L.main, rows };
   }
 
-  function filterDetail(data) {
-    const L = DF.layout({ total: false, compare: false });
-    $("period").textContent = L.summary;
-    const range = DF.isoRange();
-    if (!range) return null;
-    return { ...data, rows: data.rows.filter((r) => r.date >= range.from && r.date <= range.to) };
-  }
-
   // ---------------------------------------------------------------- load
+
+  const fetchHint = (kind, from, to) =>
+    `Run <code>main.py ${COMMAND[kind]} --from-date ${esc(from)} --to-date ${esc(to)}</code> to load them.`;
+
+  // Margin / purchases: any date range over everything loaded so far.
+  async function loadDated(t) {
+    const cov = state.coverage[DATASET[t.kind]];
+    const what = t.kind === "margin" ? "sales" : "purchases";
+    setHead(null, t.label);
+    if (!cov || !cov.ranges.length) {
+      stateView("database", `No ${what} loaded yet`,
+        `Run <code>main.py ${COMMAND[t.kind]} --from-date … --to-date …</code>, ` +
+        `or import a saved file with <code>main.py db-load --${t.kind}-json …</code>.`);
+      return;
+    }
+    DF.setSource({ coverage: cov.merged, fiscalStart: (state.runs.financials[0] || {}).fiscal_year_start });
+    DF.setCompare(!t.detail);  // flat lists have no period columns to compare
+    const L = DF.layout();
+    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
+    $("period").textContent = L.summary;
+    syncUrl();
+    if (L.empty) {
+      stateView("search", `No ${what} loaded for ${DF.rangeLabel(L.from, L.to)}`,
+        `Loaded: ${esc(DF.rangeLabel(cov.min, cov.max))}. ${fetchHint(t.kind, L.from, L.to)}`);
+      return;
+    }
+    skeleton();
+    if (t.detail) {
+      state.detailData = await api(`api/margin-detail?from=${L.from}&to=${L.to}&view=${t.detail}`);
+      renderDetail(state.detailData, t);
+    } else {
+      renderPivot(await loadPivot(t, L), t);
+    }
+  }
 
   async function load() {
     const t = tab();
     renderTabs();
-    const hasRuns = pickRun();
     renderTools();
     renderExport();
+    if (DATASET[t.kind]) {
+      try {
+        await loadDated(t);
+      } catch (e) {
+        stateView("error", "Could not load this report", esc(e.message), "error");
+      }
+      return;
+    }
+    const hasRuns = pickRun();
     syncUrl();
 
     if (!hasRuns) {
@@ -579,11 +598,8 @@
       stateView(
         "database",
         "No report runs saved yet",
-        t.kind === "financials"
-          ? "Run <code>main.py financials --from-date … --to-date …</code>, or import a saved trial balance " +
-            "with <code>main.py db-load --tb-json …</code>."
-          : `Run <code>main.py ${t.kind === "margin" ? "margin" : "purchases"} --from-date … --to-date …</code>, ` +
-            `or import a saved file with <code>main.py db-load --${t.kind}-json …</code>.`,
+        "Run <code>main.py financials --from-date … --to-date …</code>, or import a saved trial balance " +
+          "with <code>main.py db-load --tb-json …</code>.",
       );
       return;
     }
@@ -591,18 +607,12 @@
     const runId = state.selected[t.kind];
     const run = runOf(t.kind);
     DF.setSource({ months: run.months, fiscalStart: run.fiscal_year_start });
-    DF.setCompare(!(t.id === "tb" || t.detail));  // those two have no period columns to compare
+    DF.setCompare(t.id !== "tb");  // the trial balance has no period columns to compare
     state.labels = {};
     setHead(run, t.label);
     skeleton();
     try {
-      if (t.detail) {
-        state.detailData = filterDetail(await api(`api/margin-detail?run_id=${runId}&view=${t.detail}`));
-        if (state.detailData) renderDetail(state.detailData, t); else stateView(...NO_DATA);
-      } else if (t.pivot) {
-        const data = await loadPivot(t, runId);
-        if (data) renderPivot(data, t); else stateView(...NO_DATA);
-      } else if (t.statement) {
+      if (t.statement) {
         const data = filterStatement(await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`), t);
         state.tree.nodes = null;
         if (!data) {
@@ -677,16 +687,20 @@
     }
   });
 
+  if (qs.get("from") && qs.get("to")) DF.setRange(qs.get("from"), qs.get("to"));  // a shared link's range
   DF.init({ mount: $("datebar"), onChange: () => load() });
   renderTabs();
   skeleton();
+  const noCoverage = { ranges: [], merged: [], gaps: [], min: null, max: null };
   Promise.all([
-    ...["financials", "margin", "purchases"].map((k) => api(`api/runs?kind=${k}`)),
+    api("api/runs?kind=financials"),
+    ...Object.values(DATASET).map((ds) => api(`api/coverage?dataset=${ds}`).catch(() => noCoverage)),
     api("api/org").catch(() => ({})),  // company profile from MariaDB; the page still works without it
   ])
-    .then(([fin, mar, pur, org]) => {
+    .then(([fin, sales, purchases, org]) => {
       state.org = org && org.name ? org : null;
-      state.runs = { financials: fin.runs, margin: mar.runs, purchases: pur.runs };
+      state.runs = { financials: fin.runs };
+      state.coverage = { sales, purchases };
       load();
     })
     .catch((e) => stateView("error", "Could not reach the report database", esc(e.message), "error"));

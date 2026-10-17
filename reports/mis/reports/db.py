@@ -17,6 +17,10 @@ hangs off `run_id` (ON DELETE CASCADE), so old runs can be dropped cleanly.
     margin_lines       one row per invoice line, with its own cost of sales (FK run_id + invoice_id -> margin_invoices)
     purchase_lines     bill / purchase-order line rows
     category_master    current ledger → PL/BS / category mapping
+    sales_invoices     dated store: one row per invoice, latest fetch wins (no run_id)
+    sales_lines        dated store: invoice lines (FK invoice_id -> sales_invoices)
+    purchase_doc_lines dated store: bill / purchase-order lines
+    sync_coverage      which date ranges each dated dataset holds, when and from where
     cashflow_runs      one forecast pull (as-of date, opening cash, totals)
     cashflow_accounts  leaf bank and cash balances for that run
     cashflow_events    dated AR / AP / PO / SO movements
@@ -30,11 +34,13 @@ from __future__ import annotations
 import json
 import os
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
 from dotenv import load_dotenv
+
+from reports import periods
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -297,6 +303,104 @@ SCHEMA = [
         reason  VARCHAR(255)  NOT NULL DEFAULT '',
         PRIMARY KEY (run_id, line_no),
         CONSTRAINT fk_cfu_run FOREIGN KEY (run_id) REFERENCES cashflow_runs (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    # --- Dated store: one row per Zoho document, latest fetch wins; reports read any date range. ---
+    """
+    CREATE TABLE IF NOT EXISTS sales_invoices (
+        invoice_id       VARCHAR(40)   NOT NULL PRIMARY KEY,
+        invoice_number   VARCHAR(60)   NOT NULL DEFAULT '',
+        month            CHAR(7)       NOT NULL,
+        date             DATE          NOT NULL,
+        due_date         DATE          NULL,
+        status           VARCHAR(30)   NOT NULL DEFAULT '',
+        customer_id      VARCHAR(40)   NOT NULL DEFAULT '',
+        customer_name    VARCHAR(255)  NOT NULL DEFAULT '',
+        salesperson_name VARCHAR(255)  NOT NULL DEFAULT '',
+        van              VARCHAR(255)  NOT NULL DEFAULT '',
+        currency_code    VARCHAR(10)   NOT NULL DEFAULT '',
+        exchange_rate    DECIMAL(18,6) NOT NULL DEFAULT 1,
+        sub_total        DECIMAL(18,2) NOT NULL DEFAULT 0,
+        discount_total   DECIMAL(18,2) NOT NULL DEFAULT 0,
+        tax_total        DECIMAL(18,2) NOT NULL DEFAULT 0,
+        total            DECIMAL(18,2) NOT NULL DEFAULT 0,
+        balance          DECIMAL(18,2) NOT NULL DEFAULT 0,
+        line_count       INT UNSIGNED  NOT NULL DEFAULT 0,
+        base_quantity    DECIMAL(18,4) NOT NULL DEFAULT 0,
+        net_sales        DECIMAL(18,2) NOT NULL DEFAULT 0,
+        cost_of_sales    DECIMAL(18,2) NOT NULL DEFAULT 0,
+        gross_margin     DECIMAL(18,2) NOT NULL DEFAULT 0,
+        flagged_lines    INT UNSIGNED  NOT NULL DEFAULT 0,
+        cost_source      VARCHAR(20)   NOT NULL DEFAULT '',
+        fetched_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY ix_si_date (date),
+        KEY ix_si_number (invoice_number)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS sales_lines (
+        invoice_id       VARCHAR(40)   NOT NULL,
+        line_no          INT UNSIGNED  NOT NULL,
+        month            CHAR(7)       NOT NULL,
+        date             DATE          NOT NULL,
+        invoice_number   VARCHAR(60)   NOT NULL DEFAULT '',
+        customer_name    VARCHAR(255)  NOT NULL DEFAULT '',
+        salesperson_name VARCHAR(255)  NOT NULL DEFAULT '',
+        van              VARCHAR(255)  NOT NULL DEFAULT '',
+        item_id          VARCHAR(40)   NOT NULL DEFAULT '',
+        item_name        VARCHAR(255)  NOT NULL DEFAULT '',
+        sku              VARCHAR(100)  NOT NULL DEFAULT '',
+        unit             VARCHAR(40)   NOT NULL DEFAULT '',
+        quantity         DECIMAL(18,4) NOT NULL DEFAULT 0,
+        conversion_rate  DECIMAL(18,6) NOT NULL DEFAULT 1,
+        base_quantity    DECIMAL(18,4) NOT NULL DEFAULT 0,
+        rate             DECIMAL(18,4) NOT NULL DEFAULT 0,
+        gross_amount     DECIMAL(18,2) NOT NULL DEFAULT 0,
+        line_discount    DECIMAL(18,2) NOT NULL DEFAULT 0,
+        invoice_discount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        net_sales        DECIMAL(18,2) NOT NULL DEFAULT 0,
+        cost_rate        DECIMAL(18,4) NOT NULL DEFAULT 0,
+        cost_of_sales    DECIMAL(18,2) NOT NULL DEFAULT 0,
+        gross_margin     DECIMAL(18,2) NOT NULL DEFAULT 0,
+        flag             VARCHAR(255)  NOT NULL DEFAULT '',
+        cost_source      VARCHAR(20)   NOT NULL DEFAULT '',
+        PRIMARY KEY (invoice_id, line_no),
+        KEY ix_sl_date (date),
+        KEY ix_sl_item (item_id),
+        CONSTRAINT fk_sl_invoice FOREIGN KEY (invoice_id)
+            REFERENCES sales_invoices (invoice_id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS purchase_doc_lines (
+        kind        VARCHAR(20)   NOT NULL,
+        doc_id      VARCHAR(40)   NOT NULL,
+        line_no     INT UNSIGNED  NOT NULL,
+        month       CHAR(7)       NOT NULL,
+        date        DATE          NOT NULL,
+        number      VARCHAR(60)   NOT NULL DEFAULT '',
+        vendor_name VARCHAR(255)  NOT NULL DEFAULT '',
+        status      VARCHAR(40)   NOT NULL DEFAULT '',
+        item_id     VARCHAR(40)   NOT NULL DEFAULT '',
+        item_name   VARCHAR(255)  NOT NULL DEFAULT '',
+        sku         VARCHAR(100)  NOT NULL DEFAULT '',
+        unit        VARCHAR(40)   NOT NULL DEFAULT '',
+        quantity    DECIMAL(18,4) NOT NULL DEFAULT 0,
+        rate        DECIMAL(18,4) NOT NULL DEFAULT 0,
+        amount      DECIMAL(18,2) NOT NULL DEFAULT 0,
+        fetched_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (kind, doc_id, line_no),
+        KEY ix_pdl_date (date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS sync_coverage (
+        dataset   VARCHAR(40) NOT NULL,
+        from_date DATE        NOT NULL,
+        to_date   DATE        NOT NULL,
+        synced_at DATETIME    NOT NULL,
+        source    VARCHAR(20) NOT NULL DEFAULT '',
+        PRIMARY KEY (dataset, from_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
 ]
@@ -567,6 +671,174 @@ def save_purchases_run(rows: list[dict[str, Any]], summary: dict[str, Any], *, s
             ],
         )
     return run_id
+
+
+# ---------------------------------------------------------------------------
+# Dated store: range-replace writes (the Zoho list for a date range is authoritative)
+# ---------------------------------------------------------------------------
+
+PURCHASE_KINDS = ("bill", "purchase_order")
+COVERAGE_DATASETS = {"sales", "purchases", "purchases:bill", "purchases:purchase_order", "gl"}
+_SALES_HEADER_SUMS = ("base_quantity", "net_sales", "cost", "gross_margin")
+_ZOHO_ONLY_TOTALS = ("sub_total", "discount_total", "tax_total", "total", "balance")
+
+
+def _in_chunks(values: list[Any], size: int = 500) -> Iterator[list[Any]]:
+    for i in range(0, len(values), size):
+        yield values[i:i + size]
+
+
+def _set_coverage(cur: Any, dataset: str, start: date, end: date, source: str, synced_at: Any) -> None:
+    """Record [start, end] as loaded; older rows it overlaps are trimmed (their outside parts survive)."""
+    cur.execute("SELECT from_date, to_date, synced_at, source FROM sync_coverage "
+                "WHERE dataset=%s AND from_date<=%s AND to_date>=%s", (dataset, end, start))
+    keep = []
+    for r in cur.fetchall():
+        cur.execute("DELETE FROM sync_coverage WHERE dataset=%s AND from_date=%s", (dataset, r["from_date"]))
+        if r["from_date"] < start:
+            keep.append((r["from_date"], start - timedelta(days=1), r["synced_at"], r["source"]))
+        if r["to_date"] > end:
+            keep.append((end + timedelta(days=1), r["to_date"], r["synced_at"], r["source"]))
+    cur.executemany("INSERT INTO sync_coverage (dataset, from_date, to_date, synced_at, source) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    [(dataset, *k) for k in keep] + [(dataset, start, end, synced_at, source[:20])])
+
+
+def _headers_from_lines(rows: list[dict[str, Any]], known: set[str]) -> list[dict[str, Any]]:
+    """Invoice headers for lines whose invoice has none (older JSON files): sums of the lines."""
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        iid = str(r.get("invoice_id") or "")
+        if iid in known:
+            continue
+        h = out.setdefault(iid, {"invoice_id": iid, "line_count": 0, "flagged_lines": 0, "_src": set(),
+                                 "exchange_rate": 1, **dict.fromkeys(_ZOHO_ONLY_TOTALS, 0),
+                                 **{k: r.get(k) for k in ("invoice_number", "month", "date", "customer_name",
+                                                          "salesperson_name", "van")},
+                                 **{k: 0.0 for k in _SALES_HEADER_SUMS}})
+        h["line_count"] += 1
+        h["flagged_lines"] += 1 if r.get("flag") else 0
+        h["_src"].add(r.get("cost_source") or "")
+        for k in _SALES_HEADER_SUMS:
+            h[k] += float(r.get(k) or 0)
+    for h in out.values():
+        src = h.pop("_src")
+        h["cost_source"] = src.pop() if len(src) == 1 else "mixed"
+    return list(out.values())
+
+
+def _replace_sales(cur: Any, start: date, end: date, invoices: list[dict[str, Any]],
+                   rows: list[dict[str, Any]], source: str, synced_at: Any) -> dict[str, int]:
+    invoices = list(invoices or [])
+    invoices += _headers_from_lines(rows, {str(i["invoice_id"]) for i in invoices})
+    ids = [str(i["invoice_id"]) for i in invoices]
+    deleted = cur.execute("DELETE FROM sales_invoices WHERE date BETWEEN %s AND %s", (start, end))
+    for chunk in _in_chunks(ids):  # invoices whose date moved into this range from elsewhere
+        deleted += cur.execute(f"DELETE FROM sales_invoices WHERE invoice_id IN ({','.join(['%s'] * len(chunk))})",
+                               chunk)
+    icols = ", ".join(MARGIN_INVOICE_DB_COLUMNS)
+    cur.executemany(
+        f"INSERT INTO sales_invoices ({icols}, fetched_at) VALUES ({', '.join(['%s'] * (len(MARGIN_INVOICE_DB_COLUMNS) + 1))})",
+        [(*[_db_value(r, c) for c in MARGIN_INVOICE_DB_COLUMNS], synced_at) for r in invoices],
+    )
+    line_no: dict[str, int] = {}
+    values = []
+    for r in rows:
+        iid = str(r.get("invoice_id") or "")
+        line_no[iid] = line_no.get(iid, 0) + 1
+        values.append((line_no[iid], *[_db_value(r, c) for c in MARGIN_DB_COLUMNS]))
+    cols = ", ".join(MARGIN_DB_COLUMNS)
+    cur.executemany(
+        f"INSERT INTO sales_lines (line_no, {cols}) VALUES ({', '.join(['%s'] * (len(MARGIN_DB_COLUMNS) + 1))})",
+        values,
+    )
+    _set_coverage(cur, "sales", start, end, source, synced_at)
+    return {"invoices": len(invoices), "lines": len(values), "replaced_invoices": deleted}
+
+
+def _purchase_datasets(kinds: list[str] | tuple[str, ...]) -> list[str]:
+    return ["purchases"] if set(kinds) == set(PURCHASE_KINDS) else [f"purchases:{k}" for k in kinds]
+
+
+def _replace_purchases(cur: Any, start: date, end: date, rows: list[dict[str, Any]],
+                       kinds: list[str] | tuple[str, ...], source: str, synced_at: Any) -> dict[str, int]:
+    """Only the given kinds are replaced, so `--kind bill` leaves purchase orders alone."""
+    if not kinds or set(kinds) - set(PURCHASE_KINDS):
+        raise ValueError(f"kinds must be from {PURCHASE_KINDS}")
+    marks = ",".join(["%s"] * len(kinds))
+    deleted = cur.execute(f"DELETE FROM purchase_doc_lines WHERE kind IN ({marks}) AND date BETWEEN %s AND %s",
+                          (*kinds, start, end))
+    for kind in kinds:
+        ids = sorted({str(r["doc_id"]) for r in rows if r.get("kind") == kind})
+        for chunk in _in_chunks(ids):
+            deleted += cur.execute(
+                f"DELETE FROM purchase_doc_lines WHERE kind=%s AND doc_id IN ({','.join(['%s'] * len(chunk))})",
+                (kind, *chunk))
+    line_no: dict[tuple[str, str], int] = {}
+    values = []
+    for r in rows:
+        if r.get("kind") not in kinds:
+            continue
+        key = (r["kind"], str(r.get("doc_id") or ""))
+        line_no[key] = line_no.get(key, 0) + 1
+        values.append((line_no[key], *[(r.get(c) or None) if c == "date" else r.get(c, "")
+                                       for c in PURCHASE_DB_COLUMNS], synced_at))
+    cols = ", ".join(PURCHASE_DB_COLUMNS)
+    cur.executemany(
+        f"INSERT INTO purchase_doc_lines (line_no, {cols}, fetched_at) "
+        f"VALUES ({', '.join(['%s'] * (len(PURCHASE_DB_COLUMNS) + 2))})",
+        values,
+    )
+    for ds in _purchase_datasets(kinds):
+        _set_coverage(cur, ds, start, end, source, synced_at)
+    return {"documents": len(line_no), "lines": len(values), "replaced_lines": deleted}
+
+
+def sync_sales(from_date: Any, to_date: Any, invoices: list[dict[str, Any]] | None,
+               rows: list[dict[str, Any]], *, source: str) -> dict[str, int]:
+    """Make the dated sales tables hold exactly this fetch for [from_date, to_date] (one transaction).
+
+    `source` is 'zoho' or 'cache' (an offline run never learns about deleted invoices)."""
+    start, end = periods.parse_range(from_date, to_date)
+    with connect() as conn, conn.cursor() as cur:
+        return _replace_sales(cur, start, end, invoices or [], rows, source, datetime.now())
+
+
+def sync_purchases(from_date: Any, to_date: Any, rows: list[dict[str, Any]], *, source: str,
+                   kinds: list[str] | None = None) -> dict[str, int]:
+    start, end = periods.parse_range(from_date, to_date)
+    with connect() as conn, conn.cursor() as cur:
+        return _replace_purchases(cur, start, end, rows, kinds or PURCHASE_KINDS, source, datetime.now())
+
+
+def run_purchase_kinds(summary: dict[str, Any]) -> list[str]:
+    kinds = summary.get("kinds") or list(summary.get("documents") or {}) or list(PURCHASE_KINDS)
+    return [k for k in PURCHASE_KINDS if k in kinds]
+
+
+def migrate_runs_to_dated() -> list[dict[str, Any]]:
+    """Replay stored margin / purchases runs into the dated tables, oldest first, so the newest run wins
+    where runs overlap. No Zoho calls; idempotent (replaying again gives the same tables)."""
+    out = []
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id, kind, from_date, to_date, summary, created_at FROM report_runs "
+                    "WHERE kind IN ('margin', 'purchases') ORDER BY created_at, id")
+        for run in cur.fetchall():
+            start, end, rid = run["from_date"], run["to_date"], run["id"]
+            if run["kind"] == "margin":
+                cur.execute("SELECT * FROM margin_invoices WHERE run_id=%s", (rid,))
+                invoices = cur.fetchall()
+                cur.execute("SELECT * FROM margin_lines WHERE run_id=%s ORDER BY invoice_id, line_no", (rid,))
+                lines = cur.fetchall()
+                for r in invoices + lines:
+                    r["cost"] = r.pop("cost_of_sales")
+                res = _replace_sales(cur, start, end, invoices, lines, "migrated", run["created_at"])
+            else:
+                cur.execute("SELECT * FROM purchase_lines WHERE run_id=%s ORDER BY line_no", (rid,))
+                kinds = run_purchase_kinds(json.loads(run["summary"] or "{}"))
+                res = _replace_purchases(cur, start, end, cur.fetchall(), kinds, "migrated", run["created_at"])
+            out.append({"run_id": rid, "kind": run["kind"], "from": str(start), "to": str(end), **res})
+    return out
 
 
 def _sql_date(value: Any) -> str | None:
@@ -883,7 +1155,10 @@ def get_margin_detail(run_id: int, view: str) -> dict[str, Any]:
         raise ValueError("view must be line or invoice")
     with connect() as conn, conn.cursor() as cur:
         cur.execute(sql, (run_id,))
-        rows = cur.fetchall()
+        return _margin_detail(view, cur.fetchall())
+
+
+def _margin_detail(view: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     for r in rows:
         r["date"] = r["date"].isoformat() if r["date"] else ""
         for k, v in r.items():
@@ -943,3 +1218,120 @@ def get_purchase_pivot(run_id: int, dimension: str, measure: str) -> dict[str, A
     total = {m: val(month_totals[m]) for m in months}
     total["Total"] = val(grand_total)
     return {"columns": months + ["Total"], "rows": rows, "total": total, "dimension": dimension, "measure": measure}
+
+
+# ---------------------------------------------------------------------------
+# Dated store: reads by date range (columns come from the client's date filter)
+# ---------------------------------------------------------------------------
+
+_MARGIN_SUMS = {"net_sales": "net_sales", "cost": "cost_of_sales", "gross_margin": "gross_margin",
+                "base_quantity": "base_quantity", "flagged": "flag <> ''"}
+_PURCHASE_SUMS = {"amount": "amount", "quantity": "quantity", "documents": "DISTINCT CONCAT(kind, ':', doc_id)"}
+
+
+def _bucketed(table: str, dim_col: str, cols: list[periods.Col], sums: dict[str, str]) -> list[dict[str, Any]]:
+    """One row per dimension value plus the rollup row (dim None): `c{i}_{name}` per column, `c{i}_n` the
+    row count (0 → no data in that column), `s_{name}` over the whole span."""
+    start, end = periods.span(cols)
+    when = "WHEN date BETWEEN %s AND %s THEN"
+    parts, params = [], []
+    for i, c in enumerate(cols):
+        for name, expr in sums.items():
+            if expr.startswith("DISTINCT "):
+                parts.append(f"COUNT(DISTINCT CASE {when} {expr[9:]} END) AS c{i}_{name}")
+            else:
+                parts.append(f"SUM(CASE {when} {expr} END) AS c{i}_{name}")
+            params += [c.start, c.end]
+        parts.append(f"COUNT(CASE {when} 1 END) AS c{i}_n")
+        params += [c.start, c.end]
+    parts += [f"SUM({expr}) AS s_{name}" for name, expr in sums.items() if not expr.startswith("DISTINCT ")]
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT {dim_col} AS dim, {', '.join(parts)} FROM {table} "
+                    f"WHERE date BETWEEN %s AND %s GROUP BY {dim_col} WITH ROLLUP", (*params, start, end))
+        return cur.fetchall()
+
+
+def _range_pivot(table: str, dim_col: str, cols: list[periods.Col], sums: dict[str, str],
+                 value: Any, sort_key: str, extra: Any) -> dict[str, Any]:
+    def cells(r: dict[str, Any]) -> dict[str, float]:
+        return {c.key: value({n: float(r[f"c{i}_{n}"] or 0) for n in sums})
+                for i, c in enumerate(cols) if r[f"c{i}_n"]}
+
+    rows, grand = [], {}
+    for r in _bucketed(table, dim_col, cols, sums):
+        if r["dim"] is None:  # WITH ROLLUP total (dimension columns are NOT NULL, so no clash)
+            grand = cells(r)
+        else:
+            rows.append({"label": r["dim"] or "(none)", "values": cells(r), **extra(r)})
+    rows.sort(key=lambda x: x[sort_key], reverse=True)
+    start, end = periods.span(cols)
+    return {"columns": [c.key for c in cols], "rows": rows, "total": grand,
+            "from": start.isoformat(), "to": end.isoformat()}
+
+
+def get_margin_pivot_range(cols: list[periods.Col], dimension: str, measure: str) -> dict[str, Any]:
+    """Rows = dimension values, columns = the given date ranges; gm % is a ratio of sums per column."""
+    if dimension not in MARGIN_DIMENSIONS or measure not in MARGIN_MEASURES:
+        raise ValueError("unknown dimension or measure")
+
+    def value(agg: dict[str, float]) -> float:
+        if measure == "gm_pct":
+            return round(agg["gross_margin"] / agg["net_sales"], 4) if agg["net_sales"] else 0.0
+        return round(agg[measure], 4)
+
+    out = _range_pivot("sales_lines", MARGIN_DIMENSIONS[dimension], cols, _MARGIN_SUMS, value, "net_sales",
+                       lambda r: {"net_sales": float(r["s_net_sales"] or 0), "flagged": int(r["s_flagged"] or 0)})
+    return {**out, "dimension": dimension, "measure": measure}
+
+
+def get_purchase_pivot_range(cols: list[periods.Col], dimension: str, measure: str) -> dict[str, Any]:
+    """Same shape as the margin pivot; `documents` counts distinct bills / POs per column."""
+    if dimension not in PURCHASE_DIMENSIONS or measure not in PURCHASE_MEASURES:
+        raise ValueError("unknown dimension or measure")
+    out = _range_pivot("purchase_doc_lines", PURCHASE_DIMENSIONS[dimension], cols, _PURCHASE_SUMS,
+                       lambda agg: round(agg[measure], 4), "amount",
+                       lambda r: {"amount": float(r["s_amount"] or 0)})
+    return {**out, "dimension": dimension, "measure": measure}
+
+
+def get_margin_detail_range(start: date, end: date, view: str) -> dict[str, Any]:
+    """Margin as a flat list for [start, end]: one row per invoice line or per invoice."""
+    if view == "line":
+        sql = """SELECT date, invoice_number, customer_name, item_name, unit, quantity, rate,
+                        net_sales, cost_rate, cost_of_sales AS cost, gross_margin, flag, cost_source
+                 FROM sales_lines WHERE date BETWEEN %s AND %s ORDER BY date, invoice_number, line_no"""
+    elif view == "invoice":
+        sql = """SELECT date, invoice_number, status, customer_name, salesperson_name, line_count,
+                        net_sales, cost_of_sales AS cost, gross_margin, flagged_lines AS flagged,
+                        cost_source, total, balance
+                 FROM sales_invoices WHERE date BETWEEN %s AND %s ORDER BY date, invoice_number"""
+    else:
+        raise ValueError("view must be line or invoice")
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(sql, (start, end))
+        return _margin_detail(view, cur.fetchall())
+
+
+def get_coverage(dataset: str) -> dict[str, Any]:
+    """Loaded date ranges for a dataset, plus the gaps between the first and last loaded day."""
+    if dataset not in COVERAGE_DATASETS:
+        raise ValueError(f"dataset must be one of {sorted(COVERAGE_DATASETS)}")
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT from_date, to_date, synced_at, source FROM sync_coverage WHERE dataset=%s "
+                    "ORDER BY from_date", (dataset,))
+        rows = cur.fetchall()
+    spans = [(r["from_date"], r["to_date"]) for r in rows]
+    lo, hi = (spans[0][0], max(b for _, b in spans)) if spans else (None, None)
+
+    def iso(pairs: list[tuple[date, date]]) -> list[dict[str, str]]:
+        return [{"from": a.isoformat(), "to": b.isoformat()} for a, b in pairs]
+
+    return {
+        "dataset": dataset,
+        "ranges": [{"from": r["from_date"].isoformat(), "to": r["to_date"].isoformat(),
+                    "synced_at": str(r["synced_at"]), "source": r["source"]} for r in rows],
+        "merged": iso(periods.merge_ranges(spans)),
+        "gaps": iso(periods.gaps(spans, lo, hi)) if spans else [],
+        "min": lo.isoformat() if lo else None,
+        "max": hi.isoformat() if hi else None,
+    }

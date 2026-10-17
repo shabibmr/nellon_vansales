@@ -270,7 +270,8 @@ def _cmd_margin(args: argparse.Namespace) -> int:
     print(f"Gross margin: {summary['gross_margin']:,.2f}  ({summary['gross_margin_pct']:.1%})")
     print(f"Flagged lines: {summary['flagged_lines']}  (see 'flag' column)")
     _db_save(args, lambda src: db.save_margin_run(rows, summary, source=src, invoices=invoice_rows),
-             "cache" if args.offline else "zoho")
+             "cache" if args.offline else "zoho",
+             lambda src: db.sync_sales(args.from_date, args.to_date, invoice_rows, rows, source=src))
     print(f"CSV   -> {csv_path}")
     print(f"Excel -> {xlsx_path}")
     print(f"JSON  -> {json_path}")
@@ -295,19 +296,27 @@ def _cmd_purchases(args: argparse.Namespace) -> int:
     print(f"Documents: {summary['documents']}   Lines: {summary['lines']}   Zoho calls: {summary['api_calls']}")
     print(f"Amount by kind: {summary['amount_by_kind']}")
     _db_save(args, lambda src: db.save_purchases_run(rows, summary, source=src),
-             "cache" if args.offline else "zoho")
+             "cache" if args.offline else "zoho",
+             lambda src: db.sync_purchases(args.from_date, args.to_date, rows, source=src, kinds=kinds))
     print(f"Excel -> {OUT_DIR / (stem + '.xlsx')}")
     return 0
 
 
-def _db_save(args: argparse.Namespace, save, source: str) -> None:
+def _db_save(args: argparse.Namespace, save, source: str, sync=None) -> None:
+    """Save the run (fetch log + run-based views); `sync` also replaces the date range in the dated tables."""
     if getattr(args, "no_db", False):
         return
     if not db.enabled():
         print("MariaDB: not configured (MIS_DB_* in .env) — skipped")
         return
+    if sync is None:
+        run_id = save(source)
+        print(f"MariaDB: saved as run #{run_id}  → view at /reports?run={run_id}")
+        return
+    db.init_schema()  # the dated tables may be newer than this database
     run_id = save(source)
-    print(f"MariaDB: saved as run #{run_id}  → view at /reports?run={run_id}")
+    print(f"MariaDB: run #{run_id}; {args.from_date} → {args.to_date} replaced in dated tables: {sync(source)}")
+    print(f"  → view at /reports?from={args.from_date}&to={args.to_date}")
 
 
 def _cmd_db_init(args: argparse.Namespace) -> int:
@@ -338,11 +347,16 @@ def _cmd_db_load(args: argparse.Namespace) -> int:
         data = json.loads(Path(args.margin_json).read_text(encoding="utf-8"))
         run_id = db.save_margin_run(data["rows"], data["summary"], source=args.margin_json,
                                     invoices=data.get("invoices"))
-        print(f"Margin run #{run_id}: {len(data['rows'])} invoice lines")
+        s = data["summary"]
+        res = db.sync_sales(s["from_date"], s["to_date"], data.get("invoices"), data["rows"], source="file")
+        print(f"Margin run #{run_id}: {len(data['rows'])} invoice lines; dated tables: {res}")
     if args.purchases_json:
         data = json.loads(Path(args.purchases_json).read_text(encoding="utf-8"))
         run_id = db.save_purchases_run(data["rows"], data["summary"], source=args.purchases_json)
-        print(f"Purchases run #{run_id}: {len(data['rows'])} lines")
+        s = data["summary"]
+        res = db.sync_purchases(s["from_date"], s["to_date"], data["rows"], source="file",
+                                kinds=db.run_purchase_kinds(s))
+        print(f"Purchases run #{run_id}: {len(data['rows'])} lines; dated tables: {res}")
     if args.category_json:
         data = json.loads(Path(args.category_json).read_text(encoding="utf-8"))
         print(f"category_master upserted: {db.save_category_master(data['rows'])} accounts")
@@ -358,6 +372,27 @@ def _cmd_db_runs(args: argparse.Namespace) -> int:
     for r in db.list_runs(args.kind):
         print(f"#{r['id']:<5} {r['kind']:10} {r['from_date']} → {r['to_date']}  "
               f"{len(r['months'])} months  {r['created_at']}  {r['source']}")
+    return 0
+
+
+def _cmd_db_migrate_runs(args: argparse.Namespace) -> int:
+    """Replay stored margin / purchases runs into the dated tables (oldest first; no Zoho calls)."""
+    db.init_schema()
+    for r in db.migrate_runs_to_dated():
+        print(f"#{r.pop('run_id'):<5} {r.pop('kind'):10} {r.pop('from')} → {r.pop('to')}  {r}")
+    return _cmd_db_coverage(args)
+
+
+def _cmd_db_coverage(args: argparse.Namespace) -> int:
+    for ds in sorted(db.COVERAGE_DATASETS):
+        cov = db.get_coverage(ds)
+        if not cov["ranges"]:
+            continue
+        print(f"{ds}: {cov['min']} → {cov['max']}")
+        for r in cov["ranges"]:
+            print(f"    {r['from']} → {r['to']}  {r['source']:9} synced {r['synced_at']}")
+        for g in cov["gaps"]:
+            print(f"    not loaded: {g['from']} → {g['to']}")
     return 0
 
 
@@ -556,6 +591,13 @@ def build_parser() -> argparse.ArgumentParser:
     dbr.add_argument("--kind", choices=["financials", "margin", "purchases"])
     dbr.add_argument("--delete", type=int, metavar="RUN_ID", help="Delete a run and its data")
     dbr.set_defaults(func=_cmd_db_runs)
+
+    dbm = sub.add_parser("db-migrate-runs",
+                         help="Copy stored margin / purchases runs into the dated tables (no Zoho calls)")
+    dbm.set_defaults(func=_cmd_db_migrate_runs)
+
+    dbc = sub.add_parser("db-coverage", help="Date ranges loaded in the dated tables, and gaps")
+    dbc.set_defaults(func=_cmd_db_coverage)
 
     cf = sub.add_parser(
         "cashflow",
