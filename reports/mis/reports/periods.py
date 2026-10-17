@@ -113,6 +113,27 @@ def month_cols(start: date, end: date, *, total: bool = True) -> list[Col]:
     return cols + [Col("Total", start, end)] if total else cols
 
 
+_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def col_label(col: Col) -> str:
+    """Heading like the web date filter's: 'Oct-26', 'Oct-26 (1–15)', 'Apr-26 – Sep-26', '5 – 11 Oct 26'."""
+    a, b = col.start, col.end
+    mon = lambda d: f"{_MON[d.month - 1]}-{d:%y}"  # noqa: E731
+    day = lambda d: f"{d.day} {_MON[d.month - 1]}"  # noqa: E731
+    if col.key == "Total":
+        return "Total"
+    if a.day == 1 and b == month_end(month_key(b)):
+        return mon(a) if month_key(a) == month_key(b) else f"{mon(a)} – {mon(b)}"
+    if _MONTH.match(col.key) and month_key(a) == month_key(b):
+        return f"{mon(a)} ({a.day}–{b.day})"
+    if a == b:
+        return f"{day(a)} {a:%y}"
+    if month_key(a) == month_key(b):
+        return f"{a.day} – {b.day} {_MON[a.month - 1]} {a:%y}"
+    return f"{day(a)}{'' if a.year == b.year else f' {a:%y}'} – {day(b)} {b:%y}"
+
+
 def merge_ranges(ranges: Iterable[tuple[date, date]]) -> list[tuple[date, date]]:
     """Merge overlapping or touching (end + 1 day == next start) ranges, sorted."""
     out: list[list[date]] = []

@@ -1,4 +1,6 @@
-/* Reports page: reads MariaDB through the local server API, never Zoho. */
+/* Reports page: margin / purchases (and stored financials runs) come from MariaDB through the local
+   server API; with live financials on, Executive Summary, P&L, BS and TB come from Zoho through the
+   server's cache (reports/live_financials.py). */
 (() => {
   "use strict";
 
@@ -28,7 +30,8 @@
   };
 
   const qs = new URLSearchParams(location.search);
-  // Margin and purchases read the dated tables for any range; financials still read one stored run.
+  // Margin and purchases read the dated tables for any range; financials are live from Zoho when the
+  // server allows it (`/api/config`), else they read one stored run.
   const DATASET = { margin: "sales", purchases: "purchases" };
   const COMMAND = { margin: "margin", purchases: "purchases" };
   const state = {
@@ -41,6 +44,9 @@
     detailFilter: "",
     detailData: null,
     org: null,
+    live: false,         // server serves live financials
+    fiscalStart: null,   // "2000-MM" from /api/config: quarters / years follow it
+    seq: 0,              // newest live request; older answers are dropped
     tbData: null,
     labels: {},  // column key → heading for the date filter's columns (periods, Total)
     // Expandable statements: `tree` on a tab is its default outline level.
@@ -50,6 +56,8 @@
   // ---------------------------------------------------------------- helpers
 
   const tab = () => TABS.find((t) => t.id === state.tab) || TABS[0];
+  const isLive = (t) => state.live && t.kind === "financials";
+  const fiscalStart = () => state.fiscalStart || (state.runs.financials[0] || {}).fiscal_year_start;
   const runOf = (kind) => state.runs[kind].find((r) => r.id === state.selected[kind]);
 
   const colLabel = (c) => {
@@ -74,7 +82,8 @@
       `<th scope="col" class="${c === totalCol ? "tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr></thead>`;
 
   const view = (html) => { $("out").innerHTML = html; };
-  const skeleton = () => view(`<div class="skeleton" aria-label="Loading report">${"<div></div>".repeat(9)}</div>`);
+  const skeleton = (note = "") => view((note ? `<p class="loading-note">${esc(note)}</p>` : "") +
+    `<div class="skeleton" aria-label="Loading report">${"<div></div>".repeat(9)}</div>`);
   const stateView = (iconName, title, body, cls = "") =>
     view(`<div class="state ${cls}">${icon(iconName, "xl")}<h2>${esc(title)}</h2><p>${body}</p></div>`);
 
@@ -96,7 +105,7 @@
   // A dated tab's link carries its range, so it reproduces the view.
   function syncUrl() {
     const p = new URLSearchParams({ tab: state.tab });
-    const r = DATASET[tab().kind] && DF.isoRange();
+    const r = (DATASET[tab().kind] || isLive(tab())) && DF.isoRange();
     if (r) { p.set("from", r.from); p.set("to", r.to); p.set("by", DF.split()); }
     history.replaceState(null, "", `?${p}`);
   }
@@ -116,10 +125,14 @@
   }
 
   function renderExport() {
-    // The workbook covers the selected financials run (margin / purchases: the run matching its period).
+    // Live: the workbook covers the date filter's columns (its href is set on click).
+    // Else it covers the selected financials run (margin / purchases: the run matching its period).
     const btn = $("exportBtn");
     const id = state.selected.financials || (state.runs.financials[0] || {}).id;
-    if (id) {
+    if (state.live) {
+      btn.removeAttribute("aria-disabled");
+      btn.title = "Executive Summary, PL, BS, Trial Balance (live from Zoho), Margin, Purchases and Category Master for the selected dates";
+    } else if (id) {
       btn.href = `api/export.xlsx?run_id=${id}`;
       btn.removeAttribute("aria-disabled");
       btn.title = `Run #${id}: Executive Summary, PL, BS, Trial Balance, Margin, Purchases and Category Master`;
@@ -557,7 +570,7 @@
         `or import a saved file with <code>main.py db-load --${t.kind}-json …</code>.`);
       return;
     }
-    DF.setSource({ coverage: cov.merged, fiscalStart: (state.runs.financials[0] || {}).fiscal_year_start });
+    DF.setSource({ coverage: cov.merged, fiscalStart: fiscalStart() });
     DF.setCompare(!t.detail);  // flat lists have no period columns to compare
     const L = DF.layout();
     state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
@@ -582,14 +595,65 @@
     }
   }
 
+  // When the shown figures were fetched from Zoho, and a Refresh button.
+  function showLive(data) {
+    const el = $("live");
+    const at = new Date(data.fetched_at);
+    const sameDay = at.toDateString() === new Date().toDateString();
+    const when = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
+      (sameDay ? "" : ` ${at.toLocaleDateString([], { day: "numeric", month: "short" })}`);
+    el.className = `rpt-live${data.stale ? " stale" : ""}`;
+    el.innerHTML = (data.stale ? `${icon("error")}<span>Zoho unavailable — showing data from ${esc(when)}</span>`
+      : `<span title="${data.zoho_calls ? `${data.zoho_calls} Zoho calls` : "From the 15-minute cache"}">Zoho · ${esc(when)}</span>`) +
+      `<button type="button" class="btn text" id="liveRefresh">${icon("refresh")}Refresh</button>`;
+    el.hidden = false;
+  }
+
+  // Executive Summary, P&L, BS, TB live from Zoho for any dates; the server caches for 15 minutes.
+  async function loadLive(t, refresh = false) {
+    DF.setSource({ live: true, fiscalStart: fiscalStart() });
+    DF.setCompare(t.id !== "tb");  // the trial balance has no period columns to compare
+    const L = t.id === "tb" ? DF.layout({ total: false, compare: false }) : DF.layout({ total: t.id !== "bs" });
+    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
+    setHead(null, t.label);
+    $("period").textContent = L.summary;
+    syncUrl();
+    if (L.tooMany) {
+      stateView("search", `Too many columns (${L.tooMany})`,
+        "Each column is a Zoho call. Shorten the range, split by a longer period, or drop comparison periods.");
+      return;
+    }
+    if (!L.cols.length) return stateView(...NO_DATA);
+    const seq = ++state.seq;
+    skeleton("Fetching from Zoho… a long range can take a minute the first time.");
+    const cols = `cols=${DF.colsParam(L.cols)}${refresh ? "&refresh=1" : ""}`;
+    const data = await api(t.statement ? `api/statement?name=${encodeURIComponent(t.statement)}&${cols}` : `api/tb?${cols}`);
+    if (seq !== state.seq || tab() !== t) return;  // the user moved on while Zoho answered
+    showLive(data);
+    if (!t.statement) {
+      state.tbData = { months: data.months, rows: data.rows };
+      renderTb(state.tbData);
+      return;
+    }
+    data.columns = L.cols.map((c) => c.key);
+    state.tree.nodes = null;
+    if (t.tree && data.tree?.length) {
+      showTree(data, t);
+    } else {
+      if (t.tree) $("toolbar").innerHTML = "";
+      renderStatement(data);
+    }
+  }
+
   async function load() {
     const t = tab();
     renderTabs();
     renderTools();
     renderExport();
-    if (DATASET[t.kind]) {
+    $("live").hidden = true;
+    if (DATASET[t.kind] || isLive(t)) {
       try {
-        await loadDated(t);
+        await (isLive(t) ? loadLive(t) : loadDated(t));
       } catch (e) {
         stateView("error", "Could not load this report", esc(e.message), "error");
       }
@@ -673,12 +737,22 @@
     if (parent) focusTwisty(parent.key);
   });
 
+  $("live").addEventListener("click", (e) => {
+    if (!e.target.closest("#liveRefresh")) return;
+    loadLive(tab(), true).catch((err) => stateView("error", "Could not load this report", esc(err.message), "error"));
+  });
+
   // The workbook needs the Bearer token, so fetch it and save the blob instead of following a link.
   $("exportBtn").addEventListener("click", async (e) => {
     e.preventDefault();
     const btn = $("exportBtn");
     if (btn.getAttribute("aria-disabled") === "true") return;
-    snackbar("Preparing the Excel workbook");
+    if (state.live) {
+      const L = DF.layout({ total: true });
+      if (!L.cols.length) return snackbar(L.tooMany ? `Too many columns (${L.tooMany})` : "Pick a date range first", true);
+      btn.setAttribute("href", `api/export.xlsx?cols=${DF.colsParam(L.cols)}`);
+    }
+    snackbar(state.live ? "Preparing the Excel workbook (financials live from Zoho)" : "Preparing the Excel workbook");
     try {
       const res = await MISAuth.fetch(btn.getAttribute("href"));
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
@@ -701,9 +775,13 @@
     api("api/runs?kind=financials"),
     ...Object.values(DATASET).map((ds) => api(`api/coverage?dataset=${ds}`).catch(() => noCoverage)),
     api("api/org").catch(() => ({})),  // company profile from MariaDB; the page still works without it
+    api("api/config").catch(() => ({})),
   ])
-    .then(([fin, sales, purchases, org]) => {
+    .then(([fin, sales, purchases, org, config]) => {
       state.org = org && org.name ? org : null;
+      state.live = !!config.live_financials;
+      const fy = Number(config.fiscal_year_start_month);
+      if (fy >= 1 && fy <= 12) state.fiscalStart = `2000-${String(fy).padStart(2, "0")}`;
       state.runs = { financials: fin.runs };
       state.coverage = { sales, purchases };
       load();

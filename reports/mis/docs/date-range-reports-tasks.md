@@ -54,7 +54,13 @@ What we keep: the fetchers (`invoice_margin.MarginSource`, `purchases.PurchaseSo
 | T1.9 | done | From / To always visible (editing → Custom); **Split by** Weekly (Mon–Sun) / Monthly / Quarterly / 6 months / Annual, fiscal-aligned, partial edge blocks; ≤ 40 columns; `?by=` in links. Financials (stored runs) get month-based splits only until Phase 2 makes them live |
 | T1.8 | done | `tests/test_date_columns.py`, `tests/test_sync_replace.py` (`MIS_TEST_DB_NAME=nellon_mis_test`) |
 | Test site | done | `https://algoray.tech/nellon/test-mis/` = static `web/` + `deploy/test-web/api.php` → `koyson-mis-test` on :8766 (dev DB, read-only); systemd unit not installed yet |
-| Phase 2+ | not started | Phase 2 rewritten as live financials (2026-10-17) |
+| T2.1 | done | `reports/live_financials.py`; `monthly_trial_balance` now cuts any columns into GL segments (`segments`, `Ledger`, `tb_rows`), CLI output unchanged (same rows, same call count). BS columns = balances at each column end, P&L reset per fiscal year of that end |
+| T2.2 | done | in-process `GLCache` per segment; 15 min TTL (`MIS_LIVE_TTL`); refresh re-fetches only segments > 1 min old; one Zoho fetch at a time (60 s wait → 503); stale copy kept 24 h; ≤ 100 calls per view |
+| T2.3 | done | `/api/config`, `/api/statement?name=&cols=`, `/api/tb?cols=`, `/api/export.xlsx?cols=` (run_id variants kept); 503 when `MIS_LIVE_FINANCIALS` ≠ 1 or busy, 502 when Zoho fails with no copy |
+| T2.4 | done (not yet seen in a browser) | live financial tabs use day grain (any From/To, "Year to date" default, Split by incl. weekly); "Zoho · 10:42" + Refresh; stale banner. COGS relabel not done |
+| T2.5 | done | `build_live_workbook`: live Executive Summary / PL / BS / TB + margin & purchases from the date tables, same columns as the screen. CLI `financials` still saves runs (dropped in Phase 4) |
+| T2.6 | done offline | `tests/test_live_financials.py` (fake GL: P&L/BS/TB maths, FY reset, cache, refresh limit, single-flight, busy, stale, limits); parity vs run #1 to the cent with a fake Zoho rebuilt from its stored TB. Real Zoho fixtures not recorded (needs approval) |
+| Live on a server | not enabled | needs approval: first real Zoho calls; test site would stop being Zoho-free |
 
 ## Phase 1 — Margin & Purchases by date (fixes "where is September")
 

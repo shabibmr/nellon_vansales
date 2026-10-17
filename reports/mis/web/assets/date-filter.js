@@ -4,10 +4,11 @@
    with the same range. Quarters, halves and years follow the fiscal year; weeks run Monday–Sunday.
 
    Two grains:
-   - "month" (financials): the source is a stored run's month list; columns are its months, and pages
-     `aggregate()` month values into them.
-   - "day" (margin, purchases): the source is the loaded-date coverage; columns are date ranges
-     (`{key, label, from, to}`) the server buckets itself — pass `colsParam()` to the API. */
+   - "month" (stored financials runs): the source is a run's month list; columns are its months, and
+     pages `aggregate()` month values into them.
+   - "day" (margin, purchases; live financials): the source is the loaded-date coverage, or `live`
+     (any dates, fetched on demand); columns are date ranges (`{key, label, from, to}`) the server
+     buckets itself — pass `colsParam()` to the API. */
 const MISDateFilter = (() => {
   "use strict";
 
@@ -20,7 +21,8 @@ const MISDateFilter = (() => {
     ["this_quarter", "This quarter"], ["last_quarter", "Last quarter"],
     ["this_year", "This year"], ["last_year", "Last year"], ["custom", "Custom"],
   ];
-  const presetText = (id) => (id === "run" && grain === "day" ? "All loaded data" : PRESETS.find((p) => p[0] === id)[1]);
+  const presetText = (id) => (id !== "run" || grain === "month" ? PRESETS.find((p) => p[0] === id)[1]
+    : live ? "Year to date" : "All loaded data");
   const SPLITS = [["week", "Weekly"], ["month", "Monthly"], ["quarter", "Quarterly"], ["half", "6 months"], ["year", "Annual"]];
   const SPLIT_MONTHS = { month: 1, quarter: 3, half: 6, year: 12 };
   const MAX_COLS = 40;  // the dated report API refuses more (reports/periods.py MAX_COLS)
@@ -58,6 +60,7 @@ const MISDateFilter = (() => {
   let grain = "month";
   let months = [];       // month grain: available month keys of the selected run, ascending
   let coverage = [];     // day grain: loaded [{from, to}] ranges, merged and sorted
+  let live = false;      // day grain without coverage: any dates (live financials)
   let fyStart = 0;       // 0-based month the fiscal year starts in
   let compareOn = true;
   let mount = null;
@@ -112,6 +115,7 @@ const MISDateFilter = (() => {
       }
       default: break;
     }
+    if (live) return [yearStart, t];
     if (grain === "day") {
       return coverage.length ? [toIdx(coverage[0].from), toIdx(coverage[coverage.length - 1].to)] : [0, 0];
     }
@@ -163,7 +167,9 @@ const MISDateFilter = (() => {
     const [a, b] = wanted();
     switch (sel.preset) {
       case "custom": return sel.from <= sel.to ? [sel.from, sel.to] : [sel.to, sel.from];
-      case "run": return coverage.length ? [coverage[0].from, coverage[coverage.length - 1].to] : null;
+      case "run":
+        if (live) return [monthFirst(a), today];
+        return coverage.length ? [coverage[0].from, coverage[coverage.length - 1].to] : null;
       default: {
         const start = monthFirst(a);
         return start > today ? [start, monthLast(b)] : [start, minS(monthLast(b), today)];
@@ -171,10 +177,11 @@ const MISDateFilter = (() => {
     }
   }
 
-  const loaded = (a, b) => coverage.some((r) => r.from <= b && r.to >= a);
+  const loaded = (a, b) => live || coverage.some((r) => r.from <= b && r.to >= a);
 
   // Parts of [a, b] not covered by the loaded ranges.
   function gapsIn(a, b) {
+    if (live) return [];
     const out = [];
     let cur = a;
     for (const r of coverage) {
@@ -305,6 +312,8 @@ const MISDateFilter = (() => {
 
   function hintText(info) {
     const [lo, hi] = bounds();
+    if (live && info.tooMany) return [`${info.tooMany} columns — at most ${MAX_COLS}. Shorten the range, split by a longer period or drop comparisons.`, true];
+    if (live) return [info.from ? `${info.summary} · live from Zoho` : "", false];
     if (!lo) return ["", false];
     if (grain === "day") {
       if (!info.from) return ["", false];
@@ -390,16 +399,19 @@ const MISDateFilter = (() => {
       bind();
       render();
     },
-    /** What the page is showing: a run's months (month grain) or loaded date ranges (day grain,
-        `coverage` = [{from, to}] merged), and where the fiscal year starts. */
-    setSource({ months: list, coverage: cov, fiscalStart }) {
+    /** What the page is showing: a run's months (month grain), loaded date ranges (day grain,
+        `coverage` = [{from, to}] merged) or `live` (day grain, any dates), and where the fiscal year
+        starts. */
+    setSource({ months: list, coverage: cov, live: isLive = false, fiscalStart }) {
+      if (isLive) cov = [];
       const nextGrain = cov ? "day" : "month";
       const next = cov ? cov.map((r) => ({ from: r.from, to: r.to })) : [...(list || [])].sort();
       const fs = toIdx(fiscalStart);
       const start = Number.isNaN(fs) ? 0 : fs % 12;
       const prev = grain === "day" ? coverage : months;
-      const same = nextGrain === grain && start === fyStart && JSON.stringify(next) === JSON.stringify(prev);
+      const same = nextGrain === grain && start === fyStart && isLive === live && JSON.stringify(next) === JSON.stringify(prev);
       grain = nextGrain;
+      live = isLive;
       if (cov) coverage = next; else months = next;
       fyStart = start;
       if (!same) render();  // a re-render would drop focus from the control being used

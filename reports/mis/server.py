@@ -9,15 +9,19 @@ All page/asset/API URLs in the web files are relative, so the app also works
 behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /assets/<name>.css|.js|.svg → web/assets/ (shared styles, page scripts, icon sprite)
     GET  /api/org                → organization profile (name, currency) stored by `main.py org-sync`
+    GET  /api/config             → {live_financials, fiscal_year_start_month}
     GET  /api/runs?kind=         → stored runs
-    GET  /api/statement?run_id=&name=   Executive Summary | PL | BS (+ expandable `tree` for the first two)
-    GET  /api/tb?run_id=         → monthly trial balance
+    GET  /api/statement?name=&cols=key:from:to,…[&refresh=1]   live from Zoho (MIS_LIVE_FINANCIALS=1):
+         Executive Summary | PL | BS (+ expandable `tree` for the first two), with fetched_at / stale /
+         zoho_calls; `run_id=` instead of cols reads a stored run
+    GET  /api/tb?cols=…[&refresh=1]   live trial balance (or run_id= for a stored run)
     GET  /api/coverage?dataset=sales|purchases  → loaded date ranges and gaps
     GET  /api/margin?from=&to=[&cols=key:from:to,…]&dim=&measure=   margin pivot over any dates
          (columns = the given ranges, default one per month + Total; `run_id=` still reads a stored run)
     GET  /api/margin-detail?from=&to=&view=line|invoice   margin per invoice line / per invoice (or run_id=)
     GET  /api/purchases?from=&to=[&cols=…]&dim=&measure=   bills + purchase orders pivot (or run_id=)
-    GET  /api/export.xlsx?run_id=[&margin_run=&purchases_run=]  → Excel workbook (financials, margin, purchases, category master)
+    GET  /api/export.xlsx?cols=…  → Excel workbook: live financials + margin / purchases for those columns
+         (run_id=[&margin_run=&purchases_run=] for a stored run)
     GET  /api/category-master    → rows built from the cached COA snapshot + overrides
     GET  /api/cashflow           → cash forecast from the COA snapshot and cached documents (no Zoho)
     POST /api/refresh            → re-pull Chart of Accounts from Zoho; returns rebuilt payload
@@ -26,8 +30,11 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
 
 Overrides are written to category_overrides.csv (rebuilt from the cached COA, no Zoho call), saved to
 MariaDB, and logged to output/category_audit.log with the Zoho user id. Editing needs the Zoho JWT
-auth to be enabled (MIS_JWT_SECRET); without it the endpoints refuse. Saved financials runs are not
-recomputed: re-run `main.py financials` to apply a changed mapping to a report.
+auth to be enabled (MIS_JWT_SECRET); without it the endpoints refuse. Live financials apply a changed
+mapping at once; saved financials runs are not recomputed (re-run `main.py financials`).
+
+Live financials call Zoho only for GL periods not cached in this process (reports/live_financials.py:
+15-minute cache, one Zoho fetch at a time, last good copy served when Zoho fails).
 
 Zoho credentials stay server-side. Binds to 127.0.0.1 by default. Every /api route needs the
 Zoho web-tab JWT as a Bearer header (pages/assets stay open); see reports/web_auth.py and
@@ -53,7 +60,8 @@ from main import BASE_DIR, COA_SNAPSHOT, OUT_DIR, OVERRIDES_CSV, load_coa_snapsh
 from reports import category_master as cm
 from reports import cashflow_forecast as cf
 from reports import db, periods, web_auth
-from reports.excel_export import build_workbook
+from reports import live_financials as live
+from reports.excel_export import build_live_workbook, build_workbook
 
 WEB_PAGE = BASE_DIR / "web" / "category_master.html"
 REPORTS_PAGE = BASE_DIR / "web" / "reports.html"
@@ -178,6 +186,23 @@ def _cols(q: dict[str, str]) -> list[periods.Col]:
     return periods.month_cols(*periods.parse_range(q.get("from"), q.get("to")))
 
 
+class Unavailable(Exception):
+    """→ 503 with the message."""
+
+
+def _cached_snapshot() -> dict[str, Any]:
+    """The COA snapshot on disk; never calls Zoho (POST /api/refresh does)."""
+    if not COA_SNAPSHOT.exists():
+        raise Unavailable("No chart of accounts snapshot yet: run main.py category-master.")
+    return json.loads(COA_SNAPSHOT.read_text(encoding="utf-8"))
+
+
+def _live_args(q: dict[str, str]) -> tuple[list[periods.Col], dict[str, Any], dict[str, dict[str, str]]]:
+    if not live.enabled():
+        raise Unavailable("Live financials are switched off on this server (MIS_LIVE_FINANCIALS=1).")
+    return _cols(q), _cached_snapshot(), cm.load_overrides(OVERRIDES_CSV)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "NellonMIS/1.0"
 
@@ -275,6 +300,16 @@ class Handler(BaseHTTPRequestHandler):
                 payload["currency"] = _org_currency(payload.get("currency", ""))
                 payload.pop("organization", None)
                 self._json(HTTPStatus.OK, payload)
+            elif path == "/api/config":
+                fy = COA_SNAPSHOT.exists() and _cached_snapshot().get("fiscal_year_start_month")
+                self._json(HTTPStatus.OK, {"live_financials": live.enabled(), "fiscal_year_start_month": fy or None})
+            elif path == "/api/statement" and "run_id" not in q:
+                cols, snapshot, overrides = _live_args(q)
+                self._json(HTTPStatus.OK, live.statement(q.get("name", ""), cols, snapshot, overrides,
+                                                         refresh=q.get("refresh") == "1"))
+            elif path == "/api/tb" and "run_id" not in q:
+                cols, snapshot, overrides = _live_args(q)
+                self._json(HTTPStatus.OK, live.trial_balance(cols, snapshot, overrides, refresh=q.get("refresh") == "1"))
             elif path.startswith("/api/") and not db.enabled():
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "MariaDB not configured (MIS_DB_* in .env)"})
             elif path == "/api/org":
@@ -298,11 +333,14 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/tb":
                 self._json(HTTPStatus.OK, db.get_trial_balance(_int(q, "run_id")))
             elif path == "/api/export.xlsx":
-                body, filename = build_workbook(
-                    _int(q, "run_id"),
-                    _int(q, "margin_run") if q.get("margin_run") else None,
-                    _int(q, "purchases_run") if q.get("purchases_run") else None,
-                )
+                if "run_id" in q:
+                    body, filename = build_workbook(
+                        _int(q, "run_id"),
+                        _int(q, "margin_run") if q.get("margin_run") else None,
+                        _int(q, "purchases_run") if q.get("purchases_run") else None,
+                    )
+                else:
+                    body, filename = build_live_workbook(*_live_args(q), refresh=q.get("refresh") == "1")
                 self.send_response(HTTPStatus.OK)
                 self.send_header(
                     "Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -338,6 +376,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ValueError as exc:
             self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except (Unavailable, live.Busy) as exc:
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+        except live.ZohoDown as exc:
+            self._json(HTTPStatus.BAD_GATEWAY, {"error": str(exc)})
         except Exception as exc:  # Zoho / DB / IO failures surface in the page
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 

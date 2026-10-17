@@ -108,7 +108,8 @@ def write_statement_workbook(
         ws.append([st.subtitle])
         ws["A2"].font = Font(italic=True, color="666666")
         ws.append([])
-        ws.append([getattr(st, "first_header", "Particulars"), *[month_label(c) for c in st.columns]])
+        labels = getattr(st, "labels", None) or {}
+        ws.append([getattr(st, "first_header", "Particulars"), *[labels.get(c) or month_label(c) for c in st.columns]])
         for cell in ws[4]:
             cell.font = Font(bold=True)
             cell.border = Border(bottom=Side(style="thin"))

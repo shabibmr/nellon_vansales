@@ -409,8 +409,10 @@ def _month_end_balances(row: dict[str, Any], months: list[str]) -> dict[str, flo
 
 
 def build_balance_sheet(rows: list[dict[str, Any]], summary: dict[str, Any]) -> Statement:
+    """Columns are month ends, rolled forward from `opening`; a row's `balances` ({column: balance},
+    from the live service) replaces the roll-forward."""
     months = _months(summary)
-    balances = {id(r): _month_end_balances(r, months) for r in rows}
+    balances = {id(r): r.get("balances") or _month_end_balances(r, months) for r in rows}
     known = set(ASSET_CATS + LIABILITY_CATS + EQUITY_CATS)
 
     bs_rows = []
@@ -452,7 +454,7 @@ def build_balance_sheet(rows: list[dict[str, Any]], summary: dict[str, Any]) -> 
     return Statement(
         name="BS",
         title="Balance Sheet",
-        subtitle=f"As at month end · {summary.get('currency_code', '')}",
+        subtitle=f"As at {summary.get('as_at', 'month end')} · {summary.get('currency_code', '')}",
         columns=months,
         lines=lines,
     )

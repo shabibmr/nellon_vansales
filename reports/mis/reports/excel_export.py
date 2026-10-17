@@ -1,9 +1,13 @@
-"""One Excel workbook per financials run, each report on its own sheet — built from MariaDB.
+"""One Excel workbook of the MIS, each report on its own sheet.
 
-Sheets, in order: Executive Summary, PL, BS, Trial Balance, then (when a matching run exists) Margin by
-Invoice, Margin by Item, Purchases (by vendor), and Category Master.
-Margin and purchases are separate runs: the caller can pick them, else the latest one whose period matches
-the financials run (or, failing that, overlaps it) is used.
+Sheets, in order: Executive Summary, PL, BS, Trial Balance, then Margin by Invoice, Margin by Item,
+Purchases (by vendor), and Category Master.
+
+- `build_live_workbook(cols, …)`: financials live from Zoho (`reports.live_financials`, cached) and
+  margin / purchases from the dated tables, all for the date filter's columns.
+- `build_workbook(run_id)`: one stored financials run; margin and purchases are separate runs: the
+  caller can pick them, else the latest one whose period matches the financials run (or, failing
+  that, overlaps it) is used.
 
 Month columns are labelled like the template (Apr-26 … Total).
 """
@@ -12,11 +16,12 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from exporters import write_statement_workbook
-from reports import db
-from reports.financials import Line
+from reports import db, periods
+from reports import live_financials as live
+from reports.financials import TOTAL, Line
 
 MARGIN_SECTIONS = [("net_sales", "Net sales"), ("cost", "Cost"), ("gross_margin", "Gross margin"), ("gm_pct", "GM %")]
 PURCHASE_SECTIONS = [("amount", "Amount"), ("quantity", "Quantity"), ("documents", "Documents")]
@@ -37,6 +42,7 @@ class Sheet:
     lines: list[Line] = field(default_factory=list)
     first_header: str = "Particulars"
     open_level: int = 0  # >0: lines carry `.level`; rows deeper than this start collapsed
+    labels: dict[str, str] = field(default_factory=dict)  # column key → heading (else month_label)
 
 
 def _mon(iso: str) -> str:
@@ -80,7 +86,10 @@ def _flatten(nodes: list[dict[str, Any]], depth: int, out: list[Line]) -> None:
 
 
 def _trial_balance_sheet(run: dict[str, Any]) -> Sheet:
-    data = db.get_trial_balance(run["id"])
+    return _tb_sheet(db.get_trial_balance(run["id"]), _period(run))
+
+
+def _tb_sheet(data: dict[str, Any], period: str, labels: dict[str, str] | None = None) -> Sheet:
     months = data["months"]
     columns = ["Opening", *months, "Closing"]
 
@@ -98,8 +107,8 @@ def _trial_balance_sheet(run: dict[str, Any]) -> Sheet:
         for r in rows:
             label = f"{r['account_code']}  {r['account_name']}".strip()
             lines.append(Line(label, "sub", vals(r)))
-    return Sheet("Trial Balance", "Monthly Trial Balance",
-                 f"{_period(run)} · Dr + / Cr −", columns, lines, "Account")
+    return Sheet("Trial Balance", "Trial Balance", f"{period} · Dr + / Cr −", columns, lines, "Account",
+                 labels=labels or {})
 
 
 def _matching_run(kind: str, fin: dict[str, Any], run_id: int | None) -> dict[str, Any] | None:
@@ -117,13 +126,19 @@ def _matching_run(kind: str, fin: dict[str, Any], run_id: int | None) -> dict[st
 
 def _pivot_sheets(run: dict[str, Any], prefix: str, dims: list[tuple[str, str]],
                   sections: list[tuple[str, str]], fetch: Any) -> list[Sheet]:
+    return _pivots(f"{_period(run)} · run #{run['id']}", prefix, dims, sections,
+                   lambda dim, measure: fetch(run["id"], dim, measure))
+
+
+def _pivots(subtitle: str, prefix: str, dims: list[tuple[str, str]], sections: list[tuple[str, str]],
+            fetch: Callable[[str, str], dict[str, Any]], labels: dict[str, str] | None = None) -> list[Sheet]:
     """One sheet per dimension; each measure becomes a titled block of rows × (months + Total)."""
     sheets = []
     for dim, dim_label in dims:
         columns: list[str] = []
         lines: list[Line] = []
         for measure, label in sections:
-            data = fetch(run["id"], dim, measure)
+            data = fetch(dim, measure)
             columns = data["columns"]
             if lines:
                 lines.append(Line("", "blank"))
@@ -132,8 +147,8 @@ def _pivot_sheets(run: dict[str, Any], prefix: str, dims: list[tuple[str, str]],
             lines += [Line(r["label"], kind, r["values"]) for r in data["rows"]]
             lines.append(Line(f"Total {label}", "pct" if measure == "gm_pct" else "total", data["total"]))
         name = prefix if prefix == "Purchases" else f"{prefix} by {dim_label}"
-        sheets.append(Sheet(name, f"{prefix} by {dim_label}",
-                            f"{_period(run)} · run #{run['id']}", columns, lines, dim_label))
+        sheets.append(Sheet(name, f"{prefix} by {dim_label}", subtitle, columns, lines, dim_label,
+                            labels=labels or {}))
     return sheets
 
 
@@ -160,8 +175,51 @@ def build_workbook(financials_run_id: int, margin_run_id: int | None = None,
     cm = _category_master_rows()
     if cm:
         data_sheets["Category Master"] = cm
-    order = ["Executive Summary", "PL", "BS", "Trial Balance", "Margin by Invoice", "Margin by Item",
-             "Purchases", "Category Master"]
     buf = io.BytesIO()
-    write_statement_workbook(sheets, buf, data_sheets, order)
+    write_statement_workbook(sheets, buf, data_sheets, SHEET_ORDER)
     return buf.getvalue(), f"MIS_{run['from_date']}_{run['to_date']}.xlsx"
+
+
+SHEET_ORDER = ["Executive Summary", "PL", "BS", "Trial Balance", "Margin by Invoice", "Margin by Item",
+               "Purchases", "Category Master"]
+
+
+def build_live_workbook(cols: list[periods.Col], snapshot: dict[str, Any], overrides: dict[str, dict[str, str]],
+                        *, refresh: bool = False) -> tuple[bytes, str]:
+    """The date filter's columns (splits, Total, comparisons) → (xlsx bytes, suggested filename).
+
+    Executive Summary / PL use every column; BS all but Total (balances at each end); the Trial Balance
+    and Margin by Invoice cover the main range (the split columns, or Total's range)."""
+    total = next((c for c in cols if c.key == TOTAL), None)
+    main = [c for c in cols if c.key != TOTAL and not live._COMPARE.match(c.key)]
+    start, end = (total.start, total.end) if total else periods.span(main or cols)
+    labels = {c.key: periods.col_label(c) for c in cols}
+    period = f"{periods.col_label(periods.Col('', start, end))} · {snapshot.get('currency_code') or '-'}"
+
+    sheets: list[Sheet] = []
+    for name, title in STATEMENT_SHEETS:
+        use = [c for c in cols if c.key != TOTAL] if name == "BS" else cols
+        stmt, _ = live.build_statement(name, use or cols, snapshot, overrides, refresh=refresh)
+        lines, open_level = stmt.lines, 0
+        if stmt.tree:  # same outline as the web view
+            lines = []
+            _flatten([n.as_dict() for n in stmt.tree], 0, lines)
+            open_level = TREE_OPEN_LEVEL[name]
+        sheets.append(Sheet(name, title, stmt.subtitle, stmt.columns, lines, open_level=open_level, labels=labels))
+    tb_cols = main or [periods.Col("Total", start, end)]
+    sheets.append(_tb_sheet(live.trial_balance(tb_cols, snapshot, overrides), period, labels))
+
+    data_sheets: dict[str, Any] = {}
+    margin = db.get_margin_detail_range(start, end, "invoice")["rows"]
+    if margin:
+        data_sheets["Margin by Invoice"] = (INVOICE_COLUMNS, margin)
+        sheets += _pivots(period, "Margin", MARGIN_DIMS, MARGIN_SECTIONS,
+                          lambda dim, m: db.get_margin_pivot_range(cols, dim, m), labels)
+    sheets += _pivots(period, "Purchases", PURCHASE_DIMS, PURCHASE_SECTIONS,
+                      lambda dim, m: db.get_purchase_pivot_range(cols, dim, m), labels)
+    cm = _category_master_rows()
+    if cm:
+        data_sheets["Category Master"] = cm
+    buf = io.BytesIO()
+    write_statement_workbook(sheets, buf, data_sheets, SHEET_ORDER)
+    return buf.getvalue(), f"MIS_{start}_{end}.xlsx"

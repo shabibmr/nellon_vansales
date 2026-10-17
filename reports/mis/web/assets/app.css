@@ -351,6 +351,18 @@ code {
   color: var(--md-on-surface-variant);
 }
 
+/* Live financials: when the figures came from Zoho, and a Refresh button. */
+.surface-head .rpt-period { flex-wrap: wrap; }
+.surface-head .rpt-live { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.surface-head .rpt-live[hidden] { display: none; }
+.surface-head .rpt-live .btn { height: 32px; }
+.surface-head .rpt-live.stale {
+  padding-left: 10px; border-radius: 999px;
+  background: var(--md-warning-container); color: var(--md-on-warning-container);
+}
+.surface-head .rpt-live.stale > .icon { width: 16px; height: 16px; }
+.loading-note { margin: 16px 20px 0; font-size: 13px; color: var(--md-on-surface-variant); }
+
 /* Full-height report viewer (reports.html): the table surface fills the viewport. */
 @media (min-width: 721px) {
   .app.fill .page { height: 100dvh; }
