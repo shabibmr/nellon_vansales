@@ -23,6 +23,7 @@
   ];
 
   // Pivot tabs (margin, purchases): rows = chosen dimension, columns = months + Total.
+  const MARGIN_MEASURES = [["net_sales", "Net sales"], ["cost", "Cost"], ["gross_margin", "Margin"], ["gm_pct", "GM %"]];
   const PIVOTS = {
     margin: {
       dims: [["item", "Item"], ["customer", "Customer"], ["salesperson", "Salesperson"], ["van", "Van"]],
@@ -46,6 +47,7 @@
     detailData: null,
     org: null,
     tbData: null,
+    labels: {},  // column key → heading for the date filter's columns (periods, Total)
     // Expandable statements: `tree` on a tab is its default outline level.
     tree: { nodes: null, cols: [], open: new Set(), q: "", sort: "statement", reveal: null },
   };
@@ -56,6 +58,7 @@
   const runOf = (kind) => state.runs[kind].find((r) => r.id === state.selected[kind]);
 
   const colLabel = (c) => {
+    if (state.labels[c]) return state.labels[c];
     const m = /^(\d{4})-(\d{2})$/.exec(c);
     return m ? `${MON[Number(m[2]) - 1]}-${m[1].slice(2)}` : c;
   };
@@ -152,12 +155,12 @@
       const opts = (list, sel) => list.map(([v, l]) =>
         `<option value="${v}"${v === sel ? " selected" : ""}>${esc(l)}</option>`).join("");
       html = `<label class="field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
-        <label class="field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`;
+        ${t.id === "margin" ? "" : `<label class="field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`}`;
     }
     $("toolbar").innerHTML = html;
     if ($("pvDim")) {
       $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
-      $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
+      if ($("pvMeasure")) $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
     }
     if ($("dtq")) $("dtq").oninput = (e) => { state.detailFilter = e.target.value; renderDetail(state.detailData, t); };
     if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
@@ -371,6 +374,7 @@
       stateView("database", "Nothing in this run", "This run has no lines.");
       return;
     }
+    if (data.multi) return renderMarginPivot(data, t);
     const pct = data.measure === "gm_pct";
     const cols = data.columns;
     const body = data.rows.map((r) =>
@@ -381,6 +385,20 @@
       cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`;
     const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
     view(`<table class="data">${headRow(dimLabel, cols, "Total")}<tbody>${body}${foot}</tbody></table>`);
+  }
+
+  function renderMarginPivot(data, t) {
+    const cols = data.columns, M = MARGIN_MEASURES;
+    const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
+    const cells = (src, c) => M.map(([m]) => numCell(src[m][c] ?? 0, { pct: m === "gm_pct", total: c === "Total" })).join("");
+    const head = `<thead><tr><th scope="col" rowspan="2">${esc(dimLabel)}</th>${cols.map((c) =>
+      `<th scope="colgroup" colspan="${M.length}" class="grp${c === "Total" ? " tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr>` +
+      `<tr>${cols.map((c) => M.map(([, l]) => `<th scope="col" class="n${c === "Total" ? " tot" : ""}">${l}</th>`).join("")).join("")}</tr></thead>`;
+    const body = data.rows.map((r) =>
+      `<tr>${txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")}` +
+      cols.map((c) => cells(r.m, c)).join("") + `</tr>`).join("");
+    const foot = `<tr class="total"><td>Total</td>${cols.map((c) => cells(data.mtotal, c)).join("")}</tr>`;
+    view(`<table class="data">${head}<tbody>${body}${foot}</tbody></table>`);
   }
 
   function renderDetail(data, t) {
@@ -457,6 +475,106 @@
       `<tbody>${body}</tbody></table>`);
   }
 
+  // ---------------------------------------------------------------- date filter
+
+  const DF = MISDateFilter;
+  const NO_DATA = ["search", "No data in this period",
+    "The selected range has no months in this report run. Pick another period or a Full run."];
+
+  // Sum / last-month the stored month columns into the filter's columns (months, Total, comparison periods).
+  const REVENUE = ["Revenue", "Revenue Booked", "Total Revenue"];
+  function remapLines(list, L, mode) {
+    for (const n of list) {
+      n.values = DF.aggregate(n.values, L.cols, mode);
+      if (n.children) remapLines(n.children, L, mode);
+    }
+    // Ratios can't be summed: rebuild each % row from the row above it over revenue.
+    list.forEach((n, i) => {
+      if (n.kind !== "pct" || !i) return;
+      const num = list[i - 1].values, den = (list.find((x) => REVENUE.includes(x.label)) || list[0]).values;
+      n.values = Object.fromEntries(L.cols.map((c) => [c.key, den[c.key] ? num[c.key] / den[c.key] : 0]));
+    });
+  }
+
+  function filterStatement(data, t) {
+    const mode = t.id === "bs" ? "balance" : "flow";
+    const L = DF.layout({ total: mode === "flow" });
+    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
+    $("period").textContent = L.summary;
+    if (L.empty) return null;
+    remapLines(data.lines, L, mode);
+    remapLines(data.tree || [], L, mode);
+    data.columns = L.cols.map((c) => c.key);
+    return data;
+  }
+
+  function pivotAgg(data, L) {
+    return {
+      ...data,
+      columns: L.cols.map((c) => c.key),
+      rows: data.rows.map((r) => ({ ...r, values: DF.aggregate(r.values, L.cols) })),
+      total: DF.aggregate(data.total, L.cols),
+    };
+  }
+
+  async function loadPivot(t, runId) {
+    const cur = state.pivot[t.id];
+    const L = DF.layout();
+    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
+    $("period").textContent = L.summary;
+    if (L.empty) return null;
+    const get = (measure) => api(`${t.api}?run_id=${runId}&dim=${cur.dim}&measure=${measure}`);
+    if (t.id === "margin") {
+      // Every measure side by side: Net sales, Cost, Margin, GM % for each period.
+      const [ns, cost, gm] = (await Promise.all(MARGIN_MEASURES.slice(0, 3).map(([m]) => get(m)))).map((d) => pivotAgg(d, L));
+      const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? g[c.key] / n[c.key] : 0]));
+      const by = (d) => new Map(d.rows.map((r) => [r.label, r]));
+      const cm = by(cost), gmm = by(gm);
+      const rows = ns.rows.map((r) => {
+        const v = { net_sales: r.values, cost: (cm.get(r.label) || {}).values || {}, gross_margin: (gmm.get(r.label) || {}).values || {} };
+        v.gm_pct = ratio(v.gross_margin, v.net_sales);
+        return { ...r, m: v };
+      }).filter((r) => L.cols.some((c) => Math.abs(r.m.net_sales[c.key] || 0) > 0.004 || Math.abs(r.m.cost[c.key] || 0) > 0.004));
+      const tot = { net_sales: ns.total, cost: cost.total, gross_margin: gm.total };
+      tot.gm_pct = ratio(tot.gross_margin, tot.net_sales);
+      return { ...ns, multi: true, rows, mtotal: tot };
+    }
+    if (cur.measure !== "gm_pct") {
+      const out = pivotAgg(await get(cur.measure), L);
+      out.rows = out.rows.filter((r) => L.cols.some((c) => Math.abs(r.values[c.key]) > 0.004));
+      return out;
+    }
+    // GM % is a ratio: aggregate margin and sales separately, then divide.
+    const [gm, ns] = (await Promise.all([get("gross_margin"), get("net_sales")])).map((d) => pivotAgg(d, L));
+    const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? g[c.key] / n[c.key] : 0]));
+    const sales = new Map(ns.rows.map((r) => [r.label, r]));
+    const rows = gm.rows.filter((r) => sales.get(r.label) && L.cols.some((c) => Math.abs(sales.get(r.label).values[c.key]) > 0.004))
+      .map((r) => ({ ...r, values: ratio(r.values, sales.get(r.label).values) }));
+    return { ...gm, measure: "gm_pct", rows, total: ratio(gm.total, ns.total) };
+  }
+
+  // Trial balance: opening rolls forward over the months before the range, closing over the range.
+  function filterTb(data) {
+    const L = DF.layout({ total: false, compare: false });
+    $("period").textContent = L.summary;
+    if (L.empty) return null;
+    const sum = (r, ms) => ms.reduce((s, m) => s + (Number(r[m]) || 0), 0);
+    const earlier = data.months.filter((m) => m < L.from);
+    const rows = data.rows.map((r) => {
+      const opening = (Number(r.opening) || 0) + sum(r, earlier);
+      return { ...r, opening, closing: opening + sum(r, L.main) };
+    });
+    return { months: L.main, rows };
+  }
+
+  function filterDetail(data) {
+    const L = DF.layout({ total: false, compare: false });
+    $("period").textContent = L.summary;
+    const range = DF.isoRange();
+    if (!range) return null;
+    return { ...data, rows: data.rows.filter((r) => r.date >= range.from && r.date <= range.to) };
+  }
+
   // ---------------------------------------------------------------- load
 
   async function load() {
@@ -482,27 +600,34 @@
     }
 
     const runId = state.selected[t.kind];
-    setHead(runOf(t.kind), t.label);
+    const run = runOf(t.kind);
+    DF.setSource({ months: run.months, fiscalStart: run.fiscal_year_start });
+    DF.setCompare(!(t.id === "tb" || t.detail));  // those two have no period columns to compare
+    state.labels = {};
+    setHead(run, t.label);
     skeleton();
     try {
       if (t.detail) {
-        state.detailData = await api(`api/margin-detail?run_id=${runId}&view=${t.detail}`);
-        renderDetail(state.detailData, t);
+        state.detailData = filterDetail(await api(`api/margin-detail?run_id=${runId}&view=${t.detail}`));
+        if (state.detailData) renderDetail(state.detailData, t); else stateView(...NO_DATA);
       } else if (t.pivot) {
-        const cur = state.pivot[t.id];
-        renderPivot(await api(`${t.api}?run_id=${runId}&dim=${cur.dim}&measure=${cur.measure}`), t);
+        const data = await loadPivot(t, runId);
+        if (data) renderPivot(data, t); else stateView(...NO_DATA);
       } else if (t.statement) {
-        const data = await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`);
+        const data = filterStatement(await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`), t);
         state.tree.nodes = null;
-        if (t.tree && data.tree?.length) {
+        if (!data) {
+          if (t.tree) $("toolbar").innerHTML = "";
+          stateView(...NO_DATA);
+        } else if (t.tree && data.tree?.length) {
           showTree(data, t);
         } else {
           if (t.tree) $("toolbar").innerHTML = "";  // no stored TB to expand from: plain statement
           renderStatement(data);
         }
       } else {
-        state.tbData = await api(`api/tb?run_id=${runId}`);
-        renderTb(state.tbData);
+        state.tbData = filterTb(await api(`api/tb?run_id=${runId}`));
+        if (state.tbData) renderTb(state.tbData); else stateView(...NO_DATA);
       }
     } catch (e) {
       stateView("error", "Could not load this report", esc(e.message), "error");
@@ -563,6 +688,7 @@
     }
   });
 
+  DF.init({ mount: $("datebar"), onChange: () => load() });
   renderTabs();
   skeleton();
   Promise.all([

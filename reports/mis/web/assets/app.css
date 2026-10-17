@@ -910,3 +910,22 @@ table.data.tree tr.reveal td { animation: tree-in 220ms var(--ease) both; animat
   .data .guide, .twisty, .data .share i { display: none; }
   table.data.tree tr td.tl { padding-left: calc(6px + var(--depth, 0) * 14px) !important; }
 }
+
+/* Shared date filter (assets/date-filter.js) */
+.datebar { padding-bottom: 0; }
+.datebar .df-hint { margin: 0; align-self: center; font-size: 13px; color: var(--md-on-surface-variant); }
+.datebar .df-hint.warn { color: var(--md-on-warning-container); }
+.stepper { display: inline-flex; align-items: center; height: 40px; border: 1px solid var(--md-outline);
+  border-radius: var(--shape-sm); background: var(--md-surface-container-lowest); }
+.stepper output { min-width: 28px; text-align: center; font-weight: 500; }
+.stepper .step { width: 36px; height: 100%; border: 0; background: none; color: var(--md-primary);
+  font: inherit; font-size: 18px; cursor: pointer; }
+.stepper .step:hover:not(:disabled) { background: var(--md-primary-container); }
+.stepper .step:focus-visible { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+.stepper .step:disabled { color: var(--md-outline); cursor: default; }
+@media (max-width: 720px) { .datebar .stepper { width: 100%; justify-content: space-between; } }
+
+/* Margin pivot: period group header over Net sales / Cost / Margin / GM % */
+.data thead th.grp { text-align: center; border-left: 1px solid var(--md-outline-variant); }
+.data thead tr:nth-child(2) th { top: 48px; height: 32px; }
+.data thead tr:nth-child(2) th:first-child { position: sticky; left: auto; z-index: 2; background: var(--md-surface-container); min-width: 0; }
