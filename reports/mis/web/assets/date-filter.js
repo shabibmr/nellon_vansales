@@ -1,6 +1,7 @@
-/* Shared date filter for MIS pages: a date range (presets or custom) plus up to 5 earlier (−) and
-   5 later (+) comparison periods of the same length. The choice is kept in localStorage, so every
-   report page and tab opens with the same range.
+/* Shared date filter for MIS pages: a From / To range (presets or any dates), split into one column
+   per week / month / quarter / 6 months / year, plus up to 5 earlier (−) and 5 later (+) comparison
+   periods of the same length. The choice is kept in localStorage, so every report page and tab opens
+   with the same range. Quarters, halves and years follow the fiscal year; weeks run Monday–Sunday.
 
    Two grains:
    - "month" (financials): the source is a stored run's month list; columns are its months, and pages
@@ -20,6 +21,9 @@ const MISDateFilter = (() => {
     ["this_year", "This year"], ["last_year", "Last year"], ["custom", "Custom"],
   ];
   const presetText = (id) => (id === "run" && grain === "day" ? "All loaded data" : PRESETS.find((p) => p[0] === id)[1]);
+  const SPLITS = [["week", "Weekly"], ["month", "Monthly"], ["quarter", "Quarterly"], ["half", "6 months"], ["year", "Annual"]];
+  const SPLIT_MONTHS = { month: 1, quarter: 3, half: 6, year: 12 };
+  const MAX_COLS = 40;  // the dated report API refuses more (reports/periods.py MAX_COLS)
 
   // Month index = year * 12 + month0, so ranges and shifts are plain integer maths.
   const toIdx = (key) => {
@@ -58,7 +62,7 @@ const MISDateFilter = (() => {
   let compareOn = true;
   let mount = null;
   let notify = () => {};
-  let sel = { preset: "run", from: "", to: "", before: 0, after: 0 };  // from / to: YYYY-MM-DD
+  let sel = { preset: "run", from: "", to: "", split: "month", before: 0, after: 0 };  // from / to: YYYY-MM-DD
 
   try {
     let saved = JSON.parse(localStorage.getItem(STORE) || "null");
@@ -74,10 +78,16 @@ const MISDateFilter = (() => {
   const clampN = (n) => Math.max(0, Math.min(MAX_COMPARE, Number(n) || 0));
   sel.before = clampN(sel.before);
   sel.after = clampN(sel.after);
+  if (!SPLITS.some(([id]) => id === sel.split)) sel.split = "month";
   const validDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !Number.isNaN(D(s).getTime());
   if (!validDay(sel.from) || !validDay(sel.to)) sel = { ...sel, from: "", to: "", preset: sel.preset === "custom" ? "run" : sel.preset };
 
   const persist = () => { try { localStorage.setItem(STORE, JSON.stringify(sel)); } catch { /* ignore */ } };
+
+  // Weekly needs day data; month-grain sources (stored financials runs) fall back to monthly.
+  const split = () => (grain === "month" && sel.split === "week" ? "month" : sel.split);
+  // First month index of the fiscal-aligned block of `n` months containing month index i.
+  const blockStart = (i, n) => i - ((((i - fyStart) % n) + n) % n);
 
   // ---------------------------------------------------------------- month grain (financials)
 
@@ -110,8 +120,9 @@ const MISDateFilter = (() => {
 
   const within = (a, b) => months.filter((m) => { const i = toIdx(m); return i >= a && i <= b; });
 
-  /* Columns to draw, oldest first: earlier periods, the range's months (+ Total for flow reports),
-     later periods. Comparison periods are the same length as the range, stepped back / forward. */
+  /* Columns to draw, oldest first: earlier periods, one column per split block of the range's months
+     (+ Total for flow reports), later periods. Comparison periods are the same length as the range,
+     stepped back / forward. `main` stays the list of months (the trial balance rolls over it). */
   function monthLayout({ total, compare }) {
     const [a, b] = wanted();
     const len = b - a + 1;
@@ -124,7 +135,17 @@ const MISDateFilter = (() => {
         months: ms, kind: "period", offset: k });
     };
     if (compare) for (let k = -sel.before; k < 0; k++) period(k);
-    for (const m of main) cols.push({ key: m, label: label(m), months: [m], kind: "month" });
+    const n = SPLIT_MONTHS[split()];
+    for (const m of main) {
+      const key = n === 1 ? m : toKey(blockStart(toIdx(m), n));
+      const last = cols[cols.length - 1];
+      if (last && last.key === key) {
+        last.months.push(m);
+        last.label = spanLabel(last.months[0], m);
+      } else {
+        cols.push({ key, label: label(m), months: [m], kind: "split" });
+      }
+    }
     if (total && main.length) cols.push({ key: "Total", label: "Total", months: main, kind: "total" });
     if (compare) for (let k = 1; k <= sel.after; k++) period(k);
     return {
@@ -180,6 +201,34 @@ const MISDateFilter = (() => {
     return [addDays(a, len * k), addDays(b, len * k)];
   }
 
+  // Last day of the split block (week, month, quarter, half, year) that contains day s.
+  function blockEnd(s) {
+    if (split() === "week") return addDays(s, 6 - ((D(s).getUTCDay() + 6) % 7));
+    const n = SPLIT_MONTHS[split()];
+    return monthLast(blockStart(toIdx(s), n) + n - 1);
+  }
+
+  // [a, b] cut into split blocks; the first and last may be partial.
+  function blocks(a, b) {
+    const out = [];
+    for (let s = a; s <= b;) {
+      const e = minS(b, blockEnd(s));
+      out.push([s, e]);
+      s = addDays(e, 1);
+    }
+    return out;
+  }
+
+  function blockCol([ca, cb]) {
+    const sp = split();
+    if (sp === "month") {
+      const key = ca.slice(0, 7);
+      const whole = dayOf(ca) === 1 && cb === monthLast(toIdx(cb));
+      return { key, label: whole ? label(key) : `${label(key)} (${dayOf(ca)}–${dayOf(cb)})`, from: ca, to: cb, kind: "split" };
+    }
+    return { key: `${sp[0]}${ca}`, label: rangeLabel(ca, cb), from: ca, to: cb, kind: "split" };
+  }
+
   function dayLayout({ total, compare }) {
     const range = wantedDays();
     if (!range) return { cols: [], main: [], empty: true, from: "", to: "", summary: "", gaps: [] };
@@ -192,20 +241,16 @@ const MISDateFilter = (() => {
         kind: "period", offset: k });
     };
     if (compare) for (let k = -sel.before; k < 0; k++) period(k);
-    const main = [];
-    for (let i = toIdx(a); i <= toIdx(b); i++) {
-      const ca = maxS(a, monthFirst(i)), cb = minS(b, monthLast(i));
-      const whole = ca === monthFirst(i) && cb === monthLast(i);
-      main.push(toKey(i));
-      cols.push({ key: toKey(i), label: whole ? label(toKey(i)) : `${label(toKey(i))} (${dayOf(ca)}–${dayOf(cb)})`,
-        from: ca, to: cb, kind: "month" });
-    }
+    const parts = blocks(a, b).map(blockCol);
+    const main = parts.map((c) => c.key);
+    cols.push(...parts);
     if (total) cols.push({ key: "Total", label: "Total", from: a, to: b, kind: "total" });
     if (compare) for (let k = 1; k <= sel.after; k++) period(k);
     const days = daysBetween(a, b) + 1;
+    const tooMany = cols.length > MAX_COLS ? cols.length : 0;
     return {
-      cols, main, empty: !loaded(a, b), from: a, to: b, gaps: gapsIn(a, b),
-      summary: `${rangeLabel(a, b)} · ${days} day${days > 1 ? "s" : ""}`,
+      cols: tooMany ? [] : cols, main, empty: tooMany > 0 || !loaded(a, b), tooMany, from: a, to: b, gaps: gapsIn(a, b),
+      summary: `${rangeLabel(a, b)} · ${days} day${days > 1 ? "s" : ""} · ${parts.length} column${parts.length > 1 ? "s" : ""}`,
     };
   }
 
@@ -263,11 +308,12 @@ const MISDateFilter = (() => {
     if (!lo) return ["", false];
     if (grain === "day") {
       if (!info.from) return ["", false];
+      if (info.tooMany) return [`${info.tooMany} columns — at most ${MAX_COLS}. Shorten the range, split by a longer period or drop comparisons.`, true];
       if (info.empty) return [`Nothing loaded for ${rangeLabel(info.from, info.to)} (loaded: ${rangeLabel(lo, hi)})`, true];
       const g = info.gaps.map(([a, b]) => rangeLabel(a, b));
       return [g.length ? `${info.summary} · not loaded: ${g.join(", ")}` : info.summary, g.length > 0];
     }
-    if (!info.empty) return [info.summary, false];
+    if (!info.empty) return [sel.split === "week" ? `${info.summary} · weekly needs live financials, shown monthly` : info.summary, false];
     const [wa, wb] = wanted();
     return [`No data in ${spanLabel(toKey(wa), toKey(wb))} (data covers ${spanLabel(lo, hi)})`, true];
   }
@@ -275,18 +321,22 @@ const MISDateFilter = (() => {
   function render() {
     if (!mount) return;
     const [lo, hi] = bounds();
-    const custom = sel.preset === "custom";
     const info = layout({ total: false, compare: false });
     const [hint, warn] = hintText(info);
+    // From / To always show the range in use; editing either switches the period to Custom.
+    const [fa, fb] = sel.preset === "custom" ? [sel.from, sel.to] : shownRange();
     const inputs = grain === "day"
-      ? `<label class="field"><span>From</span><input class="input" type="date" id="dfFrom" value="${esc(sel.from || lo)}"></label>
-         <label class="field"><span>To</span><input class="input" type="date" id="dfTo" value="${esc(sel.to || hi)}"></label>`
-      : `<label class="field"><span>From</span><input class="input" type="month" id="dfFrom" min="${lo}" max="${hi}" value="${esc((sel.from || lo).slice(0, 7))}"></label>
-         <label class="field"><span>To</span><input class="input" type="month" id="dfTo" min="${lo}" max="${hi}" value="${esc((sel.to || hi).slice(0, 7))}"></label>`;
+      ? `<label class="field"><span>From</span><input class="input" type="date" id="dfFrom" value="${esc(fa || lo)}"></label>
+         <label class="field"><span>To</span><input class="input" type="date" id="dfTo" value="${esc(fb || hi)}"></label>`
+      : `<label class="field"><span>From</span><input class="input" type="month" id="dfFrom" min="${lo}" max="${hi}" value="${esc((fa || lo).slice(0, 7))}"></label>
+         <label class="field"><span>To</span><input class="input" type="month" id="dfTo" min="${lo}" max="${hi}" value="${esc((fb || hi).slice(0, 7))}"></label>`;
+    const splits = SPLITS.filter(([id]) => grain === "day" || id !== "week");
     mount.innerHTML =
       `<label class="field"><span>Period</span><select class="input" id="dfPreset">${PRESETS.map(([id]) =>
         `<option value="${id}"${id === sel.preset ? " selected" : ""}>${presetText(id)}</option>`).join("")}</select></label>` +
-      (custom ? inputs : "") +
+      inputs +
+      `<label class="field"><span>Split by</span><select class="input" id="dfSplit">${splits.map(([id, text]) =>
+        `<option value="${id}"${id === split() ? " selected" : ""}>${text}</option>`).join("")}</select></label>` +
       (compareOn ? stepper("b", "Earlier periods", sel.before) + stepper("a", "Later periods", sel.after) : "") +
       `<p class="df-hint${warn ? " warn" : ""}" id="dfHint">${esc(hint)}</p>`;
   }
@@ -316,7 +366,9 @@ const MISDateFilter = (() => {
         let from = $v("dfFrom"), to = $v("dfTo");
         if (!from || !to) return;
         if (grain === "month") { from = `${from}-01`; to = monthLast(toIdx(to)); }
-        change({ from, to });
+        change({ preset: "custom", from: minS(from, to), to: maxS(from, to) });
+      } else if (e.target.id === "dfSplit") {
+        change({ split: e.target.value });
       }
     });
     mount.addEventListener("click", (e) => {
@@ -352,13 +404,15 @@ const MISDateFilter = (() => {
       fyStart = start;
       if (!same) render();  // a re-render would drop focus from the control being used
     },
-    /** Open on a given date range (e.g. from a shared link) without notifying. */
-    setRange(from, to) {
+    /** Open on a given date range and optional split (e.g. from a shared link) without notifying. */
+    setRange(from, to, by) {
       if (!validDay(from) || !validDay(to)) return;
       sel = { ...sel, preset: "custom", from: minS(from, to), to: maxS(from, to) };
+      if (SPLITS.some(([id]) => id === by)) sel.split = by;
       persist();
       render();
     },
+    split,
     /** Pages without period columns (e.g. trial balance) turn the ± steppers off. */
     setCompare(on) { if (compareOn !== on) { compareOn = on; render(); } },
     layout, aggregate, isoRange, colsParam, label, spanLabel, rangeLabel,

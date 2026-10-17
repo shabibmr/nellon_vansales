@@ -97,7 +97,7 @@
   function syncUrl() {
     const p = new URLSearchParams({ tab: state.tab });
     const r = DATASET[tab().kind] && DF.isoRange();
-    if (r) { p.set("from", r.from); p.set("to", r.to); }
+    if (r) { p.set("from", r.from); p.set("to", r.to); p.set("by", DF.split()); }
     history.replaceState(null, "", `?${p}`);
   }
 
@@ -563,6 +563,11 @@
     state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
     $("period").textContent = L.summary;
     syncUrl();
+    if (L.tooMany) {
+      stateView("search", `Too many columns (${L.tooMany})`,
+        "Shorten the range, split by a longer period, or drop comparison periods.");
+      return;
+    }
     if (L.empty) {
       stateView("search", `No ${what} loaded for ${DF.rangeLabel(L.from, L.to)}`,
         `Loaded: ${esc(DF.rangeLabel(cov.min, cov.max))}. ${fetchHint(t.kind, L.from, L.to)}`);
@@ -687,7 +692,7 @@
     }
   });
 
-  if (qs.get("from") && qs.get("to")) DF.setRange(qs.get("from"), qs.get("to"));  // a shared link's range
+  if (qs.get("from") && qs.get("to")) DF.setRange(qs.get("from"), qs.get("to"), qs.get("by"));  // a shared link's range
   DF.init({ mount: $("datebar"), onChange: () => load() });
   renderTabs();
   skeleton();

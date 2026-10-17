@@ -1,7 +1,19 @@
 # MIS reports: from runs to custom date ranges — task list
 
-Goal: every report (Margin, Purchases, P&L, Executive Summary, BS, TB) is viewed for **any From/To dates**,
-across everything ever fetched, instead of one stored run at a time.
+Goal: every report (Margin, Purchases, P&L, Executive Summary, BS, TB) is viewed for **any From/To dates**
+instead of one stored run at a time.
+
+**Plan (revised 2026-10-17):**
+
+| Report | Source |
+|---|---|
+| Margin, Margin by Line / Invoice, COGS per line, Purchases | MariaDB date tables (Phase 1, done) |
+| Categories (account → category mapping) | MariaDB / `category_overrides.csv` (unchanged) |
+| Trial Balance, P&L, Balance Sheet | **live from Zoho** (`/reports/generalledger` + `/chartofaccounts`) per request, cached |
+| Executive Summary | built live from the live P&L + DB categories (no extra Zoho calls) |
+| Excel export | built live for the requested range (financials live, margin/purchases from DB) |
+
+No GL store in the DB: the old Phase 2 (`gl_monthly`) and Phase 4 (day-precise GL cache) are dropped.
 
 ## Current state (why it has to change)
 
@@ -19,12 +31,15 @@ What we keep: the fetchers (`invoice_margin.MarginSource`, `purchases.PurchaseSo
 (`financials.build_profit_and_loss / build_executive_summary / build_balance_sheet`), and the
 `date-filter.js` presets / comparison logic.
 
-## Decisions to confirm (defaults assumed below)
+## Decisions
 
-1. **Financials grain = calendar month** (default). Day-precise P&L is Phase 4, optional.
-2. **Fetch button in the web UI** calls Zoho from the server (Phase 3). Default: build it behind
-   `web_auth` and a `MIS_WEB_SYNC=1` env switch, off until approved; CLI sync works regardless.
-3. **Old runs** stay readable during rollout; `report_runs` becomes a fetch log after Phase 2.
+1. **Financials are live from Zoho** (decided 2026-10-17), any From/To date (day-precise), with a
+   server-side cache. Balance Sheet and Excel export are live too.
+2. **Fetch button in the web UI** for Margin/Purchases calls Zoho from the server (Phase 3). Default:
+   behind `web_auth` and a `MIS_WEB_SYNC=1` env switch, off until approved; CLI sync works regardless.
+3. **Old runs** stay readable during rollout; `report_runs` becomes a fetch log for margin/purchases,
+   financials runs are no longer saved.
+4. **Development uses recorded Zoho responses** (fixtures); live calls only with the user's approval.
 
 ---
 
@@ -36,8 +51,10 @@ What we keep: the fetchers (`invoice_margin.MarginSource`, `purchases.PurchaseSo
 | T1.3 | done | **dual write** during rollout: `margin` / `purchases` still save a run (fetch log, Excel export) *and* replace the range in the dated tables; `db-load` does both too |
 | T1.4 | done | dev DB: Sep = run #7, Oct = #9 + #8, purchases = #3 to the cent; re-run is identical |
 | T1.6–T1.7 | done | day grain for Margin / Purchases, month grain unchanged for financials; comparison of a range starting on the 1st steps by months (1–17 Oct ↔ 1–17 Sep) |
+| T1.9 | done | From / To always visible (editing → Custom); **Split by** Weekly (Mon–Sun) / Monthly / Quarterly / 6 months / Annual, fiscal-aligned, partial edge blocks; ≤ 40 columns; `?by=` in links. Financials (stored runs) get month-based splits only until Phase 2 makes them live |
 | T1.8 | done | `tests/test_date_columns.py`, `tests/test_sync_replace.py` (`MIS_TEST_DB_NAME=nellon_mis_test`) |
-| Phase 2+ | not started | |
+| Test site | done | `https://algoray.tech/nellon/test-mis/` = static `web/` + `deploy/test-web/api.php` → `koyson-mis-test` on :8766 (dev DB, read-only); systemd unit not installed yet |
+| Phase 2+ | not started | Phase 2 rewritten as live financials (2026-10-17) |
 
 ## Phase 1 — Margin & Purchases by date (fixes "where is September")
 
@@ -71,7 +88,7 @@ CREATE TABLE sync_coverage (             -- which date ranges are loaded, per da
 ```
 - Reuse `MARGIN_DB_COLUMNS` / `MARGIN_INVOICE_DB_COLUMNS` / `PURCHASE_DB_COLUMNS` and `_db_value`
   so column mapping stays in one place.
-- Keep the old run tables untouched until Phase 2 cleanup.
+- Keep the old run tables untouched until Phase 4 cleanup.
 
 ### T1.2 Range-replace upsert (`reports/db.py`)
 `sync_sales(from_date, to_date, invoices, rows, source)` and
@@ -121,7 +138,7 @@ GET /api/coverage?dataset=sales|purchases|gl      → {ranges:[{from,to,synced_a
   (`columns`, `rows[].values`, `total`) so `renderPivot` barely changes.
 - `gm_pct` stays a ratio of sums per column (never an average of percentages).
 - Validate: ISO dates, `from <= to`, ≤ 40 cols, span ≤ 5 years → `ValueError` → 400.
-- Keep the `run_id` variants working until Phase 2 cleanup (branch on which param is present).
+- Keep the `run_id` variants working until Phase 4 cleanup (branch on which param is present).
 
 ### T1.6 Date filter by day (`web/assets/date-filter.js`)
 - State becomes `{preset, from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', before, after}`; bump
@@ -157,68 +174,86 @@ month match runs #7, #9 + #8.
 
 ---
 
-## Phase 2 — Financials by month range
+## Phase 2 — Live financials from Zoho (TB, P&L, BS, Executive Summary, Excel)
 
-### T2.1 GL store (`reports/db.py`)
-```sql
-CREATE TABLE gl_monthly (
-  account_id VARCHAR(40), month CHAR(7),       -- '0000-00' = baseline: all movement before the first FY synced
-  debit DECIMAL(18,2), credit DECIMAL(18,2), net DECIMAL(18,2),
-  synced_at DATETIME, PRIMARY KEY (account_id, month), KEY ix_gl_month (month)
-);
+### T2.1 Live TB service (`reports/live_financials.py`, new)
+`trial_balance(from_date, to_date, cols) -> (rows, columns, summary)`:
+- Reuse `monthly_trial_balance` (`_movement`, opening / FY-reset / `RETAINED_ID` logic): refactor
+  `generate_monthly_trial_balance` so the Zoho fetch (`_movement` per period) is separate from a
+  pure `assemble_tb(opening, movements, categories, …)` — the CLI and the server share it.
+- Columns follow the date filter's **Split by** (weekly / monthly / quarterly / 6 months / annual,
+  partial edge blocks allowed) and comparison periods → one live `_movement(start, end)` per column
+  + one opening call (`BOOKS_EPOCH → from-1`). Same `cols=key:from:to,…` contract as the dated API.
+- Categories from `category_master.build_category_master(snapshot, overrides)` at request time →
+  override changes apply immediately. COA snapshot: `output/coa_snapshot.json`, refreshed by the
+  existing `load_coa_snapshot(refresh=…)` (no per-request `/chartofaccounts` call).
+- Calls per view ≈ 1 + columns (+ pagination). Hard cap: ≤ 40 columns (`periods.MAX_COLS`, same as the
+  filter), span ≤ 5 years → 400 beyond. Weekly over a year ≈ 54 calls on a cold cache.
+
+### T2.2 Cache + throttle (`reports/live_financials.py`)
+- In-process cache keyed by `(from, to, cols)` → `_movement` results, TTL **15 min**
+  (`MIS_LIVE_TTL`); per-period entries so overlapping views reuse months (closed months could use a
+  longer TTL, e.g. 6 h, `MIS_LIVE_CLOSED_TTL`).
+- **One Zoho fetch at a time** (lock + single-flight: concurrent requests for the same key wait for
+  the first). Second distinct request queues; 503 "Zoho busy, retry" after 60 s.
+- **Stale fallback**: on Zoho error/timeout serve the last good result with `stale: true,
+  fetched_at` → UI banner "Zoho unavailable — showing data from 10:42".
+- Access token: `ZohoClient` already reuses `.zoho_token_cache.json` (50 min) — never refresh per
+  request (OAuth refresh rate limit). Prod and test checkouts have separate caches → separate refreshes.
+- `?refresh=1` bypasses the cache (button in UI), rate-limited to once per minute per range.
+
+### T2.3 API (`server.py`)
 ```
-- Baseline cut-off must be a **fiscal-year start** (e.g. 2026-04-01) so P&L reset maths needs no
-  per-account split: prior-year P&L = Σ baseline P&L nets → synthetic
-  `__prior_years_pl__` row (same as `monthly_trial_balance.RETAINED_ID`).
+GET /api/tb?from=2026-04-01&to=2026-10-17[&cols=…][&refresh=1]
+GET /api/statement?name=PL|BS|Executive Summary&from=&to=[&cols=…][&refresh=1]
+GET /api/export.xlsx?from=&to=
+```
+- Response keeps today's shape (`columns`, `lines`, `tree` / TB rows) + `fetched_at`, `stale`,
+  `zoho_calls`. `financials.build_financials(rows, summary)` builds PL, BS, Executive Summary from
+  one TB fetch (cache the built statements too).
+- BS columns are balances at each column's end date; P&L / Executive Summary are period flows.
+- Requires `web_auth` JWT like every `/api` route; `MIS_LIVE_FINANCIALS=1` switch (off → 503 with a
+  clear message) so prod can deploy before it is enabled.
+- Keep `run_id` variants until Phase 5.
 
-### T2.2 GL sync (`reports/monthly_trial_balance.py`, `main.py`)
-- `main.py gl-sync --from-month 2026-04 --to-month 2026-10 [--baseline]`:
-  one `_movement()` call per month (+1 for the baseline) → upsert `gl_monthly`, record
-  `sync_coverage('gl', …)`.
-- Current month is always re-fetchable (Zoho keeps posting); coverage `synced_at` shows staleness.
-- `financials` command keeps working (writes files), but its DB save calls `gl-sync` logic.
+### T2.4 UI (`reports.js`, `date-filter.js`)
+- Financial tabs drop the run selector; date filter uses **day grain** for all tabs (`setSource`
+  without months → free From/To, no coverage gaps for financials).
+- Loading state ("Fetching from Zoho…", can take several seconds), `fetched_at` + **Refresh** button,
+  stale banner.
+- Executive Summary / P&L COGS label: "COGS (Zoho ledger)"; Margin tab: "COGS (invoice line cost)".
+  Optional reconciliation line: ledger COGS − Σ line cost for the same range.
 
-### T2.3 TB assembly on request (`reports/db.py`)
-`build_trial_balance(from_month, to_month)`:
-- opening = baseline + Σ months before `from_month` (P&L accounts: only months since the FY start
-  of `from_month`; earlier P&L folds into the retained row) — port the logic from
-  `generate_monthly_trial_balance` into a pure function shared by both paths.
-- account metadata + categories from `category_master` table + `output/coa_snapshot.json`
-  → **category overrides apply immediately** (today they are frozen in the run).
-- Refuse (400) when months between baseline and `to_month` are missing: “GL not loaded for Jul-26”.
+### T2.5 Excel export live (`reports/excel_export.py`)
+- `build_workbook(from, to)`: Executive Summary, PL, BS, TB from T2.1 (cached), Margin / Purchases
+  sheets from the date tables for the same range. Button href `api/export.xlsx?from=&to=`.
+- CLI `financials` keeps writing files; it stops saving financials runs to the DB.
 
-### T2.4 Statements on request
-- `/api/statement?from=2026-04&to=2026-09&name=PL` → `financials.build_financials(tb_rows, summary)`,
-  return `{columns, lines, tree}` in today's shape. Outer span includes comparison periods; the
-  client keeps aggregating months → periods (flow vs balance) exactly as now.
-- `/api/tb?from=&to=` likewise. Drop `statement_lines` / `statement_values` writes.
-- Cache built statements in-process keyed by `(from, to, max(gl.synced_at), category_master.updated_at)`.
+### T2.6 Tests (offline only)
+- Record Zoho responses once (with approval) for one fiscal year → `tests/fixtures/zoho_gl/*.json`;
+  a fake `ZohoClient` serves them.
+- Parity: live path for Apr–Sep == run #1 `statement_values` to the cent (TB, PL, BS, Executive Summary).
+- Cache: hit/miss, TTL expiry, single-flight (2 threads → 1 fetch), stale fallback on error,
+  column cap → 400.
 
-### T2.5 Migration + parity check
-- Seed `gl_monthly` from run #1: `tb_monthly` → monthly `net` (debit/credit unknown → store net,
-  flag `split_known=0`); `tb_accounts.opening` → baseline for BS accounts; retained row → baseline.
-- Parity test: TB/PL/BS rebuilt for Apr–Sep from `gl_monthly` == run #1 `statement_values`
-  to the cent.
-- Recommended after approval: `gl-sync --from-month 2026-04 --to-month 2026-10 --baseline`
-  (~8 GL calls) to get real Dr/Cr splits and October.
-
-### T2.6 Excel export (`reports/excel_export.py`, `server.py`)
-- `build_workbook(from, to)`; margin/purchases sheets come from the date tables for the same range
-  (removes the “matching run” guesswork). Button href: `api/export.xlsx?from=&to=`.
+**Done when:** TB / P&L / BS / Executive Summary open for any From/To (incl. mid-month), category
+overrides apply immediately, a repeat view within 15 min makes 0 Zoho calls, export matches the screen.
 
 ---
 
-## Phase 3 — Fetch missing dates from the web (needs decision 2)
+## Phase 3 — Fetch missing Margin / Purchases dates from the web (needs decision 2)
 
 ### T3.1 Sync jobs
 - `sync_jobs(id, dataset, from_date, to_date, status, progress, message, requested_by, created_at,
-  finished_at)`.
+  finished_at)`; datasets `sales`, `purchases` only (financials are live).
 - `POST /api/sync {dataset, from, to}` → insert job, spawn
   `.venv/bin/python main.py sync --job <id>` (subprocess, detached); **one job at a time**
-  (Zoho rate limit) — second request gets 409 with the running job.
+  (Zoho rate limit; shares the T2.2 lock) — second request gets 409 with the running job.
 - `GET /api/sync/<id>` → status/progress; the fetchers' `log` callbacks write progress lines.
-- Guards: requires `web_auth` JWT (the site is otherwise public), `MIS_WEB_SYNC=1`, range ≤ 3 months
-  per job, invoice-detail call budget shown before confirm (“~N Zoho calls”).
+- Guards: `web_auth` JWT, `MIS_WEB_SYNC=1`, range ≤ 3 months per job, invoice-detail call budget
+  shown before confirm (“~N Zoho calls”).
+- CLI: `margin` / `purchases` gain `--missing-only` (fetch only coverage gaps) and keep full-range
+  re-fetch as the default for picking up edits/voids.
 
 ### T3.2 UI
 - Coverage hint gets a **Fetch Oct 16 – 17** button → confirm dialog with call estimate → progress
@@ -226,24 +261,19 @@ CREATE TABLE gl_monthly (
 
 ---
 
-## Phase 4 — Optional: day-precise financials
-- For a range starting/ending mid-month: whole months from `gl_monthly`, edge partial months via
-  live `_movement(start, end)` (≤ 2 calls), cached in `gl_range_cache(from_date, to_date, account_id, …)`.
-- Opening for a mid-month start = month-start opening + live movement for the days before.
-
-## Phase 5 — Cleanup
-- Remove `run_id` API variants, `pickRun()`, `/api/runs` from the UI; keep `report_runs` as a fetch log.
+## Phase 4 — Cleanup
+- Remove `run_id` API variants, `pickRun()`, `/api/runs` from the UI; keep `report_runs` as the
+  margin/purchases fetch log.
 - Drop `margin_lines`, `margin_invoices`, `purchase_lines`, `tb_accounts`, `tb_monthly`,
   `statement_lines`, `statement_values` after a backup (`backups/` dump) and one release of overlap.
-- Update `README.md` and `ZOHO_API_CONTEXT.md` (new commands: `db-migrate-runs`, `db-coverage`,
-  `gl-sync`, `sync`).
+- Update `README.md` and `ZOHO_API_CONTEXT.md` (new commands `db-migrate-runs`, `db-coverage`,
+  `sync`; env `MIS_LIVE_FINANCIALS`, `MIS_LIVE_TTL`, `MIS_WEB_SYNC`).
 
 ## Order & size
 
 | Phase | Tasks | Zoho calls | Size |
 |---|---|---|---|
-| 1 | T1.1–T1.8 | none (migration from runs) | ~1–1.5 days |
-| 2 | T2.1–T2.6 | none for migration; ~8 to refresh GL (needs approval) | ~1.5 days |
+| 1 | T1.1–T1.8 (done) | none (migration from runs) | ~1–1.5 days |
+| 2 | T2.1–T2.6 | per uncached view ≈ 1 + columns; fixtures recorded once (needs approval) | ~1.5–2 days |
 | 3 | T3.1–T3.2 | user-triggered | ~1 day |
-| 4 | — | ≤ 2 per custom range | ~0.5 day |
-| 5 | — | none | ~0.5 day |
+| 4 | — | none | ~0.5 day |
