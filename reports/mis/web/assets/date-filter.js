@@ -13,11 +13,11 @@ const MISDateFilter = (() => {
   "use strict";
 
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const STORE = "mis.datefilter.v2";
+  const STORE = "mis.datefilter.v3";
   const OLD_STORE = "mis.datefilter";
   const MAX_COMPARE = 5;
   const PRESETS = [
-    ["run", "Full run"], ["this_month", "This month"], ["last_month", "Last month"],
+    ["run", "Full run"], ["last_3m", "Last 3 months"], ["this_month", "This month"], ["last_month", "Last month"],
     ["this_quarter", "This quarter"], ["last_quarter", "Last quarter"],
     ["this_year", "This year"], ["last_year", "Last year"], ["custom", "Custom"],
   ];
@@ -65,7 +65,7 @@ const MISDateFilter = (() => {
   let compareOn = true;
   let mount = null;
   let notify = () => {};
-  let sel = { preset: "run", from: "", to: "", split: "month", before: 0, after: 0 };  // from / to: YYYY-MM-DD
+  let sel = { preset: "last_3m", from: "", to: "", split: "month", before: 0, after: 0 };  // from / to: YYYY-MM-DD
 
   try {
     let saved = JSON.parse(localStorage.getItem(STORE) || "null");
@@ -83,7 +83,7 @@ const MISDateFilter = (() => {
   sel.after = clampN(sel.after);
   if (!SPLITS.some(([id]) => id === sel.split)) sel.split = "month";
   const validDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !Number.isNaN(D(s).getTime());
-  if (!validDay(sel.from) || !validDay(sel.to)) sel = { ...sel, from: "", to: "", preset: sel.preset === "custom" ? "run" : sel.preset };
+  if (!validDay(sel.from) || !validDay(sel.to)) sel = { ...sel, from: "", to: "", preset: sel.preset === "custom" ? "last_3m" : sel.preset };
 
   const persist = () => { try { localStorage.setItem(STORE, JSON.stringify(sel)); } catch { /* ignore */ } };
 
@@ -102,6 +102,7 @@ const MISDateFilter = (() => {
     const yearStart = t - inYear;
     const quarterStart = t - (inYear % 3);
     switch (sel.preset) {
+      case "last_3m": return [t - 2, t];
       case "this_month": return [t, t];
       case "last_month": return [t - 1, t - 1];
       case "this_quarter": return [quarterStart, quarterStart + 2];
