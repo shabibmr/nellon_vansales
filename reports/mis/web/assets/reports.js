@@ -11,16 +11,7 @@
   const NUM = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  const TABS = [
-    { id: "exec", label: "Executive Summary", kind: "financials", statement: "Executive Summary", tree: 1 },
-    { id: "pl", label: "Profit & Loss", kind: "financials", statement: "PL", tree: 2 },
-    { id: "bs", label: "Balance Sheet", kind: "financials", statement: "BS" },
-    { id: "tb", label: "Trial Balance", kind: "financials" },
-    { id: "margin", label: "Margin", kind: "margin", api: "api/margin", pivot: true },
-    { id: "mline", label: "Margin by Line", kind: "margin", detail: "line" },
-    { id: "minv", label: "Margin by Invoice", kind: "margin", detail: "invoice" },
-    { id: "purchases", label: "Purchases", kind: "purchases", api: "api/purchases", pivot: true },
-  ];
+  const { TABS } = window.MISTabs;  // assets/report-tabs.js
 
   // Pivot tabs (margin, purchases): rows = chosen dimension, columns = months + Total.
   const MARGIN_MEASURES = [["net_sales", "Net sales"], ["cost", "Cost"], ["gross_margin", "Margin"], ["gm_pct", "GM %"]];
@@ -106,9 +97,7 @@
   // ---------------------------------------------------------------- chrome
 
   function renderTabs() {
-    $("tabs").innerHTML = TABS.map((t) =>
-      `<a href="./?tab=${t.id}" data-tab="${t.id}"${t.id === state.tab ? ' aria-current="page"' : ""}>${t.label}</a>`)
-      .join("") + `<a href="categories">Categories</a>`;
+    MISTabs.render($("tabs"), state.tab);
   }
 
   function pickRun() {
