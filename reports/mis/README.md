@@ -80,33 +80,24 @@ MonthlyTB, Category Master.
 
 ## Invoice margin
 
-Revenue and margin per invoice line, plus By Month / Item / Customer /
-Salesperson / Van sheets.
+Margin and Purchases read the seeded tables `sales_invoices` / `sales_lines` and
+`purchase_docs` / `purchase_lines` in `zoho-koyson`. The MIS no longer fetches them from
+Zoho; the seeder loads them (contract: `proposal/Sync_Logic.md`).
 
-```bash
-.venv/bin/python main.py margin --from-date 2026-09-01 --to-date 2026-09-30
-.venv/bin/python main.py margin --from-date 2026-09-01 --to-date 2026-09-30 --offline   # cache only
-```
-
-- Net sales = line total net of tax, less line discount and an allocated share of any
-  whole-invoice discount, in base currency. Void/draft invoices skipped.
-- Cost = item's **current** `purchase_rate` × base quantity (alternate units converted via
-  the item's `unit_conversions`). Standard-cost view — may differ from ledger COGS in the P&L.
-- Invoice details are cached in `output/cache/` and re-fetched only when an invoice's
-  `last_modified_time` changes; calls are throttled to stay under Zoho's ~100/min limit.
-  The first run for a month costs ~1 call per invoice.
-- `flag` column marks lines with no item, no purchase rate, or an unknown unit conversion.
+- Net sales = line net sales; **COGS** = the booked per-line cost (`sales_lines.cogs`, from the
+  invoice line's `purchase_price`). Void/draft invoices are skipped.
+- Dimensions: item, customer, salesperson, van, location. `flag` marks lines the seeder
+  could not cost.
 - Credit notes / returns are not netted yet.
 
 ## Category Master
 
 Maps every Zoho ledger to the MIS reporting lines (PL/BS → Category → Sub Category)
 used by the P&L, Balance Sheet and Executive Summary in `report-template.xlsx`.
-Built from `GET /chartofaccounts`; rules live in `reports/category_master.py`.
+Built from the `accounts` table (the seeder loads the chart); rules live in `reports/category_master.py`.
 
 ```bash
-.venv/bin/python main.py category-master          # pull COA from Zoho, write output/category_master.{csv,xlsx,json}
-.venv/bin/python main.py category-master --cached # reuse output/coa_snapshot.json
+.venv/bin/python main.py category-master          # build from the `accounts` table, write output/category_master.{csv,xlsx,json}
 .venv/bin/python main.py serve                    # read-only view at http://127.0.0.1:8765/categories
 ```
 
@@ -124,32 +115,26 @@ https://algoray.tech/koyson-zoho/acc-reports/categories via the `koyson-mis-web`
 
 ## MariaDB storage + report viewer
 
-Processed data is stored in MariaDB (database `nellon_mis`; settings in the
-git-ignored `.env`: `MIS_DB_HOST/PORT/USER/PASSWORD/NAME`). Schema lives in
-`reports/db.py`.
+Data lives in MariaDB database `zoho-koyson` (settings in the git-ignored `.env`:
+`MIS_DB_HOST/PORT/USER/PASSWORD/NAME`). Schema: `reports/db.py` (`SCHEMA`), described in
+`proposal/DB-Schema-Proposed.md`. A separate seeder loads it; the MIS only reads, except
+`org-sync` and category overrides (`accounts.source='override'`).
 
 ```bash
-.venv/bin/pip install -r requirements.txt       # adds pymysql
-.venv/bin/python main.py db-init                 # create DB + tables (idempotent)
-.venv/bin/python main.py financials --from-date 2026-04-01 --to-date 2026-09-30   # also saves a run
-.venv/bin/python main.py margin --from-date 2026-09-01 --to-date 2026-09-30       # also saves a run
-.venv/bin/python main.py db-load --tb-json output/monthly_tb_<…>.json             # import saved JSON, no Zoho
-.venv/bin/python main.py db-runs                 # list runs;  --delete <id> removes one
-.venv/bin/python main.py serve                   # http://127.0.0.1:8765/reports
+.venv/bin/python main.py db-init       # create DB + tables (idempotent)
+.venv/bin/python main.py db-coverage   # date ranges loaded, and gaps
+.venv/bin/python main.py serve         # http://127.0.0.1:8765/reports
 ```
 
-Tables: `report_runs` (one per financials/margin run) → `tb_accounts`, `tb_monthly`,
-`statement_lines`, `statement_values`, `margin_lines` (all cascade-delete with the run),
-plus `category_master` (current mapping, upserted by `category-master`).
-Pass `--no-db` to `financials` / `margin` / `purchases` / `category-master` to skip saving.
+The run-based commands (`margin`, `purchases`, `db-load`, `db-runs`, `db-migrate-runs`) and the
+stored-run views (`?run=`, `run_id=`) are gone. `financials` still writes the Excel/JSON files
+but no longer saves a run.
 
-Web UI (served by `main.py serve`): `web/reports.html` (`/reports`) and `web/category_master.html` (`/`), sharing `web/assets/app.css` (Material 3-inspired tokens, nav rail, components) and the Material Symbols sprite `web/assets/icons.svg`; page logic in `web/assets/reports.js` / `category-master.js`. The report viewer reads only MariaDB, never Zoho. Tabs: Executive Summary,
-Profit & Loss, Balance Sheet, Trial Balance (by category, opening → months → closing),
-Margin (rows by item / customer / salesperson / van × months; net sales, margin, GM %,
-cost or quantity), Purchases (bills + purchase orders; rows by vendor / item / kind × months;
-amount, quantity or document count). Run `main.py db-init` once to create the `purchase_lines` table. Month columns are labelled like the template (`Apr-26 … Total`).
-**Export Excel** (financials tabs) downloads one workbook built from MariaDB with a sheet
-per report: Executive Summary, PL, BS, Trial Balance (`/api/export.xlsx?run_id=`).
+Web UI (served by `main.py serve`): `web/reports.html` (`/reports`) and `web/category_master.html` (`/`), sharing `web/assets/app.css` and `web/assets/icons.svg`; page logic in `web/assets/reports.js` / `category-master.js`. Tabs: Executive Summary,
+Profit & Loss, Balance Sheet, Trial Balance (live from Zoho's General Ledger, cached),
+Margin (rows by item / customer / salesperson / van / location × date columns; net sales, COGS, margin, GM %),
+Purchases (bills + purchase orders; rows by vendor / item / kind × date columns).
+**Export Excel** downloads one workbook for the selected columns (`/api/export.xlsx?cols=…`).
 
 ## Zoho Books web tab
 

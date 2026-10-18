@@ -10,16 +10,15 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /assets/<name>.css|.js|.svg → web/assets/ (shared styles, page scripts, icon sprite)
     GET  /api/org                → organization profile (name, currency) from the `organization` table
     GET  /api/config             → {live_financials, fiscal_year_start_month}
-    GET  /api/runs?kind=         → stored runs
     GET  /api/statement?name=&cols=key:from:to,…[&refresh=1]   live from Zoho (MIS_LIVE_FINANCIALS=1):
          Executive Summary | PL | BS (+ expandable `tree` for the first two), with fetched_at / stale /
-         zoho_calls; `run_id=` instead of cols reads a stored run
-    GET  /api/tb?cols=…[&refresh=1]   live trial balance (or run_id= for a stored run)
+         zoho_calls
+    GET  /api/tb?cols=…[&refresh=1]   live trial balance
     GET  /api/coverage?dataset=sales|purchases  → loaded date ranges and gaps
     GET  /api/margin?from=&to=[&cols=key:from:to,…]&dim=&measure=   margin pivot over any dates
-         (columns = the given ranges, default one per month + Total; `run_id=` still reads a stored run)
-    GET  /api/margin-detail?from=&to=&view=line|invoice   margin per invoice line / per invoice (or run_id=)
-    GET  /api/purchases?from=&to=[&cols=…]&dim=&measure=   bills + purchase orders pivot (or run_id=)
+         (columns = the given ranges, default one per month + Total)
+    GET  /api/margin-detail?from=&to=&view=line|invoice   margin per invoice line / per invoice
+    GET  /api/purchases?from=&to=[&cols=…]&dim=&measure=   bills + purchase orders pivot
     GET  /api/export.xlsx?cols=…  → Excel workbook: live financials + margin / purchases for those columns
     GET  /api/category-master    → rows read from the `accounts` table
     GET  /api/cashflow           → cash forecast from the COA snapshot and cached documents (no Zoho)
@@ -29,7 +28,7 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
 Overrides are written to category_overrides.csv (so a reseed keeps them), saved to `accounts`
 (source='override'), and logged to output/category_audit.log with the Zoho user id. Editing needs the Zoho JWT
 auth to be enabled (MIS_JWT_SECRET); without it the endpoints refuse. Live financials apply a changed
-mapping at once; saved financials runs are not recomputed (re-run `main.py financials`).
+mapping at once.
 
 Live financials call Zoho only for GL periods not cached in this process (reports/live_financials.py:
 15-minute cache, one Zoho fetch at a time, last good copy served when Zoho fails).
@@ -304,35 +303,17 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/config":
                 fy = db.enabled() and db.get_organization().get("fiscal_year_start_month")
                 self._json(HTTPStatus.OK, {"live_financials": live.enabled(), "fiscal_year_start_month": fy or None})
-            elif path == "/api/statement" and "run_id" not in q:
+            elif path == "/api/statement":
                 cols, snapshot, overrides = _live_args(q)
                 self._json(HTTPStatus.OK, live.statement(q.get("name", ""), cols, snapshot, overrides,
                                                          refresh=q.get("refresh") == "1"))
-            elif path == "/api/tb" and "run_id" not in q:
+            elif path == "/api/tb":
                 cols, snapshot, overrides = _live_args(q)
                 self._json(HTTPStatus.OK, live.trial_balance(cols, snapshot, overrides, refresh=q.get("refresh") == "1"))
             elif path.startswith("/api/") and not db.enabled():
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "MariaDB not configured (MIS_DB_* in .env)"})
             elif path == "/api/org":
                 self._json(HTTPStatus.OK, db.get_organization())
-            elif path == "/api/runs":
-                kind = q.get("kind") or None
-                if kind not in (None, "financials", "margin", "purchases"):
-                    raise ValueError("kind must be financials, margin or purchases")
-                self._json(HTTPStatus.OK, {"runs": db.list_runs(kind)})
-            elif path == "/api/run":
-                run = db.get_run(_int(q, "run_id"))
-                self._json(HTTPStatus.OK if run else HTTPStatus.NOT_FOUND, run or {"error": "run not found"})
-            elif path == "/api/statement":
-                name = q.get("name", "")
-                if name not in STATEMENTS:
-                    raise ValueError(f"name must be one of {sorted(STATEMENTS)}")
-                run_id = _int(q, "run_id")
-                data = db.get_statement(run_id, name)
-                data["tree"] = db.get_statement_tree(run_id, name)
-                self._json(HTTPStatus.OK, data)
-            elif path == "/api/tb":
-                self._json(HTTPStatus.OK, db.get_trial_balance(_int(q, "run_id")))
             elif path == "/api/export.xlsx":
                 body, filename = build_live_workbook(*_live_args(q), refresh=q.get("refresh") == "1")
                 self.send_response(HTTPStatus.OK)
@@ -345,27 +326,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
             elif path == "/api/coverage":
                 self._json(HTTPStatus.OK, db.get_coverage(q.get("dataset", "")))
-            elif path == "/api/margin" and "run_id" not in q:
+            elif path == "/api/margin":
                 self._json(HTTPStatus.OK, db.get_margin_pivot_range(
                     _cols(q), q.get("dim", "item"), q.get("measure", "net_sales")))
-            elif path == "/api/margin":
-                self._json(
-                    HTTPStatus.OK,
-                    db.get_margin_pivot(_int(q, "run_id"), q.get("dim", "item"), q.get("measure", "net_sales")),
-                )
-            elif path == "/api/margin-detail" and "run_id" not in q:
+            elif path == "/api/margin-detail":
                 start, end = periods.parse_range(q.get("from"), q.get("to"))
                 self._json(HTTPStatus.OK, db.get_margin_detail_range(start, end, q.get("view", "line")))
-            elif path == "/api/margin-detail":
-                self._json(HTTPStatus.OK, db.get_margin_detail(_int(q, "run_id"), q.get("view", "line")))
-            elif path == "/api/purchases" and "run_id" not in q:
+            elif path == "/api/purchases":
                 self._json(HTTPStatus.OK, db.get_purchase_pivot_range(
                     _cols(q), q.get("dim", "vendor"), q.get("measure", "amount")))
-            elif path == "/api/purchases":
-                self._json(
-                    HTTPStatus.OK,
-                    db.get_purchase_pivot(_int(q, "run_id"), q.get("dim", "vendor"), q.get("measure", "amount")),
-                )
             else:
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ValueError as exc:

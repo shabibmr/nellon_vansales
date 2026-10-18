@@ -99,8 +99,8 @@ Status: `todo` / `doing` / `done` / `parked`. Hours are rough estimates for one 
 | P1 Margin and Purchases queries | completed | 2026-10-19 |
 | P2 Accounts, organization, live financials, editor | completed | 2026-10-19 |
 | P3 UI and Excel | completed | 2026-10-19 |
-| P4 Remove the run code | todo | |
-| P5 Tests and docs | todo | |
+| P4 Remove the run code | completed | 2026-10-19 |
+| P5 Tests and docs | completed | 2026-10-19 |
 | P6 Verify on dev | todo | |
 | T9 Later | parked | |
 
@@ -147,19 +147,19 @@ Status: `todo` / `doing` / `done` / `parked`. Hours are rough estimates for one 
 
 | ID | Task | Files | Depends | h | Status |
 |---|---|---|---|---|---|
-| T4.1 | `server.py`: delete `/api/runs`, `/api/run`, every `run_id` branch of `/api/statement`, `/api/tb`, `/api/margin`, `/api/margin-detail`, `/api/purchases`, `/api/export.xlsx`; update the module docstring. | `server.py` | T3.1, T3.3 | 0.3 | todo |
-| T4.2 | `main.py`: delete `margin`, `purchases`, `db-load`, `db-runs`, `db-migrate-runs`; `financials` stops calling `save_financials_run`; `_db_save` message removed. | `main.py` | T4.1 | 0.3 | todo |
-| T4.3 | `db.py`: delete run / dual-write functions (`_new_run`, `save_*_run` except cashflow, `_replace_*`, `sync_sales`, `sync_purchases`, `migrate_runs_to_dated`, `_backfill_invoice_headers`, `_migrate_margin`, `list_runs`, `get_run`, `delete_run`, `get_statement*`, `get_trial_balance`, run-based `get_*_pivot` / `get_margin_detail`, `MARGIN_DB_COLUMNS`, `MARGIN_INVOICE_DB_COLUMNS`, `PURCHASE_DB_COLUMNS`). Keep `_set_coverage` only if something still calls it. | `reports/db.py` | T4.2 | 0.3 | todo |
-| T4.4 | Delete modules / scripts with no remaining import: check `invoice_margin.py`, `purchases.py`, `build_inv_tables.py` (`grep -r` first; `live_financials` and the sales dashboard must not import them). | `reports/`, repo root | T4.3 | 0.1 | todo |
+| T4.1 | `server.py`: delete `/api/runs`, `/api/run`, every `run_id` branch of `/api/statement`, `/api/tb`, `/api/margin`, `/api/margin-detail`, `/api/purchases`, `/api/export.xlsx`; update the module docstring. | `server.py` | T3.1, T3.3 | 0.3 | done |
+| T4.2 | `main.py`: delete `margin`, `purchases`, `db-load`, `db-runs`, `db-migrate-runs`; `financials` stops calling `save_financials_run`; `_db_save` message removed. | `main.py` | T4.1 | 0.3 | done |
+| T4.3 | `db.py`: delete run / dual-write functions (`_new_run`, `save_*_run` except cashflow, `_replace_*`, `sync_sales`, `sync_purchases`, `migrate_runs_to_dated`, `_backfill_invoice_headers`, `_migrate_margin`, `list_runs`, `get_run`, `delete_run`, `get_statement*`, `get_trial_balance`, run-based `get_*_pivot` / `get_margin_detail`, `MARGIN_DB_COLUMNS`, `MARGIN_INVOICE_DB_COLUMNS`, `PURCHASE_DB_COLUMNS`). Keep `_set_coverage` only if something still calls it. | `reports/db.py` | T4.2 | 0.3 | done |
+| T4.4 | Delete modules / scripts with no remaining import: check `invoice_margin.py`, `purchases.py`, `build_inv_tables.py` (`grep -r` first; `live_financials` and the sales dashboard must not import them). | `reports/`, repo root | T4.3 | 0.1 | done |
 
 ### P5 — Tests and docs (~1 h)
 
 | ID | Task | Files | Depends | h | Status |
 |---|---|---|---|---|---|
-| T5.1 | Delete `tests/test_sync_replace.py`. Remove any DB-backed cases from `test_date_columns.py`. | `tests/` | T4.3 | 0.1 | todo |
-| T5.2 | Unit tests without a DB: the margin / purchase SQL fragments contain the status filter and the dimension expressions; `coa_snapshot` mapping from a fake `accounts` row list (pure helper); `account_rows` uses `snapshot["categories"]` when given. | `tests/test_report_sql.py` (new) | P1, P2 | 0.5 | todo |
-| T5.3 | `tests/test_live_financials.py` still passes (snapshot shape unchanged). Run the whole `tests/` suite. | — | T5.2 | 0.1 | todo |
-| T5.4 | `README.md` / `ZOHO_API_CONTEXT.md`: new DB, removed commands, seeder contract pointer. Mark old tasks file as superseded. | docs | P4 | 0.3 | todo |
+| T5.1 | Delete `tests/test_sync_replace.py`. Remove any DB-backed cases from `test_date_columns.py`. | `tests/` | T4.3 | 0.1 | done |
+| T5.2 | Unit tests without a DB: the margin / purchase SQL fragments contain the status filter and the dimension expressions; `coa_snapshot` mapping from a fake `accounts` row list (pure helper); `account_rows` uses `snapshot["categories"]` when given. | `tests/test_report_sql.py` (new) | P1, P2 | 0.5 | done |
+| T5.3 | `tests/test_live_financials.py` still passes (snapshot shape unchanged). Run the whole `tests/` suite. | — | T5.2 | 0.1 | done |
+| T5.4 | `README.md` / `ZOHO_API_CONTEXT.md`: new DB, removed commands, seeder contract pointer. Mark old tasks file as superseded. | docs | P4 | 0.3 | done |
 
 ### P6 — Verify on dev (needs seeded data)
 
