@@ -91,14 +91,27 @@ indexed.
 
 Status: `todo` / `doing` / `done` / `parked`. Hours are rough estimates for one person.
 
-### P0 — Point dev at `zoho-koyson` (critical path, ~1 h)
+### Completion
+
+| Phase | Status | Done |
+|---|---|---|
+| P0 Point dev at `zoho-koyson` | completed | 2026-10-19 |
+| P1 Margin and Purchases queries | todo | |
+| P2 Accounts, organization, live financials, editor | todo | |
+| P3 UI and Excel | todo | |
+| P4 Remove the run code | todo | |
+| P5 Tests and docs | todo | |
+| P6 Verify on dev | todo | |
+| T9 Later | parked | |
+
+### P0 — Point dev at `zoho-koyson` (critical path, ~1 h) — completed
 
 | ID | Task | Files | Depends | h | Status |
 |---|---|---|---|---|---|
-| T0.1 | Allow `-` in the database-name check (`name.replace("_","").isalnum()` rejects `zoho-koyson`); every place that names the DB already quotes it in backticks. | `reports/db.py` `init_schema` | — | 0.1 | todo |
-| T0.2 | Replace `SCHEMA` with the 18 statements from `DB-Schema-Proposed.sql` + existing `sync_coverage` + the 4 cashflow tables. Remove `report_runs`, `tb_*`, `statement_*`, `margin_*`, old `purchase_lines`, `purchase_doc_lines`, `category_master`, old `organization`, old `sales_*`. Drop the `_migrate_margin` call. | `reports/db.py` | — | 0.5 | todo |
-| T0.3 | Dev `.env`: `MIS_DB_NAME=zoho-koyson`. Run `main.py db-init`; confirm only `sync_coverage` + cashflow tables are new. | `.env` (dev only, D13) | T0.1, T0.2 | 0.1 | todo |
-| T0.4 | Add a one-line note to `DB-Schema-Proposed.sql` header: "copy of `reports/db.py` SCHEMA; change both". | `proposal/DB-Schema-Proposed.sql` | T0.2 | 0.1 | todo |
+| T0.1 | Allow `-` in the database-name check (`name.replace("_","").isalnum()` rejects `zoho-koyson`); every place that names the DB already quotes it in backticks. | `reports/db.py` `init_schema` | — | 0.1 | done |
+| T0.2 | Replace `SCHEMA` with the 18 statements from `DB-Schema-Proposed.sql` + existing `sync_coverage` + the 4 cashflow tables. Remove `report_runs`, `tb_*`, `statement_*`, `margin_*`, old `purchase_lines`, `purchase_doc_lines`, `category_master`, old `organization`, old `sales_*`. Drop the `_migrate_margin` call. | `reports/db.py` | — | 0.5 | done |
+| T0.3 | Dev `.env`: `MIS_DB_NAME=zoho-koyson`. Run `main.py db-init`; confirm only `sync_coverage` + cashflow tables are new. | `.env` (dev only, D13) | T0.1, T0.2 | 0.1 | done |
+| T0.4 | Add a one-line note to `DB-Schema-Proposed.sql` header: "copy of `reports/db.py` SCHEMA; change both". | `proposal/DB-Schema-Proposed.sql` | T0.2 | 0.1 | done |
 
 ### P1 — Margin and Purchases queries (~2 h, parallel with P2)
 

@@ -1,5 +1,6 @@
 -- ==============================================================================
 -- Proposed Schema for Zoho Books MIS Database
+-- copy of `reports/db.py` SCHEMA; change both
 -- Source specification: proposal/DB-Schema-Proposed.md
 -- Character set: utf8mb4 / utf8mb4_unicode_ci
 -- ==============================================================================
