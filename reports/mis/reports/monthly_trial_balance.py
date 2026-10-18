@@ -196,7 +196,9 @@ def account_rows(
     overrides: dict[str, dict[str, str]],
 ) -> list[tuple[dict[str, Any], bool]]:
     """[(row of account + Category Master columns, is_pl)], no amounts yet."""
-    categories = {r["account_id"]: r for r in cm.build_category_master(snapshot, overrides)}
+    # DB snapshots carry the stored MIS columns; the CLI's Zoho snapshot is classified here.
+    cat_rows = snapshot.get("categories") or cm.build_category_master(snapshot, overrides)
+    categories = {r["account_id"]: r for r in cat_rows}
     coa = {str(a["account_id"]): a for a in snapshot.get("accounts") or [] if a.get("account_id")}
     out = []
     for account_id in account_ids:

@@ -8,7 +8,7 @@
 All page/asset/API URLs in the web files are relative, so the app also works
 behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /assets/<name>.css|.js|.svg → web/assets/ (shared styles, page scripts, icon sprite)
-    GET  /api/org                → organization profile (name, currency) stored by `main.py org-sync`
+    GET  /api/org                → organization profile (name, currency) from the `organization` table
     GET  /api/config             → {live_financials, fiscal_year_start_month}
     GET  /api/runs?kind=         → stored runs
     GET  /api/statement?name=&cols=key:from:to,…[&refresh=1]   live from Zoho (MIS_LIVE_FINANCIALS=1):
@@ -21,15 +21,13 @@ behind a reverse proxy under a sub-path (e.g. /koyson-zoho/acc-reports/).
     GET  /api/margin-detail?from=&to=&view=line|invoice   margin per invoice line / per invoice (or run_id=)
     GET  /api/purchases?from=&to=[&cols=…]&dim=&measure=   bills + purchase orders pivot (or run_id=)
     GET  /api/export.xlsx?cols=…  → Excel workbook: live financials + margin / purchases for those columns
-         (run_id=[&margin_run=&purchases_run=] for a stored run)
-    GET  /api/category-master    → rows built from the cached COA snapshot + overrides
+    GET  /api/category-master    → rows read from the `accounts` table
     GET  /api/cashflow           → cash forecast from the COA snapshot and cached documents (no Zoho)
-    POST /api/refresh            → re-pull Chart of Accounts from Zoho; returns rebuilt payload
     POST /api/category-override  → {account_id, pl_bs, category, sub_category, note}: save a mapping override
     POST /api/category-override/delete → {account_id}: drop the override (back to rule/type)
 
-Overrides are written to category_overrides.csv (rebuilt from the cached COA, no Zoho call), saved to
-MariaDB, and logged to output/category_audit.log with the Zoho user id. Editing needs the Zoho JWT
+Overrides are written to category_overrides.csv (so a reseed keeps them), saved to `accounts`
+(source='override'), and logged to output/category_audit.log with the Zoho user id. Editing needs the Zoho JWT
 auth to be enabled (MIS_JWT_SECRET); without it the endpoints refuse. Live financials apply a changed
 mapping at once; saved financials runs are not recomputed (re-run `main.py financials`).
 
@@ -56,12 +54,12 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from exporters import write_csv, write_excel_sheets
-from main import BASE_DIR, COA_SNAPSHOT, OUT_DIR, OVERRIDES_CSV, load_coa_snapshot
+from main import BASE_DIR, COA_SNAPSHOT, OUT_DIR, OVERRIDES_CSV
 from reports import category_master as cm
 from reports import cashflow_forecast as cf
 from reports import db, periods, web_auth
 from reports import live_financials as live
-from reports.excel_export import build_live_workbook, build_workbook
+from reports.excel_export import build_live_workbook
 
 WEB_PAGE = BASE_DIR / "web" / "category_master.html"
 REPORTS_PAGE = BASE_DIR / "web" / "reports.html"
@@ -92,7 +90,7 @@ def _export(rows: list[dict[str, Any]], summary: dict[str, Any]) -> None:
 
 
 def _org_currency(fallback: str) -> str:
-    """Currency code stored by `org-sync`; the snapshot's value if the DB has none."""
+    """Currency code from `organization`; `fallback` if the DB has none."""
     try:
         if db.enabled():
             return db.get_organization().get("currency_code") or fallback
@@ -101,15 +99,15 @@ def _org_currency(fallback: str) -> str:
     return fallback
 
 
-def _payload(*, refresh: bool = False) -> dict[str, Any]:
-    snapshot = load_coa_snapshot(refresh=refresh)
-    rows = cm.build_category_master(snapshot, cm.load_overrides(OVERRIDES_CSV))
+def _payload(*, fresh: bool = False) -> dict[str, Any]:
+    snapshot = db.coa_snapshot(refresh=fresh)
+    rows = snapshot["categories"]
     summary = cm.category_master_summary(rows)
     _export(rows, summary)
     return {
         "can_edit": web_auth.enabled(),
-        "currency_code": _org_currency(snapshot.get("currency_code", "")),
-        "snapshot_time": datetime.fromtimestamp(COA_SNAPSHOT.stat().st_mtime).isoformat(timespec="seconds"),
+        "currency_code": snapshot.get("currency_code", ""),
+        "snapshot_time": (snapshot.get("synced_at") or "").replace(" ", "T"),
         "categories": cm.CATEGORIES,
         "summary": summary,
         "rows": rows,
@@ -136,7 +134,7 @@ def _save_override(body: dict[str, Any], user: str, *, delete: bool) -> dict[str
     if not web_auth.enabled():
         raise PermissionError("Editing is disabled until Zoho JWT auth (MIS_JWT_SECRET) is configured")
     account_id = _text(body, "account_id", 40)
-    snapshot = load_coa_snapshot()
+    snapshot = db.coa_snapshot()
     account = next((a for a in snapshot.get("accounts", []) if str(a.get("account_id")) == account_id), None)
     if not account:
         raise ValueError("unknown account_id")
@@ -163,9 +161,9 @@ def _save_override(body: dict[str, Any], user: str, *, delete: bool) -> dict[str
         }
         overrides[account_id] = after
     cm.save_overrides(OVERRIDES_CSV, overrides)
-    payload = _payload()
-    if db.enabled():
-        db.save_category_master(payload["rows"])
+    # Rebuild every row from the chart + overrides, then write the MIS columns to `accounts`.
+    db.save_category_master(cm.build_category_master(snapshot, overrides))
+    payload = _payload(fresh=True)
     with AUDIT_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "user": user,
                             "account_id": account_id, "before": before, "after": after}) + "\n")
@@ -191,10 +189,13 @@ class Unavailable(Exception):
 
 
 def _cached_snapshot() -> dict[str, Any]:
-    """The COA snapshot on disk; never calls Zoho (POST /api/refresh does)."""
-    if not COA_SNAPSHOT.exists():
-        raise Unavailable("No chart of accounts snapshot yet: run main.py category-master.")
-    return json.loads(COA_SNAPSHOT.read_text(encoding="utf-8"))
+    """Chart + organization from the database; never calls Zoho."""
+    if not db.enabled():
+        raise Unavailable("MariaDB not configured (MIS_DB_* in .env)")
+    snap = db.coa_snapshot()
+    if not snap["accounts"]:
+        raise Unavailable("No chart of accounts loaded yet: the seeder fills `accounts`.")
+    return snap
 
 
 def _live_args(q: dict[str, str]) -> tuple[list[periods.Col], dict[str, Any], dict[str, dict[str, str]]]:
@@ -301,7 +302,7 @@ class Handler(BaseHTTPRequestHandler):
                 payload.pop("organization", None)
                 self._json(HTTPStatus.OK, payload)
             elif path == "/api/config":
-                fy = COA_SNAPSHOT.exists() and _cached_snapshot().get("fiscal_year_start_month")
+                fy = db.enabled() and db.get_organization().get("fiscal_year_start_month")
                 self._json(HTTPStatus.OK, {"live_financials": live.enabled(), "fiscal_year_start_month": fy or None})
             elif path == "/api/statement" and "run_id" not in q:
                 cols, snapshot, overrides = _live_args(q)
@@ -333,14 +334,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/tb":
                 self._json(HTTPStatus.OK, db.get_trial_balance(_int(q, "run_id")))
             elif path == "/api/export.xlsx":
-                if "run_id" in q:
-                    body, filename = build_workbook(
-                        _int(q, "run_id"),
-                        _int(q, "margin_run") if q.get("margin_run") else None,
-                        _int(q, "purchases_run") if q.get("purchases_run") else None,
-                    )
-                else:
-                    body, filename = build_live_workbook(*_live_args(q), refresh=q.get("refresh") == "1")
+                body, filename = build_live_workbook(*_live_args(q), refresh=q.get("refresh") == "1")
                 self.send_response(HTTPStatus.OK)
                 self.send_header(
                     "Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -389,9 +383,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             with _lock:
-                if path == "/api/refresh":
-                    self._json(HTTPStatus.OK, _payload(refresh=True))
-                elif path in ("/api/category-override", "/api/category-override/delete"):
+                if path in ("/api/category-override", "/api/category-override/delete"):
                     user = str(self._claims.get("user_id", "unknown"))
                     self._json(HTTPStatus.OK, _save_override(self._read_json(), user,
                                                              delete=path.endswith("/delete")))

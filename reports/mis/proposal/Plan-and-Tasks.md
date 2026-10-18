@@ -96,9 +96,9 @@ Status: `todo` / `doing` / `done` / `parked`. Hours are rough estimates for one 
 | Phase | Status | Done |
 |---|---|---|
 | P0 Point dev at `zoho-koyson` | completed | 2026-10-19 |
-| P1 Margin and Purchases queries | todo | |
-| P2 Accounts, organization, live financials, editor | todo | |
-| P3 UI and Excel | todo | |
+| P1 Margin and Purchases queries | completed | 2026-10-19 |
+| P2 Accounts, organization, live financials, editor | completed | 2026-10-19 |
+| P3 UI and Excel | completed | 2026-10-19 |
 | P4 Remove the run code | todo | |
 | P5 Tests and docs | todo | |
 | P6 Verify on dev | todo | |
@@ -113,35 +113,35 @@ Status: `todo` / `doing` / `done` / `parked`. Hours are rough estimates for one 
 | T0.3 | Dev `.env`: `MIS_DB_NAME=zoho-koyson`. Run `main.py db-init`; confirm only `sync_coverage` + cashflow tables are new. | `.env` (dev only, D13) | T0.1, T0.2 | 0.1 | done |
 | T0.4 | Add a one-line note to `DB-Schema-Proposed.sql` header: "copy of `reports/db.py` SCHEMA; change both". | `proposal/DB-Schema-Proposed.sql` | T0.2 | 0.1 | done |
 
-### P1 — Margin and Purchases queries (~2 h, parallel with P2)
+### P1 — Margin and Purchases queries (~2 h, parallel with P2) — completed
 
 | ID | Task | Files | Depends | h | Status |
 |---|---|---|---|---|---|
-| T1.1 | `_bucketed` / `_range_pivot`: take `source` (FROM + joins) and `where` (status filter) instead of `table`; prefix `date` with the line alias. | `reports/db.py` | T0.3 | 0.5 | todo |
-| T1.2 | Margin: `_MARGIN_SOURCE`, `_MARGIN_WHERE`; `MARGIN_DIMENSIONS` per the column map (add `location`); `_MARGIN_SUMS` with `cogs` and `net_sales - cogs`. | `reports/db.py` | T1.1 | 0.5 | todo |
-| T1.3 | `get_margin_detail_range`: new line / invoice SQL per the column map; update `_margin_detail` column lists. | `reports/db.py` | T1.2 | 0.4 | todo |
-| T1.4 | Purchases: `_PURCHASE_SOURCE`, `_PURCHASE_WHERE`, `PURCHASE_DIMENSIONS` per the column map. | `reports/db.py` | T1.1 | 0.3 | todo |
-| T1.5 | `COVERAGE_DATASETS` = `{'sales','purchases'}` (drop `gl`); `get_coverage` unchanged. | `reports/db.py` | T0.3 | 0.1 | todo |
+| T1.1 | `_bucketed` / `_range_pivot`: take `source` (FROM + joins) and `where` (status filter) instead of `table`; prefix `date` with the line alias. | `reports/db.py` | T0.3 | 0.5 | done |
+| T1.2 | Margin: `_MARGIN_SOURCE`, `_MARGIN_WHERE`; `MARGIN_DIMENSIONS` per the column map (add `location`); `_MARGIN_SUMS` with `cogs` and `net_sales - cogs`. | `reports/db.py` | T1.1 | 0.5 | done |
+| T1.3 | `get_margin_detail_range`: new line / invoice SQL per the column map; update `_margin_detail` column lists. | `reports/db.py` | T1.2 | 0.4 | done |
+| T1.4 | Purchases: `_PURCHASE_SOURCE`, `_PURCHASE_WHERE`, `PURCHASE_DIMENSIONS` per the column map. | `reports/db.py` | T1.1 | 0.3 | done |
+| T1.5 | `COVERAGE_DATASETS` = `{'sales','purchases'}` (drop `gl`); `get_coverage` unchanged. | `reports/db.py` | T0.3 | 0.1 | done |
 
-### P2 — Accounts, organization, live financials, editor (~2.5 h, parallel with P1)
-
-| ID | Task | Files | Depends | h | Status |
-|---|---|---|---|---|---|
-| T2.1 | `db.get_organization()` reads the proposed columns (no `raw`); `save_organization` removed or rewritten to the proposed columns (`org-sync`). Store `fiscal_year_start_month` as 1 for Zoho's 0. | `reports/db.py`, `main.py` (`org-sync`) | T0.3 | 0.3 | todo |
-| T2.2 | `db.coa_snapshot()` adapter: `accounts` rows mapped to the Zoho chart keys `build_category_master` reads (`account_id`, `account_code`, `account_name`, `account_type`, `parent_account_id`, `parent_account_name`, `is_active`; `current_balance` = 0), plus `organization_name`, `currency_code`, `fiscal_year_start_month` from `organization`, plus `categories` = MIS columns as `build_category_master` rows. Cache in-process for 60 s. | `reports/db.py` | T2.1 | 0.6 | todo |
-| T2.3 | `monthly_trial_balance.account_rows`: use `snapshot["categories"]` when present, else `cm.build_category_master(...)` (CLI path unchanged). | `reports/monthly_trial_balance.py` | T2.2 | 0.2 | todo |
-| T2.4 | `server._cached_snapshot()` → `db.coa_snapshot()`; `/api/config` FY month from it; `_org_currency` from `organization`. | `server.py` | T2.2 | 0.2 | todo |
-| T2.5 | `get_category_master()` → `SELECT … FROM accounts` with `account_name AS ledger_name` and `path` rebuilt from `parent_account_id`; `save_category_master()` → `UPDATE accounts SET group_ledger, pl_bs, category, sub_category, source, note WHERE account_id=…` (no inserts, no deletes; the seeder owns rows). | `reports/db.py` | T0.3 | 0.5 | todo |
-| T2.6 | Editor endpoints: `GET /api/category-master` from `accounts`; override save / delete = write CSV (as today) → `build_category_master(db.coa_snapshot(), overrides)` → `save_category_master()`. Remove `POST /api/refresh` and its button. | `server.py`, `web/assets/category-master.js` | T2.2, T2.5 | 0.5 | todo |
-| T2.7 | CLI `category-master`: build from `db.coa_snapshot()` + overrides and `save_category_master()`; keep file outputs. | `main.py` | T2.5 | 0.2 | todo |
-
-### P3 — UI and Excel (~1.5 h)
+### P2 — Accounts, organization, live financials, editor (~2.5 h, parallel with P1) — completed
 
 | ID | Task | Files | Depends | h | Status |
 |---|---|---|---|---|---|
-| T3.1 | Remove `pickRun()`, the run selector, `api/runs`, `run_id` URLs and the stored-run branches for financial tabs; Excel button always `api/export.xlsx?cols=…`. | `web/assets/reports.js`, `web/reports.html` | P1, P2 | 0.6 | todo |
-| T3.2 | Margin dims: add `["location","Location"]`; label `van` "Van". Line detail columns: `purchase_price`, `flag`; drop `cost_rate`, `cost_source`. COGS labels per *Defaults*. Empty state: "No sales loaded for … (load via seeder)". | `web/assets/reports.js` | T1.2, T1.3 | 0.4 | todo |
-| T3.3 | `excel_export`: delete `build_workbook` and the run helpers (`_period`, `_statement_sheets`, `_trial_balance_sheet`, `_matching_run`, `_pivot_sheets`); `build_live_workbook` adds the Location dim; Category Master sheet from `get_category_master()`. | `reports/excel_export.py` | T1.2, T2.5 | 0.4 | todo |
+| T2.1 | `db.get_organization()` reads the proposed columns (no `raw`); `save_organization` removed or rewritten to the proposed columns (`org-sync`). Store `fiscal_year_start_month` as 1 for Zoho's 0. | `reports/db.py`, `main.py` (`org-sync`) | T0.3 | 0.3 | done |
+| T2.2 | `db.coa_snapshot()` adapter: `accounts` rows mapped to the Zoho chart keys `build_category_master` reads (`account_id`, `account_code`, `account_name`, `account_type`, `parent_account_id`, `parent_account_name`, `is_active`; `current_balance` = 0), plus `organization_name`, `currency_code`, `fiscal_year_start_month` from `organization`, plus `categories` = MIS columns as `build_category_master` rows. Cache in-process for 60 s. | `reports/db.py` | T2.1 | 0.6 | done |
+| T2.3 | `monthly_trial_balance.account_rows`: use `snapshot["categories"]` when present, else `cm.build_category_master(...)` (CLI path unchanged). | `reports/monthly_trial_balance.py` | T2.2 | 0.2 | done |
+| T2.4 | `server._cached_snapshot()` → `db.coa_snapshot()`; `/api/config` FY month from it; `_org_currency` from `organization`. | `server.py` | T2.2 | 0.2 | done |
+| T2.5 | `get_category_master()` → `SELECT … FROM accounts` with `account_name AS ledger_name` and `path` rebuilt from `parent_account_id`; `save_category_master()` → `UPDATE accounts SET group_ledger, pl_bs, category, sub_category, source, note WHERE account_id=…` (no inserts, no deletes; the seeder owns rows). | `reports/db.py` | T0.3 | 0.5 | done |
+| T2.6 | Editor endpoints: `GET /api/category-master` from `accounts`; override save / delete = write CSV (as today) → `build_category_master(db.coa_snapshot(), overrides)` → `save_category_master()`. Remove `POST /api/refresh` and its button. | `server.py`, `web/assets/category-master.js` | T2.2, T2.5 | 0.5 | done |
+| T2.7 | CLI `category-master`: build from `db.coa_snapshot()` + overrides and `save_category_master()`; keep file outputs. | `main.py` | T2.5 | 0.2 | done |
+
+### P3 — UI and Excel (~1.5 h) — completed
+
+| ID | Task | Files | Depends | h | Status |
+|---|---|---|---|---|---|
+| T3.1 | Remove `pickRun()`, the run selector, `api/runs`, `run_id` URLs and the stored-run branches for financial tabs; Excel button always `api/export.xlsx?cols=…`. | `web/assets/reports.js`, `web/reports.html` | P1, P2 | 0.6 | done |
+| T3.2 | Margin dims: add `["location","Location"]`; label `van` "Van". Line detail columns: `purchase_price`, `flag`; drop `cost_rate`, `cost_source`. COGS labels per *Defaults*. Empty state: "No sales loaded for … (load via seeder)". | `web/assets/reports.js` | T1.2, T1.3 | 0.4 | done |
+| T3.3 | `excel_export`: delete `build_workbook` and the run helpers (`_period`, `_statement_sheets`, `_trial_balance_sheet`, `_matching_run`, `_pivot_sheets`); `build_live_workbook` adds the Location dim; Category Master sheet from `get_category_master()`. | `reports/excel_export.py` | T1.2, T2.5 | 0.4 | done |
 
 ### P4 — Remove the run code (~1 h)
 

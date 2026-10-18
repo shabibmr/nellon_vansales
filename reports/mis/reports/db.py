@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -629,16 +630,17 @@ MARGIN_INVOICE_DB_COLUMNS = [
 _ROW_KEY = {"cost_of_sales": "cost"}
 _DATE_COLUMNS = {"date", "due_date"}
 MARGIN_DIMENSIONS = {
-    "item": "item_name",
-    "customer": "customer_name",
-    "salesperson": "salesperson_name",
-    "van": "van",
+    "item": "l.item_name",
+    "customer": "i.customer_name",
+    "salesperson": "i.salesperson_name",
+    "van": "CASE WHEN v.location_id IS NULL THEN '(warehouse)' ELSE l.location_name END",
+    "location": "l.location_name",
 }
 PURCHASE_DB_COLUMNS = [
     "month", "date", "kind", "number", "vendor_name", "status", "item_id", "item_name", "sku", "unit",
     "quantity", "rate", "amount", "doc_id",
 ]
-PURCHASE_DIMENSIONS = {"vendor": "vendor_name", "item": "item_name", "kind": "kind"}
+PURCHASE_DIMENSIONS = {"vendor": "d.vendor_name", "item": "pl.item_name", "kind": "pl.kind"}
 PURCHASE_MEASURES = {"amount", "quantity", "documents"}
 MARGIN_MEASURES = {"net_sales", "cost", "gross_margin", "base_quantity", "gm_pct"}
 
@@ -886,7 +888,7 @@ def save_purchases_run(rows: list[dict[str, Any]], summary: dict[str, Any], *, s
 # ---------------------------------------------------------------------------
 
 PURCHASE_KINDS = ("bill", "purchase_order")
-COVERAGE_DATASETS = {"sales", "purchases", "purchases:bill", "purchases:purchase_order", "gl"}
+COVERAGE_DATASETS = {"sales", "purchases"}
 _SALES_HEADER_SUMS = ("base_quantity", "net_sales", "cost", "gross_margin")
 _ZOHO_ONLY_TOTALS = ("sub_total", "discount_total", "tax_total", "total", "balance")
 
@@ -1127,29 +1129,103 @@ def save_cashflow_run(
     return run_id
 
 
-def save_category_master(rows: list[dict[str, Any]]) -> int:
-    cols = ", ".join(CATEGORY_DB_COLUMNS)
-    marks = ", ".join(["%s"] * len(CATEGORY_DB_COLUMNS))
-    updates = ", ".join(f"{c}=VALUES({c})" for c in CATEGORY_DB_COLUMNS if c != "account_id")
+def _account_path(by_id: dict[str, dict[str, Any]], row: dict[str, Any]) -> str:
+    """Ancestor names from the root down to `row`, joined with ' > ' (cycle-safe)."""
+    names, seen, cur = [], set(), row
+    while cur and cur["account_id"] not in seen:
+        seen.add(cur["account_id"])
+        names.append((cur.get("account_name") or "").strip())
+        cur = by_id.get(str(cur.get("parent_account_id") or ""))
+    return " > ".join(reversed(names))
+
+
+def category_rows_from_accounts(accounts: list[dict[str, Any]], entity: str) -> list[dict[str, Any]]:
+    """`accounts` rows → Category Master rows (the keys `category_master.build_category_master` emits)."""
+    by_id = {str(a["account_id"]): a for a in accounts}
+    rows = []
+    for a in accounts:
+        name = (a.get("account_name") or "").strip()
+        rows.append({
+            "account_id": str(a["account_id"]),
+            "account_code": a.get("account_code") or "",
+            "ledger_name": name,
+            "entity_name": entity,
+            "concate": f"{name}{entity}",
+            "group_ledger": a.get("group_ledger") or "",
+            "pl_bs": a.get("pl_bs") or "",
+            "category": a.get("category") or "",
+            "sub_category": a.get("sub_category") or "",
+            "source": a.get("source") or "",
+            "note": a.get("note") or "",
+            "account_type": a.get("account_type") or "",
+            "parent_account_name": a.get("parent_account_name") or "",
+            "path": _account_path(by_id, a),
+            "current_balance": 0.0,
+            "is_active": bool(a.get("is_active", 1)),
+        })
+    rows.sort(key=lambda r: (r["pl_bs"] != "BS", r["path"].lower()))
+    return rows
+
+
+def _select_accounts() -> list[dict[str, Any]]:
     with connect() as conn, conn.cursor() as cur:
-        cur.executemany(
-            f"INSERT INTO category_master ({cols}) VALUES ({marks}) ON DUPLICATE KEY UPDATE {updates}",
-            [tuple(r.get(c, "") for c in CATEGORY_DB_COLUMNS) for r in rows],
-        )
-        ids = [r["account_id"] for r in rows]
-        if ids:
-            cur.execute(
-                f"DELETE FROM category_master WHERE account_id NOT IN ({', '.join(['%s'] * len(ids))})", ids
-            )
-    return len(rows)
+        cur.execute("SELECT account_id, account_code, account_name, account_type, parent_account_id, "
+                    "parent_account_name, group_ledger, is_active, pl_bs, category, sub_category, source, note "
+                    "FROM accounts")
+        return list(cur.fetchall())
 
 
 def get_category_master() -> list[dict[str, Any]]:
-    """Saved ledger → category mapping (empty until `main.py category-master` has saved it)."""
-    cols = ", ".join(CATEGORY_DB_COLUMNS)
+    """Ledger → category mapping, read from `accounts` (the seeder owns the rows)."""
+    return category_rows_from_accounts(_select_accounts(), get_organization().get("name") or "")
+
+
+def save_category_master(rows: list[dict[str, Any]]) -> int:
+    """Write the MIS columns back to `accounts`. Updates only: no inserts, no deletes."""
     with connect() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT {cols} FROM category_master ORDER BY pl_bs, category, ledger_name")
-        return [_clean(r) for r in cur.fetchall()]
+        cur.executemany(
+            "UPDATE accounts SET group_ledger=%s, pl_bs=%s, category=%s, sub_category=%s, source=%s, note=%s "
+            "WHERE account_id=%s",
+            [(r.get("group_ledger", ""), r.get("pl_bs", ""), r.get("category", ""), r.get("sub_category", ""),
+              r.get("source", ""), (r.get("note") or "")[:500], r["account_id"]) for r in rows],
+        )
+    return len(rows)
+
+
+_SNAPSHOT_TTL = 60.0
+_snapshot_cache: tuple[float, dict[str, Any]] | None = None
+
+
+def snapshot_from_db(accounts: list[dict[str, Any]], org: dict[str, Any]) -> dict[str, Any]:
+    """Same shape as output/coa_snapshot.json, plus `categories` (the stored MIS columns)."""
+    name = org.get("name") or org.get("organization_id") or ""
+    return {
+        "organization_id": org.get("organization_id", ""),
+        "organization_name": name,
+        "currency_code": org.get("currency_code") or "",
+        "fiscal_year_start_month": org.get("fiscal_year_start_month") or None,
+        "synced_at": org.get("synced_at", ""),
+        "accounts": [
+            {"account_id": str(a["account_id"]), "account_code": a.get("account_code") or "",
+             "account_name": a.get("account_name") or "", "account_type": a.get("account_type") or "",
+             "parent_account_id": a.get("parent_account_id") or "",
+             "parent_account_name": a.get("parent_account_name") or "",
+             "is_active": bool(a.get("is_active", 1)), "current_balance": 0}
+            for a in accounts
+        ],
+        "categories": category_rows_from_accounts(accounts, name),
+    }
+
+
+def coa_snapshot(*, refresh: bool = False) -> dict[str, Any]:
+    """Chart + organization from the database, cached in-process for 60 s."""
+    global _snapshot_cache
+    now = time.monotonic()
+    if not refresh and _snapshot_cache and now - _snapshot_cache[0] < _SNAPSHOT_TTL:
+        return _snapshot_cache[1]
+    snap = snapshot_from_db(_select_accounts(), get_organization())
+    _snapshot_cache = (now, snap)
+    return snap
 
 
 def delete_run(run_id: int) -> bool:
@@ -1178,26 +1254,33 @@ def _clean(row: dict[str, Any]) -> dict[str, Any]:
 # Organization (company profile synced from Zoho; the web UI reads currency/name from here)
 # ---------------------------------------------------------------------------
 
-_ORG_FIELDS = ("name", "currency_code", "currency_symbol", "fiscal_year_start_month",
-               "time_zone", "date_format", "country")
+_ORG_TEXT = ("name", "currency_id", "currency_code", "currency_symbol", "currency_format",
+             "time_zone", "country", "country_code")
 
 
 def save_organization(org: dict[str, Any]) -> None:
-    vals = [str(org.get(k) or "")[:200] for k in _ORG_FIELDS]
+    """Upsert the Zoho organization profile. `fiscal_year_start_month` is stored 1-12 (Zoho reads 0 = January)."""
+    from reports.category_master import _fy_start_month
+
+    vals = [str(org.get(k) or "")[:255] for k in _ORG_TEXT]
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
-            f"""INSERT INTO organization (organization_id, {", ".join(_ORG_FIELDS)}, raw)
-                VALUES (%s, {", ".join(["%s"] * len(_ORG_FIELDS))}, %s)
-                ON DUPLICATE KEY UPDATE {", ".join(f"{k}=VALUES({k})" for k in _ORG_FIELDS)}, raw=VALUES(raw)""",
-            (str(org["organization_id"]), *vals, json.dumps(org)),
+            f"""INSERT INTO organization (organization_id, {", ".join(_ORG_TEXT)},
+                    fiscal_year_start_month, is_tax_registered)
+                VALUES (%s, {", ".join(["%s"] * len(_ORG_TEXT))}, %s, %s)
+                ON DUPLICATE KEY UPDATE {", ".join(f"{k}=VALUES({k})" for k in _ORG_TEXT)},
+                    fiscal_year_start_month=VALUES(fiscal_year_start_month),
+                    is_tax_registered=VALUES(is_tax_registered)""",
+            (str(org["organization_id"]), *vals, _fy_start_month(org.get("fiscal_year_start_month")) or 1,
+             1 if org.get("is_tax_registered") else 0),
         )
 
 
 def get_organization() -> dict[str, Any]:
-    """The most recently synced organization, or {} if `org-sync` has not run."""
+    """The organization row, or {} if the seeder / `org-sync` has not loaded it."""
     with connect() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT organization_id, {', '.join(_ORG_FIELDS)}, synced_at FROM organization "
-                    "ORDER BY synced_at DESC LIMIT 1")
+        cur.execute("SELECT organization_id, name, currency_code, currency_symbol, fiscal_year_start_month, "
+                    "time_zone, country, synced_at FROM organization ORDER BY synced_at DESC LIMIT 1")
         r = cur.fetchone()
     if not r:
         return {}
@@ -1432,16 +1515,24 @@ def get_purchase_pivot(run_id: int, dimension: str, measure: str) -> dict[str, A
 # Dated store: reads by date range (columns come from the client's date filter)
 # ---------------------------------------------------------------------------
 
-_MARGIN_SUMS = {"net_sales": "net_sales", "cost": "cost_of_sales", "gross_margin": "gross_margin",
-                "base_quantity": "base_quantity", "flagged": "flag <> ''"}
-_PURCHASE_SUMS = {"amount": "amount", "quantity": "quantity", "documents": "DISTINCT CONCAT(kind, ':', doc_id)"}
+_MARGIN_SOURCE = ("sales_lines l JOIN sales_invoices i ON i.invoice_id = l.invoice_id "
+                  "LEFT JOIN vans v ON v.location_id = l.location_id")
+_MARGIN_WHERE = "i.status NOT IN ('draft', 'void')"
+_MARGIN_SUMS = {"net_sales": "l.net_sales", "cost": "l.cogs", "gross_margin": "l.net_sales - l.cogs",
+                "base_quantity": "l.base_quantity", "flagged": "l.flag <> ''"}
+_PURCHASE_SOURCE = "purchase_lines pl JOIN purchase_docs d ON d.kind = pl.kind AND d.doc_id = pl.doc_id"
+_PURCHASE_WHERE = "d.status NOT IN ('draft', 'void', 'cancelled')"
+_PURCHASE_SUMS = {"amount": "pl.amount", "quantity": "pl.quantity",
+                  "documents": "DISTINCT CONCAT(pl.kind, ':', pl.doc_id)"}
 
 
-def _bucketed(table: str, dim_col: str, cols: list[periods.Col], sums: dict[str, str]) -> list[dict[str, Any]]:
+def _bucketed(source: str, where: str, date_col: str, dim_col: str, cols: list[periods.Col],
+              sums: dict[str, str]) -> list[dict[str, Any]]:
     """One row per dimension value plus the rollup row (dim None): `c{i}_{name}` per column, `c{i}_n` the
-    row count (0 → no data in that column), `s_{name}` over the whole span."""
+    row count (0 → no data in that column), `s_{name}` over the whole span. `source` is the FROM + joins,
+    `where` the status filter, `date_col` the line's own (aliased) date column."""
     start, end = periods.span(cols)
-    when = "WHEN date BETWEEN %s AND %s THEN"
+    when = f"WHEN {date_col} BETWEEN %s AND %s THEN"
     parts, params = [], []
     for i, c in enumerate(cols):
         for name, expr in sums.items():
@@ -1454,19 +1545,20 @@ def _bucketed(table: str, dim_col: str, cols: list[periods.Col], sums: dict[str,
         params += [c.start, c.end]
     parts += [f"SUM({expr}) AS s_{name}" for name, expr in sums.items() if not expr.startswith("DISTINCT ")]
     with connect() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT {dim_col} AS dim, {', '.join(parts)} FROM {table} "
-                    f"WHERE date BETWEEN %s AND %s GROUP BY {dim_col} WITH ROLLUP", (*params, start, end))
+        cur.execute(f"SELECT {dim_col} AS dim, {', '.join(parts)} FROM {source} "
+                    f"WHERE {date_col} BETWEEN %s AND %s AND {where} GROUP BY {dim_col} WITH ROLLUP",
+                    (*params, start, end))
         return cur.fetchall()
 
 
-def _range_pivot(table: str, dim_col: str, cols: list[periods.Col], sums: dict[str, str],
-                 value: Any, sort_key: str, extra: Any) -> dict[str, Any]:
+def _range_pivot(source: str, where: str, date_col: str, dim_col: str, cols: list[periods.Col],
+                 sums: dict[str, str], value: Any, sort_key: str, extra: Any) -> dict[str, Any]:
     def cells(r: dict[str, Any]) -> dict[str, float]:
         return {c.key: value({n: float(r[f"c{i}_{n}"] or 0) for n in sums})
                 for i, c in enumerate(cols) if r[f"c{i}_n"]}
 
     rows, grand = [], {}
-    for r in _bucketed(table, dim_col, cols, sums):
+    for r in _bucketed(source, where, date_col, dim_col, cols, sums):
         if r["dim"] is None:  # WITH ROLLUP total (dimension columns are NOT NULL, so no clash)
             grand = cells(r)
         else:
@@ -1487,7 +1579,8 @@ def get_margin_pivot_range(cols: list[periods.Col], dimension: str, measure: str
             return round(agg["gross_margin"] / agg["net_sales"], 4) if agg["net_sales"] else 0.0
         return round(agg[measure], 4)
 
-    out = _range_pivot("sales_lines", MARGIN_DIMENSIONS[dimension], cols, _MARGIN_SUMS, value, "net_sales",
+    out = _range_pivot(_MARGIN_SOURCE, _MARGIN_WHERE, "l.date", MARGIN_DIMENSIONS[dimension], cols,
+                       _MARGIN_SUMS, value, "net_sales",
                        lambda r: {"net_sales": float(r["s_net_sales"] or 0), "flagged": int(r["s_flagged"] or 0)})
     return {**out, "dimension": dimension, "measure": measure}
 
@@ -1496,8 +1589,8 @@ def get_purchase_pivot_range(cols: list[periods.Col], dimension: str, measure: s
     """Same shape as the margin pivot; `documents` counts distinct bills / POs per column."""
     if dimension not in PURCHASE_DIMENSIONS or measure not in PURCHASE_MEASURES:
         raise ValueError("unknown dimension or measure")
-    out = _range_pivot("purchase_doc_lines", PURCHASE_DIMENSIONS[dimension], cols, _PURCHASE_SUMS,
-                       lambda agg: round(agg[measure], 4), "amount",
+    out = _range_pivot(_PURCHASE_SOURCE, _PURCHASE_WHERE, "pl.date", PURCHASE_DIMENSIONS[dimension], cols,
+                       _PURCHASE_SUMS, lambda agg: round(agg[measure], 4), "amount",
                        lambda r: {"amount": float(r["s_amount"] or 0)})
     return {**out, "dimension": dimension, "measure": measure}
 
@@ -1505,14 +1598,21 @@ def get_purchase_pivot_range(cols: list[periods.Col], dimension: str, measure: s
 def get_margin_detail_range(start: date, end: date, view: str) -> dict[str, Any]:
     """Margin as a flat list for [start, end]: one row per invoice line or per invoice."""
     if view == "line":
-        sql = """SELECT date, invoice_number, customer_name, item_name, unit, quantity, rate,
-                        net_sales, cost_rate, cost_of_sales AS cost, gross_margin, flag, cost_source
-                 FROM sales_lines WHERE date BETWEEN %s AND %s ORDER BY date, invoice_number, line_no"""
+        sql = f"""SELECT l.date, i.invoice_number, i.customer_name, l.location_name, l.item_name, l.unit,
+                         l.quantity, l.rate, l.net_sales, l.purchase_price, l.cogs AS cost,
+                         l.net_sales - l.cogs AS gross_margin, l.flag
+                  FROM sales_lines l JOIN sales_invoices i ON i.invoice_id = l.invoice_id
+                  WHERE l.date BETWEEN %s AND %s AND {_MARGIN_WHERE}
+                  ORDER BY l.date, i.invoice_number, l.line_item_id"""
     elif view == "invoice":
-        sql = """SELECT date, invoice_number, status, customer_name, salesperson_name, line_count,
-                        net_sales, cost_of_sales AS cost, gross_margin, flagged_lines AS flagged,
-                        cost_source, total, balance
-                 FROM sales_invoices WHERE date BETWEEN %s AND %s ORDER BY date, invoice_number"""
+        sql = f"""SELECT i.date, i.invoice_number, i.status, i.customer_name, i.salesperson_name,
+                         COUNT(l.line_item_id) AS line_count, i.net_sales, i.cogs AS cost,
+                         i.net_sales - i.cogs AS gross_margin, i.flagged_lines AS flagged, i.total, i.balance
+                  FROM sales_invoices i LEFT JOIN sales_lines l ON l.invoice_id = i.invoice_id
+                  WHERE i.date BETWEEN %s AND %s AND {_MARGIN_WHERE}
+                  GROUP BY i.invoice_id, i.date, i.invoice_number, i.status, i.customer_name,
+                           i.salesperson_name, i.net_sales, i.cogs, i.flagged_lines, i.total, i.balance
+                  ORDER BY i.date, i.invoice_number"""
     else:
         raise ValueError("view must be line or invoice")
     with connect() as conn, conn.cursor() as cur:

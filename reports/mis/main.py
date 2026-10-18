@@ -111,7 +111,11 @@ def load_coa_snapshot(*, refresh: bool = False) -> dict:
 
 
 def _cmd_category_master(args: argparse.Namespace) -> int:
-    snapshot = load_coa_snapshot(refresh=not args.cached)
+    if not db.enabled():
+        raise SystemExit("MariaDB not configured (MIS_DB_* in .env): the chart is read from `accounts`")
+    snapshot = db.coa_snapshot(refresh=True)
+    if not snapshot["accounts"]:
+        raise SystemExit("`accounts` is empty: load it with the seeder first")
     rows = cm.build_category_master(snapshot, cm.load_overrides(OVERRIDES_CSV))
     summary = cm.category_master_summary(rows)
 
@@ -122,7 +126,7 @@ def _cmd_category_master(args: argparse.Namespace) -> int:
     write_csv(rows, cm.COLUMNS, csv_path)
     write_excel_sheets({"Category Master": (cm.COLUMNS, rows)}, xlsx_path)
     if db.enabled() and not args.no_db:
-        print(f"MariaDB: category_master upserted ({db.save_category_master(rows)} accounts)")
+        print(f"MariaDB: accounts updated ({db.save_category_master(rows)} accounts)")
     json_path.write_text(json.dumps({"summary": summary, "rows": rows}, indent=1), encoding="utf-8")
 
     print()
@@ -556,14 +560,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     cmp = sub.add_parser(
         "category-master",
-        help="Ledger → PL/BS category mapping from /chartofaccounts + category_overrides.csv",
+        help="Ledger → PL/BS category mapping from the `accounts` table + category_overrides.csv (no Zoho call)",
     )
-    cmp.add_argument(
-        "--cached",
-        action="store_true",
-        help="Reuse output/coa_snapshot.json instead of calling Zoho",
-    )
-    cmp.add_argument("--no-db", action="store_true", help="Don't upsert into MariaDB")
+    cmp.add_argument("--no-db", action="store_true", help="Don't write the mapping back to `accounts`")
     cmp.set_defaults(func=_cmd_category_master)
 
     wt = sub.add_parser("webtab", help="Add the report viewer as a Zoho Books web tab (updates it if it exists)")

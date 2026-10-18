@@ -1,6 +1,6 @@
-/* Reports page: margin / purchases (and stored financials runs) come from MariaDB through the local
-   server API; with live financials on, Executive Summary, P&L, BS and TB come from Zoho through the
-   server's cache (reports/live_financials.py). */
+/* Reports page: margin / purchases come from MariaDB through the local server API; with live
+   financials on, Executive Summary, P&L, BS and TB come from Zoho through the server's cache
+   (reports/live_financials.py). */
 (() => {
   "use strict";
 
@@ -16,11 +16,12 @@
   const { TABS } = window.MISTabs;  // assets/report-tabs.js
 
   // Pivot tabs (margin, purchases): rows = chosen dimension, columns = months + Total.
-  const MARGIN_MEASURES = [["net_sales", "Net sales"], ["cost", "Cost"], ["gross_margin", "Margin"], ["gm_pct", "GM %"]];
+  const MARGIN_MEASURES = [["net_sales", "Net sales"], ["cost", "COGS"], ["gross_margin", "Margin"], ["gm_pct", "GM %"]];
   const PIVOTS = {
     margin: {
-      dims: [["item", "Item"], ["customer", "Customer"], ["salesperson", "Salesperson"], ["van", "Van"]],
-      measures: [["net_sales", "Net sales"], ["cost", "Cost"], ["gross_margin", "Gross margin"],
+      dims: [["item", "Item"], ["customer", "Customer"], ["salesperson", "Salesperson"], ["van", "Van"],
+        ["location", "Location"]],
+      measures: [["net_sales", "Net sales"], ["cost", "COGS (invoice line cost)"], ["gross_margin", "Gross margin"],
         ["gm_pct", "GM %"], ["base_quantity", "Base quantity"]],
     },
     purchases: {
@@ -30,14 +31,11 @@
   };
 
   const qs = new URLSearchParams(location.search);
-  // Margin and purchases read the dated tables for any range; financials are live from Zoho when the
-  // server allows it (`/api/config`), else they read one stored run.
+  // Margin and purchases read the dated tables for any range; financials are live from Zoho
+  // (`/api/config` says whether the server allows it).
   const DATASET = { margin: "sales", purchases: "purchases" };
-  const COMMAND = { margin: "margin", purchases: "purchases" };
   const state = {
     tab: TABS.some((t) => t.id === qs.get("tab")) ? qs.get("tab") : "exec",
-    runs: { financials: [] },
-    selected: { financials: null },
     coverage: { sales: null, purchases: null },  // /api/coverage per dataset
     pivot: { margin: { dim: "item", measure: "net_sales" }, purchases: { dim: "vendor", measure: "amount" } },
     tbFilter: "",
@@ -57,8 +55,7 @@
 
   const tab = () => TABS.find((t) => t.id === state.tab) || TABS[0];
   const isLive = (t) => state.live && t.kind === "financials";
-  const fiscalStart = () => state.fiscalStart || (state.runs.financials[0] || {}).fiscal_year_start;
-  const runOf = (kind) => state.runs[kind].find((r) => r.id === state.selected[kind]);
+  const fiscalStart = () => state.fiscalStart;
 
   const colLabel = (c) => {
     if (state.labels[c]) return state.labels[c];
@@ -116,31 +113,11 @@
     MISTabs.render($("tabs"), state.tab);
   }
 
-  function pickRun() {
-    const kind = tab().kind;
-    const runs = state.runs[kind];
-    if (!runs.length) return false;
-    if (!runs.some((r) => r.id === state.selected[kind])) state.selected[kind] = runs[0].id;
-    return true;
-  }
-
   function renderExport() {
-    // Live: the workbook covers the date filter's columns (its href is set on click).
-    // Else it covers the selected financials run (margin / purchases: the run matching its period).
+    // The workbook covers the date filter's columns (its href is set on click).
     const btn = $("exportBtn");
-    const id = state.selected.financials || (state.runs.financials[0] || {}).id;
-    if (state.live) {
-      btn.removeAttribute("aria-disabled");
-      btn.title = "Executive Summary, PL, BS, Trial Balance (live from Zoho), Margin, Purchases and Category Master for the selected dates";
-    } else if (id) {
-      btn.href = `api/export.xlsx?run_id=${id}`;
-      btn.removeAttribute("aria-disabled");
-      btn.title = `Run #${id}: Executive Summary, PL, BS, Trial Balance, Margin, Purchases and Category Master`;
-    } else {
-      btn.href = "api/export.xlsx";
-      btn.setAttribute("aria-disabled", "true");
-      btn.title = "Save a financials run first";
-    }
+    btn.removeAttribute("aria-disabled");
+    btn.title = "Executive Summary, PL, BS, Trial Balance (live from Zoho), Margin, Purchases and Category Master for the selected dates";
   }
 
   function renderTools() {
@@ -184,10 +161,10 @@
     return !a || a === b ? a || b : `${a} – ${b}`;
   };
 
-  function setHead(run, title) {
+  function setHead(title) {
     $("reportTitle").textContent = title;
-    $("period").textContent = run ? periodLabel(run.from_date, run.to_date) : "";
-    const ccy = (state.org && state.org.currency_code) || (run && run.currency_code) || "";
+    $("period").textContent = "";
+    const ccy = (state.org && state.org.currency_code) || "";
     $("ccy").textContent = ccy;
     $("ccy").hidden = !ccy;
     $("orgName").textContent = (state.org && state.org.name) || "";
@@ -199,7 +176,7 @@
   function renderStatement(data) {
     const cols = data.columns;
     if (!data.lines.length) {
-      stateView("database", "Nothing in this statement", `This run has no ${esc(data.statement)} lines.`);
+      stateView("database", "Nothing in this statement", `There are no ${esc(data.statement)} lines for these dates.`);
       return;
     }
     const body = data.lines.map((ln) => {
@@ -421,25 +398,25 @@
     const byLine = t.detail === "line";
     const th = (l, n, c) => `<th scope="col"${n ? ' class="n"' : c ? ` class="${c}"` : ""}>${l}</th>`;
     const head = byLine
-      ? [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Item"), th("Unit"), th("Qty", 1), th("Rate", 1),
-        th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)]
+      ? [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Location"), th("Item"), th("Unit"), th("Qty", 1),
+        th("Rate", 1), th("Net sales", 1), th("Purchase price", 1), th("COGS", 1), th("Margin", 1), th("GM %", 1)]
       : [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Salesperson"), th("Lines", 1),
-        th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)];
+        th("Net sales", 1), th("COGS", 1), th("Margin", 1), th("GM %", 1)];
     const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
     const tn = sum("net_sales"), tc = sum("cost"), tm = sum("gross_margin");
     const flag = (r) => (byLine ? r.flag : r.flagged)
       ? `<span class="tag review">${byLine ? esc(r.flag) : `${r.flagged} flagged`}</span>` : "";
     const body = rows.map((r) => byLine
       ? `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number)}${txt(r.customer_name)}` +
-        `${txt(r.item_name, flag(r))}${txt(r.unit)}${numCell(r.quantity)}${numCell(r.rate)}` +
-        `${numCell(r.net_sales)}${numCell(r.cost)}${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`
+        `${txt(r.location_name)}${txt(r.item_name, flag(r))}${txt(r.unit)}${numCell(r.quantity)}${numCell(r.rate)}` +
+        `${numCell(r.net_sales)}${numCell(r.purchase_price)}${numCell(r.cost)}${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`
       : `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, flag(r))}${txt(r.customer_name)}` +
         `${txt(r.salesperson_name)}<td class="n">${r.line_count}</td>${numCell(r.net_sales)}${numCell(r.cost)}` +
         `${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
-    const span = byLine ? 7 : 4;
+    const span = byLine ? 8 : 4;
     const foot = `<tr class="total"><td colspan="${span}">Total${q ? " of filtered rows" : ""}</td>` +
       (byLine ? "" : `<td class="n">${rows.reduce((s, r) => s + r.line_count, 0)}</td>`) +
-      `${numCell(tn)}${numCell(tc)}${numCell(tm)}${numCell(tn ? tm / tn : 0, { pct: true })}</tr>`;
+      `${numCell(tn)}${byLine ? "<td></td>" : ""}${numCell(tc)}${numCell(tm)}${numCell(tn ? tm / tn : 0, { pct: true })}</tr>`;
     view(`<table class="data"><thead><tr>${head.join("")}</tr></thead><tbody>${body}${foot}</tbody></table>`);
   }
 
@@ -487,34 +464,7 @@
 
   const DF = MISDateFilter;
   const NO_DATA = ["search", "No data in this period",
-    "The selected range has no months in this report run. Pick another period or a Full run."];
-
-  // Sum / last-month the stored month columns into the filter's columns (months, Total, comparison periods).
-  const REVENUE = ["Revenue", "Revenue Booked", "Total Revenue"];
-  function remapLines(list, L, mode) {
-    for (const n of list) {
-      n.values = DF.aggregate(n.values, L.cols, mode);
-      if (n.children) remapLines(n.children, L, mode);
-    }
-    // Ratios can't be summed: rebuild each % row from the row above it over revenue.
-    list.forEach((n, i) => {
-      if (n.kind !== "pct" || !i) return;
-      const num = list[i - 1].values, den = (list.find((x) => REVENUE.includes(x.label)) || list[0]).values;
-      n.values = Object.fromEntries(L.cols.map((c) => [c.key, den[c.key] ? num[c.key] / den[c.key] : 0]));
-    });
-  }
-
-  function filterStatement(data, t) {
-    const mode = t.id === "bs" ? "balance" : "flow";
-    const L = DF.layout({ total: mode === "flow" });
-    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
-    $("period").textContent = L.summary;
-    if (L.empty) return null;
-    remapLines(data.lines, L, mode);
-    remapLines(data.tree || [], L, mode);
-    data.columns = L.cols.map((c) => c.key);
-    return data;
-  }
+    "The selected range has no months to show. Pick another period."];
 
   // Dated pivots: the server buckets the lines into the filter's columns (months, Total, comparisons).
   async function loadPivot(t, L) {
@@ -540,34 +490,16 @@
     return out;
   }
 
-  // Trial balance: opening rolls forward over the months before the range, closing over the range.
-  function filterTb(data) {
-    const L = DF.layout({ total: false, compare: false });
-    $("period").textContent = L.summary;
-    if (L.empty) return null;
-    const sum = (r, ms) => ms.reduce((s, m) => s + (Number(r[m]) || 0), 0);
-    const earlier = data.months.filter((m) => m < L.from);
-    const rows = data.rows.map((r) => {
-      const opening = (Number(r.opening) || 0) + sum(r, earlier);
-      return { ...r, opening, closing: opening + sum(r, L.main) };
-    });
-    return { months: L.main, rows };
-  }
-
   // ---------------------------------------------------------------- load
-
-  const fetchHint = (kind, from, to) =>
-    `Run <code>main.py ${COMMAND[kind]} --from-date ${esc(from)} --to-date ${esc(to)}</code> to load them.`;
 
   // Margin / purchases: any date range over everything loaded so far.
   async function loadDated(t) {
     const cov = state.coverage[DATASET[t.kind]];
     const what = t.kind === "margin" ? "sales" : "purchases";
-    setHead(null, t.label);
+    setHead(t.label);
     if (!cov || !cov.ranges.length) {
       stateView("database", `No ${what} loaded yet`,
-        `Run <code>main.py ${COMMAND[t.kind]} --from-date … --to-date …</code>, ` +
-        `or import a saved file with <code>main.py db-load --${t.kind}-json …</code>.`);
+        "Load them with the seeder.");
       return;
     }
     DF.setSource({ coverage: cov.merged, fiscalStart: fiscalStart() });
@@ -583,7 +515,7 @@
     }
     if (L.empty) {
       stateView("search", `No ${what} loaded for ${DF.rangeLabel(L.from, L.to)}`,
-        `Loaded: ${esc(DF.rangeLabel(cov.min, cov.max))}. ${fetchHint(t.kind, L.from, L.to)}`);
+        `Loaded: ${esc(DF.rangeLabel(cov.min, cov.max))}. Load the missing dates with the seeder.`);
       return;
     }
     skeleton();
@@ -615,7 +547,7 @@
     DF.setCompare(t.id !== "tb");  // the trial balance has no period columns to compare
     const L = t.id === "tb" ? DF.layout({ total: false, compare: false }) : DF.layout({ total: t.id !== "bs" });
     state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
-    setHead(null, t.label);
+    setHead(t.label);
     $("period").textContent = L.summary;
     syncUrl();
     if (L.tooMany) {
@@ -659,47 +591,9 @@
       }
       return;
     }
-    const hasRuns = pickRun();
-    syncUrl();
-
-    if (!hasRuns) {
-      setHead(null, t.label);
-      stateView(
-        "database",
-        "No report runs saved yet",
-        "Run <code>main.py financials --from-date … --to-date …</code>, or import a saved trial balance " +
-          "with <code>main.py db-load --tb-json …</code>.",
-      );
-      return;
-    }
-
-    const runId = state.selected[t.kind];
-    const run = runOf(t.kind);
-    DF.setSource({ months: run.months, fiscalStart: run.fiscal_year_start });
-    DF.setCompare(t.id !== "tb");  // the trial balance has no period columns to compare
-    state.labels = {};
-    setHead(run, t.label);
-    skeleton();
-    try {
-      if (t.statement) {
-        const data = filterStatement(await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`), t);
-        state.tree.nodes = null;
-        if (!data) {
-          if (t.tree) $("toolbar").innerHTML = "";
-          stateView(...NO_DATA);
-        } else if (t.tree && data.tree?.length) {
-          showTree(data, t);
-        } else {
-          if (t.tree) $("toolbar").innerHTML = "";  // no stored TB to expand from: plain statement
-          renderStatement(data);
-        }
-      } else {
-        state.tbData = filterTb(await api(`api/tb?run_id=${runId}`));
-        if (state.tbData) renderTb(state.tbData); else stateView(...NO_DATA);
-      }
-    } catch (e) {
-      stateView("error", "Could not load this report", esc(e.message), "error");
-    }
+    setHead(t.label);
+    stateView("database", "Live financials are switched off",
+      "This server has live financials disabled (<code>MIS_LIVE_FINANCIALS=1</code> turns them on).");
   }
 
   // ---------------------------------------------------------------- events
@@ -747,12 +641,12 @@
     e.preventDefault();
     const btn = $("exportBtn");
     if (btn.getAttribute("aria-disabled") === "true") return;
-    if (state.live) {
+    {
       const L = DF.layout({ total: true });
       if (!L.cols.length) return snackbar(L.tooMany ? `Too many columns (${L.tooMany})` : "Pick a date range first", true);
       btn.setAttribute("href", `api/export.xlsx?cols=${DF.colsParam(L.cols)}`);
     }
-    snackbar(state.live ? "Preparing the Excel workbook (financials live from Zoho)" : "Preparing the Excel workbook");
+    snackbar("Preparing the Excel workbook (financials live from Zoho)");
     try {
       const res = await MISAuth.fetch(btn.getAttribute("href"));
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
@@ -772,17 +666,15 @@
   skeleton();
   const noCoverage = { ranges: [], merged: [], gaps: [], min: null, max: null };
   Promise.all([
-    api("api/runs?kind=financials"),
     ...Object.values(DATASET).map((ds) => api(`api/coverage?dataset=${ds}`).catch(() => noCoverage)),
     api("api/org").catch(() => ({})),  // company profile from MariaDB; the page still works without it
     api("api/config").catch(() => ({})),
   ])
-    .then(([fin, sales, purchases, org, config]) => {
+    .then(([sales, purchases, org, config]) => {
       state.org = org && org.name ? org : null;
       state.live = !!config.live_financials;
       const fy = Number(config.fiscal_year_start_month);
       if (fy >= 1 && fy <= 12) state.fiscalStart = `2000-${String(fy).padStart(2, "0")}`;
-      state.runs = { financials: fin.runs };
       state.coverage = { sales, purchases };
       load();
     })
