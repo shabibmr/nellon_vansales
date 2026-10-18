@@ -1,5 +1,5 @@
 /* Shared date filter for MIS pages: a From / To range (presets or any dates), split into one column
-   per week / month / quarter / 6 months / year, plus up to 5 earlier (−) and 5 later (+) comparison
+   per week / month / quarter / 6 months / year (earlier/later comparison steppers removed from the UI)
    periods of the same length. The choice is kept in localStorage, so every report page and tab opens
    with the same range. Quarters, halves and years follow the fiscal year; weeks run Monday–Sunday.
 
@@ -25,6 +25,7 @@ const MISDateFilter = (() => {
     : live ? "Year to date" : "All loaded data");
   const SPLITS = [["week", "Weekly"], ["month", "Monthly"], ["quarter", "Quarterly"], ["half", "6 months"], ["year", "Annual"]];
   const SPLIT_MONTHS = { month: 1, quarter: 3, half: 6, year: 12 };
+  const SPLIT_SHORT = { week: "Week", month: "Month", quarter: "Qtr", half: "6M", year: "Year" };
   const MAX_COLS = 40;  // the dated report API refuses more (reports/periods.py MAX_COLS)
 
   // Month index = year * 12 + month0, so ranges and shifts are plain integer maths.
@@ -62,7 +63,7 @@ const MISDateFilter = (() => {
   let coverage = [];     // day grain: loaded [{from, to}] ranges, merged and sorted
   let live = false;      // day grain without coverage: any dates (live financials)
   let fyStart = 0;       // 0-based month the fiscal year starts in
-  let compareOn = true;
+  let compareOn = false;
   let mount = null;
   let notify = () => {};
   let sel = { preset: "last_3m", from: "", to: "", split: "month", before: 0, after: 0 };  // from / to: YYYY-MM-DD
@@ -79,8 +80,8 @@ const MISDateFilter = (() => {
     if (saved && PRESETS.some(([id]) => id === saved.preset)) sel = { ...sel, ...saved };
   } catch { /* storage blocked: defaults */ }
   const clampN = (n) => Math.max(0, Math.min(MAX_COMPARE, Number(n) || 0));
-  sel.before = clampN(sel.before);
-  sel.after = clampN(sel.after);
+  sel.before = 0;  // earlier / later period steppers were removed from the UI
+  sel.after = 0;
   if (!SPLITS.some(([id]) => id === sel.split)) sel.split = "month";
   const validDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !Number.isNaN(D(s).getTime());
   if (!validDay(sel.from) || !validDay(sel.to)) sel = { ...sel, from: "", to: "", preset: sel.preset === "custom" ? "last_3m" : sel.preset };
@@ -296,15 +297,6 @@ const MISDateFilter = (() => {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  function stepper(side, title, n) {
-    return `<div class="field"><span id="df-${side}-l">${title}</span>
-      <div class="stepper" role="group" aria-labelledby="df-${side}-l">
-        <button type="button" class="step" data-df="${side}-" aria-label="Fewer ${title.toLowerCase()}"${n <= 0 ? " disabled" : ""}>−</button>
-        <output class="num" aria-live="polite">${n}</output>
-        <button type="button" class="step" data-df="${side}+" aria-label="More ${title.toLowerCase()}"${n >= MAX_COMPARE ? " disabled" : ""}>+</button>
-      </div></div>`;
-  }
-
   // Data bounds for the inputs and hint: month keys (month grain) or ISO dates (day grain).
   function bounds() {
     if (grain === "day") return coverage.length ? [coverage[0].from, coverage[coverage.length - 1].to] : ["", ""];
@@ -336,18 +328,22 @@ const MISDateFilter = (() => {
     // From / To always show the range in use; editing either switches the period to Custom.
     const [fa, fb] = sel.preset === "custom" ? [sel.from, sel.to] : shownRange();
     const inputs = grain === "day"
-      ? `<label class="field"><span>From</span><input class="input" type="date" id="dfFrom" value="${esc(fa || lo)}"></label>
-         <label class="field"><span>To</span><input class="input" type="date" id="dfTo" value="${esc(fb || hi)}"></label>`
-      : `<label class="field"><span>From</span><input class="input" type="month" id="dfFrom" min="${lo}" max="${hi}" value="${esc((fa || lo).slice(0, 7))}"></label>
-         <label class="field"><span>To</span><input class="input" type="month" id="dfTo" min="${lo}" max="${hi}" value="${esc((fb || hi).slice(0, 7))}"></label>`;
+      ? `<input class="input" type="date" id="dfFrom" aria-label="From" value="${esc(fa || lo)}">
+         <span class="df-dash" aria-hidden="true">–</span>
+         <input class="input" type="date" id="dfTo" aria-label="To" value="${esc(fb || hi)}">`
+      : `<input class="input" type="month" id="dfFrom" aria-label="From" min="${lo}" max="${hi}" value="${esc((fa || lo).slice(0, 7))}">
+         <span class="df-dash" aria-hidden="true">–</span>
+         <input class="input" type="month" id="dfTo" aria-label="To" min="${lo}" max="${hi}" value="${esc((fb || hi).slice(0, 7))}">`;
     const splits = SPLITS.filter(([id]) => grain === "day" || id !== "week");
+    const cur = split();
     mount.innerHTML =
-      `<label class="field"><span>Period</span><select class="input" id="dfPreset">${PRESETS.map(([id]) =>
-        `<option value="${id}"${id === sel.preset ? " selected" : ""}>${presetText(id)}</option>`).join("")}</select></label>` +
-      inputs +
-      `<label class="field"><span>Split by</span><select class="input" id="dfSplit">${splits.map(([id, text]) =>
-        `<option value="${id}"${id === split() ? " selected" : ""}>${text}</option>`).join("")}</select></label>` +
-      (compareOn ? stepper("b", "Earlier periods", sel.before) + stepper("a", "Later periods", sel.after) : "") +
+      `<div class="df-group"><span class="df-label" id="dfPl">Period</span>
+        <select class="input" id="dfPreset" aria-labelledby="dfPl">${PRESETS.map(([id]) =>
+          `<option value="${id}"${id === sel.preset ? " selected" : ""}>${presetText(id)}</option>`).join("")}</select></div>` +
+      `<div class="df-group" role="group" aria-label="Date range">${inputs}</div>` +
+      `<div class="df-group"><span class="df-label" id="dfSl">Split</span>
+        <div class="seg" role="group" aria-labelledby="dfSl">${splits.map(([id, text]) =>
+          `<button type="button" data-split="${id}" aria-pressed="${id === cur}" title="${text}">${SPLIT_SHORT[id]}</button>`).join("")}</div></div>` +
       `<p class="df-hint${warn ? " warn" : ""}" id="dfHint">${esc(hint)}</p>`;
   }
 
@@ -377,17 +373,13 @@ const MISDateFilter = (() => {
         if (!from || !to) return;
         if (grain === "month") { from = `${from}-01`; to = monthLast(toIdx(to)); }
         change({ preset: "custom", from: minS(from, to), to: maxS(from, to) });
-      } else if (e.target.id === "dfSplit") {
-        change({ split: e.target.value });
       }
     });
     mount.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-df]");
-      if (!btn || btn.disabled) return;
-      const [side, dir] = [btn.dataset.df[0], btn.dataset.df[1]];
-      const key = side === "b" ? "before" : "after";
-      change({ [key]: clampN(sel[key] + (dir === "+" ? 1 : -1)) });
-      mount.querySelector(`[data-df="${btn.dataset.df}"]`)?.focus();
+      const btn = e.target.closest("[data-split]");
+      if (!btn || btn.dataset.split === split()) return;
+      change({ split: btn.dataset.split });
+      mount.querySelector(`[data-split="${btn.dataset.split}"]`)?.focus();
     });
   }
   const $v = (id) => mount.querySelector(`#${id}`)?.value || "";

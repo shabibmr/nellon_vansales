@@ -923,21 +923,30 @@ table.data.tree tr.reveal td { animation: tree-in 220ms var(--ease) both; animat
   table.data.tree tr td.tl { padding-left: calc(6px + var(--depth, 0) * 14px) !important; }
 }
 
-/* Shared date filter (assets/date-filter.js) */
-.datebar { padding-bottom: 0; }
-.datebar .df-hint { margin: 0; align-self: center; font-size: 13px; color: var(--md-on-surface-variant); }
+/* Shared date filter (assets/date-filter.js): one compact row, 30px controls */
+.toolbar.datebar { flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 8px 24px;
+  background: var(--md-surface-container-lowest); border-bottom: 1px solid var(--md-outline-variant); }
+.datebar .df-group { display: inline-flex; align-items: center; gap: 8px; }
+.datebar .df-label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--md-on-surface-variant); }
+.datebar .df-dash { color: var(--md-on-surface-variant); }
+.datebar .input { height: 30px; padding: 0 8px; font-size: 13px; }
+.datebar select.input { padding-right: 4px; }
+.datebar input[type="date"], .datebar input[type="month"] { width: 130px; font-variant-numeric: tabular-nums; }
+.datebar .df-hint { margin: 0 0 0 auto; font-size: 12px; color: var(--md-on-surface-variant); text-align: right; }
 .datebar .df-hint.warn { color: var(--md-on-warning-container); }
-.stepper { display: inline-flex; align-items: center; height: 40px; border: 1px solid var(--md-outline);
-  border-radius: var(--shape-sm); background: var(--md-surface-container-lowest); }
-.stepper output { min-width: 28px; text-align: center; font-weight: 500; }
-.stepper .step { width: 36px; height: 100%; border: 0; background: none; color: var(--md-primary);
-  font: inherit; font-size: 18px; cursor: pointer; }
-.stepper .step:hover:not(:disabled) { background: var(--md-primary-container); }
-.stepper .step:focus-visible { outline: 2px solid var(--md-primary); outline-offset: -2px; }
-.stepper .step:disabled { color: var(--md-outline); cursor: default; }
-@media (max-width: 720px) { .datebar .stepper { width: 100%; justify-content: space-between; } }
-
-/* Margin pivot: period group header over Net sales / Cost / Margin / GM % */
-.data thead th.grp { text-align: center; border-left: 1px solid var(--md-outline-variant); }
-.data thead tr:nth-child(2) th { top: 48px; height: 32px; }
-.data thead tr:nth-child(2) th:first-child { position: sticky; left: auto; z-index: 2; background: var(--md-surface-container); min-width: 0; }
+.seg { display: inline-flex; height: 30px; border: 1px solid var(--md-outline); border-radius: var(--shape-sm);
+  overflow: hidden; background: var(--md-surface-container-lowest); }
+.seg button { padding: 0 11px; border: 0; border-left: 1px solid var(--md-outline-variant); background: none;
+  font: inherit; font-size: 13px; color: var(--md-on-surface); cursor: pointer;
+  transition: background 150ms var(--ease), color 150ms var(--ease); }
+.seg button:first-child { border-left: 0; }
+.seg button:hover { background: var(--md-surface-container-high); }
+.seg button[aria-pressed="true"] { background: var(--md-primary); color: var(--md-on-primary); font-weight: 500; }
+.seg button:focus-visible { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+@media (max-width: 720px) {
+  .toolbar.datebar { padding: 8px 16px; gap: 8px 12px; }
+  .datebar .df-hint { margin-left: 0; text-align: left; width: 100%; }
+  .datebar .df-group:nth-child(2) { flex: 1 1 100%; }
+  .datebar input[type="date"], .datebar input[type="month"] { flex: 1; width: auto; }
+}
