@@ -13,6 +13,10 @@ ExecStart=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/
 Environment=PYTHONUNBUFFERED=1
 # Live financials call Zoho (approved for this test server); creds live in the main checkout.
 Environment=MIS_LIVE_FINANCIALS=1
+# TEST ONLY: skip the Zoho web-tab login check so the page opens directly (remove before going wider).
+Environment=MIS_AUTH_DISABLED=1
+# The disable flag only works with no secret; an empty value here wins over .env.mis.
+Environment=MIS_JWT_SECRET=
 EnvironmentFile=/home/nellon/nellon_vansales/.env_zoho
 Restart=on-failure
 RestartSec=5
