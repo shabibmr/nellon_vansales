@@ -37,9 +37,10 @@ Live financials call Zoho only for GL periods not cached in this process (report
 15-minute cache, one Zoho fetch at a time, last good copy served when Zoho fails).
 
 Zoho credentials stay server-side. Binds to 127.0.0.1 by default. Every /api route needs the
-Zoho web-tab JWT as a Bearer header (pages/assets stay open); see reports/web_auth.py and
+Zoho web-tab JWT as a Bearer header; pages/assets are refused unless the browser loads them inside an
+iframe (Sec-Fetch-Dest) and CSP frame-ancestors limits that iframe to Zoho. See reports/web_auth.py and
 web/assets/webtab-auth.js. With MIS_JWT_SECRET unset all /api routes are refused (fail closed);
-MIS_AUTH_DISABLED=1 skips auth for local development only.
+MIS_AUTH_DISABLED=1 skips both checks for local development only.
 """
 
 from __future__ import annotations
@@ -211,6 +212,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", web_auth.FRAME_ANCESTORS)
         self.end_headers()
         self.wfile.write(body)
 
@@ -232,9 +234,15 @@ class Handler(BaseHTTPRequestHandler):
         return body
 
     def _authorized(self, path: str) -> bool:
-        """Pages and static assets are open (they hold no data); every /api route needs a Zoho JWT."""
+        """Pages/assets only load inside the Zoho web-tab iframe; every /api route needs a Zoho JWT."""
         if not path.startswith("/api/"):
-            return True
+            if web_auth.explicitly_disabled() or web_auth.framed(self.headers.get("Sec-Fetch-Dest"),
+                                                                  asset=path.startswith("/assets/")):
+                return True
+            print(f"auth: refusing direct access to {path} (Sec-Fetch-Dest={self.headers.get('Sec-Fetch-Dest')})")
+            self._send(HTTPStatus.FORBIDDEN, b"<!doctype html><meta charset=utf-8><title>MIS Reports</title>"
+                       b"<p>Open this report from the Zoho Books web tab.</p>", "text/html; charset=utf-8")
+            return False
         key = web_auth.secret()
         if key is None:
             if web_auth.explicitly_disabled():

@@ -32,5 +32,21 @@ class VerifyJwt(unittest.TestCase):
                 web_auth.verify_jwt(tok, KEY)
 
 
+class Framed(unittest.TestCase):
+    def test_pages_only_in_iframe(self):
+        self.assertTrue(web_auth.framed("iframe", asset=False))
+        for dest in (None, "", "document", "frame", "empty", "script"):
+            with self.subTest(dest):
+                self.assertFalse(web_auth.framed(dest, asset=False))
+
+    def test_assets_only_as_subresources(self):
+        for dest in ("script", "style", "image", "empty"):
+            with self.subTest(dest):
+                self.assertTrue(web_auth.framed(dest, asset=True))
+        for dest in (None, "", "document", "iframe"):
+            with self.subTest(dest):
+                self.assertFalse(web_auth.framed(dest, asset=True))
+
+
 if __name__ == "__main__":
     unittest.main()
