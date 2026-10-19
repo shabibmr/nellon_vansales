@@ -25,7 +25,6 @@ const MISDateFilter = (() => {
     : live ? "Year to date" : "All loaded data");
   const SPLITS = [["week", "Weekly"], ["month", "Monthly"], ["quarter", "Quarterly"], ["half", "6 months"], ["year", "Annual"]];
   const SPLIT_MONTHS = { month: 1, quarter: 3, half: 6, year: 12 };
-  const SPLIT_SHORT = { week: "Week", month: "Month", quarter: "Qtr", half: "6M", year: "Year" };
   const MAX_COLS = 40;  // the dated report API refuses more (reports/periods.py MAX_COLS)
 
   // Month index = year * 12 + month0, so ranges and shifts are plain integer maths.
@@ -320,31 +319,104 @@ const MISDateFilter = (() => {
     return [`No data in ${spanLabel(toKey(wa), toKey(wb))} (data covers ${spanLabel(lo, hi)})`, true];
   }
 
+  /* The period control: ‹ [period button] › opening a popover. The popover edits a draft copy of
+     the selection (presets, From / To, split) and only Apply commits it, so a live report is not
+     re-fetched from Zoho on every click. */
+  let open = false;
+  let draft = null;
+
+  // Run fn with `s` as the selection, so the layout maths can preview the draft.
+  function withSel(s, fn) {
+    const keep = sel;
+    sel = s;
+    try { return fn(); } finally { sel = keep; }
+  }
+
+  // [name, dates] for the button: "Last 3 months" + "Jul-26 – Sep-26"; a custom range is just its dates.
+  function periodParts(info) {
+    let range;
+    if (info.from) range = grain === "day" ? rangeLabel(info.from, info.to) : spanLabel(info.from, info.to);
+    else { const [a, b] = wanted(); range = spanLabel(toKey(a), toKey(b)); }
+    return sel.preset === "custom" ? [range, ""] : [presetText(sel.preset), range];
+  }
+
+  // The shown range moved back (-1) or forward (+1) by its own length; null once it leaves the data.
+  function stepped(k) {
+    const r = isoRange();
+    if (!r) return null;
+    const [a, b] = shifted(r.from, r.to, k);
+    if (live) return a > todayIso() ? null : [a, b];
+    let [lo, hi] = bounds();
+    if (!lo) return null;
+    if (grain === "month") { lo = `${lo}-01`; hi = monthLast(toIdx(hi)); }
+    return b < lo || a > hi ? null : [maxS(a, lo), minS(b, hi)];
+  }
+
+  const chev = (dir) => `<svg class="icon df-chev ${dir}" aria-hidden="true"><use href="assets/icons.svg#chevron_right"/></svg>`;
+  const CALENDAR = `<svg class="icon df-cal" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v9h14v-9ZM5 8h14V6H5v2Z"/></svg>`;
+
+  function dateField(text, id, value) {
+    const [lo, hi] = bounds();
+    const attrs = grain === "day"
+      ? `type="date" value="${esc(value || "")}"`
+      : `type="month" min="${esc(lo)}" max="${esc(hi)}" value="${esc((value || "").slice(0, 7))}"`;
+    return `<label class="df-field"><span>${text}</span><input class="input" id="${id}" data-focus="${id}" ${attrs}></label>`;
+  }
+
+  // Popover body for the draft selection.
+  function popover() {
+    return withSel(draft, () => {
+      const [lo, hi] = bounds();
+      const info = layout({ total: false, compare: false });
+      const [hint, warn] = hintText(info);
+      const [fa, fb] = draft.preset === "custom" ? [draft.from, draft.to] : shownRange();
+      const [name, dates] = periodParts(info);
+      const cur = split();
+      const cols = info.cols.length;
+      const splits = SPLITS.filter(([id]) => grain === "day" || id !== "week");
+      return `<div class="df-pop" id="dfPop" role="dialog" aria-label="Choose period">` +
+        `<div class="df-body">` +
+          `<div class="df-nav" role="group" aria-label="Period">${PRESETS.map(([id]) =>
+            `<button type="button" class="df-preset" data-preset="${id}" data-focus="p-${id}" aria-pressed="${id === draft.preset}">${esc(presetText(id))}</button>`).join("")}</div>` +
+          `<div class="df-pane">` +
+            `<div class="df-dates">${dateField("From", "dfFrom", fa || lo)}${dateField("To", "dfTo", fb || hi)}</div>` +
+            (hint ? `<p class="df-note${warn ? " warn" : ""}">${esc(hint)}</p>` : "") +
+          `</div>` +
+        `</div>` +
+        `<div class="df-split"><span class="df-split-label" id="dfSl">Split into columns</span>` +
+          `<div class="seg" role="group" aria-labelledby="dfSl">${splits.map(([id, text]) =>
+            `<button type="button" data-split="${id}" data-focus="s-${id}" aria-pressed="${id === cur}">${text}</button>`).join("")}</div>` +
+          (cols ? `<span class="df-split-hint">${cols} column${cols > 1 ? "s" : ""}</span>` : "") +
+        `</div>` +
+        `<div class="df-foot">` +
+          `<span class="df-shows">Shows <strong>${esc(dates ? `${name} · ${dates}` : name)}</strong></span>` +
+          `<button type="button" class="btn outlined df-btn" data-act="cancel" data-focus="cancel">Cancel</button>` +
+          `<button type="button" class="btn filled df-btn" data-act="apply" data-focus="apply">Apply</button>` +
+        `</div>` +
+      `</div>`;
+    });
+  }
+
   function render() {
     if (!mount) return;
-    const [lo, hi] = bounds();
+    // Re-rendering replaces the controls; keep focus on the one in use.
+    const focused = mount.contains(document.activeElement) ? document.activeElement.dataset.focus : null;
     const info = layout({ total: false, compare: false });
     const [hint, warn] = hintText(info);
-    // From / To always show the range in use; editing either switches the period to Custom.
-    const [fa, fb] = sel.preset === "custom" ? [sel.from, sel.to] : shownRange();
-    const inputs = grain === "day"
-      ? `<input class="input" type="date" id="dfFrom" aria-label="From" value="${esc(fa || lo)}">
-         <span class="df-dash" aria-hidden="true">–</span>
-         <input class="input" type="date" id="dfTo" aria-label="To" value="${esc(fb || hi)}">`
-      : `<input class="input" type="month" id="dfFrom" aria-label="From" min="${lo}" max="${hi}" value="${esc((fa || lo).slice(0, 7))}">
-         <span class="df-dash" aria-hidden="true">–</span>
-         <input class="input" type="month" id="dfTo" aria-label="To" min="${lo}" max="${hi}" value="${esc((fb || hi).slice(0, 7))}">`;
-    const splits = SPLITS.filter(([id]) => grain === "day" || id !== "week");
-    const cur = split();
+    const [name, dates] = periodParts(info);
+    const prev = stepped(-1), next = stepped(1);
+    const splitName = (SPLITS.find(([id]) => id === split()) || SPLITS[1])[1];
     mount.innerHTML =
-      `<div class="df-group"><span class="df-label" id="dfPl">Period</span>
-        <select class="input" id="dfPreset" aria-labelledby="dfPl">${PRESETS.map(([id]) =>
-          `<option value="${id}"${id === sel.preset ? " selected" : ""}>${presetText(id)}</option>`).join("")}</select></div>` +
-      `<div class="df-group" role="group" aria-label="Date range">${inputs}</div>` +
-      `<div class="df-group"><span class="df-label" id="dfSl">Split</span>
-        <div class="seg" role="group" aria-labelledby="dfSl">${splits.map(([id, text]) =>
-          `<button type="button" data-split="${id}" aria-pressed="${id === cur}" title="${text}">${SPLIT_SHORT[id]}</button>`).join("")}</div></div>` +
-      `<p class="df-hint${warn ? " warn" : ""}" id="dfHint">${esc(hint)}</p>`;
+      `<button type="button" class="icon-btn df-step" data-step="-1" data-focus="prev" aria-label="Previous period"${prev ? "" : " disabled"}>${chev("left")}</button>` +
+      `<button type="button" class="df-trigger" data-focus="trigger" aria-haspopup="dialog" aria-expanded="${open}" aria-controls="dfPop"${hint ? ` title="${esc(hint)}"` : ""}>` +
+        `${CALENDAR}<span class="df-name">${esc(name)}</span>` +
+        (dates ? `<span class="df-dates-text">· ${esc(dates)}</span>` : "") +
+        `<span class="df-tag">${esc(splitName)}</span>` +
+        (warn ? `<span class="df-tag warn">Check dates</span>` : "") +
+        `${chev("down")}</button>` +
+      `<button type="button" class="icon-btn df-step" data-step="1" data-focus="next" aria-label="Next period"${next ? "" : " disabled"}>${chev("right")}</button>` +
+      (open ? popover() : "");
+    if (focused) mount.querySelector(`[data-focus="${focused}"]`)?.focus();
   }
 
   function change(patch) {
@@ -352,6 +424,18 @@ const MISDateFilter = (() => {
     persist();
     render();
     notify();
+  }
+
+  function setOpen(on) {
+    open = on;
+    if (on) draft = { ...sel };
+    render();
+    mount.querySelector(on ? ".df-preset[aria-pressed='true']" : ".df-trigger")?.focus();
+  }
+
+  function editDraft(patch) {
+    draft = { ...draft, ...patch };
+    render();
   }
 
   // The range currently shown, as ISO dates (seeds the custom inputs when switching to Custom).
@@ -363,23 +447,43 @@ const MISDateFilter = (() => {
   }
 
   function bind() {
-    mount.addEventListener("change", (e) => {
-      if (e.target.id === "dfPreset") {
-        const patch = { preset: e.target.value };
-        if (patch.preset === "custom" && !sel.from) [patch.from, patch.to] = shownRange();
-        change(patch);
-      } else if (e.target.id === "dfFrom" || e.target.id === "dfTo") {
-        let from = $v("dfFrom"), to = $v("dfTo");
-        if (!from || !to) return;
-        if (grain === "month") { from = `${from}-01`; to = monthLast(toIdx(to)); }
-        change({ preset: "custom", from: minS(from, to), to: maxS(from, to) });
+    mount.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn || btn.disabled) return;
+      if (btn.dataset.step) {
+        const r = stepped(Number(btn.dataset.step));
+        if (r) change({ preset: "custom", from: r[0], to: r[1] });
+      } else if (btn.classList.contains("df-trigger")) {
+        setOpen(!open);
+      } else if (btn.dataset.preset) {
+        const patch = { preset: btn.dataset.preset };
+        if (patch.preset === "custom" && !draft.from) [patch.from, patch.to] = withSel(draft, shownRange);
+        editDraft(patch);
+      } else if (btn.dataset.split) {
+        editDraft({ split: btn.dataset.split });
+      } else if (btn.dataset.act === "cancel") {
+        setOpen(false);
+      } else if (btn.dataset.act === "apply") {
+        open = false;
+        change(draft);
+        mount.querySelector(".df-trigger")?.focus();
       }
     });
-    mount.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-split]");
-      if (!btn || btn.dataset.split === split()) return;
-      change({ split: btn.dataset.split });
-      mount.querySelector(`[data-split="${btn.dataset.split}"]`)?.focus();
+    // From / To edit the draft; either one switches it to Custom.
+    mount.addEventListener("change", (e) => {
+      if (e.target.id !== "dfFrom" && e.target.id !== "dfTo") return;
+      let from = $v("dfFrom"), to = $v("dfTo");
+      if (!from || !to) return;
+      if (grain === "month") { from = `${from}-01`; to = monthLast(toIdx(to)); }
+      editDraft({ preset: "custom", from: minS(from, to), to: maxS(from, to) });
+    });
+    // Escape or a click outside closes the popover without applying. composedPath, because a click
+    // inside re-renders the popover and detaches its target before this listener runs.
+    document.addEventListener("keydown", (e) => {
+      if (open && e.key === "Escape") setOpen(false);
+    });
+    document.addEventListener("click", (e) => {
+      if (open && !e.composedPath().includes(mount)) { open = false; render(); }
     });
   }
   const $v = (id) => mount.querySelector(`#${id}`)?.value || "";
