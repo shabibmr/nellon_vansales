@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="mis-api-base" content="api/">
-<meta name="description" content="Nellon MIS reports: Executive Summary, P&L, Balance Sheet, Trial Balance, Margin and Purchases by month.">
+<meta name="description" content="Nellon MIS reports: Executive Summary, P&L, Balance Sheet, Trial Balance, Sales & Margin and Purchase by month.">
 <title>Reports · Nellon MIS</title>
 <link rel="stylesheet" href="assets/app.css">
 </head>
-<body>
+<body data-table="dock">
 <a class="skip-link" href="#main">Skip to report</a>
 
 <div class="app fill">
@@ -36,10 +36,16 @@
       <section class="surface" aria-labelledby="reportTitle">
         <div class="surface-head">
           <h2 class="rpt-name" id="reportTitle"></h2>
-          <div class="rpt-period">
-            <span class="rpt-dates num" id="period"></span>
-            <span class="rpt-ccy" id="ccy" hidden></span>
-            <span class="rpt-live" id="live" role="status" hidden></span>
+          <div class="head-tools">
+            <div class="seg view-switch" id="viewSwitch" role="group" aria-label="Table style">
+              <button type="button" data-mode="dock" aria-pressed="true" title="Pin the group you are scrolling through">Dock</button>
+              <button type="button" data-mode="signal" aria-pressed="false" title="Draw each figure as a share of its group">Signal</button>
+            </div>
+            <div class="rpt-period">
+              <span class="rpt-dates num" id="period"></span>
+              <span class="rpt-ccy" id="ccy" hidden></span>
+              <span class="rpt-live" id="live" role="status" hidden></span>
+            </div>
           </div>
         </div>
         <div class="scroll" id="out" aria-live="polite"></div>

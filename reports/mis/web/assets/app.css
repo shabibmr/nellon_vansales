@@ -342,6 +342,15 @@ code {
   display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap;
   padding: 16px 20px; border-bottom: 1px solid var(--md-outline-variant);
 }
+.surface-head .head-tools {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px 16px;
+}
+.view-switch button {
+  transition: background-color 420ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 420ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 420ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.view-switch button:active { transform: scale(0.98); }
 .surface-head .rpt-name { font-size: 20px; line-height: 28px; font-weight: 600; min-width: 0; }
 .surface-head .rpt-period { display: flex; align-items: center; gap: 10px; color: var(--md-on-surface-variant); }
 .surface-head .rpt-dates { font-size: 15px; line-height: 24px; font-weight: 500; }
@@ -367,7 +376,14 @@ code {
 @media (min-width: 721px) {
   .app.fill .page { height: 100dvh; }
   .app.fill .content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .app.fill .surface { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .app.fill .surface {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  border: 0; border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 1px rgba(33, 38, 60, 0.06),
+    0 16px 36px -28px rgba(33, 38, 60, 0.32);
+}
   .app.fill .scroll { flex: 1; min-height: 0; max-height: none; }
 }
 
@@ -376,6 +392,8 @@ code {
 .scroll { overflow: auto; max-height: calc(100dvh - 248px); }
 
 table.data {
+  position: relative;
+  z-index: 1;
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -389,7 +407,7 @@ table.data {
 .data thead th {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 4;
   height: 48px;
   background: var(--md-surface-container);
   color: var(--md-on-surface-variant);
@@ -398,7 +416,42 @@ table.data {
   font-weight: 500;
   letter-spacing: 0.04em;
   text-align: right;
+  box-shadow: 0 10px 16px -14px rgba(33, 38, 60, 0.28);
 }
+.data thead tr.cols + tr.cols th { top: 48px; }
+/* The rail sits under the column header. It is not a table row: a cell would clip it. */
+.dock-slot {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  height: 0;
+  width: var(--port, 100%);
+  pointer-events: none;
+}
+.dock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  height: 32px;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--md-primary-container) 92%, white);
+  color: var(--md-on-primary-container);
+  box-shadow: 0 10px 18px -16px rgba(33, 38, 60, 0.4);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(var(--head, 48px) - 6px));
+  transition: opacity 420ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 420ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.dock-slot.on .dock-bar { opacity: 1; transform: translateY(var(--head, 48px)); }
+.dock-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.dock-amt { flex: none; font-variant-numeric: tabular-nums; }
 .data th:first-child, .data td:first-child {
   position: sticky;
   left: 0;
@@ -409,13 +462,13 @@ table.data {
   text-align: left;
   background: var(--md-surface-container-lowest);
 }
-.data thead th:first-child { z-index: 3; background: var(--md-surface-container); }
+.data thead th:first-child { z-index: 5; background: var(--md-surface-container); }
 .data td.n { text-align: right; }
 .data td.neg, .data tbody tr td.neg { color: var(--md-error); }  /* beats the sub/pct row colours */
 .data .tot { border-left: 1px solid var(--md-outline-variant); font-weight: 500; }
 
 .data tbody tr { transition: background-color 120ms var(--ease); }
-.data tbody tr:hover td { background: var(--md-surface-container-low); }
+.data tbody tr:hover td { background-color: var(--md-surface-container-low); }
 
 .data tr.title td {
   padding-top: 20px;
@@ -432,6 +485,16 @@ table.data {
 .data tr.sub td { color: var(--md-on-surface-variant); }
 .data tr.sub td:first-child { padding-left: 36px; }
 .data tr.total td { background: var(--md-surface-container); font-weight: 600; border-bottom-color: var(--md-outline); }
+/* Only the statement total pins. Section totals stay in the list. */
+.data tr.grand td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--md-surface-container-lowest);
+  border-top: 1px solid var(--md-outline);
+  box-shadow: 0 -10px 16px -14px rgba(33, 38, 60, 0.28);
+}
+.data tr.grand td:first-child { z-index: 3; background: var(--md-surface-container-lowest); }
 .data tr.pct td { font-style: italic; color: var(--md-on-surface-variant); }
 .data tr.check td { font-size: 12px; }
 .data tr.check.ok td { background: var(--md-success-container); color: var(--md-on-success-container); }
@@ -880,7 +943,7 @@ table.data.tree tr td.tl { padding-left: calc(8px + var(--depth, 0) * 22px); }
 .data .share i {
   position: relative;
   width: 44px;
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
   background: var(--md-surface-container-highest);
   overflow: hidden;
@@ -909,8 +972,8 @@ table.data.tree tr.d3 td, table.data.tree tr.d4 td { background: #f2f4f7; }
 table.data.tree tr td.neg { color: var(--md-error); }
 table.data.tree tr.open > td:first-child { box-shadow: inset 3px 0 0 var(--md-primary); }
 table.data.tree tr.open .lbl { color: var(--md-primary); }
-table.data.tree tbody tr:hover td { background: color-mix(in srgb, var(--md-primary) 6%, var(--md-surface-container-lowest)); }
-table.data.tree tr.total:hover td { background: var(--md-surface-container-high); }
+table.data.tree tbody tr:hover td { background-color: color-mix(in srgb, var(--md-primary) 6%, var(--md-surface-container-lowest)); }
+table.data.tree tr.total:hover td { background-color: var(--md-surface-container-high); }
 table.data.tree tr.dim td { opacity: 0.45; }
 .data mark { background: var(--md-warning-container); color: inherit; border-radius: 2px; padding: 0 1px; }
 
@@ -918,9 +981,60 @@ table.data.tree tr.dim td { opacity: 0.45; }
 @keyframes tree-in { from { opacity: 0; transform: translateY(-6px); } }
 table.data.tree tr.reveal td { animation: tree-in 220ms var(--ease) both; animation-delay: calc(min(var(--i), 12) * 16ms); }
 
+/* Signal: the number stays primary. The bar is its share of the group, or a percent. */
+body[data-table="signal"] .data .share { display: none; }
+body[data-table="signal"] td.sig {
+  background-image: linear-gradient(90deg,
+    color-mix(in srgb, var(--md-primary) 16%, transparent) calc(var(--bar) * 100%),
+    transparent calc(var(--bar) * 100%));
+  background-repeat: no-repeat;
+}
+body[data-table="signal"] td.sig.neg {
+  background-image: linear-gradient(270deg,
+    color-mix(in srgb, var(--md-error) 20%, transparent) calc(var(--bar) * 100%),
+    transparent calc(var(--bar) * 100%));
+}
+body[data-table="signal"] td.sig.mid {
+  position: relative;
+  background-image: none;
+}
+body[data-table="signal"] td.sig.mid::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 1px;
+  background: var(--md-outline-variant);
+  pointer-events: none;
+}
+body[data-table="signal"] td.sig.mid::after {
+  content: "";
+  position: absolute;
+  top: 11px;
+  bottom: 11px;
+  left: 50%;
+  width: calc(var(--bar) * 50%);
+  transform: scaleX(var(--dir, 1));
+  transform-origin: left center;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--md-primary) 32%, transparent);
+  pointer-events: none;
+}
+body[data-table="signal"] td.sig.mid.neg::after {
+  background: color-mix(in srgb, var(--md-error) 34%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-bar, .view-switch button { transition: none; }
+}
+
 @media print {
-  .data .guide, .twisty, .data .share i { display: none; }
+  .data .guide, .twisty, .data .share i, .view-switch, .dock-slot { display: none; }
   table.data.tree tr td.tl { padding-left: calc(6px + var(--depth, 0) * 14px) !important; }
+  .data tr.grand td { position: static; box-shadow: none; }
+  body[data-table="signal"] td.sig { background-image: none; }
+  body[data-table="signal"] td.sig.mid::before,
+  body[data-table="signal"] td.sig.mid::after { display: none; }
 }
 
 /* Shared date filter (assets/date-filter.js): one compact row, 30px controls */
