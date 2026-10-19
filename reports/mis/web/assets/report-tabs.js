@@ -7,10 +7,8 @@
     { id: "pl", label: "Profit & Loss", kind: "financials", statement: "PL", tree: 2 },
     { id: "bs", label: "Balance Sheet", kind: "financials", statement: "BS" },
     { id: "tb", label: "Trial Balance", kind: "financials" },
-    { id: "margin", label: "Margin", kind: "margin", api: "api/margin", pivot: true },
-    { id: "mline", label: "Margin by Line", kind: "margin", detail: "line" },
-    { id: "minv", label: "Margin by Invoice", kind: "margin", detail: "invoice" },
-    { id: "purchases", label: "Purchases", kind: "purchases", api: "api/purchases", pivot: true },
+    { id: "margin", label: "Sales & Margin", kind: "margin", api: "api/margin", pivot: true },
+    { id: "purchases", label: "Purchase", kind: "purchases", api: "api/purchases", pivot: true },
   ];
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
