@@ -12,3 +12,4 @@ output/*
 zoho_api_tools/out/
 backups/
 output/cache/contacts/
+node_modules/
