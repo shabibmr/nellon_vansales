@@ -13,7 +13,7 @@
 
 <div class="app fill">
   <div class="page">
-    <!-- Two-row header: title, search, period and actions; then tabs with the tab's own controls. -->
+    <!-- Two-row header: title, search, period and More; then tabs with the tab's own controls. -->
     <header class="mis-head">
       <div class="mh-r1">
         <h1 class="mh-title">MIS-Reports</h1>
@@ -39,6 +39,12 @@
               <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"/></svg>Export to Excel
             </a>
             <button type="button" class="mh-item" role="menuitem" id="printBtn">Print</button>
+            <div class="mh-sep" role="separator"></div>
+            <div class="mh-label" id="viewModeLabel">Table style</div>
+            <button type="button" class="mh-item" role="menuitemradio" id="modeDock" data-mode="dock"
+                    aria-checked="true" title="Pin the group you are scrolling through">Dock</button>
+            <button type="button" class="mh-item" role="menuitemradio" id="modeSignal" data-mode="signal"
+                    aria-checked="false" title="Draw each figure as a share of its group">Signal</button>
           </div>
         </div>
       </div>
@@ -47,10 +53,6 @@
         <nav class="tabs mh-tabs" id="tabs" aria-label="Reports"></nav>
         <div class="mh-ctx">
           <div class="mh-tools" id="toolbar"></div>
-          <div class="seg view-switch" id="viewSwitch" role="group" aria-label="Table style">
-            <button type="button" data-mode="dock" aria-pressed="true" title="Pin the group you are scrolling through">Dock</button>
-            <button type="button" data-mode="signal" aria-pressed="false" title="Draw each figure as a share of its group">Signal</button>
-          </div>
           <span class="rpt-ccy" id="ccy" hidden></span>
           <span class="rpt-live" id="live" role="status" hidden></span>
         </div>

@@ -92,10 +92,10 @@
 
   // `scale` is the group total for this column. Signal draws |value| / scale behind the figure.
   // `mid` grows from the center (trial balance). `plain` keeps a total row as figures only.
-  const numCell = (v, { pct = false, total = false, scale = 0, mid = false, plain = false } = {}) => {
+  const numCell = (v, { pct = false, total = false, scale = 0, mid = false, plain = false, edge = false } = {}) => {
     const n = Number(v);
     const neg = n < -0.004;
-    let cls = `n${neg ? " neg" : ""}${total ? " tot" : ""}`;
+    let cls = `n${neg ? " neg" : ""}${total ? " tot" : ""}${edge ? " pe" : ""}`;
     let style = "";
     if (tableMode() === "signal" && !plain && Number.isFinite(n)) {
       const mag = pct ? Math.min(1, Math.abs(n))
@@ -110,7 +110,7 @@
 
   const headRow = (first, cols, totalCol) =>
     `<thead><tr class="cols"><th scope="col">${esc(first)}</th>${cols.map((c) =>
-      `<th scope="col" class="${c === totalCol ? "tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr></thead>`;
+      `<th scope="col" class="pe${c === totalCol ? " tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr></thead>`;
 
   // The figure the dock repeats: Total when the statement has one, otherwise the last column.
   const dockAmount = (values, cols) => {
@@ -298,6 +298,7 @@
           total: c === "Total",
           scale: lined ? (scales[i]?.[c] || 0) : 0,
           plain: ln.kind === "check" || ln.kind === "total",
+          edge: true,
         })).join("") + `</tr>`;
     }).join("");
     view(`<table class="data">${headRow("Particulars", cols, "Total")}<tbody>${body}</tbody></table>`);
@@ -305,10 +306,11 @@
 
   // Margin text cells: max 50 chars, longer values cut with "…" (full text in the tooltip).
   const TXT_MAX = 50;
-  const txt = (v, extra = "") => {
+  const txt = (v, extra = "", cls = "") => {
     const t = String(v ?? "");
     const cut = t.length > TXT_MAX ? `${t.slice(0, TXT_MAX - 1)}…` : t;
-    return `<td class="txt"${t.length > TXT_MAX ? ` title="${esc(t)}"` : ""}>${esc(cut)}${extra}</td>`;
+    const tip = t.length > 18 ? ` title="${esc(t)}"` : "";
+    return `<td class="txt${cls ? ` ${cls}` : ""}"${tip}><div class="clipwrap"><span class="clip">${esc(cut)}</span>${extra}</div></td>`;
   };
 
   // ---------------------------------------------------------------- expandable statements
@@ -466,6 +468,7 @@
           total: c === "Total",
           plain: grand || n.kind === "total",
           scale: n.kind === "pct" || n.kind === "total" ? 0 : scaleOf(n, c),
+          edge: true,
         })).join("") + `</tr>`;
     };
 
@@ -512,9 +515,9 @@
     const body = data.rows.map((r) =>
       `<tr>${t.kind === "margin" ? txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")
         : `<td>${esc(r.label)}${r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : ""}</td>`}` +
-      cols.map((c) => numCell(r.values[c] ?? 0, { pct, total: c === "Total", scale: scale[c] })).join("") + `</tr>`).join("");
+      cols.map((c) => numCell(r.values[c] ?? 0, { pct, total: c === "Total", scale: scale[c], edge: true })).join("") + `</tr>`).join("");
     const foot = `<tr class="total grand"><td>${q ? "Total of all rows" : "Total"}</td>` +
-      cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total", plain: true })).join("") + `</tr>`;
+      cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total", plain: true, edge: true })).join("") + `</tr>`;
     const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
     view(`<table class="data">${headRow(dimLabel, cols, "Total")}<tbody>${body}${foot}</tbody></table>`);
   }
@@ -531,12 +534,13 @@
         scale[m][c] = s;
       }
     }
-    const cells = (src, c, plain = false) => M.map(([m]) => numCell(src[m][c] ?? 0, {
+    const cells = (src, c, plain = false) => M.map(([m], i) => numCell(src[m][c] ?? 0, {
       pct: m === "gm_pct", total: c === "Total", scale: scale[m][c], plain,
+      edge: i === M.length - 1,
     })).join("");
     const head = `<thead><tr class="cols"><th scope="col" rowspan="2">${esc(dimLabel)}</th>${cols.map((c) =>
-      `<th scope="colgroup" colspan="${M.length}" class="grp${c === "Total" ? " tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr>` +
-      `<tr class="cols">${cols.map((c) => M.map(([, l]) => `<th scope="col" class="n${c === "Total" ? " tot" : ""}">${l}</th>`).join("")).join("")}</tr></thead>`;
+      `<th scope="colgroup" colspan="${M.length}" class="grp pe${c === "Total" ? " tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr>` +
+      `<tr class="cols">${cols.map((c) => M.map(([, l], i) => `<th scope="col" class="n${i === M.length - 1 ? " pe" : ""}${c === "Total" ? " tot" : ""}">${l}</th>`).join("")).join("")}</tr></thead>`;
     const body = data.rows.map((r) =>
       `<tr>${txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")}` +
       cols.map((c) => cells(r.m, c)).join("") + `</tr>`).join("");
@@ -556,37 +560,46 @@
       return;
     }
     const byLine = t.detail === "line";
-    const th = (l, n, c) => `<th scope="col"${n ? ' class="n"' : c ? ` class="${c}"` : ""}>${l}</th>`;
+    const th = (l, kind) => `<th scope="col" class="${kind}">${l}</th>`;
     const head = byLine
-      ? [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Location"), th("Item"), th("Unit"), th("Qty", 1),
-        th("Rate", 1), th("Net sales", 1), th("Purchase price", 1), th("COGS", 1), th("Margin", 1), th("GM %", 1)]
-      : [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Salesperson"), th("Lines", 1),
-        th("Net sales", 1), th("COGS", 1), th("Margin", 1), th("GM %", 1)];
-    const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
-    const tn = sum("net_sales"), tc = sum("cost"), tm = sum("gross_margin");
+      ? [th("Date", "l"), th("Invoice", "l"), th("Customer", "l"), th("Item", "l"),
+        th("Qty", "n"), th("Rate", "n"), th("Net sales", "n"), th("COGS", "n"), th("Margin", "n"), th("GM %", "n")]
+      : [th("Date", "l"), th("Invoice", "l"), th("Customer", "l"),
+        th("Net sales", "n"), th("COGS", "n"), th("Margin", "n"), th("GM %", "n")];
+    const sum = (k) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+    const tn = sum("net_sales"), tc = sum("cost"), tm = sum("gross_margin"), tq = sum("quantity");
     const fields = byLine
-      ? ["quantity", "rate", "net_sales", "purchase_price", "cost", "gross_margin"]
+      ? ["quantity", "rate", "net_sales", "cost", "gross_margin"]
       : ["net_sales", "cost", "gross_margin"];
     const scale = Object.fromEntries(fields.map((k) =>
       [k, rows.reduce((m, r) => Math.max(m, Math.abs(Number(r[k]) || 0)), 0)]));
     const ncell = (v, k, opt = {}) => numCell(v, { ...opt, scale: scale[k] || 0 });
+    const money = (v) => numCell(v, { plain: true });
+    const qtyCell = (v, unit, opt = {}) => {
+      const u = String(unit ?? "").trim();
+      const html = ncell(v, "quantity", opt);
+      return u ? html.replace(/<\/td>$/, ` <span class="uom">${esc(u)}</span></td>`) : html;
+    };
     const flag = (r) => (byLine ? r.flag : r.flagged)
       ? `<span class="tag review">${byLine ? esc(r.flag) : `${r.flagged} flagged`}</span>` : "";
     const body = rows.map((r) => byLine
-      ? `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number)}${txt(r.customer_name)}` +
-        `${txt(r.location_name)}${txt(r.item_name, flag(r))}${txt(r.unit)}${ncell(r.quantity, "quantity")}${ncell(r.rate, "rate")}` +
-        `${ncell(r.net_sales, "net_sales")}${ncell(r.purchase_price, "purchase_price")}${ncell(r.cost, "cost")}` +
+      ? `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, "", "inv")}${txt(r.customer_name, "", "name")}` +
+        `${txt(r.item_name, flag(r), "item")}${qtyCell(r.quantity, r.unit)}${ncell(r.rate, "rate")}` +
+        `${ncell(r.net_sales, "net_sales")}${ncell(r.cost, "cost")}` +
         `${ncell(r.gross_margin, "gross_margin")}${numCell(r.gm_pct, { pct: true })}</tr>`
-      : `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, flag(r))}${txt(r.customer_name)}` +
-        `${txt(r.salesperson_name)}<td class="n">${r.line_count}</td>${ncell(r.net_sales, "net_sales")}${ncell(r.cost, "cost")}` +
+      : `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, flag(r), "inv")}${txt(r.customer_name, "", "name")}` +
+        `${ncell(r.net_sales, "net_sales")}${ncell(r.cost, "cost")}` +
         `${ncell(r.gross_margin, "gross_margin")}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
-    // The label stays in its own cell: the first cell pins left, so spanning it would cover the totals.
-    const span = byLine ? 7 : 3;
-    const foot = `<tr class="total grand"><td>Total${q ? " of filtered rows" : ""}</td><td colspan="${span}"></td>` +
-      (byLine ? "" : `<td class="n">${rows.reduce((s, r) => s + r.line_count, 0)}</td>`) +
-      `${numCell(tn, { plain: true })}${byLine ? "<td></td>" : ""}${numCell(tc, { plain: true })}` +
-      `${numCell(tm, { plain: true })}${numCell(tn ? tm / tn : 0, { pct: true, plain: true })}</tr>`;
-    view(`<table class="data"><thead><tr class="cols">${head.join("")}</tr></thead><tbody>${body}${foot}</tbody></table>`);
+    const label = `Total${q ? " of filtered rows" : ""}`;
+    const gm = tn ? tm / tn : 0;
+    // Rate is a unit price: the total row shows the quantity-weighted average.
+    const foot = byLine
+      ? `<tr class="total grand"><td>${label}</td><td></td><td></td><td></td>` +
+        `${money(tq)}${money(tq ? tn / tq : "")}${money(tn)}${money(tc)}${money(tm)}` +
+        `${numCell(gm, { pct: true, plain: true })}</tr>`
+      : `<tr class="total grand"><td>${label}</td><td></td><td></td>` +
+        `${money(tn)}${money(tc)}${money(tm)}${numCell(gm, { pct: true, plain: true })}</tr>`;
+    view(`<table class="data detail"><thead><tr class="cols">${head.join("")}</tr></thead><tbody>${body}${foot}</tbody></table>`);
   }
 
   function renderTb(data) {
@@ -613,7 +626,7 @@
     const scale = Object.fromEntries(keys.map((k) =>
       [k, rows.reduce((m, r) => Math.max(m, Math.abs(Number(r[k]) || 0)), 0)]));
     const cells = (src, { plain = false } = {}) => keys.map((k) =>
-      numCell(src[k], { total: k === "closing", mid: !plain, scale: scale[k], plain })).join("");
+      numCell(src[k], { total: k === "closing", mid: !plain, scale: scale[k], plain, edge: true })).join("");
 
     let body = "";
     for (const [k, list] of groups) {
@@ -630,7 +643,7 @@
     body += `<tr class="total grand" data-depth="0"><td>${q ? "Total of filtered accounts" : "Total"}</td>${cells(totals, { plain: true })}</tr>`;
 
     view(`<table class="data"><thead><tr class="cols"><th scope="col">Account</th>${labels.map((l, i) =>
-      `<th scope="col" class="${i === labels.length - 1 ? "tot" : ""}">${esc(colLabel(l))}</th>`).join("")}</tr>` +
+      `<th scope="col" class="pe${i === labels.length - 1 ? " tot" : ""}">${esc(colLabel(l))}</th>`).join("")}</tr>` +
       `</thead><tbody>${body}</tbody></table>`);
   }
 
@@ -701,7 +714,7 @@
     }
   }
 
-  // When the shown figures were fetched from Zoho, and a Refresh button.
+  // Refresh control for live financials; stale banner only when Zoho is down.
   function showLive(data) {
     const el = $("live");
     const at = new Date(data.fetched_at);
@@ -709,9 +722,8 @@
     const when = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
       (sameDay ? "" : ` ${at.toLocaleDateString([], { day: "numeric", month: "short" })}`);
     el.className = `rpt-live${data.stale ? " stale" : ""}`;
-    el.innerHTML = (data.stale ? `${icon("error")}<span>Zoho unavailable — showing data from ${esc(when)}</span>`
-      : `<span title="${data.zoho_calls ? `${data.zoho_calls} Zoho calls` : "From the 15-minute cache"}">Zoho · ${esc(when)}</span>`) +
-      `<button type="button" class="btn text" id="liveRefresh">${icon("refresh")}Refresh</button>`;
+    el.innerHTML = (data.stale ? `${icon("error")}<span>Zoho unavailable — showing data from ${esc(when)}</span>` : "") +
+      `<button type="button" class="btn text" id="liveRefresh" title="${data.zoho_calls ? `${data.zoho_calls} Zoho calls` : "From the 15-minute cache"}">${icon("refresh")}Refresh</button>`;
     el.hidden = false;
   }
 
@@ -731,7 +743,7 @@
     }
     if (!L.cols.length) return stateView(...NO_DATA);
     const seq = ++state.seq;
-    skeleton("Fetching from Zoho… a long range can take a minute the first time.");
+    skeleton("Lining up the books. A long range takes a minute the first time.");
     const cols = `cols=${DF.colsParam(L.cols)}${refresh ? "&refresh=1" : ""}`;
     const data = await api(t.statement ? `api/statement?name=${encodeURIComponent(t.statement)}&${cols}` : `api/tb?${cols}`);
     if (seq !== state.seq || tab() !== t) return;  // the user moved on while Zoho answered
@@ -900,12 +912,17 @@
     paint();
   });
 
-  // More actions menu (Export to Excel, Print). Escape or a click outside closes it.
+  // More actions menu (Export, Print, Dock / Signal). Escape or a click outside closes it.
   const moreMenu = $("moreMenu"), moreBtn = $("moreBtn");
   function setMenu(on) {
     moreMenu.hidden = !on;
     moreBtn.setAttribute("aria-expanded", String(on));
-    if (on) moreMenu.querySelector('[role="menuitem"]:not([aria-disabled="true"])')?.focus();
+    if (on) moreMenu.querySelector('[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemradio"]')?.focus();
+  }
+  function syncModeItems() {
+    for (const b of moreMenu.querySelectorAll("[data-mode]")) {
+      b.setAttribute("aria-checked", String(b.dataset.mode === state.tableMode));
+    }
   }
   moreBtn.addEventListener("click", () => setMenu(moreMenu.hidden));
   document.addEventListener("click", (e) => {
@@ -944,18 +961,16 @@
   try { state.tableMode = localStorage.getItem("mis.tableMode") === "signal" ? "signal" : "dock"; }
   catch { state.tableMode = "dock"; }
   document.body.dataset.table = state.tableMode;
-  for (const b of $("viewSwitch").querySelectorAll("button")) {
-    b.setAttribute("aria-pressed", String(b.dataset.mode === state.tableMode));
-  }
-  $("viewSwitch").addEventListener("click", (e) => {
+  syncModeItems();
+  moreMenu.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-mode]");
-    if (!b || b.dataset.mode === state.tableMode) return;
+    if (!b) return;
+    setMenu(false);
+    if (b.dataset.mode === state.tableMode) return;
     state.tableMode = b.dataset.mode;
     document.body.dataset.table = state.tableMode;
     try { localStorage.setItem("mis.tableMode", state.tableMode); } catch { /* storage blocked */ }
-    for (const btn of $("viewSwitch").querySelectorAll("button")) {
-      btn.setAttribute("aria-pressed", String(btn.dataset.mode === state.tableMode));
-    }
+    syncModeItems();
     paint();
   });
   window.addEventListener("resize", () => { if ($("out").querySelector("table.data")) bindSheet(); });
