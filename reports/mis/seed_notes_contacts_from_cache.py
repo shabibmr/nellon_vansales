@@ -10,7 +10,9 @@ Usage:
 
 Money and COGS follow DB-Schema-Proposed.md. net_sales and cogs are stored positive; the
 reports subtract credit notes and add debit notes. A credit-only line has cogs 0. A line with
-no purchase_price uses the item master rate and is flagged. Draft and void notes are stored.
+no purchase_price uses the item master rate and is flagged. Header cogs here is the line-rule sum; reconciling
+credit-note cogs to the ledger (inventory_valuation_for_credit_notes) is a separate step, not yet written.
+Draft and void notes are stored.
 Lines of a replaced note that are gone from the payload are deleted on apply. Rows are
 written only for columns the target table really has; any gap is printed.
 """
