@@ -101,7 +101,7 @@ Status: `todo` / `doing` / `done` / `parked`. Hours are rough estimates for one 
 | P3 UI and Excel | completed | 2026-10-19 |
 | P4 Remove the run code | completed | 2026-10-19 |
 | P5 Tests and docs | completed | 2026-10-19 |
-| P6 Verify on dev | todo | |
+| P6 Verify on dev | doing (DB-backed checks done; live Zoho + browser pending) | 2026-10-19 |
 | T9 Later | parked | |
 
 ### P0 — Point dev at `zoho-koyson` (critical path, ~1 h) — completed
@@ -165,8 +165,15 @@ Status: `todo` / `doing` / `done` / `parked`. Hours are rough estimates for one 
 
 | ID | Task | Depends | Status |
 |---|---|---|---|
-| T6.1 | With the seeder's first load: Margin (all 5 dims, detail both views), Purchases, coverage hint, live TB / P&L / BS / Executive Summary, category edit + delete, Excel export — all on dev in a browser. | P0–P5, seeded data | todo |
-| T6.2 | Spot check: Margin `net_sales` for one month = `SUM(net_sales)` of non-draft/void `sales_invoices` for that month. | T6.1 | todo |
+| T6.1 | With the seeder's first load: Margin (all 5 dims, detail both views), Purchases, coverage hint, live TB / P&L / BS / Executive Summary, category edit + delete, Excel export — all on dev in a browser. | P0–P5, seeded data | doing |
+| T6.2 | Spot check: Margin `net_sales` for one month = `SUM(net_sales)` of non-draft/void `sales_invoices` for that month. | T6.1 | done |
+
+T6.1 results (2026-09 window, dev server on `zoho-koyson`, API level, no browser, no Zoho calls):
+
+- Done: Margin all 5 dims and both detail views, Purchases (vendor / item / kind, `documents`), `/api/org`, `/api/config`, category override save + delete (round-trip restored `accounts` and the CSV), unit tests (44 OK).
+- T6.2: Margin Sep net_sales 2,194,113.03 = header sum for non-draft/void invoices; purchases amount 2,572,546.29 = `purchase_docs`.
+- Open, seeder side: `sync_coverage` is empty, so the coverage hint has no ranges; `locations` / `vans` are empty, so the Location dim shows `(none)` and every line is `(warehouse)`; all lines carry the prorate flag (3,988 flagged of 3,988).
+- Open, needs approval: live TB / P&L / BS / Executive Summary and Excel export call Zoho (`live_financials` is off in this env); browser pass of the UI.
 
 ### Later / parked
 

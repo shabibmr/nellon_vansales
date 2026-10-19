@@ -30,6 +30,8 @@ from pathlib import Path
 import pymysql
 from dotenv import load_dotenv
 
+from seed_common import record_coverage
+
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 load_dotenv(BASE_DIR / ".env.mis")
@@ -271,6 +273,9 @@ def apply(tgt: pymysql.Connection, inv_rows, line_rows) -> None:
         for i in range(0, len(line_rows), 1000):
             cur.executemany(LINE_SQL, line_rows[i : i + 1000])
         cur.execute("SET FOREIGN_KEY_CHECKS = 1")
+        dates = [r["date"] for r in inv_rows]
+        lo, hi = record_coverage(cur, "sales", min(dates), max(dates), "seed_sales")
+        print(f"sync_coverage sales: {lo}..{hi}")
     tgt.commit()
 
 

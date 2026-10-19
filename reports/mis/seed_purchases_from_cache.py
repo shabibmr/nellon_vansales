@@ -25,7 +25,7 @@ from decimal import Decimal
 
 from seed_common import (
     BASE_DIR, connect, cents, d, doc_money, load_item_rates, load_item_units, parse_date,
-    parse_dt, read_cache, resolve_conversion, s, table_exists,
+    parse_dt, read_cache, record_coverage, resolve_conversion, s, table_exists,
 )
 
 CACHE = BASE_DIR / "output" / "cache"
@@ -144,7 +144,7 @@ def upsert_sql(table: str, cols: list[str], pk: set[str]) -> str:
     )
 
 
-def apply(tgt, docs, lines) -> int:
+def apply(tgt, docs, lines, dfrom: date, dto: date) -> int:
     removed = 0
     with tgt.cursor() as cur:
         cur.execute("SET FOREIGN_KEY_CHECKS = 0")
@@ -160,6 +160,8 @@ def apply(tgt, docs, lines) -> int:
                 [kind, doc_id, *ids],
             )
         cur.execute("SET FOREIGN_KEY_CHECKS = 1")
+        lo, hi = record_coverage(cur, "purchases", dfrom, dto, "seed_purchases")
+        print(f"sync_coverage purchases: {lo}..{hi}")
     tgt.commit()
     return removed
 
@@ -207,7 +209,7 @@ def main() -> int:
         if stats["duplicate_line_item_id"]:
             print("Refusing to apply: duplicate line_item_id in the cache.", file=sys.stderr)
             return 1
-        removed = apply(tgt, docs, lines)
+        removed = apply(tgt, docs, lines, dfrom, dto)
         print(f"\nCommitted {len(docs):,} documents, {len(lines):,} lines; removed {removed} stale line(s).")
     except Exception:
         tgt.rollback()

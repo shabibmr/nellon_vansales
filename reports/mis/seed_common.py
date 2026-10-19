@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
@@ -201,3 +201,23 @@ def line_cogs(
 def table_exists(cur, name: str) -> bool:
     cur.execute("SHOW TABLES LIKE %s", (name,))
     return cur.fetchone() is not None
+
+
+def record_coverage(cur, dataset: str, dfrom: date, dto: date, source: str) -> tuple[date, date]:
+    """Record a loaded range in sync_coverage, merging overlapping or adjacent ranges.
+
+    Runs in the caller's transaction. Returns the merged (from, to) now stored.
+    """
+    cur.execute(
+        "SELECT from_date, to_date FROM sync_coverage WHERE dataset = %s "
+        "AND from_date <= %s AND to_date >= %s",
+        (dataset, dto + timedelta(days=1), dfrom - timedelta(days=1)),
+    )
+    for r in cur.fetchall():
+        dfrom, dto = min(dfrom, r["from_date"]), max(dto, r["to_date"])
+        cur.execute("DELETE FROM sync_coverage WHERE dataset = %s AND from_date = %s", (dataset, r["from_date"]))
+    cur.execute(
+        "INSERT INTO sync_coverage (dataset, from_date, to_date, synced_at, source) VALUES (%s, %s, %s, NOW(), %s)",
+        (dataset, dfrom, dto, source),
+    )
+    return dfrom, dto
