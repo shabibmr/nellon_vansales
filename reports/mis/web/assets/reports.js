@@ -580,8 +580,9 @@
       : `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, flag(r))}${txt(r.customer_name)}` +
         `${txt(r.salesperson_name)}<td class="n">${r.line_count}</td>${ncell(r.net_sales, "net_sales")}${ncell(r.cost, "cost")}` +
         `${ncell(r.gross_margin, "gross_margin")}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
-    const span = byLine ? 8 : 4;
-    const foot = `<tr class="total grand"><td colspan="${span}">Total${q ? " of filtered rows" : ""}</td>` +
+    // The label stays in its own cell: the first cell pins left, so spanning it would cover the totals.
+    const span = byLine ? 7 : 3;
+    const foot = `<tr class="total grand"><td>Total${q ? " of filtered rows" : ""}</td><td colspan="${span}"></td>` +
       (byLine ? "" : `<td class="n">${rows.reduce((s, r) => s + r.line_count, 0)}</td>`) +
       `${numCell(tn, { plain: true })}${byLine ? "<td></td>" : ""}${numCell(tc, { plain: true })}` +
       `${numCell(tm, { plain: true })}${numCell(tn ? tm / tn : 0, { pct: true, plain: true })}</tr>`;
