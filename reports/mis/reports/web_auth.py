@@ -28,6 +28,10 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env.mis")
 
 LEEWAY = 60  # seconds of clock drift tolerated on exp
 
+# Only Zoho may frame the pages (same domains as ZOHO_ORIGIN in web/assets/webtab-auth.js).
+FRAME_ANCESTORS = "frame-ancestors " + " ".join(
+    f"https://*.zoho.{tld}" for tld in ("com", "ae", "eu", "in", "sa", "jp", "ca", "uk", "com.au", "com.cn"))
+
 
 def secret() -> bytes | None:
     s = os.getenv("MIS_JWT_SECRET", "").strip()
@@ -41,6 +45,19 @@ def enabled() -> bool:
 def explicitly_disabled() -> bool:
     """Opt-out for local development; only honoured when no secret is configured."""
     return secret() is None and os.getenv("MIS_AUTH_DISABLED", "").strip() == "1"
+
+
+def framed(fetch_dest: str | None, asset: bool) -> bool:
+    """Block direct access to pages/assets: browsers set Sec-Fetch-Dest and page scripts cannot change it.
+
+    A page must load as an iframe (the Zoho web tab); an asset as a subresource of one (script, style,
+    image...), never as a top-level document. No header at all means a non-browser client: refused too.
+    Not a substitute for the JWT (curl can send any header): it only keeps the shell out of plain tabs.
+    """
+    dest = (fetch_dest or "").strip().lower()
+    if asset:
+        return dest not in ("", "document", "iframe", "frame")
+    return dest == "iframe"
 
 
 def _b64d(part: str) -> bytes:
