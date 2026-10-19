@@ -40,9 +40,12 @@
     selected: { financials: null },
     coverage: { sales: null, purchases: null },  // /api/coverage per dataset
     pivot: { margin: { dim: "item", measure: "net_sales" }, purchases: { dim: "vendor", measure: "amount" } },
+    query: "",           // header search; mirrored into the per-view filters below
     tbFilter: "",
     detailFilter: "",
     detailData: null,
+    stmtData: null,      // last plain statement / pivot drawn, so a search can redraw without a fetch
+    pivotData: null,
     org: null,
     live: false,         // server serves live financials
     fiscalStart: null,   // "2000-MM" from /api/config: quarters / years follow it
@@ -143,35 +146,38 @@
     }
   }
 
+  // The header search box: what it searches on this tab.
+  const searchHint = (t) => (t.id === "tb" ? "Search accounts, codes or categories"
+    : t.detail ? "Search invoices, customers or items"
+      : t.pivot ? "Search rows" : "Search lines");
+
+  // Row 2 of the header holds the tab's own controls (pivot rows / measure); search lives in row 1.
   function renderTools() {
     const t = tab();
+    $("q").placeholder = searchHint(t);
     let html = "";
-    if (t.detail) {
-      html = `<label class="field grow"><span>Filter</span>
-          <span class="search">${icon("search")}
-            <input class="input" id="dtq" type="search" autocomplete="off"
-                   placeholder="Invoice, customer or item" value="${esc(state.detailFilter)}"></span></label>`;
-    }
-    if (t.id === "tb") {
-      html = `<label class="field grow"><span>Filter</span>
-                <span class="search">${icon("search")}
-                  <input class="input" id="tbq" type="search" autocomplete="off"
-                         placeholder="Account, code or category" value="${esc(state.tbFilter)}"></span></label>`;
-    }
     if (t.pivot) {
       const cfg = PIVOTS[t.id], cur = state.pivot[t.id];
       const opts = (list, sel) => list.map(([v, l]) =>
         `<option value="${v}"${v === sel ? " selected" : ""}>${esc(l)}</option>`).join("");
-      html = `<label class="field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
-        ${t.id === "margin" ? "" : `<label class="field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`}`;
+      html = `<label class="mh-field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
+        ${t.id === "margin" ? "" : `<label class="mh-field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`}`;
     }
     $("toolbar").innerHTML = html;
     if ($("pvDim")) {
       $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
       if ($("pvMeasure")) $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
     }
-    if ($("dtq")) $("dtq").oninput = (e) => { state.detailFilter = e.target.value; renderDetail(state.detailData, t); };
-    if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
+  }
+
+  // Redraw the current view from the data already loaded (after the search changes).
+  function redraw() {
+    const t = tab();
+    if (t.id === "tb") return renderTb(state.tbData);
+    if (t.detail) return renderDetail(state.detailData, t);
+    if (t.pivot) return state.pivotData && renderPivot(state.pivotData, t);
+    if (state.tree.nodes) return renderTree();
+    if (state.stmtData) return renderStatement(state.stmtData);
   }
 
   // "2026-04-01" → "Apr-26"; the period reads "Apr-26 – Sep-26", or one month when both ends fall in it.
@@ -190,19 +196,25 @@
     const ccy = (state.org && state.org.currency_code) || (run && run.currency_code) || "";
     $("ccy").textContent = ccy;
     $("ccy").hidden = !ccy;
-    $("orgName").textContent = (state.org && state.org.name) || "";
     document.title = `${title} · ${(state.org && state.org.name) || "MIS"}`;
   }
 
   // ---------------------------------------------------------------- reports
 
   function renderStatement(data) {
+    state.stmtData = data;
     const cols = data.columns;
     if (!data.lines.length) {
       stateView("database", "Nothing in this statement", `This run has no ${esc(data.statement)} lines.`);
       return;
     }
-    const body = data.lines.map((ln) => {
+    const q = state.query.trim().toLowerCase();
+    const lines = q ? data.lines.filter((ln) => ln.kind !== "title" && String(ln.label).toLowerCase().includes(q)) : data.lines;
+    if (!lines.length) {
+      stateView("search", "Nothing matches", "Try a different line name.");
+      return;
+    }
+    const body = lines.map((ln) => {
       if (ln.kind === "title") {
         return `<tr class="title"><td colspan="${cols.length + 1}">${esc(ln.label)}</td></tr>`;
       }
@@ -336,7 +348,8 @@
     let seq = 0;
     const row = (n, { isOpen = false, kids = false, revealing = false, dim = false } = {}) => {
       const p = n.parent;
-      const cls = [n.kind, `d${n.depth}`, kids && "parent", isOpen && "open", revealing && "reveal", dim && "dim"];
+      const cls = [n.kind, `d${n.depth}`, kids && "parent", isOpen && "open", revealing && "reveal", dim && "dim",
+        n.kind === "check" && (Object.values(n.values).every((v) => Math.abs(v) < 0.015) ? "ok" : "bad")];
       const guides = Array.from({ length: n.depth }, (_, g) => `<span class="guide" style="--g:${g}"></span>`).join("");
       const twisty = kids
         ? `<button type="button" class="twisty" aria-expanded="${isOpen}" ` +
@@ -377,9 +390,17 @@
     view(`<table class="data tree">${headRow("Particulars", cols, "Total")}<tbody>${body}</tbody></table>`);
   }
 
-  function renderPivot(data, t) {
-    if (!data.rows.length) {
+  function renderPivot(all, t) {
+    state.pivotData = all;
+    if (!all.rows.length) {
       stateView("database", "Nothing in this period", "No lines were loaded for these dates.");
+      return;
+    }
+    // The search narrows the rows; the Total row stays the total of every row.
+    const q = state.query.trim().toLowerCase();
+    const data = q ? { ...all, rows: all.rows.filter((r) => String(r.label).toLowerCase().includes(q)) } : all;
+    if (!data.rows.length) {
+      stateView("search", "Nothing matches", "Try a different name.");
       return;
     }
     if (data.multi) return renderMarginPivot(data, t);
@@ -389,10 +410,10 @@
       `<tr>${t.kind === "margin" ? txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")
         : `<td>${esc(r.label)}${r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : ""}</td>`}` +
       cols.map((c) => numCell(r.values[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`).join("");
-    const foot = `<tr class="total"><td>Total</td>` +
+    const foot = `<tr class="total"><td>${q ? "Total of all rows" : "Total"}</td>` +
       cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`;
     const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
-    view(`<table class="data">${headRow(dimLabel, cols, "Total")}<tbody>${body}${foot}</tbody></table>`);
+    view(`<table class="data">${headRow(dimLabel, cols, "Total")}<tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`);
   }
 
   function renderMarginPivot(data, t) {
@@ -405,8 +426,8 @@
     const body = data.rows.map((r) =>
       `<tr>${txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")}` +
       cols.map((c) => cells(r.m, c)).join("") + `</tr>`).join("");
-    const foot = `<tr class="total"><td>Total</td>${cols.map((c) => cells(data.mtotal, c)).join("")}</tr>`;
-    view(`<table class="data">${head}<tbody>${body}${foot}</tbody></table>`);
+    const foot = `<tr class="total"><td>${state.query.trim() ? "Total of all rows" : "Total"}</td>${cols.map((c) => cells(data.mtotal, c)).join("")}</tr>`;
+    view(`<table class="data">${head}<tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`);
   }
 
   function renderDetail(data, t) {
@@ -440,7 +461,7 @@
     const foot = `<tr class="total"><td colspan="${span}">Total${q ? " of filtered rows" : ""}</td>` +
       (byLine ? "" : `<td class="n">${rows.reduce((s, r) => s + r.line_count, 0)}</td>`) +
       `${numCell(tn)}${numCell(tc)}${numCell(tm)}${numCell(tn ? tm / tn : 0, { pct: true })}</tr>`;
-    view(`<table class="data"><thead><tr>${head.join("")}</tr></thead><tbody>${body}${foot}</tbody></table>`);
+    view(`<table class="data"><thead><tr>${head.join("")}</tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`);
   }
 
   function renderTb(data) {
@@ -476,11 +497,11 @@
       }
     }
     const totals = Object.fromEntries(keys.map((key) => [key, sum(rows, key)]));
-    if (q) body += `<tr class="total"><td>Total of filtered accounts</td>${cells(totals)}</tr>`;
+    const foot = `<tr class="total"><td>Total${q ? " of filtered accounts" : ""}</td>${cells(totals)}</tr>`;
 
     view(`<table class="data"><thead><tr><th scope="col">Account</th>${labels.map((l, i) =>
       `<th scope="col" class="${i === labels.length - 1 ? "tot" : ""}">${esc(colLabel(l))}</th>`).join("")}</tr></thead>` +
-      `<tbody>${body}</tbody></table>`);
+      `<tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`);
   }
 
   // ---------------------------------------------------------------- date filter
@@ -647,6 +668,10 @@
 
   async function load() {
     const t = tab();
+    state.tree.nodes = null;  // drop the previous tab's data so a search never redraws it here
+    state.stmtData = null;
+    state.pivotData = null;
+    state.detailData = null;
     renderTabs();
     renderTools();
     renderExport();
@@ -742,10 +767,37 @@
     loadLive(tab(), true).catch((err) => stateView("error", "Could not load this report", esc(err.message), "error"));
   });
 
+  // Header search: one box for every tab; each view filters its own rows.
+  $("q").addEventListener("input", (e) => {
+    const v = e.target.value;
+    state.query = v;
+    state.tbFilter = v;
+    state.detailFilter = v;
+    state.tree.q = v;
+    redraw();
+  });
+
+  // More actions menu (Export to Excel, Print). Escape or a click outside closes it.
+  const moreMenu = $("moreMenu"), moreBtn = $("moreBtn");
+  function setMenu(on) {
+    moreMenu.hidden = !on;
+    moreBtn.setAttribute("aria-expanded", String(on));
+    if (on) moreMenu.querySelector('[role="menuitem"]:not([aria-disabled="true"])')?.focus();
+  }
+  moreBtn.addEventListener("click", () => setMenu(moreMenu.hidden));
+  document.addEventListener("click", (e) => {
+    if (!moreMenu.hidden && !e.composedPath().includes($("moreWrap"))) setMenu(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !moreMenu.hidden) { setMenu(false); moreBtn.focus(); }
+  });
+  $("printBtn").addEventListener("click", () => { setMenu(false); window.print(); });
+
   // The workbook needs the Bearer token, so fetch it and save the blob instead of following a link.
   $("exportBtn").addEventListener("click", async (e) => {
     e.preventDefault();
     const btn = $("exportBtn");
+    if (btn.getAttribute("aria-disabled") !== "true") setMenu(false);
     if (btn.getAttribute("aria-disabled") === "true") return;
     if (state.live) {
       const L = DF.layout({ total: true });

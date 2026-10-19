@@ -13,35 +13,50 @@
 
 <div class="app fill">
   <div class="page">
-    <header class="appbar">
-      <div class="titles">
-        <h1>MIS Reports</h1>
-        <p class="subtitle" id="orgName"></p>
+    <!-- Two-row header: title, search, period and actions; then tabs with the tab's own controls. -->
+    <header class="mis-head">
+      <div class="mh-r1">
+        <h1 class="mh-title">MIS-Reports</h1>
+
+        <div class="search mh-search">
+          <label for="q" class="sr-only">Search this report</label>
+          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#search"/></svg>
+          <input class="input" id="q" type="search" autocomplete="off" placeholder="Search this report">
+        </div>
+
+        <div class="mh-spacer"></div>
+
+        <div class="mh-period" id="datebar" role="group" aria-label="Period"></div>
+
+        <div class="mh-more" id="moreWrap">
+          <button type="button" class="icon-btn mh-ctl" id="moreBtn" aria-label="More actions"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+          </button>
+          <div class="mh-menu" id="moreMenu" role="menu" hidden>
+            <a id="exportBtn" class="mh-item" role="menuitem" href="api/export.xlsx" aria-disabled="true"
+               title="Export to Excel (One workbook with Executive Summary, PL, BS and Trial Balance on separate sheets)">
+              <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"/></svg>Export to Excel
+            </a>
+            <button type="button" class="mh-item" role="menuitem" id="printBtn">Print</button>
+          </div>
+        </div>
       </div>
-      <div class="actions">
-        <a id="exportBtn" class="icon-btn filled" href="api/export.xlsx" aria-disabled="true"
-           aria-label="Export to Excel"
-           title="Export to Excel (One workbook with Executive Summary, PL, BS and Trial Balance on separate sheets)">
-          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"/></svg>
-        </a>
+
+      <div class="mh-r2">
+        <nav class="tabs mh-tabs" id="tabs" aria-label="Reports"></nav>
+        <div class="mh-ctx">
+          <div class="mh-tools" id="toolbar"></div>
+          <span class="rpt-ccy" id="ccy" hidden></span>
+          <span class="rpt-live" id="live" role="status" hidden></span>
+        </div>
       </div>
     </header>
 
-    <nav class="tabs" id="tabs" aria-label="Reports"></nav>
-
-    <div class="toolbar datebar" id="datebar" role="group" aria-label="Date range"></div>
-    <div class="toolbar" id="toolbar"></div>
-
     <main class="content" id="main" tabindex="-1">
       <section class="surface" aria-labelledby="reportTitle">
-        <div class="surface-head">
-          <h2 class="rpt-name" id="reportTitle"></h2>
-          <div class="rpt-period">
-            <span class="rpt-dates num" id="period"></span>
-            <span class="rpt-ccy" id="ccy" hidden></span>
-            <span class="rpt-live" id="live" role="status" hidden></span>
-          </div>
-        </div>
+        <h2 class="sr-only rpt-print-title" id="reportTitle"></h2>
+        <span class="sr-only" id="period"></span>
         <div class="scroll" id="out" aria-live="polite"></div>
       </section>
     </main>

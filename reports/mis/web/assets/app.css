@@ -410,6 +410,17 @@ table.data {
   background: var(--md-surface-container-lowest);
 }
 .data thead th:first-child { z-index: 3; background: var(--md-surface-container); }
+/* Header rows stay at the top and the Total row at the bottom; only the rows between scroll. */
+.data thead tr:first-child th { box-sizing: border-box; }
+.data thead tr:nth-child(2) th { top: 48px; height: 40px; }  /* under the 48px first row */
+.data tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid var(--md-outline);
+  border-bottom: 0;
+}
+.data tfoot td:first-child { z-index: 3; }
 .data td.n { text-align: right; }
 .data td.neg, .data tbody tr td.neg { color: var(--md-error); }  /* beats the sub/pct row colours */
 .data .tot { border-left: 1px solid var(--md-outline-variant); font-weight: 500; }
@@ -554,6 +565,7 @@ table.data {
   .surface { border-radius: 0; }
   .scroll { max-height: none; overflow: visible; }
   .data th, .data td { padding: 3px 6px; position: static !important; }
+  .data tfoot td { border-top-width: 2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -949,4 +961,173 @@ table.data.tree tr.reveal td { animation: tree-in 220ms var(--ease) both; animat
   .datebar .df-hint { margin-left: 0; text-align: left; width: 100%; }
   .datebar .df-group:nth-child(2) { flex: 1 1 100%; }
   .datebar input[type="date"], .datebar input[type="month"] { flex: 1; width: auto; }
+}
+
+/* ------------------------------------------------------------------ report header (reports.html) */
+/* Two compact rows: title, search, period, actions; then tabs with the tab's own controls. */
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.mis-head {
+  position: relative; z-index: 20;
+  background: var(--md-surface-container-lowest);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.mis-head + .content { padding-top: 16px; }
+
+.mh-r1 {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 52px; padding: 8px 24px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.mh-title { font-size: 17px; line-height: 24px; font-weight: 600; white-space: nowrap; }
+.mh-spacer { flex: 1 1 auto; }
+.mh-search { width: 300px; flex: none; margin-left: 8px; }
+.mh-search .input, .mh-r1 .icon-btn, .df-trigger { height: 36px; }
+.mh-search .input { background: var(--md-surface-container-low); }
+.mh-r1 .icon-btn { width: 36px; box-shadow: inset 0 0 0 1px var(--md-outline-variant); }
+.mh-r1 .icon-btn .icon { width: 20px; height: 20px; }
+
+/* period control (assets/date-filter.js) */
+.mh-period { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; }
+.df-step[disabled] { background: transparent; opacity: 0.4; }
+.df-chev.left { transform: rotate(180deg); }
+.df-chev.down { transform: rotate(90deg); width: 18px; height: 18px; color: var(--md-on-surface-variant); }
+.df-trigger {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--md-outline-variant); border-radius: var(--shape-ctl);
+  background: var(--md-surface-container-lowest); color: var(--md-on-surface);
+  font: inherit; white-space: nowrap; cursor: pointer;
+}
+.df-trigger:hover { background: var(--md-surface-container); }
+.df-cal { width: 18px; height: 18px; color: var(--md-on-surface-variant); }
+.df-name { font-weight: 600; }
+.df-dates-text { color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; }
+.df-tag {
+  padding: 0 8px; border-radius: 999px; font-size: 12px; line-height: 20px; font-weight: 500;
+  background: var(--md-primary-container); color: var(--md-on-primary-container);
+}
+.df-tag.warn { background: var(--md-warning-container); color: var(--md-on-warning-container); }
+
+.df-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  width: 600px; max-width: calc(100vw - 32px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--md-surface-container-lowest);
+  border: 1px solid var(--md-outline-variant); border-radius: var(--shape-lg);
+  box-shadow: 0 12px 32px rgba(33, 38, 60, 0.14);
+}
+.df-body { display: flex; min-height: 200px; }
+.df-nav {
+  flex: none; width: 160px; padding: 8px;
+  display: flex; flex-direction: column; gap: 2px;
+  border-right: 1px solid var(--md-outline-variant);
+}
+.df-preset {
+  height: 34px; padding: 0 10px; border: 0; border-radius: var(--shape-ctl);
+  background: transparent; color: var(--md-on-surface); font: inherit; text-align: left;
+  white-space: nowrap; cursor: pointer;
+}
+.df-preset:hover { background: var(--md-surface-container-high); }
+.df-preset[aria-pressed="true"] {
+  background: var(--md-primary-container); color: var(--md-on-primary-container); font-weight: 600;
+}
+.df-pane { flex: 1 1 auto; min-width: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.df-dates { display: flex; flex-wrap: wrap; gap: 12px; }
+.df-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 150px; }
+.df-field > span { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--md-on-surface-variant); }
+.df-field .input { height: 36px; font-variant-numeric: tabular-nums; }
+.df-note { margin: 0; font-size: 13px; color: var(--md-on-surface-variant); }
+.df-note.warn {
+  padding: 8px 10px; border-radius: var(--shape-ctl);
+  background: var(--md-warning-container); color: var(--md-on-warning-container);
+}
+.df-split {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 10px 16px; border-top: 1px solid var(--md-outline-variant);
+}
+.df-split-label { font-size: 13px; font-weight: 600; }
+.df-split-hint { font-size: 12px; color: var(--md-on-surface-variant); }
+.df-split .seg { height: 32px; }
+.df-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-top: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container-low);
+}
+.df-shows { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--md-on-surface-variant); }
+.df-shows strong { color: var(--md-on-surface); font-weight: 600; }
+.df-btn { height: 36px; padding: 0 16px; }
+
+/* more actions menu */
+.mh-more { position: relative; }
+.mh-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  min-width: 200px; padding: 6px;
+  display: flex; flex-direction: column;
+  background: var(--md-surface-container-lowest);
+  border: 1px solid var(--md-outline-variant); border-radius: var(--shape-lg);
+  box-shadow: 0 12px 32px rgba(33, 38, 60, 0.14);
+}
+.mh-menu[hidden] { display: none; }
+.mh-item {
+  display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px;
+  border: 0; border-radius: var(--shape-ctl); background: transparent;
+  color: var(--md-on-surface); font: inherit; text-align: left; text-decoration: none; cursor: pointer;
+}
+.mh-item .icon { width: 18px; height: 18px; color: var(--md-on-surface-variant); }
+.mh-item:hover { background: var(--md-surface-container-high); }
+.mh-item[aria-disabled="true"] { color: color-mix(in srgb, var(--md-on-surface) 38%, transparent); pointer-events: none; }
+
+/* row 2: tabs, then the tab's own controls, currency and live status */
+.mh-r2 { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px 0 8px; }
+.mh-tabs.tabs { flex: 1 1 auto; min-width: 0; padding: 0; border-bottom: 0; background: transparent; }
+.mh-tabs.tabs a { height: 44px; padding: 0 12px; }
+.mh-tabs.tabs a[aria-current="page"]::after { left: 12px; right: 12px; }
+.mh-ctx { flex: none; display: flex; align-items: center; gap: 12px; color: var(--md-on-surface-variant); }
+.mh-tools { display: flex; align-items: center; gap: 12px; }
+.mh-tools:empty { display: none; }
+.mh-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
+.mh-field .input { height: 30px; padding: 0 6px; font-size: 13px; }
+.mh-ctx .rpt-ccy {
+  font-size: 12px; line-height: 20px; font-weight: 600; letter-spacing: .04em;
+  padding: 0 10px; border-radius: 999px; background: var(--md-surface-container-high);
+}
+.mh-ctx .rpt-ccy[hidden], .mh-ctx .rpt-live[hidden] { display: none; }
+.mh-ctx .rpt-live { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; white-space: nowrap; }
+.mh-ctx .rpt-live .btn { height: 30px; }
+.mh-ctx .rpt-live.stale {
+  padding-left: 10px; border-radius: 999px;
+  background: var(--md-warning-container); color: var(--md-on-warning-container);
+}
+.mh-ctx .rpt-live.stale > .icon { width: 16px; height: 16px; }
+
+@media (max-width: 720px) {
+  .mh-r1 { flex-wrap: wrap; row-gap: 8px; padding: 8px 12px; }
+  .mh-title { font-size: 16px; }
+  .mh-search { flex: 1 1 0; width: auto; min-width: 0; margin-left: 0; }
+  .mh-spacer { display: none; }
+  .mh-more { order: 2; }
+  .mh-period { order: 3; flex: 1 1 100%; }
+  .df-trigger { flex: 1 1 auto; justify-content: center; }
+  .mh-search .input, .mh-r1 .icon-btn, .df-trigger { height: 44px; }
+  .mh-r1 .icon-btn { width: 44px; }
+  .df-dates-text { display: none; }
+  .df-pop { left: 0; right: 0; width: auto; max-width: none; }
+  .df-body { flex-direction: column; }
+  .df-nav { width: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--md-outline-variant); }
+  .mh-r2 { flex-wrap: wrap; padding: 0 4px; }
+  .mh-tabs.tabs { flex-basis: 100%; }
+  .mh-ctx { flex-wrap: wrap; padding: 0 8px 8px; }
+  .mis-head + .content { padding-top: 12px; }
+}
+
+@media print {
+  .mh-search, .df-step, .df-chev, .df-tag, .mh-more, .mh-tabs, .mh-tools, .rpt-live { display: none !important; }
+  .mis-head { border: 0; }
+  .df-trigger { border: 0; padding: 0; }
+  .rpt-print-title { position: static; width: auto; height: auto; margin: 8px 0; clip: auto; font-size: 18px; }
 }
