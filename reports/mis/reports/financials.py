@@ -421,11 +421,12 @@ def build_balance_sheet(rows: list[dict[str, Any]], summary: dict[str, Any]) -> 
         if r.get("pl_bs") == cm.PL:
             pl_cumulative = _add(pl_cumulative, balances[id(r)])
             continue
+        bal = balances[id(r)]
         cat = r.get("category") or ""
         if cat not in known:
             cat = UNMAPPED_ASSETS if r.get("account_type") in ASSET_TYPES else UNMAPPED_LIABILITIES
             r = {**r, "category": cat, "sub_category": r.get("account_name", "")}
-        bs_rows.append((r, balances[id(r)]))
+        bs_rows.append((r, bal))
 
     g: dict[str, dict[str, dict[str, float]]] = {}
     for r, bal in bs_rows:

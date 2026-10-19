@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from reports.financials import Node, TOTAL, build_executive_summary, build_profit_and_loss
+from reports.financials import Node, TOTAL, build_balance_sheet, build_executive_summary, build_profit_and_loss
 
 MONTHS = ["2026-04", "2026-05"]
 SUMMARY = {"months": MONTHS, "from_date": "2026-04-01", "to_date": "2026-05-31", "currency_code": "AED"}
@@ -95,3 +95,11 @@ class TreeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnmappedBalanceSheetRowTest(unittest.TestCase):
+    def test_unmapped_account_keeps_its_balance(self):
+        rows = [{"account_id": "1", "account_name": "Mystery", "account_type": "other_current_asset",
+                 "pl_bs": "BS", "category": "", "balances": {"2026-09": 5.0}}]
+        stmt = build_balance_sheet(rows, {"months": ["2026-09"]})
+        self.assertTrue(any(ln.label == "Mystery" for ln in stmt.lines))
