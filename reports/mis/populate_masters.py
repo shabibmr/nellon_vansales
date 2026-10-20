@@ -54,10 +54,8 @@ def get_connection(db_name: str) -> pymysql.Connection:
 
 
 def populate_organization(cur: pymysql.cursors.DictCursor) -> int:
-    """Populate organization from data/coa_snapshot.json or fallback."""
-    coa_file = BASE_DIR / "data" / "coa_snapshot.json"
-    if not coa_file.exists():
-        coa_file = BASE_DIR / "output" / "coa_snapshot.json"
+    """Populate organization from output/coa_snapshot.json."""
+    coa_file = BASE_DIR / "output" / "coa_snapshot.json"
     if not coa_file.exists():
         print(f"Warning: {coa_file} not found, skipping organization.")
         return 0
@@ -112,13 +110,9 @@ def populate_organization(cur: pymysql.cursors.DictCursor) -> int:
 
 
 def populate_accounts(cur: pymysql.cursors.DictCursor) -> int:
-    """Populate accounts from data/coa_snapshot.json and data/category_master.json."""
-    coa_file = BASE_DIR / "data" / "coa_snapshot.json"
-    if not coa_file.exists():
-        coa_file = BASE_DIR / "output" / "coa_snapshot.json"
-    cm_file = BASE_DIR / "data" / "category_master.json"
-    if not cm_file.exists():
-        cm_file = BASE_DIR / "output" / "category_master.json"
+    """Populate accounts from output/coa_snapshot.json and output/category_master.json."""
+    coa_file = BASE_DIR / "output" / "coa_snapshot.json"
+    cm_file = BASE_DIR / "output" / "category_master.json"
 
     if not coa_file.exists():
         print(f"Error: {coa_file} does not exist.")

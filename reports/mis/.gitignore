@@ -2,14 +2,11 @@
 .venv/
 __pycache__/
 *.pyc
-output/*
-!output/cache/
-!output/category_master.json
-!output/coa_snapshot.json
+output/
+data/
 .env
 .env_*
 .zoho_token*.json
 zoho_api_tools/out/
 backups/
-output/cache/contacts/
 node_modules/
