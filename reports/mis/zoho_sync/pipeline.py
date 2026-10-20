@@ -16,6 +16,7 @@ from .context import Run
 from .gateway import NotFound
 from .masters import ensure
 from .specs import ALL_SPECS, DocRef, DocSpec
+from .store import key_for
 from . import cogs, postings, watermark as wm
 from .ranges import cost_of_sales_ranges
 
@@ -50,7 +51,10 @@ def run_all(run: Run, specs: tuple[DocSpec, ...] | None = None) -> dict[str, Any
         "needs_attention": [],
     }
     for spec in ordered:
-        summary["datasets"][spec.dataset] = sync_dataset(run, spec, claimed, summary)
+        ds_stats = sync_dataset(run, spec, claimed, summary)
+        summary["datasets"][spec.dataset] = ds_stats
+        if ds_stats.get("stopped") == "max_calls":
+            break
     if any(spec.has_cogs for spec in ordered):
         summary["cost_of_sales"] = run_cost_of_sales(run, claimed)
     run.runlog.save_summary(summary)
@@ -68,8 +72,11 @@ def run_cost_of_sales(run: Run, claimed: dict[str, set[str]]) -> dict[str, Any]:
     once per run, after every dataset above has listed.
     """
     now = run.now()
-    today = now.date()
-    hour = now.hour
+    started = run.started_at if run.started_at is not None else now
+    today = started.date()
+    hour = started.hour
+    if hour == 1 and started.minute >= 50:
+        hour = 2
 
     invoice_dates = [
         row["date"]
@@ -117,10 +124,11 @@ def run_cost_of_sales(run: Run, claimed: dict[str, set[str]]) -> dict[str, Any]:
 
 def _invoices_dated_in(store: Any, date_ranges: list) -> list[dict[str, Any]]:
     """Every stored invoice (any status) dated inside one of `date_ranges`."""
+    if not date_ranges:
+        return []
     return [
         {"invoice_id": row["invoice_id"], "status": row.get("status", "")}
-        for row in store.iter_table("sales_invoices")
-        if row.get("date") and any(r.date_from <= row["date"] <= r.date_to for r in date_ranges)
+        for row in store.iter_where("sales_invoices", date_column="date", date_ranges=date_ranges)
     ]
 
 
@@ -161,6 +169,10 @@ def sync_dataset(
         stats["list_complete"] = False
         stats["watermark_after"] = before
         stats["stopped"] = "max_calls"
+    except Exception as exc:
+        stats["list_complete"] = False
+        stats["watermark_after"] = before
+        stats["error"] = str(exc)
 
     return stats
 
@@ -212,13 +224,12 @@ def _list_pages(
 ) -> str:
     """Read every list page. Returns the highest raw last_modified_time seen."""
     _set_gateway_dataset(run, spec.dataset)
-    encoded = wm.encode_watermark(before)
     highest = ""
     page = 1
     while True:
         params: dict[str, Any] = {
             **spec.list_params,
-            "last_modified_time": encoded,
+            "last_modified_time": before,
             "page": page,
             "per_page": PER_PAGE,
         }
@@ -226,8 +237,8 @@ def _list_pages(
         rows = body.get(spec.list_key) or []
         for row in rows:
             raw_lmt = str(row.get("last_modified_time") or "")
-            if raw_lmt and (not highest or raw_lmt > highest):
-                highest = raw_lmt
+            if raw_lmt:
+                highest = wm.highest(highest, raw_lmt)
             _sync_list_row(run, spec, row, claimed, stats, summary)
         ctx = body.get("page_context") or {}
         if not ctx.get("has_more_page"):
@@ -292,23 +303,62 @@ def _sync_by_id(
 ) -> None:
     """Fetch detail by id and store (pending retry / doc-ref load). Raises on failure."""
     doc = _load_detail(run, spec, doc_id, modified_time)
+    target = spec
     if spec.reroute is not None:
-        target = spec.reroute(doc)
-        if target:
-            other = SPECS_BY_DATASET[target]
-            if claimed is not None:
-                claimed.setdefault(target, set()).add(doc_id)
-            _store_document(run, other, list_row=doc, detail=doc)
-            return
-    _store_document(run, spec, list_row=doc, detail=doc)
+        target_name = spec.reroute(doc)
+        if target_name:
+            target = SPECS_BY_DATASET[target_name]
     if claimed is not None:
-        claimed.setdefault(spec.dataset, set()).add(doc_id)
+        claimed.setdefault(target.dataset, set()).add(doc_id)
+    _store_detail_only(run, target, doc)
+
+
+def _store_detail_only(run: Run, spec: DocSpec, detail: dict[str, Any]) -> None:
+    """Store detail-derived columns only without overwriting list-only fields."""
+    _require_party(detail, spec)
+    all_ids = spec.collect_ids(detail)
+    _ensure_collected(run, all_ids)
+    _ensure_doc_refs(run, spec, detail)
+
+    units, rates = _units_and_rates(run, all_ids.get("item", set()))
+    patch, lines = spec.from_detail(detail, units, rates)
+    patch = dict(patch)
+
+    parent_id = _line_parent_id(spec, detail, detail)
+    key = _header_key(spec, detail)
+    if not run.store.has(spec.header_table, key):
+        header = spec.header_from_list(detail)
+        run.store.upsert(spec.header_table, [header], update_cols=list(header.keys()))
+
+    if spec.line_table and spec.line_parent_col:
+        run.store.replace_lines(spec.line_table, spec.line_parent_col, parent_id, lines)
+        patch["lines_synced_at"] = run.now()
+
+    run.store.update(spec.header_table, key, patch)
+
+
+def _header_key(spec: DocSpec, row: dict[str, Any]) -> Any:
+    """Header primary key from a detail or header row."""
+    from .store import TABLE_KEY_COLUMNS
+    cols = TABLE_KEY_COLUMNS[spec.header_table]
+    if len(cols) == 1:
+        col = cols[0]
+        return str(row.get(col) or row.get(spec.id_field) or "").strip()
+    kind = row.get("kind") or _KIND_BY_DATASET.get(spec.dataset)
+    doc_id = str(row.get("doc_id") or row.get(spec.id_field) or "").strip()
+    return (kind, doc_id)
+
+
+def _merge_ids(a: dict[str, set[str]], b: dict[str, set[str]]) -> dict[str, set[str]]:
+    merged: dict[str, set[str]] = {}
+    for kind in set(a) | set(b):
+        merged[kind] = a.get(kind, set()) | b.get(kind, set())
+    return merged
 
 
 def _store_from_list_row(run: Run, spec: DocSpec, row: dict[str, Any]) -> None:
-    """Header from the list row, then detail (cache or GET)."""
+    """Load detail (cache or GET) and store document."""
     _require_party(row, spec)
-    _ensure_collected(run, spec.collect_ids(row))
     modified = str(row.get("last_modified_time") or "")
     doc_id = str(row.get(spec.id_field) or "").strip()
     detail = _load_detail(run, spec, doc_id, modified)
@@ -322,22 +372,20 @@ def _store_document(
     list_row: dict[str, Any],
     detail: dict[str, Any],
 ) -> None:
-    """Master-first header upsert, then detail patch + replace_lines."""
+    """Ensure all masters and doc refs first, then store header, lines, and patch."""
     _require_party(list_row if list_row.get(spec.party) else detail, spec)
 
-    # Masters from the list row (party + header optional ids).
-    _ensure_collected(run, spec.collect_ids(list_row))
+    # Union of all masters from list row and full detail.
+    all_ids = _merge_ids(spec.collect_ids(list_row), spec.collect_ids(detail))
+    _ensure_collected(run, all_ids)
+    _ensure_doc_refs(run, spec, detail)
+
+    units, rates = _units_and_rates(run, all_ids.get("item", set()))
+    patch, lines = spec.from_detail(detail, units, rates)
+    patch = dict(patch)
 
     header = spec.header_from_list(list_row)
     run.store.upsert(spec.header_table, [header], update_cols=list(header.keys()))
-
-    # Masters and doc refs from the full detail before lines are written.
-    _ensure_collected(run, spec.collect_ids(detail))
-    _ensure_doc_refs(run, spec, detail)
-
-    units, rates = _units_and_rates(run, spec.collect_ids(detail).get("item", set()))
-    patch, lines = spec.from_detail(detail, units, rates)
-    patch = dict(patch)
 
     # lines_synced_at only after lines (or vendor_payment_bills) are written.
     if spec.line_table and spec.line_parent_col:
@@ -345,7 +393,7 @@ def _store_document(
         run.store.replace_lines(spec.line_table, spec.line_parent_col, parent_id, lines)
         patch["lines_synced_at"] = run.now()
 
-    run.store.upsert(spec.header_table, [patch], update_cols=list(patch.keys()))
+    run.store.update(spec.header_table, key_for(spec.header_table, header), patch)
 
 
 # ---------------------------------------------------------------------------
@@ -359,10 +407,6 @@ def _load_detail(run: Run, spec: DocSpec, doc_id: str, list_modified: str) -> di
         cached = run.cache.read(spec.cache_folder, doc_id)
         if cached is not None:
             return cached
-
-    cached = run.cache.read(spec.cache_folder, doc_id)
-    if cached is not None and list_modified and cached.get("last_modified_time") == list_modified:
-        return cached
 
     body = run.gateway.get(spec.detail_path.format(id=doc_id))
     doc = _unwrap_detail(body, spec.detail_key)

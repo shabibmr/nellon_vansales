@@ -48,11 +48,15 @@ def key_for(table: str, row: dict[str, Any]) -> Any:
     return tuple(row[c] for c in cols)
 
 
+class RowNotFound(KeyError):
+    """Raised when an update targets a key that does not exist in the table."""
+
+
 @runtime_checkable
 class Store(Protocol):
     """Everything `masters.ensure`, `pipeline.py`, and `watermark.py` need.
 
-    `key` for `get`/`has` is whatever `key_for` would build: a scalar id, or a
+    `key` for `get`/`has`/`update` is whatever `key_for` would build: a scalar id, or a
     tuple for a composite key such as `purchase_docs` (`kind`, `doc_id`).
     """
 
@@ -60,7 +64,18 @@ class Store(Protocol):
 
     def has(self, table: str, key: Any) -> bool: ...
 
-    def upsert(self, table: str, rows: list[dict[str, Any]], update_cols: list[str] | None = None) -> None: ...
+    def upsert(self, table: str, rows: list[dict[str, Any]], update_cols: list[str] | None = None) -> None:
+        """Upsert full rows into `table`.
+
+        `update_cols`, if provided, restricts which columns to refresh on key conflict.
+        Every row must still be complete (carrying NOT NULL columns without defaults);
+        use `update` for partial updates to existing rows.
+        """
+        ...
+
+    def update(self, table: str, key: Any, values: dict[str, Any]) -> None:
+        """Update named columns of an existing row. Raises RowNotFound if no row matches."""
+        ...
 
     def replace_lines(self, table: str, parent_col: str, parent_id: Any, rows: list[dict[str, Any]]) -> None:
         """Upsert `rows`, then delete that parent's lines not present in `rows`."""
@@ -74,6 +89,17 @@ class Store(Protocol):
     def iter_table(self, table: str) -> Iterable[dict[str, Any]]:
         """Every row of `table`, for `cogs.py`'s own filtering (small tables only:
         `gl_journals`, and a document's own lines table)."""
+        ...
+
+    def iter_where(
+        self,
+        table: str,
+        where: dict[str, Any] | None = None,
+        where_in: dict[str, list[Any]] | None = None,
+        date_column: str | None = None,
+        date_ranges: list[Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Filtered read pushing where/in/date conditions down into SQL for DbStore."""
         ...
 
     def max_value(self, table: str, column: str) -> Any:
@@ -126,6 +152,14 @@ class MemoryStore:
                     merged[col] = row[col]
             bucket[key] = merged
 
+    def update(self, table: str, key: Any, values: dict[str, Any]) -> None:
+        bucket = self._tables.get(table)
+        if bucket is None or key not in bucket:
+            raise RowNotFound(f"store: no row in {table!r} for key {key!r}")
+        row = bucket[key]
+        for col, val in values.items():
+            row[col] = val
+
     def replace_lines(self, table: str, parent_col: str, parent_id: Any, rows: list[dict[str, Any]]) -> None:
         self.upsert(table, rows)
         bucket = self._tables.setdefault(table, {})
@@ -161,6 +195,31 @@ class MemoryStore:
         if table == "gl_journals":
             return [dict(r) for r in self._gl_journals.values()]
         return [dict(r) for r in self._tables.get(table, {}).values()]
+
+    def iter_where(
+        self,
+        table: str,
+        where: dict[str, Any] | None = None,
+        where_in: dict[str, list[Any]] | None = None,
+        date_column: str | None = None,
+        date_ranges: list[Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = self.iter_table(table)
+        results = []
+        in_sets = {col: set(vals) for col, vals in (where_in or {}).items()}
+        for row in rows:
+            if where:
+                if any(row.get(k) != v for k, v in where.items()):
+                    continue
+            if in_sets:
+                if any(row.get(k) not in s for k, s in in_sets.items()):
+                    continue
+            if date_column and date_ranges:
+                d_val = row.get(date_column)
+                if not d_val or not any(r.date_from <= d_val <= r.date_to for r in date_ranges):
+                    continue
+            results.append(dict(row))
+        return results
 
     def max_value(self, table: str, column: str) -> Any:
         rows = self._tables.get(table, {}).values()

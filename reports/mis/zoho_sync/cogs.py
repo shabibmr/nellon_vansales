@@ -2,9 +2,9 @@
 
 Plan: docs/sync/transaction-sync-plan.md, "Step 3 — Cost of Sales pass",
 "What is written". `write_invoice_cogs` and `write_debit_note_cogs` are the
-wiring task 7 asks for: read a document's own lines through `store.iter_table`,
+wiring task 7 asks for: read a document's own lines through `store.iter_where`,
 call the pure `apply_cogs`, and write header/line COGS plus `cogs_synced_at`
-back through `store.upsert`.
+back through `store.update`.
 """
 
 from __future__ import annotations
@@ -23,6 +23,19 @@ class PostingsStore(Protocol):
     def iter_table(self, table: str) -> Iterable[dict[str, Any]]:
         ...
 
+    def iter_where(
+        self,
+        table: str,
+        where: dict[str, Any] | None = None,
+        where_in: dict[str, list[Any]] | None = None,
+        date_column: str | None = None,
+        date_ranges: list[Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        ...
+
+    def update(self, table: str, key: Any, values: dict[str, Any]) -> None:
+        ...
+
     def upsert(self, table: str, rows: list[dict[str, Any]], update_cols: list[str] | None = None) -> None:
         ...
 
@@ -33,20 +46,37 @@ def load_invoice_postings(
     invoice_ids: Iterable[str],
 ) -> dict[str, Decimal]:
     """Sum inventory_valuation_for_invoice amounts for the given invoice ids on account_id."""
-    wanted = {str(i) for i in invoice_ids}
+    wanted = list({str(i) for i in invoice_ids})
     if not wanted:
         return {}
     totals: dict[str, Decimal] = {}
-    for row in store.iter_table("gl_journals"):
-        if str(row.get("account_id") or "") != str(account_id):
-            continue
-        if row.get("transaction_type") != _INVOICE_VALUATION:
-            continue
+    rows = store.iter_where(
+        "gl_journals",
+        where={"account_id": str(account_id), "transaction_type": _INVOICE_VALUATION},
+        where_in={"transaction_id": wanted},
+    )
+    for row in rows:
         tid = str(row.get("transaction_id") or "")
-        if tid not in wanted:
-            continue
         totals[tid] = totals.get(tid, Decimal("0")) + cents(d(row.get("amount")))
     return {k: cents(v) for k, v in totals.items()}
+
+
+def line_own_cost(ln: dict[str, Any]) -> Decimal:
+    """A line's own cost, computed from baseline_cogs, or quantity * conversion_rate * purchase_price.
+
+    Never falls back to stored `cogs` when quantity or purchase_price is present,
+    making Cost of Sales reconciliation repeatable and bounded.
+    """
+    if "baseline_cogs" in ln and ln["baseline_cogs"] is not None:
+        return cents(d(ln["baseline_cogs"]))
+    if "quantity" in ln or "purchase_price" in ln:
+        qty = d(ln.get("quantity"))
+        price = d(ln.get("purchase_price"))
+        conv = d(ln.get("conversion_rate"), "1")
+        if conv <= 0:
+            conv = Decimal("1")
+        return cents(qty * conv * price)
+    return cents(d(ln.get("cogs")))
 
 
 def apply_cogs(
@@ -56,15 +86,15 @@ def apply_cogs(
 ) -> tuple[Decimal, list[Decimal]]:
     """Return (header_cogs, per-line cogs) for the Cost of Sales cases.
 
-    Draft/void → 0. No postings → each line's own cost (baseline_cogs). Postings
-    found → header is that total, spread by baseline_cogs (or net_sales if those
+    Draft/void → 0. No postings → each line's own cost (line_own_cost). Postings
+    found → header is that total, spread by line_own_cost (or net_sales if those
     sum to 0) via seed_common.prorate.
     """
     n = len(lines)
     if (status or "").lower() in ("draft", "void"):
         return Decimal("0.00"), [Decimal("0.00")] * n
 
-    baseline = [cents(d(ln.get("baseline_cogs", ln.get("cogs")))) for ln in lines]
+    baseline = [line_own_cost(ln) for ln in lines]
     if postings_total is None:
         header = cents(sum(baseline, Decimal("0")))
         return header, list(baseline)
@@ -81,13 +111,6 @@ def apply_cogs(
     return header, prorate(header, weights)
 
 
-def _group_by(store: PostingsStore, table: str, parent_col: str) -> dict[str, list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in store.iter_table(table):
-        grouped.setdefault(row.get(parent_col), []).append(row)
-    return grouped
-
-
 def write_invoice_cogs(
     store: PostingsStore,
     account_id: str,
@@ -101,24 +124,25 @@ def write_invoice_cogs(
     rows = list(invoices)
     if not rows:
         return
-    postings = load_invoice_postings(store, account_id, (row["invoice_id"] for row in rows))
-    lines_by_invoice = _group_by(store, "sales_lines", "invoice_id")
+    inv_ids = [row["invoice_id"] for row in rows]
+    postings = load_invoice_postings(store, account_id, inv_ids)
+    line_rows = store.iter_where("sales_lines", where_in={"invoice_id": inv_ids})
+    lines_by_invoice: dict[str, list[dict[str, Any]]] = {}
+    for ln in line_rows:
+        lines_by_invoice.setdefault(ln.get("invoice_id"), []).append(ln)
 
     for row in rows:
         invoice_id = row["invoice_id"]
         lines = lines_by_invoice.get(invoice_id, [])
         header, line_cogs = apply_cogs(row.get("status", ""), lines, postings.get(invoice_id))
-        store.upsert(
+        store.update(
             "sales_invoices",
-            [{"invoice_id": invoice_id, "cogs": header, "cogs_synced_at": now}],
-            update_cols=["cogs", "cogs_synced_at"],
+            invoice_id,
+            {"cogs": header, "cogs_synced_at": now},
         )
         if lines:
-            store.upsert(
-                "sales_lines",
-                [{"line_item_id": ln["line_item_id"], "cogs": cogs} for ln, cogs in zip(lines, line_cogs)],
-                update_cols=["cogs"],
-            )
+            for ln, val in zip(lines, line_cogs):
+                store.update("sales_lines", ln["line_item_id"], {"cogs": val})
 
 
 def write_debit_note_cogs(
@@ -133,14 +157,18 @@ def write_debit_note_cogs(
     rows = list(debit_notes)
     if not rows:
         return
-    lines_by_note = _group_by(store, "debit_note_lines", "debit_note_id")
+    dn_ids = [row["debit_note_id"] for row in rows]
+    line_rows = store.iter_where("debit_note_lines", where_in={"debit_note_id": dn_ids})
+    lines_by_note: dict[str, list[dict[str, Any]]] = {}
+    for ln in line_rows:
+        lines_by_note.setdefault(ln.get("debit_note_id"), []).append(ln)
 
     for row in rows:
         debit_note_id = row["debit_note_id"]
         lines = lines_by_note.get(debit_note_id, [])
         header, _ = apply_cogs(row.get("status", ""), lines, None)
-        store.upsert(
+        store.update(
             "debit_notes",
-            [{"debit_note_id": debit_note_id, "cogs": header, "cogs_synced_at": now}],
-            update_cols=["cogs", "cogs_synced_at"],
+            debit_note_id,
+            {"cogs": header, "cogs_synced_at": now},
         )

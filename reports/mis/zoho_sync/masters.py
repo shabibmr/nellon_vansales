@@ -218,7 +218,15 @@ def ensure(run: Run, kind: str, doc_id: str) -> None:
         run.master_memo.add(memo_key)
         return
 
-    payload = _fetch_payload(run, spec, doc_id)
+    payload: dict[str, Any] | None = None
+    if spec.cache_folder:
+        payload = run.cache.read(spec.cache_folder, doc_id)
+
+    if payload is None:
+        payload = _fetch_payload(run, spec, doc_id)
+        if spec.cache_folder:
+            run.cache.write(spec.cache_folder, doc_id, payload)
+
     if spec.type_check is not None:
         spec.type_check(payload)
 

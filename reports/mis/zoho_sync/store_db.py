@@ -13,7 +13,7 @@ from typing import Any
 
 from seed_common import upsert_sql
 
-from .store import TABLE_KEY_COLUMNS, key_for
+from .store import TABLE_KEY_COLUMNS, RowNotFound, key_for
 
 
 class UnknownColumn(ValueError):
@@ -66,6 +66,12 @@ class DbStore:
         return self.get(table, key) is not None
 
     def upsert(self, table: str, rows: list[dict[str, Any]], update_cols: list[str] | None = None) -> None:
+        """Upsert full rows into `table`.
+
+        `update_cols`, if provided, restricts which columns to refresh on key conflict.
+        Every row must still be complete (carrying NOT NULL columns without defaults);
+        use `update` for partial updates to existing rows.
+        """
         if not rows:
             return
         cols = self._validate_rows(table, rows)
@@ -81,6 +87,33 @@ class DbStore:
         payload = [{c: row.get(c) for c in write_cols} for row in rows]
         with self._conn.cursor() as cur:
             cur.executemany(sql, payload)
+        self._conn.commit()
+
+    def update(self, table: str, key: Any, values: dict[str, Any]) -> None:
+        """Update named columns of an existing row. Raises RowNotFound if no row matches."""
+        if not values:
+            return
+        allowed = self._table_columns(table)
+        for col in values:
+            if col not in allowed:
+                raise UnknownColumn(f"store_db: {table}.{col} is not a column")
+        key_cols = TABLE_KEY_COLUMNS[table]
+        set_cols = [c for c in values if c not in key_cols]
+        if not set_cols:
+            return
+        set_clause = ", ".join(f"`{c}` = %s" for c in set_cols)
+        if len(key_cols) == 1:
+            where = f"`{key_cols[0]}` = %s"
+            key_args: tuple[Any, ...] = (key,)
+        else:
+            where = " AND ".join(f"`{c}` = %s" for c in key_cols)
+            key_args = tuple(key)
+        sql = f"UPDATE `{table}` SET {set_clause} WHERE {where}"
+        args = tuple(values[c] for c in set_cols) + key_args
+        with self._conn.cursor() as cur:
+            cur.execute(sql, args)
+            if cur.rowcount == 0:
+                raise RowNotFound(f"store_db: no row in `{table}` for key {key!r}")
         self._conn.commit()
 
     def replace_lines(self, table: str, parent_col: str, parent_id: Any, rows: list[dict[str, Any]]) -> None:
@@ -167,6 +200,52 @@ class DbStore:
     def iter_table(self, table: str) -> Any:
         with self._conn.cursor() as cur:
             cur.execute(f"SELECT * FROM `{table}`")
+            return [dict(r) for r in cur.fetchall()]
+
+    def iter_where(
+        self,
+        table: str,
+        where: dict[str, Any] | None = None,
+        where_in: dict[str, list[Any]] | None = None,
+        date_column: str | None = None,
+        date_ranges: list[Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        allowed = self._table_columns(table)
+        clauses: list[str] = []
+        args: list[Any] = []
+
+        if where:
+            for col, val in where.items():
+                if col not in allowed:
+                    raise UnknownColumn(f"store_db: {table}.{col} is not a column")
+                clauses.append(f"`{col}` = %s")
+                args.append(val)
+
+        if where_in:
+            for col, vals in where_in.items():
+                if col not in allowed:
+                    raise UnknownColumn(f"store_db: {table}.{col} is not a column")
+                if not vals:
+                    return []
+                placeholders = ", ".join(["%s"] * len(vals))
+                clauses.append(f"`{col}` IN ({placeholders})")
+                args.extend(vals)
+
+        if date_column and date_ranges:
+            if date_column not in allowed:
+                raise UnknownColumn(f"store_db: {table}.{date_column} is not a column")
+            if not date_ranges:
+                return []
+            range_clauses = []
+            for r in date_ranges:
+                range_clauses.append(f"(`{date_column}` >= %s AND `{date_column}` <= %s)")
+                args.extend([r.date_from, r.date_to])
+            clauses.append(f"({' OR '.join(range_clauses)})")
+
+        where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = f"SELECT * FROM `{table}`{where_sql}"
+        with self._conn.cursor() as cur:
+            cur.execute(sql, tuple(args))
             return [dict(r) for r in cur.fetchall()]
 
     def max_value(self, table: str, column: str) -> Any:

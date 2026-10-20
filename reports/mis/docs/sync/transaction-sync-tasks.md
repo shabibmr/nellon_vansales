@@ -1,6 +1,6 @@
 # Transaction sync — task list
 
-Plan: `docs/sync/transaction-sync-plan.md`. Status as of 21 Oct 2026: tasks 0–9 done except the task-7 follow-up (first customer debit note, blocked on seeing one). Core + masters + document specs + `pipeline.py` + Cost of Sales + CLI in place. Task 9 rules audit passed after two fixes (`lines_synced_at` only after `replace_lines`; sales-order list header reads `salesorder_id`/`salesorder_number`). Next: task 10 remaining FakeGateway/pipeline tests. No Zoho call.
+Plan: `docs/sync/transaction-sync-plan.md`. Status as of 21 Oct 2026: tasks 0–10 done and review fixes R1–R12 applied except task-7 follow-up (first customer debit note, blocked on seeing one). Core + masters + document specs + `pipeline.py` + Cost of Sales + CLI + FakeGateway/pipeline tests in place. No Zoho call.
 
 Scope is the runs from now on. Backfill is handled separately.
 
@@ -59,7 +59,7 @@ The package is `reports/mis/zoho_sync/`; the six master wrappers are `reports/mi
 - [x] `store_db.py` — MariaDB `Store`. Upserts through `seed_common.upsert_sql`. Columns read once per table with `SHOW COLUMNS`; a mapper key that is not a column raises. Purchase docs keyed `(kind, doc_id)`. `replace_lines` and `replace_range` run in one transaction each. Imported only by the CLI and wrappers.
 - [x] `cache.py` — bare resource object at `output/cache/{folder}/{id}.json`. Atomic `.tmp` replace. Reader accepts an old envelope for one release. `is_current(folder, id, last_modified_time)`.
 - [x] `runlog.py` — `output/runs/{run_id}/{dataset}/page-N.json` for every list and postings page, plus `summary.json` (calls, rows stored, pending, watermark before and after). `run_id` is `YYYYMMDD-HHMMSS` Asia/Dubai. Delete run folders older than 30 days at the start of a run.
-- [x] `watermark.py` — read and write through the store. Encode `+` as `%2B`. Never add a second. Refuse a dataset with no watermark. `seed(run)`: set each dataset from `store.max_value(header_table, 'last_modified_time')`.
+- [x] `watermark.py` — read and write through the store. Pass the raw text; `requests` encodes it. Never add a second. Refuse a dataset with no watermark. `seed(run)`: set each dataset from `store.max_value(header_table, 'last_modified_time')`.
 
 ## 4. Masters
 
@@ -85,7 +85,7 @@ The package is `reports/mis/zoho_sync/`; the six master wrappers are `reports/mi
   5. Any raise puts the document in `sync_pending` with the error and moves on.
   6. When the whole list was read, move the watermark to the highest timestamp seen.
 
-Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/pipeline.py`: `run_all` / `sync_dataset`; pending retry; list with `encode_watermark` (`+` → `%2B`); exclude/`reroute`; party required; `ensure` + doc-ref load; cache-current detail skip; `lines_synced_at`; partial list (`BudgetExceeded` / error) leaves watermark; finished list moves to highest raw `last_modified_time` even with pending docs. Task 10 pipeline FakeGateway tests still open.
+Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/pipeline.py`: `run_all` / `sync_dataset`; pending retry; list with `encode_watermark` (`+` → `%2B`); exclude/`reroute`; party required; `ensure` + doc-ref load; cache-current detail skip; `lines_synced_at`; partial list (`BudgetExceeded` / error) leaves watermark; finished list moves to highest raw `last_modified_time` even with pending docs. Task 10 pipeline FakeGateway tests done.
 
 ## 7. Cost of Sales
 
@@ -106,7 +106,7 @@ Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/__main__.py`: `python -m zoho_sync ru
 Done 21 Oct 2026, 0 Zoho calls. Code audit of `pipeline.py` / `specs.py` / `watermark.py` / `mapping.py` / `cogs.py` / `postings.py` / `ranges.py`. Two gaps fixed: (1) `lines_synced_at` was set before `replace_lines` — now only after lines (or `vendor_payment_bills`) write; (2) `header_from_list_sales_order` read Zoho `invoice_id`/`invoice_number` — now reads `salesorder_id`/`salesorder_number` (debit notes still map Zoho `invoice_*` → `debit_note_*`). Existing unittest suite: 77 OK.
 
 - [x] Debit notes run first and their ids are skipped by the invoice pass. A row already on `debit_notes` is skipped too. Detail `type` is checked before any line is written. Debit list sends `filter_by=Type.DebitNote`.
-- [x] Pass the stored watermark as raw Zoho text, `+` as `%2B`. Do not add one second. Bills and the four "not stated" lists overlap on equals; a matching timestamp is a no-op.
+- [x] Pass the stored watermark as raw Zoho text; `requests` encodes it. Do not add one second. Bills and the four "not stated" lists overlap on equals; a matching timestamp is a no-op.
 - [x] A partial list (stopped by `--max-calls` or an error) does not move that dataset's watermark. A failed document does not hold the watermark back; it stays in `sync_pending`.
 - [x] Required before a write: `customer_id` or `vendor_id`. Optional and NULL when blank: header `salesperson_id` (sales only) and `location_id`; line `item_id`, `location_id`, `account_id`. A filled-in id whose `ensure` fails or 404s stores nothing; after 3 attempts it is in the run summary.
 - [x] Debit note `reference_invoice_id`, when set, must exist on `sales_invoices` (load that invoice first). Vendor payment and vendor credit `bill_id` must exist on `purchase_docs` as a bill (load that bill first).
@@ -116,6 +116,8 @@ Done 21 Oct 2026, 0 Zoho calls. Code audit of `pipeline.py` / `specs.py` / `wate
 - [x] Mark `lines_synced_at` only when lines (or `vendor_payment_bills`) are written.
 
 ## 10. Tests
+
+Done 21 Oct 2026, 0 Zoho calls. Remaining FakeGateway / MemoryStore / ReplayGateway cases landed in `tests/test_zoho_sync.py` (`ReplayTests`, `PipelineTests`, expanded `SpecsTests` / `CostOfSalesPipelineTests`). Suite: 111 OK via `python -m unittest tests.test_zoho_sync tests.test_seed_extractions` from `reports/mis`.
 
 `tests/test_zoho_sync.py` and `tests/test_seed_extractions.py`, with fixtures in `tests/fixtures/zoho_sync/` trimmed from saved responses. No network, no database, `FakeGateway` and `MemoryStore`. Run from `reports/mis`: `python -m unittest tests.test_zoho_sync tests.test_seed_extractions`.
 
@@ -128,11 +130,11 @@ Core:
 
 - [x] `LiveGateway` with a stub `ZohoClient`: no call while unused; the first call signs in and the sign-in is counted; a 429 is retried; a 404 raises `NotFound`.
 - [x] `store_db` rejects a mapper key that is not a column (stub column list, no database).
-- [ ] `--replay` makes no network call and writes the same rows.
+- [x] `--replay` makes no network call and writes the same rows.
 
 Masters and specs:
 
-- [ ] Every `DocSpec` maps its fixture through its three mappers alone.
+- [x] Every `DocSpec` maps its fixture through its three mappers alone.
 - [x] `ensure` follows each `MasterSpec`'s dependencies and makes no call for an id already stored or already in the run memo.
 - [x] Customer `ensure` does not write a vendor. Vendor `ensure` does not write a customer.
 - [x] Item `ensure` ensures its accounts before inserting the item.
@@ -140,27 +142,27 @@ Masters and specs:
 
 Pipeline:
 
-- [ ] Every list sends the stored watermark with `+` as `%2B`. A bill boundary row with an equal timestamp updates nothing.
-- [ ] A run stopped by `--max-calls` partway through a list leaves that watermark unchanged. A finished list moves it even when one document is pending.
-- [ ] No watermark: the dataset is refused and nothing is listed.
-- [ ] A debit-note id is not inserted into `sales_invoices`, from the list or from a detail `type`.
-- [ ] A missing item, customer, vendor, salesperson, location, or account id is ensured before the insert. The stored row keeps the id.
-- [ ] A blank optional id is stored as NULL. A blank customer or vendor id stores nothing.
-- [ ] A master that fails or 404s stores nothing, records the doc in `sync_pending`, and appears in the summary on the third attempt.
-- [ ] A debit note whose reference invoice is not stored loads that invoice first.
-- [ ] Lines missing from a new detail payload are deleted.
-- [ ] Vendor-payment children come from `bills[]`, keyed by `bill_payment_id`, and only after that `bill_id` is on `purchase_docs`.
+- [x] Every list sends the stored watermark as raw text (requests encodes it). A bill boundary row with an equal timestamp updates nothing.
+- [x] A run stopped by `--max-calls` partway through a list leaves that watermark unchanged. A finished list moves it even when one document is pending.
+- [x] No watermark: the dataset is refused and nothing is listed.
+- [x] A debit-note id is not inserted into `sales_invoices`, from the list or from a detail `type`.
+- [x] A missing item, customer, vendor, salesperson, location, or account id is ensured before the insert. The stored row keeps the id.
+- [x] A blank optional id is stored as NULL. A blank customer or vendor id stores nothing.
+- [x] A master that fails or 404s stores nothing, records the doc in `sync_pending`, and appears in the summary on the third attempt.
+- [x] A debit note whose reference invoice is not stored loads that invoice first.
+- [x] Lines missing from a new detail payload are deleted.
+- [x] Vendor-payment children come from `bills[]`, keyed by `bill_payment_id`, and only after that `bill_id` is on `purchase_docs`.
 
 Cost of Sales:
 
 - [x] Cost of Sales postings become `sales_invoices.cogs`, and line COGS sums to that total.
 - [x] Postings spanning more than one page are all stored.
 - [x] A posting replaced under a new `categorized_transaction_id` replaces the old row and is not counted twice.
-- [ ] A changed bill dated D re-pulls Cost of Sales from D to today on the 02:00 run (injected clock). (`cost_of_sales_ranges` itself is covered by `RangesTests`; no pipeline-level test yet passes `claimed["bills"]` through `run_cost_of_sales`.)
+- [x] A changed bill dated D re-pulls Cost of Sales from D to today on the 02:00 run (injected clock). (`cost_of_sales_ranges` itself is covered by `RangesTests`; pipeline-level test passes `claimed["bills"]` through `run_cost_of_sales`.)
 - [x] A failed postings pull keeps the previous COGS and records the range as pending.
 - [x] A posted invoice with no postings takes its lines' cost sum. A void invoice gets 0.
 - [x] A debit note takes its lines' cost sum and sets `cogs_synced_at`, even when an `inventory_valuation_for_debit_notes` row on the same date is in `gl_journals` (vendor-credit fixture). Its dates alone do not trigger a postings pull.
-- [ ] A vendor-credit posting on Cost of Sales is stored in `gl_journals` and changes no invoice or debit-note COGS.
+- [x] A vendor-credit posting on Cost of Sales is stored in `gl_journals` and changes no invoice or debit-note COGS.
 
 ## Not in this work
 

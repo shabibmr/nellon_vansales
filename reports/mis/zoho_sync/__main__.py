@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .budget import Budget
 from .cache import Cache
-from .context import Run
+from .context import DUBAI, Run
 from .gateway import LiveGateway, ReplayGateway
 from .masters import SPECS, UnknownMaster, build_live_run, ensure
 from .pipeline import run_all
@@ -82,7 +82,8 @@ def build_run(
             mode="replay",
         )
 
-    run_id = new_run_id()
+    started_at = datetime.now(DUBAI)
+    run_id = new_run_id(started_at)
     budget = Budget(output_dir / "zoho_budget_stamp", interval=20.0, max_calls=max_calls)
     from zoho_client import ZohoClient
 
@@ -95,6 +96,7 @@ def build_run(
         runlog=runlog,
         run_id=run_id,
         mode="live",
+        started_at=started_at,
     )
 
 
@@ -107,6 +109,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     summary = run_all(run)
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+    if any(ds.get("error") for ds in summary.get("datasets", {}).values()):
+        return 1
     return 0
 
 

@@ -92,7 +92,7 @@ Credit notes are not one of the seven. `GET /creditnotes` has no `last_modified_
 
 ## Watermarks
 
-The watermark is the raw Zoho `last_modified_time` text (for example `2026-10-21T14:02:51+0400`) stored in `sync_state.watermark` as `VARCHAR`, not `DATETIME`, because a `DATETIME` drops the offset. Send it percent-encoded: `+` must go as `%2B` (the invoices spec example shows `%2B0800`).
+The watermark is the raw Zoho `last_modified_time` text (for example `2026-10-21T14:02:51+0400`) stored in `sync_state.watermark` as `VARCHAR`, not `DATETIME`, because a `DATETIME` drops the offset. Pass the raw text; `requests` encodes it on the outgoing query string (where `+` becomes `%2B`).
 
 Pass the watermark on every list. Invoices and debit notes are strict "after". Bills are "at or after", so the boundary row comes back and the header upsert is a no-op. The other four do not say equal versus after, so they use the same overlap. Do not add a second: two documents can share a timestamp, and skipping equals would drop one of them.
 
@@ -245,7 +245,7 @@ Watermarks live in `sync_state` (`dataset`, `watermark`, `last_run_at`). `sync_s
 | `store_db.py` | The MariaDB `Store`. Imported only by the CLI and wrappers | DB |
 | `cache.py` | `output/cache/{folder}/{id}.json` read and atomic write | File |
 | `runlog.py` | Run folder pages, `summary.json`, the 30-day clean-up | File |
-| `watermark.py` | Read and write `sync_state` through the store, `%2B` encoding, the seed | Through store |
+| `watermark.py` | Read and write `sync_state` through the store, `to_zoho_watermark`, seed, and datetime `highest` | Through store |
 | `masters.py` | `MasterSpec` per master, `ensure(run, kind, id)` | Through run |
 | `specs.py` | `DocSpec` per dataset, in run order | — |
 | `mapping.py` | Pure mappers per spec: `header_from_list(row)`, `from_detail(doc) -> (header_patch, lines)`, `collect_ids(doc) -> {kind: ids}`; `build_sales_lines(header, lines, units, rates)` | — |
@@ -303,7 +303,7 @@ Deletes are invisible to a `last_modified_time` list. This plan does not add a d
 
 No network. Fixture JSON only.
 
-- Every list sends the stored watermark, with `+` sent as `%2B`. A bill boundary row with an equal timestamp updates nothing.
+- Every list sends the stored watermark as raw text; `requests` encodes it. A bill boundary row with an equal timestamp updates nothing.
 - A run stopped by `--max-calls` partway through a list leaves that dataset's watermark unchanged. A finished list moves it to the highest timestamp seen, even when one document went to `sync_pending`.
 - No watermark in `sync_state`: the run refuses that dataset and lists nothing.
 - A debit-note id seen on the debit-note list is not inserted into `sales_invoices`, and a detail payload whose `type` is a debit note is not written as an invoice.
