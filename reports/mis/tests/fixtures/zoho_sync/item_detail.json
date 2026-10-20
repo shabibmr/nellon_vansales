@@ -1,0 +1,35 @@
+{
+  "item_id": "3331482000006071024",
+  "name": "RICE POWDER",
+  "sku": "",
+  "status": "active",
+  "item_type": "inventory",
+  "product_type": "goods",
+  "unit": "kg",
+  "purchase_rate": 2.133333,
+  "rate": 3.0,
+  "account_id": "3331482000000000388",
+  "account_name": "Sales Income - Nellon",
+  "purchase_account_id": "3331482000000034003",
+  "purchase_account_name": "Cost of Sales - Nellon",
+  "tax_id": "3331482000000075238",
+  "tax_name": "Standard Rate",
+  "tax_percentage": 5,
+  "brand": "",
+  "track_inventory": true,
+  "can_be_sold": true,
+  "can_be_purchased": true,
+  "last_modified_time": "2026-10-08T14:09:43+0400",
+  "unit_conversions": [
+    {
+      "unit_conversion_id": "3331482000000084011",
+      "target_unit": "g",
+      "conversion_rate": 0.001
+    },
+    {
+      "unit_conversion_id": "3331482000000243007",
+      "target_unit": "18 kg Bag",
+      "conversion_rate": 18.0
+    }
+  ]
+}

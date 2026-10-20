@@ -25,11 +25,14 @@ from typing import Any
 import pymysql
 from dotenv import load_dotenv
 
+from reports.account_postings import to_row as postings_to_row
 from seed_common import (
-    BASE_DIR, cents, connect, d, doc_money, line_cogs, load_item_rates, load_item_units,
-    parse_date, parse_dt, prorate, record_coverage, resolve_conversion, s, table_exists,
+    BASE_DIR, connect, d, load_item_rates, load_item_units,
+    parse_date, parse_dt, record_coverage, s, table_exists, upsert_sql,
 )
 from zoho_client import ZohoClient
+from zoho_sync.cogs import COS_ACCOUNT_ID, apply_cogs, load_invoice_postings
+from zoho_sync.mapping import build_sales_lines
 
 CACHE_DIR = BASE_DIR / "output" / "cache" / "invoices"
 
@@ -57,20 +60,23 @@ ILI_COLS = [
 ]
 
 
-def upsert_sql(table: str, cols: list[str], pk: str) -> str:
-    upd = ", ".join(f"`{c}` = VALUES(`{c}`)" for c in cols if c != pk)
-    return (
-        f"INSERT INTO `{table}` ({', '.join(f'`{c}`' for c in cols)}) "
-        f"VALUES ({', '.join(f'%({c})s' for c in cols)}) "
-        f"ON DUPLICATE KEY UPDATE {upd}"
-    )
+class _ConnPostingsStore:
+    """Thin adapter so load_invoice_postings can read gl_journals from a pymysql connection."""
+
+    def __init__(self, conn: pymysql.Connection) -> None:
+        self._conn = conn
+
+    def iter_table(self, table: str):
+        with self._conn.cursor() as cur:
+            cur.execute(f"SELECT * FROM `{table}`")
+            return list(cur.fetchall())
 
 
 def sync_recent_gl_journals(conn: pymysql.Connection, client: ZohoClient, dfrom: str, dto: str) -> int:
     """Fetch recent Cost of Sales postings and upsert into gl_journals."""
     print(f"Syncing GL inventory valuations from Zoho for {dfrom}..{dto}...")
     res = client.get("/chartofaccounts/transactions", params={
-        "account_id": "3331482000000034003",
+        "account_id": COS_ACCOUNT_ID,
         "date_start": dfrom,
         "date_end": dto,
         "per_page": 200,
@@ -82,55 +88,19 @@ def sync_recent_gl_journals(conn: pymysql.Connection, client: ZohoClient, dfrom:
     page_ctx = {"account_name": "Cost of Sales - Nellon", "account_code": "5.1.1000"}
     rows = []
     for t in txs:
-        dr = float(t.get("debit_amount") or 0.0)
-        cr = float(t.get("credit_amount") or 0.0)
-        rows.append({
-            "account_id": "3331482000000034003",
-            "categorized_transaction_id": s(t.get("categorized_transaction_id"), 40),
-            "account_name": page_ctx["account_name"],
-            "account_code": page_ctx["account_code"],
-            "transaction_id": s(t.get("transaction_id"), 40),
-            "transaction_type": s(t.get("transaction_type"), 60),
-            "transaction_type_formatted": s(t.get("transaction_type_formatted"), 120),
-            "transaction_date": t.get("transaction_date") or None,
-            "entry_number": s(t.get("entry_number"), 80),
-            "reference_number": s(t.get("reference_number"), 120),
-            "customer_id": s(t.get("customer_id"), 40),
-            "payee": s(t.get("payee"), 255),
-            "description": s(t.get("description"), 1000),
-            "debit_or_credit": s(t.get("debit_or_credit"), 10),
-            "debit_amount": dr,
-            "credit_amount": cr,
-            "amount": round(dr - cr, 2),
-            "fcy_debit_amount": float(t.get("fcy_debit_amount") or 0.0),
-            "fcy_credit_amount": float(t.get("fcy_credit_amount") or 0.0),
-            "currency_id": s(t.get("currency_id"), 40),
-            "currency_code": s(t.get("currency_code"), 10),
-            "offset_account_name": s(t.get("offset_account_name"), 255),
-            "raw_json": json.dumps(t, separators=(",", ":")),
-        })
+        payload = dict(t)
+        if not payload.get("account_id"):
+            payload["account_id"] = COS_ACCOUNT_ID
+        rows.append(postings_to_row(payload, page_ctx))
 
     cols = list(rows[0].keys())
-    upd = ", ".join(f"`{c}` = VALUES(`{c}`)" for c in cols if c not in ("account_id", "categorized_transaction_id"))
-    sql = f"INSERT INTO gl_journals ({', '.join(f'`{c}`' for c in cols)}) VALUES ({', '.join(f'%({c})s' for c in cols)}) ON DUPLICATE KEY UPDATE {upd}"
+    sql = upsert_sql("gl_journals", cols, {"account_id", "categorized_transaction_id"})
 
     with conn.cursor() as cur:
         cur.executemany(sql, rows)
     conn.commit()
     print(f"Upserted {len(rows)} Cost of Sales postings into gl_journals.")
     return len(rows)
-
-
-def load_gl_cogs(conn: pymysql.Connection) -> dict[str, Decimal]:
-    """Return map of invoice_id -> sum of GL inventory valuation amounts."""
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT transaction_id, SUM(amount) AS cogs
-            FROM gl_journals
-            WHERE transaction_type = 'inventory_valuation_for_invoice'
-            GROUP BY transaction_id
-        """)
-        return {r["transaction_id"]: cents(d(r["cogs"])) for r in cur.fetchall()}
 
 
 def build_invoice_rows(
@@ -158,7 +128,7 @@ def build_invoice_rows(
 
         h = data.get("invoice", data)
         raw_lines = h.get("line_items") or []
-        money = doc_money(h, raw_lines)
+        raw_by_id = {s(ln.get("line_item_id"), 40): ln for ln in raw_lines if s(ln.get("line_item_id"), 40)}
 
         inv_date = parse_date(h.get("date"))
         cid = s(h.get("customer_id"), 40) or None
@@ -166,113 +136,57 @@ def build_invoice_rows(
             cid = None
             stats["invoice_customer_not_in_customers"] += 1
 
-        built_lines = []
-        built_ili = []
+        skipped = sum(1 for ln in raw_lines if not s(ln.get("line_item_id"), 40))
+        if skipped:
+            stats["lines_without_id_skipped"] += skipped
+
+        built_lines = build_sales_lines(h, raw_lines, units, rates)
         flagged_count = 0
-
-        # Pass 1: compute line baseline money & COGS
-        for ln, m in zip(raw_lines, money):
-            lid = s(ln.get("line_item_id"), 40)
-            if not lid:
-                stats["lines_without_id_skipped"] += 1
-                continue
-
-            qty = d(ln.get("quantity"))
-            conv, conv_flag = resolve_conversion(ln, units)
-            base_qty = qty * conv
-
-            iid_line = s(ln.get("item_id"), 40) or None
-            item_flag = ""
+        for bl in built_lines:
+            iid_line = bl["item_id"]
             if iid_line and iid_line not in item_ids:
-                item_flag = "item_id not in items"
                 stats["line_item_not_in_items"] += 1
-                iid_line = None
-
-            unit_price = d(ln.get("purchase_price"))
-            m_rate = rates.get(iid_line, Decimal("0")) if iid_line else Decimal("0")
-            base_unit = s(ln.get("base_unit"), 40)
-
-            cogs_val, c_flag = line_cogs(
-                qty=qty, conv=conv, base_qty=base_qty,
-                price=unit_price, master_rate=m_rate, base_unit=base_unit
-            )
-
-            flags = [f for f in [conv_flag, item_flag, c_flag] if f]
-            flag_str = "; ".join(flags)
-            if flag_str:
+                bl["item_id"] = None
+                item_flag = "item_id not in items"
+                bl["flag"] = f"{bl['flag']}; {item_flag}" if bl["flag"] else item_flag
+                bl["flag"] = bl["flag"][:255]
+            if bl["flag"]:
                 flagged_count += 1
                 stats["lines_flagged"] += 1
 
-            built_lines.append({
-                "line_item_id": lid,
-                "invoice_id": iid,
-                "date": inv_date,
-                "location_id": s(ln.get("location_id") or h.get("location_id"), 40) or None,
-                "location_name": s(ln.get("location_name") or h.get("location_name"), 255),
-                "item_id": iid_line,
-                "item_name": s(ln.get("name") or ln.get("item_name") or ln.get("description"), 255),
-                "sku": s(ln.get("sku"), 100),
-                "account_id": s(ln.get("account_id"), 40) or None,
-                "account_name": s(ln.get("account_name"), 255),
-                "quantity": qty,
-                "unit": s(ln.get("unit"), 40),
-                "base_unit": base_unit,
-                "conversion_rate": conv,
-                "base_quantity": base_qty,
-                "rate": d(ln.get("rate")),
-                "line_discount": m["line_discount"],
-                "invoice_discount": m["doc_discount"],
-                "item_total": m["item_total"],
-                "tax_amount": m["tax_amount"],
-                "net_sales": m["amount"],
-                "purchase_price": unit_price,
-                "baseline_cogs": cogs_val,
-                "cogs": cogs_val,
-                "flag": flag_str[:255],
-            })
+        postings_total = gl_cogs_map.get(iid)
+        if postings_total is not None:
+            stats["invoices_reconciled_to_gl"] += 1
+        else:
+            stats["invoices_unreconciled_line_sum_cogs"] += 1
+        header_cogs, allocated = apply_cogs(s(h.get("status"), 30), built_lines, postings_total)
+        for bl, alloc in zip(built_lines, allocated):
+            bl["cogs"] = alloc
 
+        built_ili = []
+        for bl in built_lines:
+            ln = raw_by_id.get(bl["line_item_id"], {})
             built_ili.append({
-                "line_item_id": lid,
+                "line_item_id": bl["line_item_id"],
                 "invoice_id": iid,
                 "Invoice#": s(h.get("invoice_number"), 60),
                 "invoice_number": s(h.get("invoice_number"), 60),
                 "date": inv_date,
-                "item_id": iid_line,
-                "item_name": s(ln.get("name") or ln.get("item_name") or ln.get("description"), 255),
-                "qty": qty,
-                "uom": s(ln.get("unit"), 40),
-                "base_uom": base_unit,
-                "rate": d(ln.get("rate")),
+                "item_id": bl["item_id"],
+                "item_name": bl["item_name"],
+                "qty": bl["quantity"],
+                "uom": bl["unit"],
+                "base_uom": bl["base_unit"],
+                "rate": bl["rate"],
                 "sales_rate": d(ln.get("sales_rate")),
-                "item_total": m["item_total"],
-                "purchase_price": unit_price,
-                "conversion_rate": conv,
-                "cost_of_sales": cogs_val,
+                "item_total": bl["item_total"],
+                "purchase_price": bl["purchase_price"],
+                "conversion_rate": bl["conversion_rate"],
+                "cost_of_sales": bl["cogs"],
                 "cost_source": s(ln.get("cost_source"), 50),
             })
 
-        # Reconcile header COGS and line COGS
         header_net_sales = sum((bl["net_sales"] for bl in built_lines), Decimal("0"))
-        baseline_cogs_sum = sum((bl["baseline_cogs"] for bl in built_lines), Decimal("0"))
-
-        if iid in gl_cogs_map:
-            gl_total_cogs = gl_cogs_map[iid]
-            stats["invoices_reconciled_to_gl"] += 1
-            header_cogs = gl_total_cogs
-            if len(built_lines) == 1:
-                built_lines[0]["cogs"] = gl_total_cogs
-                built_ili[0]["cost_of_sales"] = gl_total_cogs
-            elif len(built_lines) > 1:
-                weights = [bl["baseline_cogs"] for bl in built_lines]
-                if sum(weights) <= 0:
-                    weights = [bl["net_sales"] for bl in built_lines]
-                allocated = prorate(gl_total_cogs, weights)
-                for bl, ili, alloc in zip(built_lines, built_ili, allocated):
-                    bl["cogs"] = alloc
-                    ili["cost_of_sales"] = alloc
-        else:
-            stats["invoices_unreconciled_line_sum_cogs"] += 1
-            header_cogs = baseline_cogs_sum
 
         inv_rows.append({
             "invoice_id": iid,
@@ -358,9 +272,6 @@ def main() -> int:
             cur.execute("SELECT item_id FROM items")
             item_ids = {r["item_id"] for r in cur.fetchall()}
 
-        # Load GL COGS map
-        gl_cogs_map = load_gl_cogs(conn)
-
         # List all Zoho invoices in range
         zoho_invoices = []
         page = 1
@@ -384,6 +295,8 @@ def main() -> int:
         if not missing_ids:
             print("No missing invoices to seed.")
             return 0
+
+        gl_cogs_map = load_invoice_postings(_ConnPostingsStore(conn), COS_ACCOUNT_ID, missing_ids)
 
         # Step 3: Build rows
         inv_rows, line_rows, ili_rows, stats = build_invoice_rows(

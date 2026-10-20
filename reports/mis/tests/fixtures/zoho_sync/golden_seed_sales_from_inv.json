@@ -1,0 +1,63 @@
+{
+  "inv_rows": [
+    {
+      "balance": "105",
+      "cogs": "40.00",
+      "currency_code": "AED",
+      "customer_id": "c1",
+      "customer_name": "Cust",
+      "date": "2026-09-01",
+      "discount_total": "0",
+      "due_date": "2026-09-10",
+      "exchange_rate": "1",
+      "flagged_lines": 0,
+      "invoice_id": "inv1",
+      "invoice_number": "T-1",
+      "net_sales": "100.00",
+      "salesperson_name": "Sam",
+      "status": "sent",
+      "sub_total": "100",
+      "tax_total": "5",
+      "total": "105"
+    }
+  ],
+  "line_rows": [
+    {
+      "base_quantity": "2",
+      "base_unit": "kg",
+      "cogs": "20",
+      "conversion_rate": "1",
+      "date": "2026-09-01",
+      "flag": "net_sales prorated from header",
+      "invoice_id": "inv1",
+      "item_id": "i1",
+      "item_name": "A",
+      "item_total": "60",
+      "line_item_id": "l1",
+      "net_sales": "60.00",
+      "purchase_price": "10",
+      "quantity": "2",
+      "rate": "30",
+      "unit": "kg"
+    },
+    {
+      "base_quantity": "18",
+      "base_unit": "kg",
+      "cogs": "20",
+      "conversion_rate": "18",
+      "date": "2026-09-01",
+      "flag": "net_sales prorated from header",
+      "invoice_id": "inv1",
+      "item_id": "i2",
+      "item_name": "B",
+      "item_total": "40",
+      "line_item_id": "l2",
+      "net_sales": "40.00",
+      "purchase_price": "15",
+      "quantity": "1",
+      "rate": "40",
+      "unit": "bag"
+    }
+  ],
+  "stats": {}
+}

@@ -140,7 +140,7 @@ Run once per run, after all seven lists. This is the only place `sales_invoices.
 
 ### Which dates
 
-- Every date of a posted, draft, or void invoice or debit note this run stored.
+- Every date of a posted, draft, or void invoice this run stored. Debit-note dates are not added: debit-note COGS does not use postings (see What is written).
 - On the 02:00 run: every date in a trailing window (the current month, plus the previous month until its 5th day). A backdated bill can revalue stock and replace the postings of later invoices without changing those invoices' `last_modified_time`.
 - On the 02:00 run: for every bill this run changed with date D, every date from D to today.
 - Every date range left in `sync_pending` with `dataset='cogs'`.
@@ -166,9 +166,11 @@ For each invoice dated in a range that was pulled:
 | Draft or void | 0 | 0 | Set |
 | Pull for that range failed | Unchanged | Unchanged | Left as it was; range goes to `sync_pending` |
 
-Debit notes follow the same table into `debit_notes.cogs` and `debit_note_lines.cogs`, once the posting type for a debit note is confirmed from a saved response. Until then a debit note takes the sum of its lines' own cost and `cogs_synced_at` is set.
+Only `inventory_valuation_for_invoice` rows are matched, on `transaction_id`. Confirmed from `output/archive/cos_raw_all.json`: all 195 such rows carry the invoice id there.
 
-Credit-note reversals land in the same account. They are kept in `gl_journals` and are not added to any invoice.
+Debit notes do not use postings. Every debit note this run stored gets `debit_notes.cogs` = the sum of its lines' own cost (0 for draft or void), its line COGS unchanged, and `cogs_synced_at` set, in this pass, with no pull of their own. No customer debit note has been seen yet, so the posting type one leaves on Cost of Sales is unknown. `inventory_valuation_for_debit_notes` on this account belongs to vendor credits (`KGT-VC-*`, 48 of 48 in `gl_journals`) and is never matched to a customer debit note. Once the first customer debit note is stored, its posting is looked up by `transaction_id` in that date's pull; only after its type is recorded do debit notes move to the table above.
+
+Credit-note and vendor-credit postings land in the same account. They are kept in `gl_journals` and are not added to any invoice or debit note.
 
 `seed_missing_sales.py` (`load_gl_cogs` and the reconcile block in `build_invoice_rows`) already does this matching and spreading. Both move into `zoho_sync/cogs.py` and the seeder imports them back, so there is one version:
 
@@ -194,6 +196,33 @@ The runner is the package `reports/mis/zoho_sync/`. CLI:
 - `python -m zoho_sync run --replay RUN_ID`: the same pipeline over a saved run folder, with no network.
 - `python -m zoho_sync fetch KIND ID`: one master, as the `fetch_*.py` wrappers do.
 - `python -m zoho_sync seed-watermarks`: the first-run seed (see Watermarks).
+
+### Where the files go
+
+All new code is under `reports/mis/`, the folder that already holds `seed_common.py`, `zoho_client.py`, and the seeders. Commands run from that folder.
+
+```
+reports/mis/
+  zoho_sync/                  new package
+    __init__.py
+    __main__.py               python -m zoho_sync …
+    gateway.py  budget.py  context.py
+    store.py    store_db.py cache.py   runlog.py  watermark.py
+    masters.py  specs.py    mapping.py pipeline.py
+    ranges.py   postings.py cogs.py
+  fetch_customer.py           six master wrappers, beside the existing scripts
+  fetch_vendor.py
+  fetch_item.py
+  fetch_account.py
+  fetch_location.py
+  fetch_salesperson.py
+  tests/
+    test_zoho_sync.py         new
+    test_seed_extractions.py  new
+    fixtures/zoho_sync/       new fixture JSON, trimmed from saved responses
+```
+
+Edited in place: `seed_common.py`, `zoho_client.py`, `reports/account_postings.py`, `reports/db.py`, `proposal/DB-Schema-Proposed.sql`, `seed_missing_sales.py`, `seed_sales_from_inv.py`, `seed_purchases_from_cache.py`, and `fetch_and_seed_gl_journals.py`. Run output goes to `reports/mis/output/` (`cache/`, `runs/`), which git does not track.
 
 Watermarks live in `sync_state` (`dataset`, `watermark`, `last_run_at`). `sync_state` is for these watermarks only; the existing `sync_coverage` table stays as the record of date ranges loaded by the seeders.
 
@@ -292,6 +321,8 @@ No network. Fixture JSON only.
 - A changed bill dated D re-pulls Cost of Sales from D to today on the 02:00 run.
 - A failed postings pull leaves the previous COGS, leaves `cogs_synced_at` as it was, and records the range in `sync_pending`.
 - A posted invoice with no postings takes the sum of its lines' own cost. A void invoice gets 0.
+- A debit note takes the sum of its lines' own cost and sets `cogs_synced_at`, even when an `inventory_valuation_for_debit_notes` row on the same date is in `gl_journals`. Its dates alone do not trigger a postings pull.
+- A vendor-credit posting on Cost of Sales is stored in `gl_journals` and changes no invoice or debit-note COGS.
 - Vendor-payment children come from `bills[]`, keyed by `bill_payment_id`, and only after that `bill_id` is on `purchase_docs`.
 - `--replay` of a saved run folder makes no network call and writes the same rows.
 - Every `DocSpec` maps its fixture through its three mappers alone, with no store and no gateway.

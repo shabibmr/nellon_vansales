@@ -1,0 +1,10 @@
+{
+  "account_id": "3331482000000000388",
+  "account_code": "4.1.1000",
+  "account_name": "Sales Income - Nellon",
+  "account_type": "income",
+  "parent_account_id": "3331482000000119341",
+  "parent_account_name": "Revenue",
+  "is_active": true,
+  "last_modified_time": "2022-07-15T17:28:35+0400"
+}

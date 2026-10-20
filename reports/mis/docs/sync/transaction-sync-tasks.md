@@ -1,6 +1,6 @@
 # Transaction sync — task list
 
-Plan: `docs/sync/transaction-sync-plan.md`. Status as of 21 Oct 2026: task 0 done (confirmations only). No project file from this plan has been written. No Zoho call.
+Plan: `docs/sync/transaction-sync-plan.md`. Status as of 21 Oct 2026: tasks 0–8 done except the task-7 follow-up (first customer debit note, blocked on seeing one). Core + masters + document specs + `pipeline.py` + Cost of Sales modules + CLI (`zoho_sync/__main__.py`) in place. `pipeline.run_all` now calls `run_cost_of_sales` after the seven-list loop (only when a spec in that run has `has_cogs`), which pulls the ranges `ranges.cost_of_sales_ranges` implies through `postings.pull_ranges` and reconciles invoices/debit notes through `cogs.write_invoice_cogs`/`write_debit_note_cogs`. Next: task 9 rules check / task 10 remaining tests. No Zoho call.
 
 Scope is the runs from now on. Backfill is handled separately.
 
@@ -22,60 +22,62 @@ Findings (21 Oct 2026, no Zoho call):
 
 ## 1. Schema
 
-- [ ] Add `lines_synced_at DATETIME NULL` on `sales_invoices`, `debit_notes`, `purchase_docs`, `sales_orders`, `vendor_credits`, and `vendor_payments` in `reports/db.py` and `proposal/DB-Schema-Proposed.sql`. Do not add it to `credit_notes`.
-- [ ] Add `cogs_synced_at DATETIME NULL` on `sales_invoices` and `debit_notes`.
-- [ ] Add an ALTER path so an existing database gains those columns (`CREATE TABLE IF NOT EXISTS` will not).
-- [ ] Add `sync_state` (`dataset` primary key, `watermark VARCHAR(40)` holding the raw Zoho text with offset, `last_run_at`).
-- [ ] Add `sync_pending` (`dataset`, `doc_id`, primary key on both; `modified_time`, `reason`, `last_error`, `attempts`, `first_seen`, `last_tried`). For `dataset='cogs'`, `doc_id` is the range as `YYYY-MM-DD..YYYY-MM-DD`.
-- [ ] Add `sales_orders` and `sales_order_lines` (invoice shape, no COGS; lines include `quantity_invoiced` and `order_discount`).
-- [ ] Add `vendor_credits` and `vendor_credit_lines` (vendor, optional `bill_id`, amount, no COGS). `bill_id` joins `purchase_docs` through a `kind` column fixed to `'bill'`.
-- [ ] Add `vendor_payments` and `vendor_payment_bills` (`bill_payment_id` primary key; a `kind` column fixed to `'bill'` so `(kind, bill_id)` can reference `purchase_docs (kind, doc_id)`).
-- [ ] Leave `sync_coverage` as is. It records seeder date ranges, not watermarks.
+- [x] Add `lines_synced_at DATETIME NULL` on `sales_invoices`, `debit_notes`, `purchase_docs`, `sales_orders`, `vendor_credits`, and `vendor_payments` in `reports/db.py` and `proposal/DB-Schema-Proposed.sql`. Do not add it to `credit_notes`.
+- [x] Add `cogs_synced_at DATETIME NULL` on `sales_invoices` and `debit_notes`.
+- [x] Add an ALTER path so an existing database gains those columns (`CREATE TABLE IF NOT EXISTS` will not).
+- [x] Add `sync_state` (`dataset` primary key, `watermark VARCHAR(40)` holding the raw Zoho text with offset, `last_run_at`).
+- [x] Add `sync_pending` (`dataset`, `doc_id`, primary key on both; `modified_time`, `reason`, `last_error`, `attempts`, `first_seen`, `last_tried`). For `dataset='cogs'`, `doc_id` is the range as `YYYY-MM-DD..YYYY-MM-DD`.
+- [x] Add `sales_orders` and `sales_order_lines` (invoice shape, no COGS; lines include `quantity_invoiced` and `order_discount`).
+- [x] Add `vendor_credits` and `vendor_credit_lines` (vendor, optional `bill_id`, amount, no COGS). `bill_id` joins `purchase_docs` through a `kind` column fixed to `'bill'`.
+- [x] Add `vendor_payments` and `vendor_payment_bills` (`bill_payment_id` primary key; a `kind` column fixed to `'bill'` so `(kind, bill_id)` can reference `purchase_docs (kind, doc_id)`).
+- [x] Leave `sync_coverage` as is. It records seeder date ranges, not watermarks.
 
 ## 2. Shared code and extractions
 
 Each extraction keeps the script's command line and output. Write the same-rows test (task 10) before moving code, and run it after.
 
-- [ ] `seed_common.py`: add `upsert_sql(table, cols, key_cols)`.
-- [ ] `seed_sales_from_inv.py`: delete its `connect`, `d`, `cents`, `prorate`, `table_exists`; import them from `seed_common`.
-- [ ] `seed_missing_sales.py`, `seed_purchases_from_cache.py`: delete `upsert_sql`; use `seed_common.upsert_sql`.
-- [ ] `fetch_and_seed_gl_journals.py` and `seed_missing_sales.sync_recent_gl_journals`: use `reports/account_postings.to_row` instead of their own postings mappers.
-- [ ] Create `zoho_sync/mapping.py` with `build_sales_lines(header, lines, units, rates)`, moved from the per-line block of `seed_missing_sales.build_invoice_rows`. It does not filter ids. The seeder keeps its own NULL-ing of unknown customer and item ids, applied after the call.
-- [ ] Create `zoho_sync/cogs.py` with `load_invoice_postings(store, account_id, invoice_ids)` (from `load_gl_cogs`, filtered on account and ids) and the pure `apply_cogs(status, lines, postings_total)` (from the reconcile block, using `seed_common.prorate`). `seed_missing_sales.py` imports both.
-- [ ] `zoho_client.py`: sign in on first request, not in `__init__`; add an `on_auth` callback; raise `ZohoHTTPError(RuntimeError)` with `status` and `code`; remove the unused `TOKEN_CACHE`. No retry here.
-- [ ] `reports/account_postings.fetch_pages`: take a gateway instead of creating a `ZohoClient`; send `date_start` / `date_end` instead of `date.start` / `date.end`. `run_cli` builds a live gateway, so `fetch_cost_of_sales_nellon.py` and the other callers keep working. Update the `--from-date` / `--to-date` help text.
+- [x] `seed_common.py`: add `upsert_sql(table, cols, key_cols)`.
+- [x] `seed_sales_from_inv.py`: delete its `connect`, `d`, `cents`, `prorate`, `table_exists`; import them from `seed_common`.
+- [x] `seed_missing_sales.py`, `seed_purchases_from_cache.py`: delete `upsert_sql`; use `seed_common.upsert_sql`.
+- [x] `fetch_and_seed_gl_journals.py` and `seed_missing_sales.sync_recent_gl_journals`: use `reports/account_postings.to_row` instead of their own postings mappers.
+- [x] Create `zoho_sync/mapping.py` with `build_sales_lines(header, lines, units, rates)`, moved from the per-line block of `seed_missing_sales.build_invoice_rows`. It does not filter ids. The seeder keeps its own NULL-ing of unknown customer and item ids, applied after the call.
+- [x] Create `zoho_sync/cogs.py` with `load_invoice_postings(store, account_id, invoice_ids)` (from `load_gl_cogs`, filtered on account and ids) and the pure `apply_cogs(status, lines, postings_total)` (from the reconcile block, using `seed_common.prorate`). `seed_missing_sales.py` imports both.
+- [x] `zoho_client.py`: sign in on first request, not in `__init__`; add an `on_auth` callback; raise `ZohoHTTPError(RuntimeError)` with `status` and `code`; remove the unused `TOKEN_CACHE`. No retry here.
+- [x] `reports/account_postings.fetch_pages`: take a gateway instead of creating a `ZohoClient`; send `date_start` / `date_end` instead of `date.start` / `date.end`. `run_cli` builds a live gateway, so `fetch_cost_of_sales_nellon.py` and the other callers keep working. Update the `--from-date` / `--to-date` help text.
 
 ## 3. Core of `zoho_sync/`
 
-- [ ] `gateway.py` — the `Gateway` interface `get(endpoint, params) -> dict`.
-  - `LiveGateway(client, budget, runlog)`: sign-in on first call, counted through `on_auth`; budget before every call; retry 429 and 5xx with backoff, each retry counted; `NotFound` on 404; list and postings pages handed to `runlog`.
-  - `ReplayGateway(run_folder)`: answers each request from the saved page; a missing page raises.
-  - `FakeGateway(responses)`: fixtures keyed by endpoint and params; records the calls made.
-- [ ] `budget.py` — default 20 seconds between calls (3 per minute). `--max-calls`. Shared stamp file under `output/` with an exclusive lock, so the wrappers and the runner share the cap. Interval 0 in tests.
-- [ ] `context.py` — `Run` (gateway, store, cache, runlog, clock, mode, `run_id`, master memo). The clock is injectable.
-- [ ] `store.py` — the `Store` protocol (`get`, `has`, `upsert`, `replace_lines`, `replace_range`, `max_value`, `add_pending`, `list_pending`, `clear_pending`, `get_watermark`, `set_watermark`) and `MemoryStore`.
-- [ ] `store_db.py` — MariaDB `Store`. Upserts through `seed_common.upsert_sql`. Columns read once per table with `SHOW COLUMNS`; a mapper key that is not a column raises. Purchase docs keyed `(kind, doc_id)`. `replace_lines` and `replace_range` run in one transaction each. Imported only by the CLI and wrappers.
-- [ ] `cache.py` — bare resource object at `output/cache/{folder}/{id}.json`. Atomic `.tmp` replace. Reader accepts an old envelope for one release. `is_current(folder, id, last_modified_time)`.
-- [ ] `runlog.py` — `output/runs/{run_id}/{dataset}/page-N.json` for every list and postings page, plus `summary.json` (calls, rows stored, pending, watermark before and after). `run_id` is `YYYYMMDD-HHMMSS` Asia/Dubai. Delete run folders older than 30 days at the start of a run.
-- [ ] `watermark.py` — read and write through the store. Encode `+` as `%2B`. Never add a second. Refuse a dataset with no watermark. `seed(run)`: set each dataset from `store.max_value(header_table, 'last_modified_time')`.
+The package is `reports/mis/zoho_sync/`; the six master wrappers are `reports/mis/fetch_*.py`. Full layout: plan, Code structure, Where the files go.
+
+- [x] `gateway.py` — the `Gateway` interface `get(endpoint, params) -> dict`.
+  - [x] `LiveGateway(client, budget, runlog)`: sign-in on first call, counted through `on_auth`; budget before every call; retry 429 and 5xx with backoff, each retry counted; `NotFound` on 404; list and postings pages handed to `runlog`.
+  - [x] `ReplayGateway(run_folder)`: answers each request from the saved page; a missing page raises.
+  - [x] `FakeGateway(responses)`: fixtures keyed by endpoint and params; records the calls made.
+- [x] `budget.py` — default 20 seconds between calls (3 per minute). `--max-calls`. Shared stamp file under `output/` with an exclusive lock, so the wrappers and the runner share the cap. Interval 0 in tests.
+- [x] `context.py` — `Run` (gateway, store, cache, runlog, clock, mode, `run_id`, master memo). The clock is injectable.
+- [x] `store.py` — the `Store` protocol (`get`, `has`, `upsert`, `replace_lines`, `replace_range`, `max_value`, `add_pending`, `list_pending`, `clear_pending`, `get_watermark`, `set_watermark`) and `MemoryStore`.
+- [x] `store_db.py` — MariaDB `Store`. Upserts through `seed_common.upsert_sql`. Columns read once per table with `SHOW COLUMNS`; a mapper key that is not a column raises. Purchase docs keyed `(kind, doc_id)`. `replace_lines` and `replace_range` run in one transaction each. Imported only by the CLI and wrappers.
+- [x] `cache.py` — bare resource object at `output/cache/{folder}/{id}.json`. Atomic `.tmp` replace. Reader accepts an old envelope for one release. `is_current(folder, id, last_modified_time)`.
+- [x] `runlog.py` — `output/runs/{run_id}/{dataset}/page-N.json` for every list and postings page, plus `summary.json` (calls, rows stored, pending, watermark before and after). `run_id` is `YYYYMMDD-HHMMSS` Asia/Dubai. Delete run folders older than 30 days at the start of a run.
+- [x] `watermark.py` — read and write through the store. Encode `+` as `%2B`. Never add a second. Refuse a dataset with no watermark. `seed(run)`: set each dataset from `store.max_value(header_table, 'last_modified_time')`.
 
 ## 4. Masters
 
-- [ ] `masters.py` — `MasterSpec` (`kind`, `lookup` id / list / id-else-list, `path`, `list_path`, `response_key`, `type_check`, `table`, `mapper`, `deps`, `cache_folder`, `update_cols`) and `ensure(run, kind, id)` with the six steps in the plan. Raises on failure, `NotFound` on 404, `WrongType` on a type mismatch.
-- [ ] Six specs: customer, vendor, item (deps: `account_id`, `purchase_account_id`), account (deps: `parent_account_id`; update columns are Zoho columns only), location (list), salesperson (id, else list).
-- [ ] Mappers for the six, pure, in `mapping.py`. Item mapper writes `items` and `item_units` rows from the detail payload. No `raw_json` on items.
-- [ ] Six wrappers, `fetch_customer.py`, `fetch_vendor.py`, `fetch_item.py`, `fetch_account.py`, `fetch_location.py`, `fetch_salesperson.py`: parse the id, build a live `Run`, call `ensure`, exit non-zero on any raise. No other logic. Each refuses to call Zoho without `--yes-live`.
+- [x] `masters.py` — `MasterSpec` (`kind`, `lookup` id / list / id-else-list, `path`, `list_path`, `response_key`, `type_check`, `table`, `mapper`, `deps`, `cache_folder`, `update_cols`) and `ensure(run, kind, id)` with the six steps in the plan. Raises on failure, `NotFound` on 404, `WrongType` on a type mismatch.
+- [x] Six specs: customer, vendor, item (deps: `account_id`, `purchase_account_id`), account (deps: `parent_account_id`; update columns are Zoho columns only), location (list), salesperson (id, else list).
+- [x] Mappers for the six, pure, in `mapping.py`. Item mapper writes `items` and `item_units` rows from the detail payload. No `raw_json` on items.
+- [x] Six wrappers, `fetch_customer.py`, `fetch_vendor.py`, `fetch_item.py`, `fetch_account.py`, `fetch_location.py`, `fetch_salesperson.py`: parse the id, build a live `Run`, call `ensure`, exit non-zero on any raise. No other logic. Each refuses to call Zoho without `--yes-live`.
 
 ## 5. Document specs and mappers
 
-- [ ] `specs.py` — seven `DocSpec`s with the fields in the plan, in run order: debit notes, invoices, bills, vendor credits, sales orders, purchase orders, vendor payments.
-- [ ] Invoice spec: `exclude_ids_from='debit_notes'` and the `reroute` hook for a detail whose `type` is a debit note. Debit-note spec: `list_params` with `filter_by=Type.DebitNote`.
-- [ ] `doc_refs`: debit note `reference_invoice_id` → invoices; vendor credit `bill_id` and vendor payment `bills[].bill_id` → bills (`kind='bill'`).
-- [ ] Mappers per spec in `mapping.py`: `header_from_list`, `from_detail`, `collect_ids`. Invoices and debit notes use `build_sales_lines`. Vendor payment `from_detail` returns `bills[]` rows keyed by `bill_payment_id`.
+- [x] `specs.py` — seven `DocSpec`s with the fields in the plan, in run order: debit notes, invoices, bills, vendor credits, sales orders, purchase orders, vendor payments.
+- [x] Invoice spec: `exclude_ids_from='debit_notes'` and the `reroute` hook for a detail whose `type` is a debit note. Debit-note spec: `list_params` with `filter_by=Type.DebitNote`.
+- [x] `doc_refs`: debit note `reference_invoice_id` → invoices; vendor credit `bill_id` and vendor payment `bills[].bill_id` → bills (`kind='bill'`).
+- [x] Mappers per spec in `mapping.py`: `header_from_list`, `from_detail`, `collect_ids`. Invoices and debit notes use `build_sales_lines`. Vendor payment `from_detail` returns `bills[]` rows keyed by `bill_payment_id`.
 
 ## 6. Pipeline
 
-- [ ] `pipeline.py` — one loop over the specs, reading every difference from the spec:
+- [x] `pipeline.py` — one loop over the specs, reading every difference from the spec:
   1. Retry `sync_pending` for the dataset.
   2. List from the watermark, every page.
   3. Per row: skip excluded ids; require `party`; `ensure` each optional id from `collect_ids`; load `doc_refs` documents through the same loop; upsert the header from `header_from_list`.
@@ -83,17 +85,21 @@ Each extraction keeps the script's command line and output. Write the same-rows 
   5. Any raise puts the document in `sync_pending` with the error and moves on.
   6. When the whole list was read, move the watermark to the highest timestamp seen.
 
+Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/pipeline.py`: `run_all` / `sync_dataset`; pending retry; list with `encode_watermark` (`+` → `%2B`); exclude/`reroute`; party required; `ensure` + doc-ref load; cache-current detail skip; `lines_synced_at`; partial list (`BudgetExceeded` / error) leaves watermark; finished list moves to highest raw `last_modified_time` even with pending docs. Task 10 pipeline FakeGateway tests still open.
+
 ## 7. Cost of Sales
 
-- [ ] `ranges.py` — pure: dates from this run's stored invoices (not debit notes; see task 0 finding 2), the trailing window when the clock says 02:00 run, D to today for each changed bill on that run, and pending ranges; merged into continuous ranges.
-- [ ] `postings.py` — for each range, every page through `account_postings.fetch_pages` with the run's gateway, mapped with `account_postings.to_row` (`raw_json` NULL), then `store.replace_range`. A failed range goes to `sync_pending` with `dataset='cogs'`.
-- [ ] Wire `cogs.load_invoice_postings` and `cogs.apply_cogs` to write header and line COGS and `cogs_synced_at` per the plan's table, for invoices dated in a pulled range. Match only `transaction_type='inventory_valuation_for_invoice'` on `transaction_id`.
-- [ ] Debit notes stored this run: header COGS is the sum of their lines' own cost (0 for draft or void), line COGS unchanged, `cogs_synced_at` set. No postings pull is needed for them. Never match `inventory_valuation_for_debit_notes` rows to a customer debit note; on this account that type belongs to vendor credits (`KGT-VC-*`).
+- [x] `ranges.py` — pure: dates from this run's stored invoices (not debit notes; see task 0 finding 2), the trailing window when the clock says 02:00 run, D to today for each changed bill on that run, and pending ranges; merged into continuous ranges.
+- [x] `postings.py` — for each range, every page through `account_postings.fetch_pages` with the run's gateway, mapped with `account_postings.to_row` (`raw_json` NULL), then `store.replace_range`. A failed range goes to `sync_pending` with `dataset='cogs'`.
+- [x] Wire `cogs.load_invoice_postings` and `cogs.apply_cogs` to write header and line COGS and `cogs_synced_at` per the plan's table, for invoices dated in a pulled range. Match only `transaction_type='inventory_valuation_for_invoice'` on `transaction_id`. (`cogs.write_invoice_cogs`.)
+- [x] Debit notes stored this run: header COGS is the sum of their lines' own cost (0 for draft or void), line COGS unchanged, `cogs_synced_at` set. No postings pull is needed for them. Never match `inventory_valuation_for_debit_notes` rows to a customer debit note; on this account that type belongs to vendor credits (`KGT-VC-*`). (`cogs.write_debit_note_cogs`.)
 - [ ] Follow-up once the first customer debit note is stored: look in that date's pulled Cost of Sales postings for a row whose `transaction_id` is the debit note id, note its `transaction_type` under task 0, and only then switch debit notes to the postings path.
 
 ## 8. CLI
 
-- [ ] `__main__.py` — `run` (`--yes-live`, `--max-calls`, `--replay RUN_ID`), `fetch KIND ID`, `seed-watermarks`. Builds the `Run`: `LiveGateway` only with `--yes-live`, `ReplayGateway` for `--replay`; otherwise it refuses any call. Pending is always retried.
+- [x] `__main__.py` — `run` (`--yes-live`, `--max-calls`, `--replay RUN_ID`), `fetch KIND ID`, `seed-watermarks`. Builds the `Run`: `LiveGateway` only with `--yes-live`, `ReplayGateway` for `--replay`; otherwise it refuses any call. Pending is always retried.
+
+Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/__main__.py`: `python -m zoho_sync run|fetch|seed-watermarks`. Live refuses without `--yes-live`; `--replay` uses `ReplayGateway` on `output/runs/RUN_ID` and a fresh runlog folder; `fetch` reuses `masters.build_live_run` + `ensure`; `seed-watermarks` seeds from each `DocSpec.header_table` max `last_modified_time` (DB only). COS is now wired into `run_all` (`pipeline.run_cost_of_sales`, task 7).
 
 ## 9. Rules the pipeline must keep
 
@@ -109,26 +115,26 @@ Each extraction keeps the script's command line and output. Write the same-rows 
 
 ## 10. Tests
 
-`tests/test_zoho_sync.py` and `tests/test_seed_extractions.py`. No network, no database, fixture JSON, `FakeGateway` and `MemoryStore`. Run from `reports/mis`: `python -m unittest tests.test_zoho_sync tests.test_seed_extractions`.
+`tests/test_zoho_sync.py` and `tests/test_seed_extractions.py`, with fixtures in `tests/fixtures/zoho_sync/` trimmed from saved responses. No network, no database, `FakeGateway` and `MemoryStore`. Run from `reports/mis`: `python -m unittest tests.test_zoho_sync tests.test_seed_extractions`.
 
 Extractions (write first, task 2):
 
-- [ ] `seed_missing_sales`, `seed_sales_from_inv`, and `seed_purchases_from_cache` build the same rows from the same cache before and after the extractions.
-- [ ] `account_postings.fetch_pages` sends `date_start` / `date_end` and reads every page through a `FakeGateway`.
+- [x] `seed_missing_sales`, `seed_sales_from_inv`, and `seed_purchases_from_cache` build the same rows from the same cache before and after the extractions.
+- [x] `account_postings.fetch_pages` sends `date_start` / `date_end` and reads every page through a `FakeGateway`.
 
 Core:
 
-- [ ] `LiveGateway` with a stub `ZohoClient`: no call while unused; the first call signs in and the sign-in is counted; a 429 is retried; a 404 raises `NotFound`.
-- [ ] `store_db` rejects a mapper key that is not a column (stub column list, no database).
+- [x] `LiveGateway` with a stub `ZohoClient`: no call while unused; the first call signs in and the sign-in is counted; a 429 is retried; a 404 raises `NotFound`.
+- [x] `store_db` rejects a mapper key that is not a column (stub column list, no database).
 - [ ] `--replay` makes no network call and writes the same rows.
 
 Masters and specs:
 
 - [ ] Every `DocSpec` maps its fixture through its three mappers alone.
-- [ ] `ensure` follows each `MasterSpec`'s dependencies and makes no call for an id already stored or already in the run memo.
-- [ ] Customer `ensure` does not write a vendor. Vendor `ensure` does not write a customer.
-- [ ] Item `ensure` ensures its accounts before inserting the item.
-- [ ] Location uses the list and writes only the matching id.
+- [x] `ensure` follows each `MasterSpec`'s dependencies and makes no call for an id already stored or already in the run memo.
+- [x] Customer `ensure` does not write a vendor. Vendor `ensure` does not write a customer.
+- [x] Item `ensure` ensures its accounts before inserting the item.
+- [x] Location uses the list and writes only the matching id.
 
 Pipeline:
 
@@ -145,13 +151,13 @@ Pipeline:
 
 Cost of Sales:
 
-- [ ] Cost of Sales postings become `sales_invoices.cogs`, and line COGS sums to that total.
-- [ ] Postings spanning more than one page are all stored.
-- [ ] A posting replaced under a new `categorized_transaction_id` replaces the old row and is not counted twice.
-- [ ] A changed bill dated D re-pulls Cost of Sales from D to today on the 02:00 run (injected clock).
-- [ ] A failed postings pull keeps the previous COGS and records the range as pending.
-- [ ] A posted invoice with no postings takes its lines' cost sum. A void invoice gets 0.
-- [ ] A debit note takes its lines' cost sum and sets `cogs_synced_at`, even when an `inventory_valuation_for_debit_notes` row on the same date is in `gl_journals` (vendor-credit fixture). Its dates alone do not trigger a postings pull.
+- [x] Cost of Sales postings become `sales_invoices.cogs`, and line COGS sums to that total.
+- [x] Postings spanning more than one page are all stored.
+- [x] A posting replaced under a new `categorized_transaction_id` replaces the old row and is not counted twice.
+- [ ] A changed bill dated D re-pulls Cost of Sales from D to today on the 02:00 run (injected clock). (`cost_of_sales_ranges` itself is covered by `RangesTests`; no pipeline-level test yet passes `claimed["bills"]` through `run_cost_of_sales`.)
+- [x] A failed postings pull keeps the previous COGS and records the range as pending.
+- [x] A posted invoice with no postings takes its lines' cost sum. A void invoice gets 0.
+- [x] A debit note takes its lines' cost sum and sets `cogs_synced_at`, even when an `inventory_valuation_for_debit_notes` row on the same date is in `gl_journals` (vendor-credit fixture). Its dates alone do not trigger a postings pull.
 - [ ] A vendor-credit posting on Cost of Sales is stored in `gl_journals` and changes no invoice or debit-note COGS.
 
 ## Not in this work

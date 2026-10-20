@@ -1,7 +1,7 @@
 """Ledger postings from Zoho Books → MariaDB, shared by the fetch_* scripts.
 
     GET /chartofaccounts/transactions?account_id=…&per_page=200&page=N
-        [&date.start=YYYY-MM-DD&date.end=YYYY-MM-DD][&transaction_type=…]
+        [&date_start=YYYY-MM-DD&date_end=YYYY-MM-DD][&transaction_type=…]
 
 One row per posting (Zoho's `categorized_transaction_id`), so re-running over
 an overlapping range updates rows instead of duplicating them. Each script
@@ -14,11 +14,26 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from reports import db
 
 Pages = list[tuple[list[dict[str, Any]], dict[str, Any]]]
+
+
+class Gateway(Protocol):
+    def get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        ...
+
+
+class _ClientGateway:
+    """Adapts ZohoClient to the gateway get() used by fetch_pages."""
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    def get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._client.get(endpoint, params)
 
 
 def ddl(table: str) -> str:
@@ -126,22 +141,20 @@ def fetch_pages(
     to_date: str | None,
     transaction_type: str | None,
     max_pages: int,
+    gateway: Gateway,
 ) -> Pages:
     """Page through Zoho for one account; returns [(transactions, page_context), ...]."""
-    from zoho_client import ZohoClient
-
-    client = ZohoClient()
     params: dict[str, Any] = {"account_id": account_id, "per_page": 200}
     if from_date:
-        params["date.start"] = from_date
+        params["date_start"] = from_date
     if to_date:
-        params["date.end"] = to_date
+        params["date_end"] = to_date
     if transaction_type:
         params["transaction_type"] = transaction_type
 
     pages: Pages = []
     for page in range(1, max_pages + 1):
-        body = client.get("/chartofaccounts/transactions", {**params, "page": page})
+        body = gateway.get("/chartofaccounts/transactions", {**params, "page": page})
         txns = list(body.get("transactions") or [])
         ctx = body.get("page_context") or {}
         pages.append((txns, ctx))
@@ -179,8 +192,8 @@ def run_cli(
     p = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--from-json", type=Path, action="append",
                    help="Load a saved /chartofaccounts/transactions response instead (repeatable)")
-    p.add_argument("--from-date", help="YYYY-MM-DD (date.start)")
-    p.add_argument("--to-date", help="YYYY-MM-DD (date.end)")
+    p.add_argument("--from-date", help="YYYY-MM-DD (date_start)")
+    p.add_argument("--to-date", help="YYYY-MM-DD (date_end)")
     p.add_argument("--transaction-type", help="e.g. inventory_valuation_for_invoice (default: all types)")
     p.add_argument("--max-pages", type=int, default=50,
                    help="Safety cap per account, 200 postings per page (default 50)")
@@ -192,6 +205,9 @@ def run_cli(
             body = json.loads(path.read_text(encoding="utf-8"))
             pages.append((list(body.get("transactions") or []), body.get("page_context") or {}))
     else:
+        from zoho_client import ZohoClient
+
+        gateway = _ClientGateway(ZohoClient())
         for account_id, code in accounts.items():
             print(f"Fetching {code} ({account_id}) postings…")
             pages += fetch_pages(
@@ -200,6 +216,7 @@ def run_cli(
                 to_date=args.to_date,
                 transaction_type=args.transaction_type,
                 max_pages=args.max_pages,
+                gateway=gateway,
             )
 
     check_account(pages, accounts)

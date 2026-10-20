@@ -9,7 +9,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import requests
 from dotenv import load_dotenv
@@ -18,11 +18,17 @@ ROOT = Path(__file__).resolve().parents[2]  # nellon_vansales/
 load_dotenv(ROOT / ".env_zoho")
 
 TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
-# Zoho rate-limits refresh-token grants; reuse an access token across runs until
-# shortly before it expires. Lives in the git-ignored output/ dir.
-TOKEN_CACHE = Path(__file__).resolve().parent / "output" / ".zoho_token.json"
 TOKEN_SAFETY_SECONDS = 300
 API_BASE = "https://www.zohoapis.com/books/v3"
+
+
+class ZohoHTTPError(RuntimeError):
+    """HTTP or Zoho API error with status and Zoho code."""
+
+    def __init__(self, message: str, *, status: int, code: Any = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
 
 
 def _require_env(key: str) -> str:
@@ -33,18 +39,21 @@ def _require_env(key: str) -> str:
 
 
 class ZohoClient:
-    def __init__(self) -> None:
+    def __init__(self, on_auth: Callable[[], None] | None = None) -> None:
         self.client_id = _require_env("ZOHO_CLIENT_ID")
         self.client_secret = _require_env("ZOHO_CLIENT_SECRET")
         self.refresh_token = _require_env("ZOHO_REFRESH_TOKEN")
         self.org_id = _require_env("ZOHO_ORG_ID")
         self.session = requests.Session()
-        self._authenticate()
+        self._on_auth = on_auth
+        self._authed = False
+
+    def _ensure_auth(self) -> None:
+        if not self._authed:
+            self._authenticate()
+            self._authed = True
 
     def _authenticate(self, force: bool = False) -> None:
-        import time
-        import json
-
         cache_file = ROOT / ".zoho_token_cache.json"
         if not force and cache_file.exists():
             try:
@@ -57,6 +66,8 @@ class ZohoClient:
                             "Content-Type": "application/json;charset=UTF-8",
                         }
                     )
+                    if self._on_auth:
+                        self._on_auth()
                     return
             except Exception:
                 pass
@@ -74,7 +85,7 @@ class ZohoClient:
         data = resp.json()
         if "access_token" not in data:
             raise RuntimeError(f"OAuth failed: {data}")
-        
+
         try:
             cache_file.write_text(
                 json.dumps({"access_token": data["access_token"], "timestamp": time.time()}),
@@ -89,8 +100,18 @@ class ZohoClient:
                 "Content-Type": "application/json;charset=UTF-8",
             }
         )
+        if self._on_auth:
+            self._on_auth()
+
+    def _raise_http(self, endpoint: str, resp: requests.Response, body: dict[str, Any]) -> None:
+        raise ZohoHTTPError(
+            f"{endpoint} failed: HTTP {resp.status_code} code={body.get('code')} msg={body.get('message')}",
+            status=resp.status_code,
+            code=body.get("code"),
+        )
 
     def get(self, endpoint: str, params: dict[str, Any] | None = None, timeout: int = 120) -> dict:
+        self._ensure_auth()
         params = dict(params or {})
         params["organization_id"] = self.org_id
         url = f"{API_BASE}{endpoint}"
@@ -103,12 +124,11 @@ class ZohoClient:
         except Exception as exc:
             raise RuntimeError(f"{endpoint} returned non-JSON HTTP {resp.status_code}: {resp.text[:300]}") from exc
         if resp.status_code != 200 or body.get("code") not in (0, None):
-            raise RuntimeError(
-                f"{endpoint} failed: HTTP {resp.status_code} code={body.get('code')} msg={body.get('message')}"
-            )
+            self._raise_http(endpoint, resp, body)
         return body
 
     def put(self, endpoint: str, json_data: dict[str, Any] | None = None, params: dict[str, Any] | None = None, timeout: int = 120) -> dict:
+        self._ensure_auth()
         params = dict(params or {})
         params["organization_id"] = self.org_id
         url = f"{API_BASE}{endpoint}"
@@ -121,12 +141,11 @@ class ZohoClient:
         except Exception as exc:
             raise RuntimeError(f"{endpoint} returned non-JSON HTTP {resp.status_code}: {resp.text[:300]}") from exc
         if resp.status_code != 200 or body.get("code") not in (0, None):
-            raise RuntimeError(
-                f"{endpoint} failed: HTTP {resp.status_code} code={body.get('code')} msg={body.get('message')}"
-            )
+            self._raise_http(endpoint, resp, body)
         return body
 
     def post(self, endpoint: str, json_data: dict[str, Any] | None = None, params: dict[str, Any] | None = None, timeout: int = 120) -> dict:
+        self._ensure_auth()
         params = dict(params or {})
         params["organization_id"] = self.org_id
         url = f"{API_BASE}{endpoint}"
@@ -139,12 +158,11 @@ class ZohoClient:
         except Exception as exc:
             raise RuntimeError(f"{endpoint} returned non-JSON HTTP {resp.status_code}: {resp.text[:300]}") from exc
         if resp.status_code not in (200, 201) or body.get("code") not in (0, None):
-            raise RuntimeError(
-                f"{endpoint} failed: HTTP {resp.status_code} code={body.get('code')} msg={body.get('message')}"
-            )
+            self._raise_http(endpoint, resp, body)
         return body
 
     def delete(self, endpoint: str, params: dict[str, Any] | None = None, timeout: int = 120) -> dict:
+        self._ensure_auth()
         params = dict(params or {})
         params["organization_id"] = self.org_id
         url = f"{API_BASE}{endpoint}"
@@ -157,8 +175,5 @@ class ZohoClient:
         except Exception as exc:
             raise RuntimeError(f"{endpoint} returned non-JSON HTTP {resp.status_code}: {resp.text[:300]}") from exc
         if resp.status_code != 200 or body.get("code") not in (0, None):
-            raise RuntimeError(
-                f"{endpoint} failed: HTTP {resp.status_code} code={body.get('code')} msg={body.get('message')}"
-            )
+            self._raise_http(endpoint, resp, body)
         return body
-

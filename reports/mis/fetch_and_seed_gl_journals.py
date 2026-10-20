@@ -30,6 +30,8 @@ from typing import Any
 import pymysql
 from dotenv import load_dotenv
 
+from reports.account_postings import COLUMNS, to_row as postings_to_row
+from seed_common import upsert_sql
 from zoho_client import ZohoClient
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -42,24 +44,7 @@ DEFAULT_TO = "2026-10-19"
 COST_OF_SALES_ID = "3331482000000034003"
 PER_PAGE = 200
 
-COLUMNS = [
-    "account_id", "categorized_transaction_id", "account_name", "account_code",
-    "transaction_id", "transaction_type", "transaction_type_formatted", "transaction_date",
-    "entry_number", "reference_number", "customer_id", "payee", "description",
-    "debit_or_credit", "debit_amount", "credit_amount", "amount",
-    "fcy_debit_amount", "fcy_credit_amount", "currency_id", "currency_code",
-    "offset_account_name", "raw_json",
-]
-
-UPSERT_SQL = (
-    "INSERT INTO gl_journals ({cols}) VALUES ({vals}) ON DUPLICATE KEY UPDATE {upd}".format(
-        cols=", ".join(f"`{c}`" for c in COLUMNS),
-        vals=", ".join(f"%({c})s" for c in COLUMNS),
-        upd=", ".join(
-            f"`{c}` = VALUES(`{c}`)" for c in COLUMNS if c not in ("account_id", "categorized_transaction_id")
-        ),
-    )
-)
+UPSERT_SQL = upsert_sql("gl_journals", COLUMNS, {"account_id", "categorized_transaction_id"})
 
 
 def connect() -> pymysql.Connection:
@@ -73,47 +58,6 @@ def connect() -> pymysql.Connection:
         autocommit=False,
         cursorclass=pymysql.cursors.DictCursor,
     )
-
-
-def _f(val: Any) -> float:
-    try:
-        return round(float(val or 0), 2)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _s(val: Any, limit: int) -> str:
-    return str(val if val is not None else "").strip()[:limit]
-
-
-def to_row(t: dict[str, Any], page_context: dict[str, Any], default_aid: str) -> dict[str, Any]:
-    debit, credit = _f(t.get("debit_amount")), _f(t.get("credit_amount"))
-    aid = _s(t.get("account_id") or default_aid, 40)
-    return {
-        "account_id": aid,
-        "categorized_transaction_id": _s(t.get("categorized_transaction_id"), 40),
-        "account_name": _s(page_context.get("account_name"), 255),
-        "account_code": _s(page_context.get("account_code"), 40),
-        "transaction_id": _s(t.get("transaction_id"), 40),
-        "transaction_type": _s(t.get("transaction_type"), 60),
-        "transaction_type_formatted": _s(t.get("transaction_type_formatted"), 120),
-        "transaction_date": t.get("transaction_date") or None,
-        "entry_number": _s(t.get("entry_number"), 80),
-        "reference_number": _s(t.get("reference_number"), 120),
-        "customer_id": _s(t.get("customer_id"), 40),
-        "payee": _s(t.get("payee"), 255),
-        "description": _s(t.get("description"), 1000),
-        "debit_or_credit": _s(t.get("debit_or_credit"), 10),
-        "debit_amount": debit,
-        "credit_amount": credit,
-        "amount": round(debit - credit, 2),
-        "fcy_debit_amount": _f(t.get("fcy_debit_amount")),
-        "fcy_credit_amount": _f(t.get("fcy_credit_amount")),
-        "currency_id": _s(t.get("currency_id"), 40),
-        "currency_code": _s(t.get("currency_code"), 10),
-        "offset_account_name": _s(t.get("offset_account_name"), 255),
-        "raw_json": json.dumps(t, separators=(",", ":")),
-    }
 
 
 def load_preflight_accounts(include_cos: bool = False) -> list[dict[str, Any]]:
@@ -265,7 +209,12 @@ def main() -> int:
                     ctx = resp.get("page_context") or {}
 
                     for t in txns:
-                        account_rows.append(to_row(t, ctx, aid))
+                        payload = dict(t)
+                        if not payload.get("account_id"):
+                            payload["account_id"] = aid
+                        if not ctx.get("account_name"):
+                            ctx = {**ctx, "account_name": name, "account_code": code}
+                        account_rows.append(postings_to_row(payload, ctx))
 
                     has_more = bool(ctx.get("has_more_page"))
                     if not has_more or len(txns) < PER_PAGE:

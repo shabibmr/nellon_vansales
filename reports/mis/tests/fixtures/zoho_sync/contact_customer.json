@@ -1,0 +1,20 @@
+{
+  "contact_id": "3331482000038638045",
+  "contact_name": "2252 LULU HYPERMARKET (L.L.C) (BRANCH)",
+  "company_name": "2252 LULU HYPERMARKET (L.L.C) (BRANCH)",
+  "contact_type": "customer",
+  "customer_sub_type": "individual",
+  "status": "active",
+  "email": "sim@ae.lulumea.com",
+  "phone": "04-3725000",
+  "mobile": "",
+  "tax_treatment": "vat_registered",
+  "tax_reg_no": null,
+  "vat_reg_no": null,
+  "payment_terms": 120,
+  "payment_terms_label": "NET 120",
+  "currency_code": "AED",
+  "credit_limit": null,
+  "customer_credit_limit": "",
+  "last_modified_time": "2026-08-25T16:13:46+0400"
+}

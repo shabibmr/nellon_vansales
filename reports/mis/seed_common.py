@@ -1,6 +1,7 @@
-"""Shared helpers for the zoho-koyson seed scripts (purchases, notes, contacts).
+"""Shared helpers for the zoho-koyson seed scripts and zoho_sync.
 
 Money rules follow proposal/DB-Schema-Proposed.md ("Sales money", "COGS").
+Also owns upsert_sql used by seeders and store_db.
 """
 
 from __future__ import annotations
@@ -201,6 +202,17 @@ def line_cogs(
 def table_exists(cur, name: str) -> bool:
     cur.execute("SHOW TABLES LIKE %s", (name,))
     return cur.fetchone() is not None
+
+
+def upsert_sql(table: str, cols: list[str], key_cols: str | list[str] | set[str] | tuple[str, ...]) -> str:
+    """INSERT … ON DUPLICATE KEY UPDATE for named columns; key_cols are left out of the UPDATE."""
+    keys = {key_cols} if isinstance(key_cols, str) else set(key_cols)
+    upd = ", ".join(f"`{c}` = VALUES(`{c}`)" for c in cols if c not in keys)
+    return (
+        f"INSERT INTO `{table}` ({', '.join(f'`{c}`' for c in cols)}) "
+        f"VALUES ({', '.join(f'%({c})s' for c in cols)}) "
+        f"ON DUPLICATE KEY UPDATE {upd}"
+    )
 
 
 def record_coverage(cur, dataset: str, dfrom: date, dto: date, source: str) -> tuple[date, date]:

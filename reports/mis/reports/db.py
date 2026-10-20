@@ -5,8 +5,10 @@ Config (reports/mis/.env, git-ignored):
     MIS_DB_HOST=127.0.0.1  MIS_DB_PORT=3306  MIS_DB_USER=…  MIS_DB_PASSWORD=…  MIS_DB_NAME=zoho-koyson
 
 SCHEMA is the proposed tables in proposal/DB-Schema-Proposed.sql, plus
-sync_coverage and the four cashflow tables. Change both copies together.
-Dev uses zoho-koyson. Prod stays on nellon_mis until cut-over.
+sync_coverage, sync_state, sync_pending, and the four cashflow tables.
+Change both copies together. Dev uses zoho-koyson. Prod stays on
+nellon_mis until cut-over. init_schema also ALTERs existing headers to
+add lines_synced_at / cogs_synced_at (CREATE TABLE IF NOT EXISTS will not).
 
 The web viewer reads only from here — it never calls Zoho.
 """
@@ -215,6 +217,8 @@ SCHEMA = [
         `cogs`                     DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED GL-reconciled; sales_lines.cogs add up to it',
         `flagged_lines`            INT UNSIGNED  NOT NULL DEFAULT 0,
         `last_modified_time`       DATETIME      NULL DEFAULT NULL,
+        `lines_synced_at`          DATETIME      NULL DEFAULT NULL,
+        `cogs_synced_at`           DATETIME      NULL DEFAULT NULL,
         PRIMARY KEY (`invoice_id`),
         KEY `ix_si_date` (`date`),
         KEY `ix_si_number` (`invoice_number`),
@@ -292,6 +296,7 @@ SCHEMA = [
         `amount`                   DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Purchase amount in AED, after discount, excl tax',
         `flagged_lines`            INT UNSIGNED  NOT NULL DEFAULT 0,
         `last_modified_time`       DATETIME      NULL DEFAULT NULL,
+        `lines_synced_at`          DATETIME      NULL DEFAULT NULL,
         PRIMARY KEY (`kind`, `doc_id`),
         KEY `ix_pd_date` (`date`),
         KEY `ix_pd_number` (`number`),
@@ -455,6 +460,8 @@ SCHEMA = [
         `cogs`                     DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Positive AED increasing COGS; GL-reconciled when a ledger row exists',
         `flagged_lines`            INT UNSIGNED  NOT NULL DEFAULT 0,
         `last_modified_time`       DATETIME      NULL DEFAULT NULL,
+        `lines_synced_at`          DATETIME      NULL DEFAULT NULL,
+        `cogs_synced_at`           DATETIME      NULL DEFAULT NULL,
         PRIMARY KEY (`debit_note_id`),
         KEY `ix_dn_date` (`date`),
         KEY `ix_dn_number` (`debit_note_number`),
@@ -505,6 +512,199 @@ SCHEMA = [
         CONSTRAINT `fk_dnl_location` FOREIGN KEY (`location_id`) REFERENCES `locations` (`location_id`) ON DELETE SET NULL,
         CONSTRAINT `fk_dnl_item` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`) ON DELETE SET NULL,
         CONSTRAINT `fk_dnl_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`account_id`) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS `sales_orders` (
+        `salesorder_id`            VARCHAR(40)   NOT NULL,
+        `salesorder_number`        VARCHAR(60)   NOT NULL DEFAULT '',
+        `date`                     DATE          NOT NULL,
+        `due_date`                 DATE          NULL DEFAULT NULL,
+        `status`                   VARCHAR(30)   NOT NULL DEFAULT '',
+        `customer_id`              VARCHAR(40)   NULL DEFAULT NULL,
+        `customer_name`            VARCHAR(255)  NOT NULL DEFAULT '',
+        `salesperson_id`           VARCHAR(40)   NULL DEFAULT NULL,
+        `salesperson_name`         VARCHAR(255)  NOT NULL DEFAULT '',
+        `location_id`              VARCHAR(40)   NULL DEFAULT NULL COMMENT 'Company header location',
+        `location_name`            VARCHAR(255)  NOT NULL DEFAULT '',
+        `currency_code`            VARCHAR(10)   NOT NULL DEFAULT 'AED',
+        `exchange_rate`            DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+        `sub_total`                DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `discount_total`           DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `tax_total`                DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `shipping_charge`          DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `adjustment`               DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `total`                    DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `balance`                  DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `net_sales`                DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED after discount, excl tax',
+        `flagged_lines`            INT UNSIGNED  NOT NULL DEFAULT 0,
+        `last_modified_time`       DATETIME      NULL DEFAULT NULL,
+        `lines_synced_at`          DATETIME      NULL DEFAULT NULL,
+        PRIMARY KEY (`salesorder_id`),
+        KEY `ix_so_date` (`date`),
+        KEY `ix_so_number` (`salesorder_number`),
+        KEY `ix_so_customer` (`customer_id`),
+        KEY `ix_so_salesperson` (`salesperson_id`),
+        KEY `ix_so_location` (`location_id`),
+        KEY `ix_so_status` (`status`),
+        CONSTRAINT `fk_so_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`customer_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_so_salesperson` FOREIGN KEY (`salesperson_id`) REFERENCES `salespersons` (`salesperson_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_so_location` FOREIGN KEY (`location_id`) REFERENCES `locations` (`location_id`) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS `sales_order_lines` (
+        `line_item_id`             VARCHAR(40)   NOT NULL,
+        `salesorder_id`            VARCHAR(40)   NOT NULL,
+        `date`                     DATE          NOT NULL,
+        `location_id`              VARCHAR(40)   NULL DEFAULT NULL COMMENT 'Van or warehouse location on line',
+        `location_name`            VARCHAR(255)  NOT NULL DEFAULT '',
+        `item_id`                  VARCHAR(40)   NULL DEFAULT NULL,
+        `item_name`                VARCHAR(255)  NOT NULL DEFAULT '',
+        `sku`                      VARCHAR(100)  NOT NULL DEFAULT '',
+        `account_id`               VARCHAR(40)   NULL DEFAULT NULL COMMENT 'Income account',
+        `account_name`             VARCHAR(255)  NOT NULL DEFAULT '',
+        `quantity`                 DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+        `quantity_invoiced`        DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+        `unit`                     VARCHAR(40)   NOT NULL DEFAULT '',
+        `base_unit`                VARCHAR(40)   NOT NULL DEFAULT '',
+        `conversion_rate`          DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+        `base_quantity`            DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+        `rate`                     DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+        `line_discount`            DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED excl tax',
+        `order_discount`           DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED excl tax prorated share',
+        `item_total`               DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `tax_amount`               DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `net_sales`                DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED excl tax after discounts',
+        `purchase_price`           DECIMAL(18,4) NOT NULL DEFAULT 0.0000 COMMENT 'Zoho raw line price',
+        `flag`                     VARCHAR(255)  NOT NULL DEFAULT '',
+        PRIMARY KEY (`line_item_id`),
+        KEY `ix_sol_so` (`salesorder_id`),
+        KEY `ix_sol_date` (`date`),
+        KEY `ix_sol_location` (`location_id`),
+        KEY `ix_sol_item` (`item_id`),
+        KEY `ix_sol_account` (`account_id`),
+        CONSTRAINT `fk_sol_so` FOREIGN KEY (`salesorder_id`) REFERENCES `sales_orders` (`salesorder_id`) ON DELETE CASCADE,
+        CONSTRAINT `fk_sol_location` FOREIGN KEY (`location_id`) REFERENCES `locations` (`location_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_sol_item` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_sol_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`account_id`) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS `vendor_credits` (
+        `vendor_credit_id`         VARCHAR(40)   NOT NULL,
+        `vendor_credit_number`     VARCHAR(60)   NOT NULL DEFAULT '',
+        `date`                     DATE          NOT NULL,
+        `status`                   VARCHAR(30)   NOT NULL DEFAULT '',
+        `vendor_id`                VARCHAR(40)   NULL DEFAULT NULL,
+        `vendor_name`              VARCHAR(255)  NOT NULL DEFAULT '',
+        `location_id`              VARCHAR(40)   NULL DEFAULT NULL,
+        `location_name`            VARCHAR(255)  NOT NULL DEFAULT '',
+        `kind`                     VARCHAR(20)   NOT NULL DEFAULT 'bill' COMMENT 'Fixed to bill for purchase_docs join',
+        `bill_id`                  VARCHAR(40)   NULL DEFAULT NULL COMMENT 'Optional credited bill',
+        `reference_number`         VARCHAR(100)  NOT NULL DEFAULT '',
+        `currency_code`            VARCHAR(10)   NOT NULL DEFAULT 'AED',
+        `exchange_rate`            DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+        `sub_total`                DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `discount_total`           DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `tax_total`                DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `adjustment`               DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `total`                    DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `balance`                  DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `amount`                   DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED after discount, excl tax',
+        `flagged_lines`            INT UNSIGNED  NOT NULL DEFAULT 0,
+        `last_modified_time`       DATETIME      NULL DEFAULT NULL,
+        `lines_synced_at`          DATETIME      NULL DEFAULT NULL,
+        PRIMARY KEY (`vendor_credit_id`),
+        KEY `ix_vc_date` (`date`),
+        KEY `ix_vc_number` (`vendor_credit_number`),
+        KEY `ix_vc_vendor` (`vendor_id`),
+        KEY `ix_vc_location` (`location_id`),
+        KEY `ix_vc_bill` (`kind`, `bill_id`),
+        KEY `ix_vc_status` (`status`),
+        CONSTRAINT `fk_vc_vendor` FOREIGN KEY (`vendor_id`) REFERENCES `vendors` (`vendor_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_vc_location` FOREIGN KEY (`location_id`) REFERENCES `locations` (`location_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_vc_bill` FOREIGN KEY (`kind`, `bill_id`) REFERENCES `purchase_docs` (`kind`, `doc_id`) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS `vendor_credit_lines` (
+        `line_item_id`             VARCHAR(40)   NOT NULL,
+        `vendor_credit_id`         VARCHAR(40)   NOT NULL,
+        `date`                     DATE          NOT NULL,
+        `location_id`              VARCHAR(40)   NULL DEFAULT NULL,
+        `location_name`            VARCHAR(255)  NOT NULL DEFAULT '',
+        `item_id`                  VARCHAR(40)   NULL DEFAULT NULL,
+        `item_name`                VARCHAR(255)  NOT NULL DEFAULT '',
+        `sku`                      VARCHAR(100)  NOT NULL DEFAULT '',
+        `account_id`               VARCHAR(40)   NULL DEFAULT NULL COMMENT 'Purchase account',
+        `account_name`             VARCHAR(255)  NOT NULL DEFAULT '',
+        `quantity`                 DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+        `unit`                     VARCHAR(40)   NOT NULL DEFAULT '',
+        `base_unit`                VARCHAR(40)   NOT NULL DEFAULT '',
+        `conversion_rate`          DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+        `base_quantity`            DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+        `rate`                     DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+        `line_discount`            DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED excl tax',
+        `doc_discount`             DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED excl tax prorated share',
+        `item_total`               DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `tax_amount`               DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `amount`                   DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'AED excl tax after discounts',
+        `flag`                     VARCHAR(255)  NOT NULL DEFAULT '',
+        PRIMARY KEY (`line_item_id`),
+        KEY `ix_vcl_vc` (`vendor_credit_id`),
+        KEY `ix_vcl_date` (`date`),
+        KEY `ix_vcl_location` (`location_id`),
+        KEY `ix_vcl_item` (`item_id`),
+        KEY `ix_vcl_account` (`account_id`),
+        CONSTRAINT `fk_vcl_vc` FOREIGN KEY (`vendor_credit_id`) REFERENCES `vendor_credits` (`vendor_credit_id`) ON DELETE CASCADE,
+        CONSTRAINT `fk_vcl_location` FOREIGN KEY (`location_id`) REFERENCES `locations` (`location_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_vcl_item` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_vcl_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`account_id`) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS `vendor_payments` (
+        `payment_id`               VARCHAR(40)   NOT NULL,
+        `payment_number`           VARCHAR(60)   NOT NULL DEFAULT '',
+        `date`                     DATE          NOT NULL,
+        `vendor_id`                VARCHAR(40)   NULL DEFAULT NULL,
+        `vendor_name`              VARCHAR(255)  NOT NULL DEFAULT '',
+        `location_id`              VARCHAR(40)   NULL DEFAULT NULL,
+        `location_name`            VARCHAR(255)  NOT NULL DEFAULT '',
+        `payment_mode`             VARCHAR(60)   NOT NULL DEFAULT '',
+        `reference_number`         VARCHAR(100)  NOT NULL DEFAULT '',
+        `currency_code`            VARCHAR(10)   NOT NULL DEFAULT 'AED',
+        `exchange_rate`            DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+        `amount`                   DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `balance`                  DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `tax_amount_withheld`      DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `paid_through_account_id`  VARCHAR(40)   NULL DEFAULT NULL,
+        `paid_through_account_name` VARCHAR(255) NOT NULL DEFAULT '',
+        `last_modified_time`       DATETIME      NULL DEFAULT NULL,
+        `lines_synced_at`          DATETIME      NULL DEFAULT NULL,
+        PRIMARY KEY (`payment_id`),
+        KEY `ix_vp_date` (`date`),
+        KEY `ix_vp_number` (`payment_number`),
+        KEY `ix_vp_vendor` (`vendor_id`),
+        KEY `ix_vp_location` (`location_id`),
+        CONSTRAINT `fk_vp_vendor` FOREIGN KEY (`vendor_id`) REFERENCES `vendors` (`vendor_id`) ON DELETE SET NULL,
+        CONSTRAINT `fk_vp_location` FOREIGN KEY (`location_id`) REFERENCES `locations` (`location_id`) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS `vendor_payment_bills` (
+        `bill_payment_id`          VARCHAR(40)   NOT NULL,
+        `payment_id`               VARCHAR(40)   NOT NULL,
+        `kind`                     VARCHAR(20)   NOT NULL DEFAULT 'bill' COMMENT 'Fixed to bill for purchase_docs join',
+        `bill_id`                  VARCHAR(40)   NOT NULL,
+        `amount_applied`           DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        `tax_amount_withheld`      DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+        PRIMARY KEY (`bill_payment_id`),
+        KEY `ix_vpb_payment` (`payment_id`),
+        KEY `ix_vpb_bill` (`kind`, `bill_id`),
+        CONSTRAINT `fk_vpb_payment` FOREIGN KEY (`payment_id`) REFERENCES `vendor_payments` (`payment_id`) ON DELETE CASCADE,
+        CONSTRAINT `fk_vpb_bill` FOREIGN KEY (`kind`, `bill_id`) REFERENCES `purchase_docs` (`kind`, `doc_id`) ON DELETE RESTRICT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     """,
     """
@@ -612,7 +812,57 @@ SCHEMA = [
         PRIMARY KEY (dataset, from_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
+    """
+    CREATE TABLE IF NOT EXISTS sync_state (
+        dataset     VARCHAR(40) NOT NULL,
+        watermark   VARCHAR(40) NOT NULL DEFAULT '' COMMENT 'Raw Zoho last_modified_time text with offset',
+        last_run_at DATETIME    NULL DEFAULT NULL,
+        PRIMARY KEY (dataset)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS sync_pending (
+        dataset       VARCHAR(40)  NOT NULL,
+        doc_id        VARCHAR(80)  NOT NULL COMMENT 'Document id, or YYYY-MM-DD..YYYY-MM-DD for cogs',
+        modified_time VARCHAR(40)  NOT NULL DEFAULT '',
+        reason        VARCHAR(255) NOT NULL DEFAULT '',
+        last_error    TEXT         NULL,
+        attempts      INT UNSIGNED NOT NULL DEFAULT 0,
+        first_seen    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_tried    DATETIME     NULL DEFAULT NULL,
+        PRIMARY KEY (dataset, doc_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
 ]
+
+# Columns CREATE TABLE IF NOT EXISTS will not add to an existing table.
+_SYNC_COLUMN_ALTERS = (
+    ("sales_invoices", "lines_synced_at", "DATETIME NULL DEFAULT NULL"),
+    ("sales_invoices", "cogs_synced_at", "DATETIME NULL DEFAULT NULL"),
+    ("debit_notes", "lines_synced_at", "DATETIME NULL DEFAULT NULL"),
+    ("debit_notes", "cogs_synced_at", "DATETIME NULL DEFAULT NULL"),
+    ("purchase_docs", "lines_synced_at", "DATETIME NULL DEFAULT NULL"),
+)
+
+
+def _ensure_sync_columns(cur: Any) -> None:
+    """ALTER existing header tables so they gain the sync timestamp columns."""
+    for table, column, ddl in _SYNC_COLUMN_ALTERS:
+        cur.execute(
+            """
+            SELECT COUNT(*) AS n
+              FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = %s
+               AND COLUMN_NAME = %s
+            """,
+            (table, column),
+        )
+        row = cur.fetchone()
+        n = row["n"] if isinstance(row, dict) else row[0]
+        if not n:
+            cur.execute(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {ddl}")
+
 
 MARGIN_DIMENSIONS = {
     "item": "l.item_name",
@@ -687,6 +937,7 @@ def init_schema() -> str:
     with connect() as conn, conn.cursor() as cur:
         for ddl in SCHEMA:
             cur.execute(ddl)
+        _ensure_sync_columns(cur)
     return name
 
 

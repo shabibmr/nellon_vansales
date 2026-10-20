@@ -21,60 +21,15 @@ an allocation, not Zoho's line valuation.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from collections import Counter, defaultdict
-from decimal import Decimal, ROUND_HALF_UP
-from pathlib import Path
+from decimal import Decimal
 
 import pymysql
-from dotenv import load_dotenv
 
-from seed_common import record_coverage
+from seed_common import connect, d, prorate, record_coverage, table_exists
 
-BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
-load_dotenv(BASE_DIR / ".env.mis")
-
-CENT = Decimal("0.01")
 PRORATE_FLAG = "net_sales prorated from header"
-
-
-def connect(db: str) -> pymysql.Connection:
-    return pymysql.connect(
-        host=os.getenv("MIS_DB_HOST", "127.0.0.1"),
-        port=int(os.getenv("MIS_DB_PORT", "3306")),
-        user=os.getenv("MIS_DB_USER", "user2grey"),
-        password=os.getenv("MIS_DB_PASSWORD", "user2grey"),
-        database=db,
-        charset="utf8mb4",
-        autocommit=False,
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-
-
-def d(val, default="0") -> Decimal:
-    return Decimal(str(val if val is not None else default))
-
-
-def cents(val: Decimal) -> Decimal:
-    return val.quantize(CENT, rounding=ROUND_HALF_UP)
-
-
-def prorate(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
-    """Split total across weights to the cent; the remainder goes to the largest weight."""
-    wsum = sum(weights)
-    if not weights:
-        return []
-    if wsum <= 0:
-        shares = [cents(total / len(weights)) for _ in weights]
-    else:
-        shares = [cents(total * w / wsum) for w in weights]
-    rem = total - sum(shares)
-    if rem:
-        big = max(range(len(weights)), key=lambda i: weights[i])
-        shares[big] += rem
-    return shares
 
 
 def build_rows(src: pymysql.Connection, item_ids: set[str]):
@@ -189,11 +144,6 @@ def validate(inv_rows, line_rows, stats) -> int:
     stats["invoices_line_net_sales_ne_header"] = ns_off
     problems += cogs_off + ns_off
     return problems
-
-
-def table_exists(cur, name: str) -> bool:
-    cur.execute("SHOW TABLES LIKE %s", (name,))
-    return cur.fetchone() is not None
 
 
 def target_report(tgt: pymysql.Connection, inv_rows, line_rows) -> None:

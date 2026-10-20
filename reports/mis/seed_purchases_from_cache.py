@@ -25,7 +25,7 @@ from decimal import Decimal
 
 from seed_common import (
     BASE_DIR, connect, cents, d, doc_money, load_item_rates, load_item_units, parse_date,
-    parse_dt, read_cache, record_coverage, resolve_conversion, s, table_exists,
+    parse_dt, read_cache, record_coverage, resolve_conversion, s, table_exists, upsert_sql,
 )
 
 CACHE = BASE_DIR / "output" / "cache"
@@ -134,14 +134,6 @@ LINE_COLS = [
     "base_unit", "conversion_rate", "base_quantity", "rate", "line_discount", "doc_discount",
     "item_total", "tax_amount", "amount", "purchaseorder_item_id", "flag",
 ]
-
-
-def upsert_sql(table: str, cols: list[str], pk: set[str]) -> str:
-    return (
-        f"INSERT INTO `{table}` ({', '.join(f'`{c}`' for c in cols)}) "
-        f"VALUES ({', '.join(f'%({c})s' for c in cols)}) ON DUPLICATE KEY UPDATE "
-        + ", ".join(f"`{c}` = VALUES(`{c}`)" for c in cols if c not in pk)
-    )
 
 
 def apply(tgt, docs, lines, dfrom: date, dto: date) -> int:
