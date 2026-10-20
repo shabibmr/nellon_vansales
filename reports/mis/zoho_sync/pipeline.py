@@ -8,6 +8,7 @@ through `run.gateway`.
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Any
 
@@ -24,7 +25,9 @@ PER_PAGE = 200
 COS_ACCOUNT_ID = cogs.COS_ACCOUNT_ID
 
 # purchase_docs composite key: dataset → kind column value.
-_KIND_BY_DATASET = {
+logger = logging.getLogger(__name__)
+
+KIND_BY_DATASET = {
     "bills": "bill",
     "purchase_orders": "purchase_order",
 }
@@ -172,7 +175,8 @@ def sync_dataset(
     except Exception as exc:
         stats["list_complete"] = False
         stats["watermark_after"] = before
-        stats["error"] = str(exc)
+        stats["error"] = f"{type(exc).__name__}: {exc}"
+        logger.exception("dataset %s failed", spec.dataset)
 
     return stats
 
@@ -310,48 +314,12 @@ def _sync_by_id(
             target = SPECS_BY_DATASET[target_name]
     if claimed is not None:
         claimed.setdefault(target.dataset, set()).add(doc_id)
-    _store_detail_only(run, target, doc)
-
-
-def _store_detail_only(run: Run, spec: DocSpec, detail: dict[str, Any]) -> None:
-    """Store detail-derived columns only without overwriting list-only fields."""
-    _require_party(detail, spec)
-    all_ids = spec.collect_ids(detail)
-    _ensure_collected(run, all_ids)
-    _ensure_doc_refs(run, spec, detail)
-
-    units, rates = _units_and_rates(run, all_ids.get("item", set()))
-    patch, lines = spec.from_detail(detail, units, rates)
-    patch = dict(patch)
-
-    parent_id = _line_parent_id(spec, detail, detail)
-    key = _header_key(spec, detail)
-    if not run.store.has(spec.header_table, key):
-        header = spec.header_from_list(detail)
-        run.store.upsert(spec.header_table, [header], update_cols=list(header.keys()))
-
-    if spec.line_table and spec.line_parent_col:
-        run.store.replace_lines(spec.line_table, spec.line_parent_col, parent_id, lines)
-        patch["lines_synced_at"] = run.now()
-
-    run.store.update(spec.header_table, key, patch)
-
-
-def _header_key(spec: DocSpec, row: dict[str, Any]) -> Any:
-    """Header primary key from a detail or header row."""
-    from .store import TABLE_KEY_COLUMNS
-    cols = TABLE_KEY_COLUMNS[spec.header_table]
-    if len(cols) == 1:
-        col = cols[0]
-        return str(row.get(col) or row.get(spec.id_field) or "").strip()
-    kind = row.get("kind") or _KIND_BY_DATASET.get(spec.dataset)
-    doc_id = str(row.get("doc_id") or row.get(spec.id_field) or "").strip()
-    return (kind, doc_id)
+    _store_document(run, target, detail=doc)
 
 
 def _merge_ids(a: dict[str, set[str]], b: dict[str, set[str]]) -> dict[str, set[str]]:
     merged: dict[str, set[str]] = {}
-    for kind in set(a) | set(b):
+    for kind in dict.fromkeys([*a, *b]):
         merged[kind] = a.get(kind, set()) | b.get(kind, set())
     return merged
 
@@ -369,14 +337,22 @@ def _store_document(
     run: Run,
     spec: DocSpec,
     *,
-    list_row: dict[str, Any],
     detail: dict[str, Any],
+    list_row: dict[str, Any] | None = None,
 ) -> None:
-    """Ensure all masters and doc refs first, then store header, lines, and patch."""
-    _require_party(list_row if list_row.get(spec.party) else detail, spec)
+    """Ensure all masters and doc refs first, then store header, lines, and patch.
+
+    With a `list_row` the header is upserted from it. Without one (pending retry,
+    doc-ref load) only detail-derived columns are written, and a header is
+    inserted from the detail only if none is stored, so list-only fields are
+    never overwritten.
+    """
+    _require_party(list_row if list_row and list_row.get(spec.party) else detail, spec)
 
     # Union of all masters from list row and full detail.
-    all_ids = _merge_ids(spec.collect_ids(list_row), spec.collect_ids(detail))
+    all_ids = spec.collect_ids(detail)
+    if list_row is not None:
+        all_ids = _merge_ids(spec.collect_ids(list_row), all_ids)
     _ensure_collected(run, all_ids)
     _ensure_doc_refs(run, spec, detail)
 
@@ -384,16 +360,18 @@ def _store_document(
     patch, lines = spec.from_detail(detail, units, rates)
     patch = dict(patch)
 
-    header = spec.header_from_list(list_row)
-    run.store.upsert(spec.header_table, [header], update_cols=list(header.keys()))
+    header = spec.header_from_list(list_row if list_row is not None else detail)
+    key = key_for(spec.header_table, header)
+    if list_row is not None or not run.store.has(spec.header_table, key):
+        run.store.upsert(spec.header_table, [header], update_cols=list(header.keys()))
 
     # lines_synced_at only after lines (or vendor_payment_bills) are written.
     if spec.line_table and spec.line_parent_col:
-        parent_id = _line_parent_id(spec, detail, list_row)
+        parent_id = _line_parent_id(spec, detail, list_row if list_row is not None else detail)
         run.store.replace_lines(spec.line_table, spec.line_parent_col, parent_id, lines)
         patch["lines_synced_at"] = run.now()
 
-    run.store.update(spec.header_table, key_for(spec.header_table, header), patch)
+    run.store.update(spec.header_table, key, patch)
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +451,7 @@ def _spec_for_ref(ref: DocRef) -> DocSpec:
             continue
         if ref.kind_value is None:
             return spec
-        if _KIND_BY_DATASET.get(spec.dataset) == ref.kind_value:
+        if KIND_BY_DATASET.get(spec.dataset) == ref.kind_value:
             return spec
     raise DocRefUnresolved(
         f"no DocSpec for header_table={ref.header_table!r} kind_value={ref.kind_value!r}"

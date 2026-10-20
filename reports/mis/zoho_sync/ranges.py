@@ -28,7 +28,7 @@ class DateRange:
 
 def is_02_run(hour: int) -> bool:
     """True when the run's clock hour is 2 (the nightly 02:00 run)."""
-    return hour in (1, 2)
+    return hour == 2
 
 
 def trailing_window(today: date) -> DateRange:

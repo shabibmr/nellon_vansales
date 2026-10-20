@@ -85,7 +85,7 @@ The package is `reports/mis/zoho_sync/`; the six master wrappers are `reports/mi
   5. Any raise puts the document in `sync_pending` with the error and moves on.
   6. When the whole list was read, move the watermark to the highest timestamp seen.
 
-Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/pipeline.py`: `run_all` / `sync_dataset`; pending retry; list with `encode_watermark` (`+` → `%2B`); exclude/`reroute`; party required; `ensure` + doc-ref load; cache-current detail skip; `lines_synced_at`; partial list (`BudgetExceeded` / error) leaves watermark; finished list moves to highest raw `last_modified_time` even with pending docs. Task 10 pipeline FakeGateway tests done.
+Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/pipeline.py`: `run_all` / `sync_dataset`; pending retry; list passes the raw watermark text (`requests` encodes it once); exclude/`reroute`; party required; `ensure` + doc-ref load; cache-current detail skip; `lines_synced_at`; partial list (`BudgetExceeded` / error) leaves watermark; finished list moves to highest raw `last_modified_time` even with pending docs. Task 10 pipeline FakeGateway tests done.
 
 ## 7. Cost of Sales
 

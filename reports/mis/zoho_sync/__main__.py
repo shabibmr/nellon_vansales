@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .budget import Budget
@@ -23,7 +24,7 @@ from .cache import Cache
 from .context import DUBAI, Run
 from .gateway import LiveGateway, ReplayGateway
 from .masters import SPECS, UnknownMaster, build_live_run, ensure
-from .pipeline import run_all
+from .pipeline import KIND_BY_DATASET, run_all
 from .runlog import RunLog, cleanup_old_runs, new_run_id
 from .specs import ALL_SPECS
 from .store_db import DbStore
@@ -126,7 +127,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 def cmd_seed_watermarks(args: argparse.Namespace) -> int:
     store = _db_store(args.db)
-    seeded = wm.seed(store, _header_tables())
+    seeded = wm.seed(store, _header_tables(), kinds=KIND_BY_DATASET)
     print(json.dumps(seeded, ensure_ascii=False, indent=2, default=str))
     empty = [dataset for dataset, value in seeded.items() if not value]
     if empty:

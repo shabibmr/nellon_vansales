@@ -9,11 +9,9 @@ raw Zoho `last_modified_time` text, stored and passed verbatim.
 from __future__ import annotations
 
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
+from .runlog import DUBAI
 from .store import Store
-
-DUBAI = ZoneInfo("Asia/Dubai")
 
 
 class NoWatermark(Exception):
@@ -70,18 +68,27 @@ def highest(current: str, candidate: str) -> str:
         return candidate if candidate > current else current
 
 
-def seed(store: Store, header_tables: dict[str, str]) -> dict[str, str | None]:
+def seed(
+    store: Store,
+    header_tables: dict[str, str],
+    kinds: dict[str, str] | None = None,
+) -> dict[str, str | None]:
     """First-run seed: set each dataset's watermark to the highest
     `last_modified_time` already stored in that dataset's header table.
 
     `header_tables` maps dataset -> header table name, e.g.
     `{"invoices": "sales_invoices", "debit_notes": "debit_notes", ...}`.
+    `kinds` maps dataset -> the `kind` column value for datasets that share a
+    header table (bills and purchase orders in `purchase_docs`), so each is
+    seeded from its own rows only.
     A dataset whose table is empty gets no watermark (still `NoWatermark` on
     the next list) rather than a guessed value.
     """
     seeded: dict[str, str | None] = {}
     for dataset, table in header_tables.items():
-        value = store.max_value(table, "last_modified_time")
+        value = store.max_value(
+            table, "last_modified_time", where={"kind": kinds[dataset]} if kinds and dataset in kinds else None
+        )
         if value:
             wm_text = to_zoho_watermark(value)
             store.set_watermark(dataset, wm_text)

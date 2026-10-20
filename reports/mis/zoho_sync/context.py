@@ -9,14 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, Literal
-from zoneinfo import ZoneInfo
 
 from .cache import Cache
 from .gateway import Gateway
-from .runlog import RunLog
+from .runlog import DUBAI, RunLog
 from .store import Store
-
-DUBAI = ZoneInfo("Asia/Dubai")
 
 
 def now_dubai() -> datetime:

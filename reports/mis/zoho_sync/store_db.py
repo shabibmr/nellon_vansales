@@ -8,6 +8,7 @@ and `replace_range` each run in one transaction.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any
 
@@ -26,6 +27,27 @@ class DbStore:
     def __init__(self, conn: Any, columns: dict[str, set[str]] | None = None) -> None:
         self._conn = conn
         self._columns: dict[str, set[str]] = {k: set(v) for k, v in (columns or {}).items()}
+        self._tx_depth = 0
+
+    def _commit(self) -> None:
+        if self._tx_depth == 0:
+            self._conn.commit()
+
+    @contextmanager
+    def transaction(self) -> Any:
+        """Group writes into one commit; any error rolls them all back."""
+        self._tx_depth += 1
+        try:
+            yield
+        except Exception:
+            self._tx_depth -= 1
+            if self._tx_depth == 0:
+                self._conn.rollback()
+            raise
+        else:
+            self._tx_depth -= 1
+            if self._tx_depth == 0:
+                self._conn.commit()
 
     def _table_columns(self, table: str) -> set[str]:
         if table in self._columns:
@@ -87,7 +109,7 @@ class DbStore:
         payload = [{c: row.get(c) for c in write_cols} for row in rows]
         with self._conn.cursor() as cur:
             cur.executemany(sql, payload)
-        self._conn.commit()
+        self._commit()
 
     def update(self, table: str, key: Any, values: dict[str, Any]) -> None:
         """Update named columns of an existing row. Raises RowNotFound if no row matches."""
@@ -112,9 +134,16 @@ class DbStore:
         args = tuple(values[c] for c in set_cols) + key_args
         with self._conn.cursor() as cur:
             cur.execute(sql, args)
-            if cur.rowcount == 0:
+            # rowcount is rows changed, not matched (no FOUND_ROWS flag): an
+            # UPDATE that rewrites identical values reports 0 for a real row.
+            if cur.rowcount == 0 and not self._row_exists(cur, table, where, key_args):
                 raise RowNotFound(f"store_db: no row in `{table}` for key {key!r}")
-        self._conn.commit()
+        self._commit()
+
+    @staticmethod
+    def _row_exists(cur: Any, table: str, where: str, key_args: tuple[Any, ...]) -> bool:
+        cur.execute(f"SELECT 1 FROM `{table}` WHERE {where} LIMIT 1", key_args)
+        return cur.fetchone() is not None
 
     def replace_lines(self, table: str, parent_col: str, parent_id: Any, rows: list[dict[str, Any]]) -> None:
         key_cols = TABLE_KEY_COLUMNS[table]
@@ -129,7 +158,7 @@ class DbStore:
             else:
                 with self._conn.cursor() as cur:
                     cur.execute(f"DELETE FROM `{table}` WHERE `{parent_col}` = %s", (parent_id,))
-            self._conn.commit()
+            self._commit()
         except Exception:
             self._conn.rollback()
             raise
@@ -192,7 +221,7 @@ class DbStore:
                         f"AND `transaction_date` >= %s AND `transaction_date` <= %s",
                         (account_id, date_from, date_to),
                     )
-            self._conn.commit()
+            self._commit()
         except Exception:
             self._conn.rollback()
             raise
@@ -231,7 +260,7 @@ class DbStore:
                 clauses.append(f"`{col}` IN ({placeholders})")
                 args.extend(vals)
 
-        if date_column and date_ranges:
+        if date_column is not None:
             if date_column not in allowed:
                 raise UnknownColumn(f"store_db: {table}.{date_column} is not a column")
             if not date_ranges:
@@ -248,12 +277,14 @@ class DbStore:
             cur.execute(sql, tuple(args))
             return [dict(r) for r in cur.fetchall()]
 
-    def max_value(self, table: str, column: str) -> Any:
+    def max_value(self, table: str, column: str, where: dict[str, Any] | None = None) -> Any:
         allowed = self._table_columns(table)
-        if column not in allowed:
-            raise UnknownColumn(f"store_db: {table}.{column} is not a column")
+        for col in (column, *(where or {})):
+            if col not in allowed:
+                raise UnknownColumn(f"store_db: {table}.{col} is not a column")
+        clause = " WHERE " + " AND ".join(f"`{c}` = %s" for c in where) if where else ""
         with self._conn.cursor() as cur:
-            cur.execute(f"SELECT MAX(`{column}`) AS v FROM `{table}`")
+            cur.execute(f"SELECT MAX(`{column}`) AS v FROM `{table}`{clause}", tuple((where or {}).values()))
             row = cur.fetchone()
         return row["v"] if row else None
 
@@ -271,7 +302,7 @@ class DbStore:
                 "last_tried = VALUES(last_tried)",
                 (dataset, doc_id, modified_time, reason, error, datetime.now(), datetime.now()),
             )
-        self._conn.commit()
+        self._commit()
 
     def list_pending(self, dataset: str) -> list[dict[str, Any]]:
         with self._conn.cursor() as cur:
@@ -281,7 +312,7 @@ class DbStore:
     def clear_pending(self, dataset: str, doc_id: str) -> None:
         with self._conn.cursor() as cur:
             cur.execute("DELETE FROM sync_pending WHERE dataset = %s AND doc_id = %s", (dataset, doc_id))
-        self._conn.commit()
+        self._commit()
 
     def get_watermark(self, dataset: str) -> str | None:
         with self._conn.cursor() as cur:
@@ -299,4 +330,4 @@ class DbStore:
                 "ON DUPLICATE KEY UPDATE watermark = VALUES(watermark), last_run_at = VALUES(last_run_at)",
                 (dataset, watermark, datetime.now()),
             )
-        self._conn.commit()
+        self._commit()

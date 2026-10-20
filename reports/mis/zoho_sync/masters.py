@@ -222,15 +222,15 @@ def ensure(run: Run, kind: str, doc_id: str) -> None:
     if spec.cache_folder:
         payload = run.cache.read(spec.cache_folder, doc_id)
 
+    fetched = payload is None
     if payload is None:
         payload = _fetch_payload(run, spec, doc_id)
-        if spec.cache_folder:
-            run.cache.write(spec.cache_folder, doc_id, payload)
 
     if spec.type_check is not None:
         spec.type_check(payload)
 
-    if spec.cache_folder:
+    # Cache only a payload that passed the type check, and only when it came from Zoho.
+    if fetched and spec.cache_folder:
         run.cache.write(spec.cache_folder, doc_id, payload)
 
     for field, dep_kind in spec.deps:

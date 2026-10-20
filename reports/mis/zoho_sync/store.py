@@ -10,6 +10,7 @@ they are kept here rather than passed on every call.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date
 from typing import Any, Iterable, Protocol, runtime_checkable
 
@@ -77,6 +78,10 @@ class Store(Protocol):
         """Update named columns of an existing row. Raises RowNotFound if no row matches."""
         ...
 
+    def transaction(self) -> Any:
+        """Context manager: the writes inside commit together or not at all."""
+        ...
+
     def replace_lines(self, table: str, parent_col: str, parent_id: Any, rows: list[dict[str, Any]]) -> None:
         """Upsert `rows`, then delete that parent's lines not present in `rows`."""
         ...
@@ -102,8 +107,9 @@ class Store(Protocol):
         """Filtered read pushing where/in/date conditions down into SQL for DbStore."""
         ...
 
-    def max_value(self, table: str, column: str) -> Any:
-        """The highest value of `column` in `table`, or None if the table is empty."""
+    def max_value(self, table: str, column: str, where: dict[str, Any] | None = None) -> Any:
+        """The highest value of `column` in `table` (rows matching `where`, if
+        given), or None if there are none."""
         ...
 
     def add_pending(
@@ -151,6 +157,10 @@ class MemoryStore:
                 if col in row:
                     merged[col] = row[col]
             bucket[key] = merged
+
+    @contextmanager
+    def transaction(self) -> Any:
+        yield
 
     def update(self, table: str, key: Any, values: dict[str, Any]) -> None:
         bucket = self._tables.get(table)
@@ -204,6 +214,8 @@ class MemoryStore:
         date_column: str | None = None,
         date_ranges: list[Any] | None = None,
     ) -> list[dict[str, Any]]:
+        if date_column is not None and not date_ranges:
+            return []
         rows = self.iter_table(table)
         results = []
         in_sets = {col: set(vals) for col, vals in (where_in or {}).items()}
@@ -214,15 +226,17 @@ class MemoryStore:
             if in_sets:
                 if any(row.get(k) not in s for k, s in in_sets.items()):
                     continue
-            if date_column and date_ranges:
+            if date_column is not None:
                 d_val = row.get(date_column)
                 if not d_val or not any(r.date_from <= d_val <= r.date_to for r in date_ranges):
                     continue
             results.append(dict(row))
         return results
 
-    def max_value(self, table: str, column: str) -> Any:
+    def max_value(self, table: str, column: str, where: dict[str, Any] | None = None) -> Any:
         rows = self._tables.get(table, {}).values()
+        if where:
+            rows = [r for r in rows if all(r.get(k) == v for k, v in where.items())]
         values = [row.get(column) for row in rows if row.get(column) is not None]
         return max(values) if values else None
 

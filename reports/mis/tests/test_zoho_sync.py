@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -165,6 +165,44 @@ class StoreTests(unittest.TestCase):
         store.update("customers", "C1", {"status": "inactive"})
         self.assertEqual(store.get("customers", "C1"), {"customer_id": "C1", "name": "Acme", "status": "inactive"})
 
+    def test_transaction_commits_once_and_rolls_back_on_error(self) -> None:
+        class StubCur:
+            rowcount = 1
+
+            def execute(self, sql: str, args: tuple = ()) -> None:
+                pass
+
+            def __enter__(self) -> StubCur:
+                return self
+
+            def __exit__(self, *exc: object) -> None:
+                pass
+
+        class StubConn:
+            commits = 0
+            rollbacks = 0
+
+            def cursor(self) -> StubCur:
+                return StubCur()
+
+            def commit(self) -> None:
+                self.commits += 1
+
+            def rollback(self) -> None:
+                self.rollbacks += 1
+
+        conn = StubConn()
+        store = DbStore(conn=conn, columns={"sales_lines": {"line_item_id", "cogs"}})
+        with store.transaction():
+            store.update("sales_lines", "L1", {"cogs": Decimal("1")})
+            store.update("sales_lines", "L2", {"cogs": Decimal("2")})
+        self.assertEqual((conn.commits, conn.rollbacks), (1, 0))
+        with self.assertRaises(RuntimeError):
+            with store.transaction():
+                store.update("sales_lines", "L1", {"cogs": Decimal("3")})
+                raise RuntimeError("boom")
+        self.assertEqual((conn.commits, conn.rollbacks), (1, 1))
+
     def test_update_missing_row_raises(self) -> None:
         store = MemoryStore()
         with self.assertRaises(RowNotFound):
@@ -273,6 +311,20 @@ class WatermarkTests(unittest.TestCase):
         with self.assertRaises(NoWatermark):
             get_watermark(store, "bills")
 
+    def test_seed_shared_table_uses_each_datasets_own_kind(self) -> None:
+        store = MemoryStore()
+        store.upsert("purchase_docs", [
+            {"kind": "bill", "doc_id": "B1", "last_modified_time": "2026-10-21 14:00:00"},
+            {"kind": "purchase_order", "doc_id": "P1", "last_modified_time": "2026-10-01 09:00:00"},
+        ])
+        result = seed(
+            store,
+            {"bills": "purchase_docs", "purchase_orders": "purchase_docs"},
+            kinds={"bills": "bill", "purchase_orders": "purchase_order"},
+        )
+        self.assertEqual(result["bills"], "2026-10-21T14:00:00+0400")
+        self.assertEqual(result["purchase_orders"], "2026-10-01T09:00:00+0400")
+
     def test_highest_orders_mixed_offsets_correctly(self) -> None:
         t_utc = "2026-10-01T10:00:00+0000"
         t_dubai = "2026-10-01T12:00:00+0400"
@@ -350,6 +402,13 @@ class LiveGatewayTests(unittest.TestCase):
                 gw.get("/contacts/missing")
 
 
+class IterWhereDateTests(unittest.TestCase):
+    def test_date_column_with_no_ranges_returns_no_rows(self) -> None:
+        store = MemoryStore()
+        store.upsert("sales_invoices", [{"invoice_id": "I1", "date": date(2026, 10, 1)}])
+        self.assertEqual(store.iter_where("sales_invoices", date_column="date", date_ranges=[]), [])
+
+
 class StoreDbTests(unittest.TestCase):
     def test_rejects_mapper_key_that_is_not_a_column(self) -> None:
         store = DbStore(conn=None, columns={"customers": {"customer_id", "contact_name", "status"}})
@@ -396,10 +455,41 @@ class StoreDbTests(unittest.TestCase):
         self.assertEqual(cur.args, (Decimal("15.50"), now, "INV1"))
         self.assertTrue(conn.committed)
 
+    def test_update_identical_values_is_not_a_missing_row(self) -> None:
+        # pymysql without FOUND_ROWS reports changed rows, so an UPDATE that
+        # rewrites the same values returns rowcount 0 for an existing row.
+        class StubCur:
+            rowcount = 0
+
+            def execute(self, sql: str, args: tuple = ()) -> None:
+                self.last_sql = sql
+
+            def fetchone(self) -> dict:
+                return {"1": 1} if self.last_sql.startswith("SELECT") else None
+
+            def __enter__(self) -> StubCur:
+                return self
+
+            def __exit__(self, *exc: object) -> None:
+                pass
+
+        class StubConn:
+            def cursor(self) -> StubCur:
+                return StubCur()
+
+            def commit(self) -> None:
+                pass
+
+        store = DbStore(conn=StubConn(), columns={"sales_invoices": {"invoice_id", "cogs"}})
+        store.update("sales_invoices", "INV1", {"cogs": Decimal("10")})
+
     def test_update_missing_row_raises(self) -> None:
         class StubCur:
             def __init__(self) -> None:
                 self.rowcount = 0
+
+            def fetchone(self) -> None:
+                return None
 
             def execute(self, sql: str, args: tuple = ()) -> None:
                 pass
@@ -1092,6 +1182,31 @@ class CogsWiringTests(unittest.TestCase):
         self.assertEqual(invoice["cogs"], Decimal("20.00"))
         self.assertIsNotNone(invoice["cogs_synced_at"])
 
+    def test_own_cost_uses_mapper_rules_when_baseline_is_not_stored(self) -> None:
+        # Stored rows have no baseline_cogs: the rebuilt cost must match seed_common.line_cogs.
+        store = MemoryStore()
+        store.upsert("items", [
+            {"item_id": "I1", "purchase_rate": Decimal("5")},
+            {"item_id": "I2", "purchase_rate": Decimal("2")},
+        ])
+        store.upsert("sales_lines", [
+            # price 0 -> master rate * base quantity (2 * 5)
+            {"line_item_id": "L1", "invoice_id": "INV1", "item_id": "I1", "quantity": Decimal("2"),
+             "conversion_rate": Decimal("1"), "base_quantity": Decimal("2"), "base_unit": "pc",
+             "purchase_price": Decimal("0")},
+            # price 24 is ~conv x master rate (a pack price): 3 packs * 24; multiplying by conv again would overstate
+            {"line_item_id": "L2", "invoice_id": "INV1", "item_id": "I2", "quantity": Decimal("3"),
+             "conversion_rate": Decimal("12"), "base_quantity": Decimal("36"), "base_unit": "pc",
+             "purchase_price": Decimal("24")},
+        ])
+        store.upsert("sales_invoices", [{"invoice_id": "INV1", "status": "closed"}])
+        cogs.write_invoice_cogs(
+            store, cogs.COS_ACCOUNT_ID, [{"invoice_id": "INV1", "status": "closed"}], datetime(2026, 10, 21, 2, 0, 0)
+        )
+        self.assertEqual(store.get("sales_lines", "L1")["cogs"], Decimal("10.00"))
+        self.assertEqual(store.get("sales_lines", "L2")["cogs"], Decimal("72.00"))
+        self.assertEqual(store.get("sales_invoices", "INV1")["cogs"], Decimal("82.00"))
+
     def test_void_invoice_gets_zero(self) -> None:
         store = self._invoice_store()
         store.upsert("sales_invoices", [{"invoice_id": "INV1", "status": "void"}], update_cols=["status"])
@@ -1360,6 +1475,21 @@ class CostOfSalesPipelineTests(unittest.TestCase):
             [("/chartofaccounts/transactions", "2026-09-01", "2026-10-21")],
         )
 
+    def test_cost_of_sales_0130_run_does_not_pull_trailing_or_bill_ranges(self) -> None:
+        store = MemoryStore()
+        store.upsert("purchase_docs", [{
+            "kind": "bill", "doc_id": "B1", "date": date(2026, 9, 1), "status": "open",
+        }])
+        gw = FakeGateway()
+        run = _test_run(gw, store=store)
+        from zoneinfo import ZoneInfo
+        dubai = ZoneInfo("Asia/Dubai")
+        run.started_at = datetime(2026, 10, 21, 1, 30, 0, tzinfo=dubai)
+        run.clock = lambda: datetime(2026, 10, 21, 1, 35, 0, tzinfo=dubai)
+        stats = pipeline.run_cost_of_sales(run, {"bills": {"B1"}})
+        self.assertEqual(stats["ranges_attempted"], 0)
+        self.assertEqual(gw.calls, [])
+
     def test_cost_of_sales_0301_run_does_not_pull_trailing_or_bill_ranges(self) -> None:
         store = MemoryStore()
         store.upsert("purchase_docs", [{
@@ -1388,6 +1518,16 @@ class ReplayTests(unittest.TestCase):
                 run = zoho_sync_main.build_run(replay="oldrun")
             self.assertIsInstance(run.gateway, ReplayGateway)
             self.assertEqual(run.mode, "replay")
+
+    def test_build_run_live_stamps_dubai_start_time(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with mock.patch.object(zoho_sync_main, "_output_dir", return_value=root), \
+                    mock.patch.object(zoho_sync_main, "_db_store", return_value=MemoryStore()), \
+                    mock.patch("zoho_client.ZohoClient"):
+                run = zoho_sync_main.build_run(yes_live=True)
+            self.assertEqual(run.mode, "live")
+            self.assertEqual(run.started_at.utcoffset(), timedelta(hours=4))
 
     def test_replay_writes_same_rows_without_network(self) -> None:
         list_row = {**_INVOICE_LIST_ROW, "last_modified_time": WM_LATER}
@@ -1974,6 +2114,9 @@ class DbStoreMariaDbIntegrationTests(unittest.TestCase):
         self.assertEqual(inv["cogs"], Decimal("40.00"))
         self.assertEqual(inv["cogs_synced_at"], now)
         self.assertEqual(inv["date"], date(2026, 10, 1))
+
+        # 2b. Rewriting the same values still finds the row (rowcount is changed-rows, not matched-rows).
+        self.store.update("sales_invoices", "INV1", {"cogs": Decimal("40.00"), "cogs_synced_at": now})
 
         # 3. replace_lines
         self.store.replace_lines("sales_lines", "invoice_id", "INV1", [

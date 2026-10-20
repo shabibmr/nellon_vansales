@@ -13,16 +13,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Iterable, Protocol
 
-from seed_common import cents, d, prorate
+from seed_common import cents, d, line_cogs, prorate
 
 COS_ACCOUNT_ID = "3331482000000034003"
 _INVOICE_VALUATION = "inventory_valuation_for_invoice"
 
 
 class PostingsStore(Protocol):
-    def iter_table(self, table: str) -> Iterable[dict[str, Any]]:
-        ...
-
     def iter_where(
         self,
         table: str,
@@ -34,6 +31,9 @@ class PostingsStore(Protocol):
         ...
 
     def update(self, table: str, key: Any, values: dict[str, Any]) -> None:
+        ...
+
+    def transaction(self) -> Any:
         ...
 
     def upsert(self, table: str, rows: list[dict[str, Any]], update_cols: list[str] | None = None) -> None:
@@ -61,28 +61,58 @@ def load_invoice_postings(
     return {k: cents(v) for k, v in totals.items()}
 
 
-def line_own_cost(ln: dict[str, Any]) -> Decimal:
-    """A line's own cost, computed from baseline_cogs, or quantity * conversion_rate * purchase_price.
+def _group_by(rows: Iterable[dict[str, Any]], parent_col: str) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(row.get(parent_col), []).append(row)
+    return grouped
 
-    Never falls back to stored `cogs` when quantity or purchase_price is present,
-    making Cost of Sales reconciliation repeatable and bounded.
+
+def line_own_cost(ln: dict[str, Any], master_rate: Decimal | None = None) -> Decimal:
+    """A line's own cost: `baseline_cogs` when the row carries it, else rebuilt
+    with the same `seed_common.line_cogs` rules the mapper used at insert
+    (master-rate fallback, pack versus base price) from the stored quantity,
+    conversion, price and the item's `master_rate`.
+
+    Never falls back to stored `cogs` when quantity or purchase_price is
+    present, making Cost of Sales reconciliation repeatable and bounded.
     """
     if "baseline_cogs" in ln and ln["baseline_cogs"] is not None:
         return cents(d(ln["baseline_cogs"]))
     if "quantity" in ln or "purchase_price" in ln:
         qty = d(ln.get("quantity"))
-        price = d(ln.get("purchase_price"))
         conv = d(ln.get("conversion_rate"), "1")
         if conv <= 0:
             conv = Decimal("1")
-        return cents(qty * conv * price)
+        base_qty = d(ln.get("base_quantity")) if ln.get("base_quantity") is not None else qty * conv
+        cost, _ = line_cogs(
+            qty=qty,
+            conv=conv,
+            base_qty=base_qty,
+            price=d(ln.get("purchase_price")),
+            master_rate=master_rate if master_rate is not None else Decimal("0"),
+            base_unit=str(ln.get("base_unit") or ""),
+        )
+        return cost
     return cents(d(ln.get("cogs")))
+
+
+def _master_rates(store: PostingsStore, lines: Iterable[dict[str, Any]]) -> dict[str, Decimal]:
+    """`items.purchase_rate` for the items on `lines`, keyed by item id."""
+    item_ids = sorted({str(ln["item_id"]) for ln in lines if ln.get("item_id")})
+    if not item_ids:
+        return {}
+    return {
+        str(row["item_id"]): d(row.get("purchase_rate"))
+        for row in store.iter_where("items", where_in={"item_id": item_ids})
+    }
 
 
 def apply_cogs(
     status: str,
     lines: list[dict[str, Any]],
     postings_total: Decimal | None,
+    master_rates: dict[str, Decimal] | None = None,
 ) -> tuple[Decimal, list[Decimal]]:
     """Return (header_cogs, per-line cogs) for the Cost of Sales cases.
 
@@ -94,7 +124,8 @@ def apply_cogs(
     if (status or "").lower() in ("draft", "void"):
         return Decimal("0.00"), [Decimal("0.00")] * n
 
-    baseline = [line_own_cost(ln) for ln in lines]
+    rates = master_rates or {}
+    baseline = [line_own_cost(ln, rates.get(str(ln.get("item_id")))) for ln in lines]
     if postings_total is None:
         header = cents(sum(baseline, Decimal("0")))
         return header, list(baseline)
@@ -127,21 +158,16 @@ def write_invoice_cogs(
     inv_ids = [row["invoice_id"] for row in rows]
     postings = load_invoice_postings(store, account_id, inv_ids)
     line_rows = store.iter_where("sales_lines", where_in={"invoice_id": inv_ids})
-    lines_by_invoice: dict[str, list[dict[str, Any]]] = {}
-    for ln in line_rows:
-        lines_by_invoice.setdefault(ln.get("invoice_id"), []).append(ln)
+    rates = _master_rates(store, line_rows)
+    lines_by_invoice = _group_by(line_rows, "invoice_id")
 
     for row in rows:
         invoice_id = row["invoice_id"]
         lines = lines_by_invoice.get(invoice_id, [])
-        header, line_cogs = apply_cogs(row.get("status", ""), lines, postings.get(invoice_id))
-        store.update(
-            "sales_invoices",
-            invoice_id,
-            {"cogs": header, "cogs_synced_at": now},
-        )
-        if lines:
-            for ln, val in zip(lines, line_cogs):
+        header, new_line_cogs = apply_cogs(row.get("status", ""), lines, postings.get(invoice_id), rates)
+        with store.transaction():
+            store.update("sales_invoices", invoice_id, {"cogs": header, "cogs_synced_at": now})
+            for ln, val in zip(lines, new_line_cogs):
                 store.update("sales_lines", ln["line_item_id"], {"cogs": val})
 
 
@@ -159,14 +185,13 @@ def write_debit_note_cogs(
         return
     dn_ids = [row["debit_note_id"] for row in rows]
     line_rows = store.iter_where("debit_note_lines", where_in={"debit_note_id": dn_ids})
-    lines_by_note: dict[str, list[dict[str, Any]]] = {}
-    for ln in line_rows:
-        lines_by_note.setdefault(ln.get("debit_note_id"), []).append(ln)
+    rates = _master_rates(store, line_rows)
+    lines_by_note = _group_by(line_rows, "debit_note_id")
 
     for row in rows:
         debit_note_id = row["debit_note_id"]
         lines = lines_by_note.get(debit_note_id, [])
-        header, _ = apply_cogs(row.get("status", ""), lines, None)
+        header, _ = apply_cogs(row.get("status", ""), lines, None, rates)
         store.update(
             "debit_notes",
             debit_note_id,
