@@ -338,12 +338,14 @@ def _store_document(
     units, rates = _units_and_rates(run, spec.collect_ids(detail).get("item", set()))
     patch, lines = spec.from_detail(detail, units, rates)
     patch = dict(patch)
-    patch["lines_synced_at"] = run.now()
-    run.store.upsert(spec.header_table, [patch], update_cols=list(patch.keys()))
 
+    # lines_synced_at only after lines (or vendor_payment_bills) are written.
     if spec.line_table and spec.line_parent_col:
         parent_id = _line_parent_id(spec, detail, list_row)
         run.store.replace_lines(spec.line_table, spec.line_parent_col, parent_id, lines)
+        patch["lines_synced_at"] = run.now()
+
+    run.store.upsert(spec.header_table, [patch], update_cols=list(patch.keys()))
 
 
 # ---------------------------------------------------------------------------

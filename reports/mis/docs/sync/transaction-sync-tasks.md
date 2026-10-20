@@ -1,6 +1,6 @@
 # Transaction sync — task list
 
-Plan: `docs/sync/transaction-sync-plan.md`. Status as of 21 Oct 2026: tasks 0–8 done except the task-7 follow-up (first customer debit note, blocked on seeing one). Core + masters + document specs + `pipeline.py` + Cost of Sales modules + CLI (`zoho_sync/__main__.py`) in place. `pipeline.run_all` now calls `run_cost_of_sales` after the seven-list loop (only when a spec in that run has `has_cogs`), which pulls the ranges `ranges.cost_of_sales_ranges` implies through `postings.pull_ranges` and reconciles invoices/debit notes through `cogs.write_invoice_cogs`/`write_debit_note_cogs`. Next: task 9 rules check / task 10 remaining tests. No Zoho call.
+Plan: `docs/sync/transaction-sync-plan.md`. Status as of 21 Oct 2026: tasks 0–9 done except the task-7 follow-up (first customer debit note, blocked on seeing one). Core + masters + document specs + `pipeline.py` + Cost of Sales + CLI in place. Task 9 rules audit passed after two fixes (`lines_synced_at` only after `replace_lines`; sales-order list header reads `salesorder_id`/`salesorder_number`). Next: task 10 remaining FakeGateway/pipeline tests. No Zoho call.
 
 Scope is the runs from now on. Backfill is handled separately.
 
@@ -103,15 +103,17 @@ Done 21 Oct 2026, 0 Zoho calls. `zoho_sync/__main__.py`: `python -m zoho_sync ru
 
 ## 9. Rules the pipeline must keep
 
-- [ ] Debit notes run first and their ids are skipped by the invoice pass. A row already on `debit_notes` is skipped too. Detail `type` is checked before any line is written. Debit list sends `filter_by=Type.DebitNote`.
-- [ ] Pass the stored watermark as raw Zoho text, `+` as `%2B`. Do not add one second. Bills and the four "not stated" lists overlap on equals; a matching timestamp is a no-op.
-- [ ] A partial list (stopped by `--max-calls` or an error) does not move that dataset's watermark. A failed document does not hold the watermark back; it stays in `sync_pending`.
-- [ ] Required before a write: `customer_id` or `vendor_id`. Optional and NULL when blank: header `salesperson_id` (sales only) and `location_id`; line `item_id`, `location_id`, `account_id`. A filled-in id whose `ensure` fails or 404s stores nothing; after 3 attempts it is in the run summary.
-- [ ] Debit note `reference_invoice_id`, when set, must exist on `sales_invoices` (load that invoice first). Vendor payment and vendor credit `bill_id` must exist on `purchase_docs` as a bill (load that bill first).
-- [ ] Header from the list row only. Detail-only amounts wait for the detail step. `net_sales` is computed at detail time. `cogs` is written only by the Cost of Sales pass.
-- [ ] Draft and void are stored. Their COGS is 0.
-- [ ] A failed postings pull keeps the stored COGS, leaves `cogs_synced_at` as it was, and records the range in `sync_pending`. A posted invoice with no postings takes the sum of its lines' own cost and sets `cogs_synced_at`.
-- [ ] Mark `lines_synced_at` only when lines (or `vendor_payment_bills`) are written.
+Done 21 Oct 2026, 0 Zoho calls. Code audit of `pipeline.py` / `specs.py` / `watermark.py` / `mapping.py` / `cogs.py` / `postings.py` / `ranges.py`. Two gaps fixed: (1) `lines_synced_at` was set before `replace_lines` — now only after lines (or `vendor_payment_bills`) write; (2) `header_from_list_sales_order` read Zoho `invoice_id`/`invoice_number` — now reads `salesorder_id`/`salesorder_number` (debit notes still map Zoho `invoice_*` → `debit_note_*`). Existing unittest suite: 77 OK.
+
+- [x] Debit notes run first and their ids are skipped by the invoice pass. A row already on `debit_notes` is skipped too. Detail `type` is checked before any line is written. Debit list sends `filter_by=Type.DebitNote`.
+- [x] Pass the stored watermark as raw Zoho text, `+` as `%2B`. Do not add one second. Bills and the four "not stated" lists overlap on equals; a matching timestamp is a no-op.
+- [x] A partial list (stopped by `--max-calls` or an error) does not move that dataset's watermark. A failed document does not hold the watermark back; it stays in `sync_pending`.
+- [x] Required before a write: `customer_id` or `vendor_id`. Optional and NULL when blank: header `salesperson_id` (sales only) and `location_id`; line `item_id`, `location_id`, `account_id`. A filled-in id whose `ensure` fails or 404s stores nothing; after 3 attempts it is in the run summary.
+- [x] Debit note `reference_invoice_id`, when set, must exist on `sales_invoices` (load that invoice first). Vendor payment and vendor credit `bill_id` must exist on `purchase_docs` as a bill (load that bill first).
+- [x] Header from the list row only. Detail-only amounts wait for the detail step. `net_sales` is computed at detail time. `cogs` is written only by the Cost of Sales pass.
+- [x] Draft and void are stored. Their COGS is 0.
+- [x] A failed postings pull keeps the stored COGS, leaves `cogs_synced_at` as it was, and records the range in `sync_pending`. A posted invoice with no postings takes the sum of its lines' own cost and sets `cogs_synced_at`.
+- [x] Mark `lines_synced_at` only when lines (or `vendor_payment_bills`) are written.
 
 ## 10. Tests
 

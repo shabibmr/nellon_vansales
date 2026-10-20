@@ -215,8 +215,9 @@ def build_sales_lines(
 # "Step 1 — header from the list row"); the pipeline upserts with those keys
 # as `update_cols` so detail-only columns on an existing row are left alone,
 # and take the table's own default on first insert. `from_detail` returns the
-# detail-only header columns plus the built line rows; `cogs` is never set by
-# either — only the Cost of Sales pass (`ranges.py`/`cogs.py`) writes it.
+# detail-only header columns plus the built line rows. Header `cogs` is never
+# set here — only the Cost of Sales pass writes it. Line `cogs` starts as each
+# line's own cost (`line_cogs`) and is overwritten for invoices by that pass.
 # ---------------------------------------------------------------------------
 
 
@@ -270,10 +271,20 @@ def collect_ids_vendor_payment(doc: dict[str, Any]) -> dict[str, set[str]]:
 # -- Invoices and debit notes: both /invoices, both built with build_sales_lines --
 
 
-def _invoice_like_header_from_list(row: dict[str, Any], id_col: str, number_col: str) -> dict[str, Any]:
+def _invoice_like_header_from_list(
+    row: dict[str, Any],
+    id_col: str,
+    number_col: str,
+    *,
+    id_field: str = "invoice_id",
+    number_field: str = "invoice_number",
+) -> dict[str, Any]:
+    """List-row header. `id_field`/`number_field` are Zoho list keys; `id_col`/
+    `number_col` are the table columns (debit notes keep Zoho's invoice_* keys
+    but store under debit_note_*)."""
     return {
-        id_col: s(row.get("invoice_id"), 40),
-        number_col: s(row.get("invoice_number"), 60),
+        id_col: s(row.get(id_field), 40),
+        number_col: s(row.get(number_field), 60),
         "date": parse_date(row.get("date")),
         "due_date": parse_date(row.get("due_date")),
         "status": s(row.get("status"), 30),
@@ -298,6 +309,7 @@ def header_from_list_invoice(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def header_from_list_debit_note(row: dict[str, Any]) -> dict[str, Any]:
+    # Zoho debit-note list rows still use invoice_id / invoice_number.
     return _invoice_like_header_from_list(row, "debit_note_id", "debit_note_number")
 
 
@@ -359,7 +371,13 @@ def is_debit_note_detail(doc: dict[str, Any]) -> bool:
 
 
 def header_from_list_sales_order(row: dict[str, Any]) -> dict[str, Any]:
-    return _invoice_like_header_from_list(row, "salesorder_id", "salesorder_number")
+    return _invoice_like_header_from_list(
+        row,
+        "salesorder_id",
+        "salesorder_number",
+        id_field="salesorder_id",
+        number_field="salesorder_number",
+    )
 
 
 def from_detail_sales_order(
