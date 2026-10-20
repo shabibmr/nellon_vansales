@@ -223,6 +223,8 @@
 
     const lineItems = raw.line_items || raw.lineItems;
     let finalLineItems = [];
+    const rawLineAmount = findVal(['line_amount', 'line amount']);
+    const lineAmount = rawLineAmount !== undefined && rawLineAmount !== '' ? parseNum(rawLineAmount, 0) : null;
 
     if (Array.isArray(lineItems) && lineItems.length > 0) {
       finalLineItems = lineItems.map((li, idx) => ({
@@ -233,7 +235,7 @@
         category: cleanStr(li.category || category),
         rate: parseNum(li.rate, 0),
         quantity: parseNum(li.quantity || li.qty, 1),
-        amount: parseNum(li.amount || li.total, parseNum(li.rate, 0) * parseNum(li.quantity, 1))
+        amount: parseNum(li.amount || li.line_amount || li.total, parseNum(li.rate, 0) * parseNum(li.quantity, 1))
       }));
     } else if (itemName) {
       finalLineItems.push({
@@ -244,7 +246,7 @@
         category: category,
         rate: rate,
         quantity: quantity,
-        amount: total
+        amount: lineAmount !== null ? lineAmount : total
       });
     }
 
@@ -424,10 +426,37 @@
         }
       }
     } catch (err) {
-      console.warn('Zoho Books loading failed or not in Zoho environment. Falling back to reference demo data.', err);
+      console.warn('Zoho Books loading failed or not in Zoho environment. Falling back to invoice_clean.xlsx.', err);
     }
 
-    // 2. Fallback to reference demo data
+    // 2. Published workbook beside this page. Demo data is only the last resort.
+    try {
+      if (typeof window !== 'undefined' && window.XLSX && typeof fetch === 'function') {
+        const res = await fetch('invoice_clean.xlsx', { cache: 'no-store' });
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          const workbook = window.XLSX.read(buf, { type: 'array', cellDates: true });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rawJson = window.XLSX.utils.sheet_to_json(sheet, { defval: '' });
+          const invoices = groupRowsIntoInvoices(rawJson);
+          if (invoices.length) {
+            if (AppState && AppState.setState) {
+              AppState.setState({
+                rawData: invoices,
+                isZohoEnv: false,
+                dataSourceLabel: 'invoice_clean.xlsx',
+                isLoading: false
+              });
+            }
+            return { source: 'file', count: invoices.length };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('invoice_clean.xlsx could not be loaded. Falling back to reference demo data.', err);
+    }
+
+    // 3. Fallback to reference demo data
     const demo = DEMO_DATA || (typeof window !== 'undefined' ? window.DEMO_DATA : null);
     if (demo && Array.isArray(demo.invoices)) {
       if (AppState && AppState.setState) {
