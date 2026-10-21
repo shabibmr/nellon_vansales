@@ -7,7 +7,7 @@ Plan: docs/sync/transaction-sync-plan.md, "Code structure" / CLI. Task 8.
   `--max-calls N` caps one live run. Pending is always retried (pipeline).
 - `fetch KIND ID` — one master, same as the `fetch_*.py` wrappers.
 - `seed-watermarks` — first-run seed from each header table's max
-  `last_modified_time`. No Zoho call.
+  `last_modified_time`. Keeps existing watermarks unless `--force`. No Zoho call.
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 def cmd_seed_watermarks(args: argparse.Namespace) -> int:
     store = _db_store(args.db)
-    seeded = wm.seed(store, _header_tables(), kinds=KIND_BY_DATASET)
+    seeded = wm.seed(store, _header_tables(), kinds=KIND_BY_DATASET, overwrite=args.force)
     print(json.dumps(seeded, ensure_ascii=False, indent=2, default=str))
     empty = [dataset for dataset, value in seeded.items() if not value]
     if empty:
@@ -160,6 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     seed_p = sub.add_parser("seed-watermarks", help="seed sync_state from stored header last_modified_time")
     seed_p.add_argument("--db", default=None)
+    seed_p.add_argument("--force", action="store_true", help="overwrite watermarks that already exist")
     seed_p.set_defaults(func=cmd_seed_watermarks)
 
     return p

@@ -72,6 +72,7 @@ def seed(
     store: Store,
     header_tables: dict[str, str],
     kinds: dict[str, str] | None = None,
+    overwrite: bool = False,
 ) -> dict[str, str | None]:
     """First-run seed: set each dataset's watermark to the highest
     `last_modified_time` already stored in that dataset's header table.
@@ -81,11 +82,18 @@ def seed(
     `kinds` maps dataset -> the `kind` column value for datasets that share a
     header table (bills and purchase orders in `purchase_docs`), so each is
     seeded from its own rows only.
+    A dataset that already has a watermark keeps it unless `overwrite` is set:
+    re-seeding after real syncs could move it backwards (a large re-list) or
+    forwards past documents never listed.
     A dataset whose table is empty gets no watermark (still `NoWatermark` on
     the next list) rather than a guessed value.
     """
     seeded: dict[str, str | None] = {}
     for dataset, table in header_tables.items():
+        existing = store.get_watermark(dataset)
+        if existing and not overwrite:
+            seeded[dataset] = existing
+            continue
         value = store.max_value(
             table, "last_modified_time", where={"kind": kinds[dataset]} if kinds and dataset in kinds else None
         )

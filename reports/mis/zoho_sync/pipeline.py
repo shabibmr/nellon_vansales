@@ -17,7 +17,7 @@ from .context import Run
 from .gateway import NotFound
 from .masters import ensure
 from .specs import ALL_SPECS, DocRef, DocSpec
-from .store import key_for
+from .store import TABLE_KEY_COLUMNS, key_for
 from . import cogs, postings, watermark as wm
 from .ranges import cost_of_sales_ranges
 
@@ -276,12 +276,12 @@ def _sync_list_row(
             if target:
                 other = SPECS_BY_DATASET[target]
                 claimed.setdefault(target, set()).add(doc_id)
-                _store_document(run, other, list_row=row, detail=doc)
+                _store_document(run, other, list_row=row, detail=doc, claimed=claimed)
                 stats["stored"] += 1
                 return
-            _store_document(run, spec, list_row=row, detail=doc)
+            _store_document(run, spec, list_row=row, detail=doc, claimed=claimed)
         else:
-            _store_from_list_row(run, spec, row)
+            _store_from_list_row(run, spec, row, claimed)
         claimed.setdefault(spec.dataset, set()).add(doc_id)
         run.store.clear_pending(spec.dataset, doc_id)
         stats["stored"] += 1
@@ -314,7 +314,7 @@ def _sync_by_id(
             target = SPECS_BY_DATASET[target_name]
     if claimed is not None:
         claimed.setdefault(target.dataset, set()).add(doc_id)
-    _store_document(run, target, detail=doc)
+    _store_document(run, target, detail=doc, claimed=claimed)
 
 
 def _merge_ids(a: dict[str, set[str]], b: dict[str, set[str]]) -> dict[str, set[str]]:
@@ -324,13 +324,15 @@ def _merge_ids(a: dict[str, set[str]], b: dict[str, set[str]]) -> dict[str, set[
     return merged
 
 
-def _store_from_list_row(run: Run, spec: DocSpec, row: dict[str, Any]) -> None:
+def _store_from_list_row(
+    run: Run, spec: DocSpec, row: dict[str, Any], claimed: dict[str, set[str]] | None = None
+) -> None:
     """Load detail (cache or GET) and store document."""
     _require_party(row, spec)
     modified = str(row.get("last_modified_time") or "")
     doc_id = str(row.get(spec.id_field) or "").strip()
     detail = _load_detail(run, spec, doc_id, modified)
-    _store_document(run, spec, list_row=row, detail=detail)
+    _store_document(run, spec, list_row=row, detail=detail, claimed=claimed)
 
 
 def _store_document(
@@ -339,6 +341,7 @@ def _store_document(
     *,
     detail: dict[str, Any],
     list_row: dict[str, Any] | None = None,
+    claimed: dict[str, set[str]] | None = None,
 ) -> None:
     """Ensure all masters and doc refs first, then store header, lines, and patch.
 
@@ -354,7 +357,7 @@ def _store_document(
     if list_row is not None:
         all_ids = _merge_ids(spec.collect_ids(list_row), all_ids)
     _ensure_collected(run, all_ids)
-    _ensure_doc_refs(run, spec, detail)
+    _ensure_doc_refs(run, spec, detail, claimed)
 
     units, rates = _units_and_rates(run, all_ids.get("item", set()))
     patch, lines = spec.from_detail(detail, units, rates)
@@ -364,6 +367,13 @@ def _store_document(
     key = key_for(spec.header_table, header)
     if list_row is not None or not run.store.has(spec.header_table, key):
         run.store.upsert(spec.header_table, [header], update_cols=list(header.keys()))
+    else:
+        # Retry or doc-ref load of a stored document: refresh only the header
+        # columns the detail itself carries, so list-only fields survive and
+        # status, date and totals do not go stale.
+        key_cols = TABLE_KEY_COLUMNS[spec.header_table]
+        fresh = {c: v for c, v in header.items() if c in detail and c not in key_cols}
+        patch = {**fresh, **patch}
 
     # lines_synced_at only after lines (or vendor_payment_bills) are written.
     if spec.line_table and spec.line_parent_col:
@@ -416,16 +426,20 @@ def _ensure_collected(run: Run, ids_by_kind: dict[str, set[str]]) -> None:
             ensure(run, kind, doc_id)
 
 
-def _ensure_doc_refs(run: Run, spec: DocSpec, detail: dict[str, Any]) -> None:
+def _ensure_doc_refs(
+    run: Run, spec: DocSpec, detail: dict[str, Any], claimed: dict[str, set[str]] | None = None
+) -> None:
     for ref in spec.doc_refs:
         if ref.line_path:
             for child in detail.get(ref.line_path) or []:
-                _ensure_one_ref(run, ref, child.get(ref.field))
+                _ensure_one_ref(run, ref, child.get(ref.field), claimed)
         else:
-            _ensure_one_ref(run, ref, detail.get(ref.field))
+            _ensure_one_ref(run, ref, detail.get(ref.field), claimed)
 
 
-def _ensure_one_ref(run: Run, ref: DocRef, raw_id: Any) -> None:
+def _ensure_one_ref(
+    run: Run, ref: DocRef, raw_id: Any, claimed: dict[str, set[str]] | None = None
+) -> None:
     doc_id = str(raw_id or "").strip()
     if not doc_id:
         return
@@ -434,7 +448,7 @@ def _ensure_one_ref(run: Run, ref: DocRef, raw_id: Any) -> None:
         return
     target = _spec_for_ref(ref)
     try:
-        _sync_by_id(run, target, doc_id)
+        _sync_by_id(run, target, doc_id, claimed=claimed)
     except BudgetExceeded:
         raise
     except Exception as exc:

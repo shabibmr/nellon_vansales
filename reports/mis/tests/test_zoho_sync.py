@@ -325,6 +325,16 @@ class WatermarkTests(unittest.TestCase):
         self.assertEqual(result["bills"], "2026-10-21T14:00:00+0400")
         self.assertEqual(result["purchase_orders"], "2026-10-01T09:00:00+0400")
 
+    def test_seed_keeps_existing_watermark_unless_overwrite(self) -> None:
+        store = MemoryStore()
+        store.upsert("sales_invoices", [{"invoice_id": "I1", "last_modified_time": "2026-10-21 14:02:51"}])
+        store.set_watermark("invoices", "2026-10-25T08:00:00+0400")
+        result = seed(store, {"invoices": "sales_invoices"})
+        self.assertEqual(result["invoices"], "2026-10-25T08:00:00+0400")
+        self.assertEqual(get_watermark(store, "invoices"), "2026-10-25T08:00:00+0400")
+        seed(store, {"invoices": "sales_invoices"}, overwrite=True)
+        self.assertEqual(get_watermark(store, "invoices"), "2026-10-21T14:02:51+0400")
+
     def test_highest_orders_mixed_offsets_correctly(self) -> None:
         t_utc = "2026-10-01T10:00:00+0000"
         t_dubai = "2026-10-01T12:00:00+0400"
@@ -2001,6 +2011,62 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(inv["salesperson_name"], "Sam")
         self.assertEqual(inv["net_sales"], Decimal("100.00"))
         self.assertEqual(len(store.list_pending("invoices")), 0)
+
+    def test_retry_refreshes_header_fields_the_detail_carries(self) -> None:
+        store = MemoryStore()
+        store.set_watermark("invoices", WM)
+        _seed_sales_masters(store)
+        store.upsert("sales_invoices", [{
+            "invoice_id": "INV1", "customer_id": "C1", "status": "closed",
+            "balance": Decimal("50.00"), "salesperson_name": "Sam",
+            "date": date(2026, 10, 1), "total": Decimal("100.00"),
+        }])
+        # Edited in Zoho: voided, total and balance changed. The detail carries no salesperson_name.
+        detail = {
+            "invoice_id": "INV1", "customer_id": "C1", "date": "2026-10-03", "status": "void",
+            "total": "80", "balance": "0",
+            "sub_total": "80", "discount_total": "0", "tax_total": "0",
+            "line_items": [{"line_item_id": "LI1", "item_id": "IT1", "quantity": "2",
+                            "rate": "40", "item_total": "80"}],
+            "last_modified_time": WM_LATER,
+        }
+        store.add_pending("invoices", "INV1", modified_time=WM_LATER, reason="retry_test")
+        gw = FakeGateway()
+        gw.add("/invoices", _list_params(), {"invoices": [], "page_context": {"has_more_page": False}})
+        gw.add("/invoices/INV1", None, {"invoice": detail})
+        with TemporaryDirectory() as tmp:
+            run = _test_run(gw, store=store, cache_root=Path(tmp))
+            pipeline.sync_dataset(run, INVOICES)
+        inv = store.get("sales_invoices", "INV1")
+        self.assertEqual(inv["status"], "void")
+        self.assertEqual(inv["total"], Decimal("80"))
+        self.assertEqual(inv["balance"], Decimal("0"))
+        self.assertEqual(inv["date"], date(2026, 10, 3))
+        self.assertEqual(inv["salesperson_name"], "Sam")
+
+    def test_doc_ref_loaded_invoice_is_claimed_for_cost_of_sales(self) -> None:
+        store = MemoryStore()
+        store.set_watermark("debit_notes", WM)
+        _seed_sales_masters(store)
+        dn_list = {
+            **_INVOICE_LIST_ROW, "invoice_id": "DN1", "invoice_number": "DN-1",
+            "type": "debit_note", "last_modified_time": WM_LATER,
+        }
+        dn_detail = {
+            **_INVOICE_DETAIL, "invoice_id": "DN1", "invoice_number": "DN-1",
+            "type": "debit_note", "reference_invoice_id": "INV9", "last_modified_time": WM_LATER,
+        }
+        gw = FakeGateway()
+        gw.add("/invoices", _list_params(filter_by="Type.DebitNote"), {
+            "invoices": [dn_list], "page_context": {"has_more_page": False},
+        })
+        gw.add("/invoices/DN1", None, {"invoice": dn_detail})
+        gw.add("/invoices/INV9", None, {"invoice": {**_INVOICE_DETAIL, "invoice_id": "INV9"}})
+        claimed: dict[str, set[str]] = {}
+        with TemporaryDirectory() as tmp:
+            run = _test_run(gw, store=store, cache_root=Path(tmp))
+            pipeline.sync_dataset(run, DEBIT_NOTES, claimed)
+        self.assertIn("INV9", claimed.get("invoices", set()))
 
     def test_http_failure_on_one_dataset_does_not_stop_run_and_leaves_watermark(self) -> None:
         store = MemoryStore()
