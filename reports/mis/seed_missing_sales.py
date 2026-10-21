@@ -31,6 +31,7 @@ from seed_common import (
     parse_date, parse_dt, record_coverage, s, table_exists, upsert_sql,
 )
 from zoho_client import ZohoClient
+from zoho_sync.store_db import DbStore
 from zoho_sync.cogs import COS_ACCOUNT_ID, apply_cogs, load_invoice_postings
 from zoho_sync.mapping import build_sales_lines
 
@@ -58,18 +59,6 @@ ILI_COLS = [
     "rate", "sales_rate", "item_total", "purchase_price",
     "conversion_rate", "cost_of_sales", "cost_source",
 ]
-
-
-class _ConnPostingsStore:
-    """Thin adapter so load_invoice_postings can read gl_journals from a pymysql connection."""
-
-    def __init__(self, conn: pymysql.Connection) -> None:
-        self._conn = conn
-
-    def iter_table(self, table: str):
-        with self._conn.cursor() as cur:
-            cur.execute(f"SELECT * FROM `{table}`")
-            return list(cur.fetchall())
 
 
 def sync_recent_gl_journals(conn: pymysql.Connection, client: ZohoClient, dfrom: str, dto: str) -> int:
@@ -296,7 +285,7 @@ def main() -> int:
             print("No missing invoices to seed.")
             return 0
 
-        gl_cogs_map = load_invoice_postings(_ConnPostingsStore(conn), COS_ACCOUNT_ID, missing_ids)
+        gl_cogs_map = load_invoice_postings(DbStore(conn), COS_ACCOUNT_ID, missing_ids)
 
         # Step 3: Build rows
         inv_rows, line_rows, ili_rows, stats = build_invoice_rows(

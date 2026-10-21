@@ -24,9 +24,9 @@ from .ranges import cost_of_sales_ranges
 PER_PAGE = 200
 COS_ACCOUNT_ID = cogs.COS_ACCOUNT_ID
 
-# purchase_docs composite key: dataset → kind column value.
 logger = logging.getLogger(__name__)
 
+# purchase_docs composite key: dataset → kind column value.
 KIND_BY_DATASET = {
     "bills": "bill",
     "purchase_orders": "purchase_order",

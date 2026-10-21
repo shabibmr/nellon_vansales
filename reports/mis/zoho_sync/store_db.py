@@ -37,17 +37,17 @@ class DbStore:
     def transaction(self) -> Any:
         """Group writes into one commit; any error rolls them all back."""
         self._tx_depth += 1
+        ok = False
         try:
             yield
-        except Exception:
+            ok = True
+        finally:
             self._tx_depth -= 1
             if self._tx_depth == 0:
-                self._conn.rollback()
-            raise
-        else:
-            self._tx_depth -= 1
-            if self._tx_depth == 0:
-                self._conn.commit()
+                if ok:
+                    self._conn.commit()
+                else:
+                    self._conn.rollback()
 
     def _table_columns(self, table: str) -> set[str]:
         if table in self._columns:
