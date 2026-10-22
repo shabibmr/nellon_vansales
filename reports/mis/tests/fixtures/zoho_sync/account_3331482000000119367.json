@@ -1,0 +1,10 @@
+{
+  "account_id": "3331482000000119367",
+  "account_code": "5.1.0000",
+  "account_name": "Cost of Sales",
+  "account_type": "cost_of_goods_sold",
+  "parent_account_id": "",
+  "parent_account_name": "",
+  "is_active": true,
+  "last_modified_time": "2022-07-04T18:16:35+0400"
+}

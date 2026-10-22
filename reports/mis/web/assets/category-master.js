@@ -266,21 +266,6 @@
   });
   ["q", "fPlbs", "fCat", "fGroups"].forEach((id) => $(id).addEventListener("input", render));
 
-  $("refresh").addEventListener("click", async () => {
-    const b = $("refresh");
-    b.disabled = true;
-    b.lastChild.textContent = " Refreshing";
-    try {
-      setData(await api("api/refresh", {}));
-      snackbar("Chart of accounts refreshed from Zoho");
-    } catch (e) {
-      snackbar(e.message, true);
-    } finally {
-      b.disabled = false;
-      b.lastChild.textContent = " Refresh from Zoho";
-    }
-  });
-
   MISTabs.render($("tabs"), "categories");
   api("api/category-master").then(setData).catch((e) => {
     $("subtitle").textContent = "Could not load the chart of accounts";

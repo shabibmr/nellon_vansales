@@ -1,3 +1,5 @@
+> **Superseded** by `proposal/Plan-and-Tasks.md` (reports on the `zoho-koyson` schema).
+
 # MIS reports: from runs to custom date ranges — task list
 
 Goal: every report (Margin, Purchases, P&L, Executive Summary, BS, TB) is viewed for **any From/To dates**

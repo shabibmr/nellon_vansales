@@ -1,0 +1,10 @@
+{
+  "account_id": "3331482000000034003",
+  "account_code": "5.1.1000",
+  "account_name": "Cost of Sales - Nellon",
+  "account_type": "cost_of_goods_sold",
+  "parent_account_id": "3331482000000119367",
+  "parent_account_name": "Cost of Sales",
+  "is_active": true,
+  "last_modified_time": "2022-07-15T17:29:14+0400"
+}

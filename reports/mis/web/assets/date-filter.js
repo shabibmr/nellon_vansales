@@ -374,6 +374,8 @@ const MISDateFilter = (() => {
       const cur = split();
       const cols = info.cols.length;
       const splits = SPLITS.filter(([id]) => grain === "day" || id !== "week");
+      const shown = dates ? `${name} · ${dates}` : name;
+      const shows = cols ? `${shown} · ${cols} column${cols > 1 ? "s" : ""}` : shown;
       return `<div class="df-pop" id="dfPop" role="dialog" aria-label="Choose period">` +
         `<div class="df-body">` +
           `<div class="df-nav" role="group" aria-label="Period">${PRESETS.map(([id]) =>
@@ -386,10 +388,9 @@ const MISDateFilter = (() => {
         `<div class="df-split"><span class="df-split-label" id="dfSl">Split into columns</span>` +
           `<div class="seg" role="group" aria-labelledby="dfSl">${splits.map(([id, text]) =>
             `<button type="button" data-split="${id}" data-focus="s-${id}" aria-pressed="${id === cur}">${text}</button>`).join("")}</div>` +
-          (cols ? `<span class="df-split-hint">${cols} column${cols > 1 ? "s" : ""}</span>` : "") +
         `</div>` +
         `<div class="df-foot">` +
-          `<span class="df-shows">Shows <strong>${esc(dates ? `${name} · ${dates}` : name)}</strong></span>` +
+          `<span class="df-shows">Shows <strong>${esc(shows)}</strong></span>` +
           `<button type="button" class="btn outlined df-btn" data-act="cancel" data-focus="cancel">Cancel</button>` +
           `<button type="button" class="btn filled df-btn" data-act="apply" data-focus="apply">Apply</button>` +
         `</div>` +

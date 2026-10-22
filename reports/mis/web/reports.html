@@ -4,16 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="mis-api-base" content="api/">
-<meta name="description" content="Nellon MIS reports: Executive Summary, P&L, Balance Sheet, Trial Balance, Margin and Purchases by month.">
+<meta name="description" content="Nellon MIS reports: Executive Summary, P&L, Balance Sheet, Trial Balance, Sales & Margin and Purchase by month.">
 <title>Reports · Nellon MIS</title>
 <link rel="stylesheet" href="assets/app.css">
 </head>
-<body>
+<body data-table="dock">
 <a class="skip-link" href="#main">Skip to report</a>
 
 <div class="app fill">
   <div class="page">
-    <!-- Two-row header: title, search, period and actions; then tabs with the tab's own controls. -->
+    <!-- Two-row header: title, search, period and More; then tabs with the tab's own controls. -->
     <header class="mis-head">
       <div class="mh-r1">
         <h1 class="mh-title">MIS-Reports</h1>
@@ -39,6 +39,12 @@
               <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"/></svg>Export to Excel
             </a>
             <button type="button" class="mh-item" role="menuitem" id="printBtn">Print</button>
+            <div class="mh-sep" role="separator"></div>
+            <div class="mh-label" id="viewModeLabel">Table style</div>
+            <button type="button" class="mh-item" role="menuitemradio" id="modeDock" data-mode="dock"
+                    aria-checked="true" title="Pin the group you are scrolling through">Dock</button>
+            <button type="button" class="mh-item" role="menuitemradio" id="modeSignal" data-mode="signal"
+                    aria-checked="false" title="Draw each figure as a share of its group">Signal</button>
           </div>
         </div>
       </div>

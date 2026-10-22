@@ -1,0 +1,58 @@
+{
+  "invoices": [
+    {
+      "invoice_id": "inv1",
+      "invoice_number": "T-1",
+      "date": "2026-09-01",
+      "due_date": "2026-09-10",
+      "status": "sent",
+      "customer_id": "c1",
+      "customer_name": "Cust",
+      "salesperson_name": "Sam",
+      "currency_code": "AED",
+      "exchange_rate": "1",
+      "sub_total": "100",
+      "discount_total": "0",
+      "tax_total": "5",
+      "total": "105",
+      "balance": "105",
+      "net_sales": "100.00",
+      "cost_of_sales": "40.00",
+      "flagged_lines": 0
+    }
+  ],
+  "lines": [
+    {
+      "line_item_id": "l1",
+      "invoice_id": "inv1",
+      "date": "2026-09-01",
+      "item_id": "i1",
+      "item_name": "A",
+      "qty": "2",
+      "uom": "kg",
+      "base_uom": "kg",
+      "rate": "30",
+      "item_total": "60",
+      "purchase_price": "10",
+      "conversion_rate": "1",
+      "base_qty": "2",
+      "cost_of_sales": "20"
+    },
+    {
+      "line_item_id": "l2",
+      "invoice_id": "inv1",
+      "date": "2026-09-01",
+      "item_id": "i2",
+      "item_name": "B",
+      "qty": "1",
+      "uom": "bag",
+      "base_uom": "kg",
+      "rate": "40",
+      "item_total": "40",
+      "purchase_price": "15",
+      "conversion_rate": "18",
+      "base_qty": "18",
+      "cost_of_sales": "20"
+    }
+  ]
+}

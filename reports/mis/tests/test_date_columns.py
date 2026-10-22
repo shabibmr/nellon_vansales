@@ -5,9 +5,8 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from reports import periods
-from reports.db import _headers_from_lines, run_purchase_kinds
-from reports.periods import Col
+from common import periods
+from common.periods import Col
 
 D = date
 
@@ -71,25 +70,3 @@ class CoverageTests(unittest.TestCase):
                           (D(2026, 10, 16), D(2026, 10, 17))])
         self.assertEqual(periods.gaps(loaded, D(2026, 9, 3), D(2026, 9, 20)), [])
         self.assertEqual(periods.gaps([], D(2026, 9, 1), D(2026, 9, 2)), [(D(2026, 9, 1), D(2026, 9, 2))])
-
-
-class RowHelperTests(unittest.TestCase):
-    def test_headers_from_lines(self) -> None:
-        line = {"invoice_id": "1", "invoice_number": "INV-1", "month": "2026-09", "date": "2026-09-02",
-                "net_sales": 10, "cost": 6, "gross_margin": 4, "base_quantity": 2, "flag": "", "cost_source": "booked"}
-        rows = [line, {**line, "net_sales": 5, "cost": 5, "gross_margin": 0, "flag": "no cost", "cost_source": "purchase_rate"},
-                {**line, "invoice_id": "2"}]
-        heads = {h["invoice_id"]: h for h in _headers_from_lines(rows, known={"2"})}
-        self.assertEqual(list(heads), ["1"])
-        h = heads["1"]
-        self.assertEqual((h["line_count"], h["flagged_lines"], h["net_sales"], h["gross_margin"], h["cost_source"]),
-                         (2, 1, 15.0, 4.0, "mixed"))
-
-    def test_run_purchase_kinds(self) -> None:
-        self.assertEqual(run_purchase_kinds({"documents": {"bill": 3}}), ["bill"])
-        self.assertEqual(run_purchase_kinds({}), ["bill", "purchase_order"])
-        self.assertEqual(run_purchase_kinds({"kinds": ["purchase_order", "bill"]}), ["bill", "purchase_order"])
-
-
-if __name__ == "__main__":
-    unittest.main()

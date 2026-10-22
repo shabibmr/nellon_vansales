@@ -1,0 +1,21 @@
+# Production report server behind https://algoray.tech/nellon/zoho-koyson/ (static web + api.php).
+# Worktree code, database zoho-koyson (.env). Zoho web-tab JWT is required (MIS_JWT_SECRET in .env.mis).
+# Do not set MIS_AUTH_DISABLED or an empty MIS_JWT_SECRET here: either one turns the token check off.
+# Install: cp to /etc/systemd/system/, then systemctl daemon-reload && systemctl enable --now koyson-mis-zoho
+[Unit]
+Description=Koyson Zoho MIS reports web - PROD (zoho-koyson DB, port 8767, web-tab JWT)
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/mis
+ExecStart=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/mis/.venv/bin/python -m backend serve --host 127.0.0.1 --port 8767
+Environment=PYTHONUNBUFFERED=1
+Environment=MIS_LIVE_FINANCIALS=1
+EnvironmentFile=/home/nellon/nellon_vansales/.env_zoho
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

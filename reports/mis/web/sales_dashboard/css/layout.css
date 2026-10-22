@@ -1,0 +1,734 @@
+/* ==========================================================================
+   Koyson Sales Dashboard - Layout & App Shell
+   ========================================================================== */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Scroll Offset for Sticky Header & Filter Bar */
+#section-kpis,
+#section-brands,
+#section-charts-row1,
+#section-month-snapshot,
+#section-charts-row2,
+#section-matrix-credit,
+#section-asp-trend,
+#section-tables {
+  scroll-margin-top: calc(var(--header-height) + 75px);
+}
+
+/* Main App Wrapper */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--color-bg-canvas);
+  position: relative;
+}
+
+/* Header Brand Logo (Integrated into Header Bar) */
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.brand-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--brand-nellon), #1E40AF);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.header-divider-vertical {
+  width: 1px;
+  height: 24px;
+  background-color: var(--color-border);
+  margin: 0 var(--space-2);
+}
+
+/* ==========================================================================
+   Waypoint Spine (Telemetry Rail & Live Hover Cards)
+   ========================================================================== */
+.waypoint-spine {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: var(--z-sticky-header);
+  pointer-events: none; /* allow clicks through container, capture on nodes */
+}
+
+.spine-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 16px 8px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: var(--radius-full);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  pointer-events: auto;
+  transition: all var(--motion-standard) var(--ease-standard);
+}
+
+[data-theme="dark"] .spine-track,
+.dark-theme .spine-track {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(51, 65, 85, 0.8);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.spine-line {
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, 
+    rgba(37, 99, 235, 0.15) 0%, 
+    rgba(37, 99, 235, 0.4) 50%, 
+    rgba(37, 99, 235, 0.15) 100%);
+  border-radius: var(--radius-full);
+  z-index: 1;
+}
+
+/* Floating Tracer Bead */
+.spine-tracer-bead {
+  position: absolute;
+  left: 50%;
+  top: 16px; /* Dynamically transformed via JS */
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--brand-nellon);
+  transform: translate(-50%, 0);
+  box-shadow: 0 0 12px var(--brand-nellon), 0 0 4px #FFFFFF;
+  z-index: 3;
+  pointer-events: none;
+  transition: top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Individual Waypoint Node */
+.spine-node {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  outline: none;
+}
+
+/* Persistent Typography Label for each Waypoint */
+.node-label {
+  position: absolute;
+  right: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: auto;
+  transition: all var(--motion-fast) var(--ease-standard);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+[data-theme="dark"] .node-label,
+.dark-theme .node-label {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(51, 65, 85, 0.8);
+  color: var(--color-text-muted);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.spine-node:hover .node-label {
+  color: var(--color-text-primary);
+  border-color: var(--brand-nellon-border);
+  transform: translateY(-50%) translateX(-2px);
+}
+
+.spine-node.active .node-label {
+  color: var(--brand-nellon);
+  font-weight: 600;
+  border-color: var(--brand-nellon-border);
+  background: var(--brand-nellon-light);
+}
+
+[data-theme="dark"] .spine-node.active .node-label,
+.dark-theme .spine-node.active .node-label {
+  background: rgba(37, 99, 235, 0.2);
+  color: #93C5FD;
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.node-marker {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+  transition: all var(--motion-fast) var(--ease-standard);
+}
+
+.node-pulse {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: rgba(37, 99, 235, 0.2);
+  transform: scale(0);
+  opacity: 0;
+  transition: all var(--motion-standard) var(--ease-standard);
+}
+
+/* Hover & Active States for Nodes */
+.spine-node:hover .node-marker {
+  transform: scale(1.3);
+}
+
+.spine-node:hover .node-dot {
+  background: var(--brand-nellon);
+}
+
+.spine-node.active .node-dot {
+  background: var(--brand-nellon);
+  box-shadow: 0 0 8px var(--brand-nellon);
+}
+
+.spine-node.active .node-pulse {
+  transform: scale(1);
+  opacity: 1;
+  animation: pulse-ring 2.5s infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  50% { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(0.9); opacity: 0; }
+}
+
+/* ==========================================================================
+   Waypoint Hover HUD Card (Telemetry Bloom)
+   ========================================================================== */
+.waypoint-hover-card {
+  position: absolute;
+  right: calc(100% + 95px);
+  top: 50%;
+  transform: translateY(-50%) translateX(10px) scale(0.95);
+  width: 230px;
+  padding: var(--space-3) var(--space-4);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 35px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.04);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--ease-standard),
+              transform var(--motion-fast) var(--ease-standard),
+              visibility var(--motion-fast);
+  z-index: 10;
+  text-align: left;
+}
+
+[data-theme="dark"] .waypoint-hover-card,
+.dark-theme .waypoint-hover-card {
+  background: rgba(19, 27, 46, 0.92);
+  border-color: rgba(51, 65, 85, 0.9);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Arrow tip on hover card */
+.waypoint-hover-card::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: 1px solid rgba(226, 232, 240, 0.9);
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+[data-theme="dark"] .waypoint-hover-card::after,
+.dark-theme .waypoint-hover-card::after {
+  border-right-color: rgba(51, 65, 85, 0.9);
+  border-top-color: rgba(51, 65, 85, 0.9);
+}
+
+.spine-node:hover .waypoint-hover-card,
+.spine-node:focus-visible .waypoint-hover-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0) scale(1);
+}
+
+.hover-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.hover-card-badge {
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  color: var(--brand-nellon);
+  letter-spacing: 0.05em;
+}
+
+.hover-card-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.hover-card-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.hover-metric {
+  display: flex;
+  flex-direction: column;
+}
+
+.hover-metric .metric-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hover-metric .metric-val {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.hover-card-hint {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Main Content Area
+   ========================================================================== */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* ==========================================================================
+   Header Bar
+   ========================================================================== */
+.header-bar {
+  height: var(--header-height);
+  background-color: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky-header);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-6);
+  gap: var(--space-4);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: nowrap;
+}
+
+.header-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.badge-fy {
+  background-color: #EEF2FF;
+  color: #4F46E5;
+  border: 1px solid #C7D2FE;
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.source-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+
+.source-indicator .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--status-closed);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* Currency Segment Switch */
+.currency-switch {
+  display: inline-flex;
+  background-color: var(--color-bg-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.currency-btn {
+  padding: 4px 10px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  transition: all var(--motion-fast) var(--ease-standard);
+}
+
+.currency-btn.active {
+  background-color: var(--color-bg-surface);
+  color: var(--brand-nellon);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Header Buttons */
+.btn-header {
+  height: 34px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  transition: all var(--motion-fast) var(--ease-standard);
+}
+
+.btn-header:hover {
+  background-color: var(--color-bg-hover);
+  border-color: var(--color-border-medium);
+}
+
+.btn-header-primary {
+  background-color: var(--brand-nellon);
+  color: #FFFFFF;
+  border-color: var(--brand-nellon);
+}
+
+.btn-header-primary:hover {
+  background-color: var(--brand-nellon-hover);
+  border-color: var(--brand-nellon-hover);
+  color: #FFFFFF;
+}
+
+.btn-icon-only {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==========================================================================
+   Global Filter Bar
+   ========================================================================== */
+.global-filter-bar {
+  background-color: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: var(--header-height);
+  z-index: var(--z-sticky-filter);
+  padding: var(--space-2) var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  box-shadow: var(--shadow-xs);
+}
+
+.filter-group-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.filter-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.filter-select {
+  height: 32px;
+  padding: 0 var(--space-6) 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-md);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--brand-nellon);
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.btn-clear-filters {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: color var(--motion-fast);
+}
+
+.btn-clear-filters:hover {
+  color: var(--status-overdue);
+  background-color: var(--status-overdue-bg);
+}
+
+/* ==========================================================================
+   Dashboard Content & Grid Structure
+   ========================================================================== */
+.dashboard-content {
+  flex: 1;
+  padding: var(--space-6) calc(var(--space-6) + 32px) var(--space-6) var(--space-6);
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Row 1: KPI Grid (5 Columns) */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-4);
+}
+
+/* Row 2: Brand Summaries (3 Columns) */
+.brand-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+/* Row 3: Charts Row 1 (Revenue Trend 65% + Donut 35%) */
+.charts-split-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-4);
+}
+
+/* Row 4: Charts Row 2 (Status 1fr + Weekly 1fr) */
+.charts-half-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+/* Full Width Card Layouts */
+.section-full {
+  width: 100%;
+}
+
+/* Two Column Layout for Matrix & Credit */
+.matrix-layout-grid {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr;
+  gap: var(--space-4);
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+@media (max-width: 1400px) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .matrix-layout-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .charts-split-grid,
+  .charts-half-grid {
+    grid-template-columns: 1fr;
+  }
+  .brand-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .waypoint-spine {
+    right: 12px;
+    top: auto;
+    bottom: 24px;
+    transform: none;
+  }
+  .spine-track {
+    flex-direction: row;
+    padding: 8px 14px;
+    gap: 16px;
+  }
+  .spine-line {
+    top: 50%;
+    bottom: auto;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    height: 2px;
+    transform: translateY(-50%);
+    background: linear-gradient(90deg, 
+      rgba(37, 99, 235, 0.15) 0%, 
+      rgba(37, 99, 235, 0.4) 50%, 
+      rgba(37, 99, 235, 0.15) 100%);
+  }
+  .spine-tracer-bead {
+    top: 50%;
+    left: 14px;
+    transform: translate(0, -50%);
+    transition: left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .waypoint-hover-card,
+  .node-label {
+    display: none; /* Hide hover HUD and micro-labels on small mobile screens to keep floating dock compact */
+  }
+  .header-bar {
+    padding: 0 var(--space-4);
+  }
+  .global-filter-bar {
+    padding: var(--space-3) var(--space-4);
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .filter-group-container {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .dashboard-content {
+    padding: var(--space-4);
+  }
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
