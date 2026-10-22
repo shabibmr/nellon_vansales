@@ -13,6 +13,7 @@ from unittest import mock
 
 from backend.reports import live_financials as live
 from backend.reports import monthly_trial_balance as mtb
+from backend.reports.financials import BS_CHECK, PL_CHECK
 from common import periods
 from common.periods import Col
 
@@ -140,6 +141,7 @@ class LiveTest(unittest.TestCase):
         net_profit = line(pl, "Net Profit")
         want = -(net("sales", a, b) + net("cogs", a, b) + net("rent", a, b))
         self.assertAlmostEqual(net_profit["Total"], want, places=2)
+        self.assertTrue(all(v == 0.0 for v in line(pl, PL_CHECK).values()))
         self.assertEqual(pl["zoho_calls"], 1 + len(cols) - 1 + 1)  # opening + fiscal-year-to-start + weeks
 
     def test_balance_sheet_balances_across_a_fiscal_year_end(self):
@@ -150,6 +152,7 @@ class LiveTest(unittest.TestCase):
         assets, cap_liab = line(bs, "Total Assets"), line(bs, "Total Capital & Liabilities")
         for c in cols:
             self.assertAlmostEqual(assets[c.key], cap_liab[c.key], places=2)
+            self.assertEqual(line(bs, BS_CHECK)[c.key], 0.0)
             self.assertAlmostEqual(line(bs, "Cash and bank balances")[c.key], net("bank", START, c.end), places=2)
         # Current-year earnings restart on 1 Apr; earlier years move to retained earnings.
         cye = line(bs, "Current Year Earnings")

@@ -45,6 +45,7 @@ DEPRECIATION_CATS = ["Depreciation"]
 FX_CATS = ["FX Gain/loss"]
 TAX_CATS = ["Income Tax"]
 UNMAPPED_PL = "Unmapped P&L accounts"
+PL_CHECK = "Check: Net Profit − TB P&L movement"
 
 # Shown credit-positive (income / gains).
 CREDIT_POSITIVE_PL = set(REVENUE_CATS + OTHER_INCOME_CATS + FX_CATS)
@@ -67,6 +68,7 @@ EQUITY_CATS = ["Share Capital", "Partners Capital & Current Accounts", "Reserves
 CURRENT_YEAR_EARNINGS = "Current Year Earnings"
 UNMAPPED_ASSETS = "Unmapped asset accounts"
 UNMAPPED_LIABILITIES = "Unmapped liability / equity accounts"
+BS_CHECK = "Check: Total Assets − Total Capital & Liabilities"
 
 ASSET_TYPES = {
     "bank", "cash", "accounts_receivable", "stock", "fixed_asset", "other_current_asset", "other_asset",
@@ -326,6 +328,11 @@ def build_profit_and_loss(rows: list[dict[str, Any]], summary: dict[str, Any]) -
     net = _add(pbt, tax, -1)
     result("Net Profit", "total", net)
     result("Net Profit %", "pct", _pct(net, revenue))
+    # Every P&L account must land in exactly one block: Net Profit = −Σ TB movement (debit-positive).
+    tb_net = _zero(columns)
+    for r in pl_rows:
+        tb_net = _add(tb_net, {c: value_of(r, c) for c in columns}, -1)
+    result(PL_CHECK, "check", _add(net, tb_net, -1))
 
     figures = PLFigures(revenue, cogs, gm, direct, cm_, other_income, fixed, ebitda,
                         finance, dep, fx, pbt, tax, net, sections)
@@ -452,6 +459,8 @@ def build_balance_sheet(rows: list[dict[str, Any]], summary: dict[str, Any]) -> 
 
     cap_liab = _add(liabilities, equity)
     lines.append(Line("Total Capital & Liabilities", "total", cap_liab))
+    # Off when the TB itself doesn't balance at that column's end.
+    lines.append(Line(BS_CHECK, "check", _add(assets, cap_liab, -1)))
     return Statement(
         name="BS",
         title="Balance Sheet",
