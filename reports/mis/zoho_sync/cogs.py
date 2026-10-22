@@ -13,7 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Iterable, Protocol
 
-from seed_common import cents, d, line_cogs, prorate
+from common.seed_common import cents, d, line_cogs, prorate
 
 COS_ACCOUNT_ID = "3331482000000034003"
 _INVOICE_VALUATION = "inventory_valuation_for_invoice"

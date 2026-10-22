@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from zoho_client import ZohoClient
+from common.zoho_client import ZohoClient
 
 from . import mapping
 from .budget import Budget
@@ -256,7 +256,7 @@ def build_live_run(*, yes_live: bool, max_calls: int | None = None, db_name: str
     if not yes_live:
         raise SystemExit("refuses to call Zoho without --yes-live")
 
-    from seed_common import connect
+    from common.seed_common import connect
     import os
 
     base = Path(__file__).resolve().parent.parent

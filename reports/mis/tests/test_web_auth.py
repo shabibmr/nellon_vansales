@@ -1,5 +1,5 @@
 import base64, hashlib, hmac, json, time, unittest
-from reports import web_auth
+from backend.reports import web_auth
 
 KEY = b"k" * 32
 

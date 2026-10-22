@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any
 
-from seed_common import upsert_sql
+from common.seed_common import upsert_sql
 
 from .store import TABLE_KEY_COLUMNS, RowNotFound, key_for
 

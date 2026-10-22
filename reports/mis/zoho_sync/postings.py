@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from reports.account_postings import fetch_pages, to_row
-from seed_common import parse_date
+from common.account_postings import fetch_pages, to_row
+from common.seed_common import parse_date
 
 from .ranges import DateRange, format_range_doc_id
 

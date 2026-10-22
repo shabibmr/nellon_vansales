@@ -88,7 +88,7 @@ class FakeGateway:
 
 class SeedMissingSalesRowsTest(unittest.TestCase):
     def test_build_invoice_rows_matches_golden_with_and_without_gl(self) -> None:
-        import seed_missing_sales as sms
+        from scripts import seed_missing_sales as sms
 
         iid = "3331482000188896018"
         inv = json.loads((FIX / f"invoice_{iid}.json").read_text(encoding="utf-8"))["invoice"]
@@ -126,7 +126,7 @@ class SeedMissingSalesRowsTest(unittest.TestCase):
 
 class SeedSalesFromInvRowsTest(unittest.TestCase):
     def test_build_rows_matches_golden(self) -> None:
-        import seed_sales_from_inv as ssi
+        from scripts import seed_sales_from_inv as ssi
 
         raw = _load_golden("ssi_input.json")
 
@@ -162,7 +162,7 @@ class SeedSalesFromInvRowsTest(unittest.TestCase):
 
 class SeedPurchasesRowsTest(unittest.TestCase):
     def test_build_matches_golden(self) -> None:
-        import seed_purchases_from_cache as spc
+        from scripts import seed_purchases_from_cache as spc
 
         bill = json.loads((FIX / "bill_3331482000187180271.json").read_text(encoding="utf-8"))
         bdir = Path(tempfile.mkdtemp())
@@ -191,14 +191,14 @@ class SeedPurchasesRowsTest(unittest.TestCase):
 
 class AccountPostingsTest(unittest.TestCase):
     def test_to_row_matches_golden(self) -> None:
-        from reports.account_postings import to_row
+        from common.account_postings import to_row
 
         page1 = json.loads((FIX / "cos_page1.json").read_text(encoding="utf-8"))
         row = to_row(page1["transactions"][0], page1["page_context"])
         self.assertEqual(_ser(row), _load_golden("golden_to_row.json"))
 
     def test_fetch_pages_uses_date_start_end_and_reads_every_page(self) -> None:
-        from reports.account_postings import fetch_pages
+        from common.account_postings import fetch_pages
 
         page1 = json.loads((FIX / "cos_page1.json").read_text(encoding="utf-8"))
         page2 = json.loads((FIX / "cos_page2.json").read_text(encoding="utf-8"))
@@ -230,7 +230,7 @@ class AccountPostingsTest(unittest.TestCase):
 
 class UpsertSqlTest(unittest.TestCase):
     def test_seed_common_upsert_sql_single_and_composite(self) -> None:
-        from seed_common import upsert_sql
+        from common.seed_common import upsert_sql
 
         single = upsert_sql("sales_invoices", ["invoice_id", "total", "cogs"], "invoice_id")
         self.assertIn("ON DUPLICATE KEY UPDATE", single)

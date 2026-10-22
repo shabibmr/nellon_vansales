@@ -19,7 +19,7 @@ from tempfile import TemporaryDirectory
 
 from unittest import mock
 
-from zoho_client import ZohoHTTPError
+from common.zoho_client import ZohoHTTPError
 from zoho_sync import cogs, pipeline, postings
 from zoho_sync import __main__ as zoho_sync_main
 from zoho_sync.budget import Budget, BudgetExceeded
@@ -1534,7 +1534,7 @@ class ReplayTests(unittest.TestCase):
             root = Path(tmp)
             with mock.patch.object(zoho_sync_main, "_output_dir", return_value=root), \
                     mock.patch.object(zoho_sync_main, "_db_store", return_value=MemoryStore()), \
-                    mock.patch("zoho_client.ZohoClient"):
+                    mock.patch("common.zoho_client.ZohoClient"):
                 run = zoho_sync_main.build_run(yes_live=True)
             self.assertEqual(run.mode, "live")
             self.assertEqual(run.started_at.utcoffset(), timedelta(hours=4))
@@ -2110,7 +2110,7 @@ class DbStoreMariaDbIntegrationTests(unittest.TestCase):
     """Opt-in integration test on real MariaDB 10.11 in STRICT_TRANS_TABLES mode."""
 
     def setUp(self) -> None:
-        from seed_common import connect
+        from common.seed_common import connect
         self.conn = connect("mysql")
         with self.conn.cursor() as cur:
             cur.execute("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'")

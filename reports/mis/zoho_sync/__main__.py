@@ -40,7 +40,7 @@ def _output_dir() -> Path:
 
 
 def _db_store(db_name: str | None = None) -> DbStore:
-    from seed_common import connect
+    from common.seed_common import connect
 
     name = db_name or os.getenv("MIS_DB_NAME", "zoho-koyson")
     return DbStore(connect(name))
@@ -86,7 +86,7 @@ def build_run(
     started_at = datetime.now(DUBAI)
     run_id = new_run_id(started_at)
     budget = Budget(output_dir / "zoho_budget_stamp", interval=20.0, max_calls=max_calls)
-    from zoho_client import ZohoClient
+    from common.zoho_client import ZohoClient
 
     client = ZohoClient(on_auth=budget.before_call)
     runlog = RunLog(output_dir, run_id)

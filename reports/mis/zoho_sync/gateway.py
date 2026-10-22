@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Protocol, runtime_checkable
 
-from zoho_client import ZohoHTTPError
+from common.zoho_client import ZohoHTTPError
 
 from .budget import Budget
 from .runlog import RunLog

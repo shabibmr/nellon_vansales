@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from reports.cashflow_forecast import (
+from backend.reports.cashflow_forecast import (
     balances,
     bill_events,
     forecast_from_documents,

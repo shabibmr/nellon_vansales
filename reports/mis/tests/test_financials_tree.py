@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from reports.financials import Node, TOTAL, build_balance_sheet, build_executive_summary, build_profit_and_loss
+from backend.reports.financials import Node, TOTAL, build_balance_sheet, build_executive_summary, build_profit_and_loss
 
 MONTHS = ["2026-04", "2026-05"]
 SUMMARY = {"months": MONTHS, "from_date": "2026-04-01", "to_date": "2026-05-31", "currency_code": "AED"}

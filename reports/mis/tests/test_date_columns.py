@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from reports import periods
-from reports.periods import Col
+from common import periods
+from common.periods import Col
 
 D = date
 

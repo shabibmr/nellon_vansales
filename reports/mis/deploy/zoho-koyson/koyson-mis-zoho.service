@@ -10,7 +10,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/mis
-ExecStart=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/mis/.venv/bin/python main.py serve --host 127.0.0.1 --port 8767
+ExecStart=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/mis/.venv/bin/python -m backend serve --host 127.0.0.1 --port 8767
 Environment=PYTHONUNBUFFERED=1
 Environment=MIS_LIVE_FINANCIALS=1
 EnvironmentFile=/home/nellon/nellon_vansales/.env_zoho

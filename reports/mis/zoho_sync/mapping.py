@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from seed_common import d, doc_money, line_cogs, parse_date, parse_dt, resolve_conversion, s
+from common.seed_common import d, doc_money, line_cogs, parse_date, parse_dt, resolve_conversion, s
 
 
 def _flag(val: Any) -> int:

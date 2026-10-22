@@ -12,6 +12,19 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
+## Layout
+
+| Folder | What lives there |
+|--------|------------------|
+| `web/` | Frontend only: the four pages and `web/assets/`. Served by `backend/server.py`. |
+| `backend/` | The CLI and report server (`python -m backend <command>`): `main.py`, `server.py`, `exporters.py`, and `backend/reports/` (financials, trial balance, cashflow, category master, live financials, web-tab JWT auth). |
+| `zoho_sync/` | The Zoho → MariaDB sync (`python -m zoho_sync run`). |
+| `common/` | Code both the backend and the sync import: `zoho_client.py`, `seed_common.py`, `db.py` (schema + queries), `periods.py`, `account_postings.py`. |
+| `scripts/` | One-off fetch, seed, reconcile and test-invoice scripts. Run from `reports/mis` as `python -m scripts.<name>`. |
+| `deploy/` | systemd units, PHP shims and deploy scripts. |
+
+`common/` must not import from `backend/` or `zoho_sync/`. One exception today: `common/db.py` lazily imports `_fy_start_month` from `backend/reports/category_master.py`.
+
 ## Trial balance
 
 Built from **General Ledger + Chart of Accounts**, not from `/journals`.
@@ -23,7 +36,7 @@ ledger covers all postings:
 - `GET /chartofaccounts?showbalance=true` (account type / parent / active)
 
 ```bash
-.venv/bin/python main.py trial-balance --from-date 2026-04-01 --to-date 2026-10-11
+.venv/bin/python -m backend trial-balance --from-date 2026-04-01 --to-date 2026-10-11
 ```
 
 Outputs under `output/`:
@@ -41,8 +54,8 @@ gross Dr/Cr, closing, plus Category Master columns (PL/BS, Category, Sub Categor
 All amounts are signed **debit positive** (Dr +, Cr −).
 
 ```bash
-.venv/bin/python main.py monthly-tb --from-date 2026-04-01 --to-date 2026-09-30
-.venv/bin/python main.py monthly-tb --from-date 2026-04-01 --fy-start-month 4 --cached-coa
+.venv/bin/python -m backend monthly-tb --from-date 2026-04-01 --to-date 2026-09-30
+.venv/bin/python -m backend monthly-tb --from-date 2026-04-01 --fy-start-month 4 --cached-coa
 ```
 
 - GL report returns period movement only, so opening = GL from 2000-01-01 to the day before `--from-date`.
@@ -59,8 +72,8 @@ Built from the monthly trial balance + Category Master, laid out like
 offline from a saved TB JSON.
 
 ```bash
-.venv/bin/python main.py financials --tb-json output/monthly_tb_<from>_<to>_<stamp>.json   # no Zoho calls
-.venv/bin/python main.py financials --from-date 2026-04-01 --to-date 2026-09-30          # pulls TB first
+.venv/bin/python -m backend financials --tb-json output/monthly_tb_<from>_<to>_<stamp>.json   # no Zoho calls
+.venv/bin/python -m backend financials --from-date 2026-04-01 --to-date 2026-09-30          # pulls TB first
 ```
 
 Workbook `output/mis_<from>_<to>_<stamp>.xlsx` sheets: Executive Summary, PL, BS,
@@ -97,8 +110,8 @@ used by the P&L, Balance Sheet and Executive Summary in `report-template.xlsx`.
 Built from the `accounts` table (the seeder loads the chart); rules live in `reports/category_master.py`.
 
 ```bash
-.venv/bin/python main.py category-master          # build from the `accounts` table, write output/category_master.{csv,xlsx,json}
-.venv/bin/python main.py serve                    # read-only view at http://127.0.0.1:8765/categories
+.venv/bin/python -m backend category-master          # build from the `accounts` table, write output/category_master.{csv,xlsx,json}
+.venv/bin/python -m backend serve                    # read-only view at http://127.0.0.1:8765/categories
 ```
 
 Each account is resolved in this order (the `source` column says which step decided):
@@ -121,16 +134,16 @@ Data lives in MariaDB database `zoho-koyson` (settings in the git-ignored `.env`
 `org-sync` and category overrides (`accounts.source='override'`).
 
 ```bash
-.venv/bin/python main.py db-init       # create DB + tables (idempotent)
-.venv/bin/python main.py db-coverage   # date ranges loaded, and gaps
-.venv/bin/python main.py serve         # http://127.0.0.1:8765/reports
+.venv/bin/python -m backend db-init       # create DB + tables (idempotent)
+.venv/bin/python -m backend db-coverage   # date ranges loaded, and gaps
+.venv/bin/python -m backend serve         # http://127.0.0.1:8765/reports
 ```
 
 The run-based commands (`margin`, `purchases`, `db-load`, `db-runs`, `db-migrate-runs`) and the
 stored-run views (`?run=`, `run_id=`) are gone. `financials` still writes the Excel/JSON files
 but no longer saves a run.
 
-Web UI (served by `main.py serve`): `web/reports.html` (`/reports`) and `web/category_master.html` (`/`), sharing `web/assets/app.css` and `web/assets/icons.svg`; page logic in `web/assets/reports.js` / `category-master.js`. Tabs: Executive Summary,
+Web UI (served by `python -m backend serve`): `web/reports.html` (`/reports`) and `web/category_master.html` (`/`), sharing `web/assets/app.css` and `web/assets/icons.svg`; page logic in `web/assets/reports.js` / `category-master.js`. Tabs: Executive Summary,
 Profit & Loss, Balance Sheet, Trial Balance (live from Zoho's General Ledger, cached),
 Margin (rows by item / customer / salesperson / van / location × date columns; net sales, COGS, margin, GM %),
 Purchases (bills + purchase orders; rows by vendor / item / kind × date columns).
@@ -139,7 +152,7 @@ Purchases (bills + purchase orders; rows by vendor / item / kind × date columns
 ## Zoho Books web tab
 
 ```bash
-.venv/bin/python main.py webtab     # adds "MIS Reports" -> https://algoray.tech/koyson-zoho/acc-reports/
+.venv/bin/python -m backend webtab     # adds "MIS Reports" -> https://algoray.tech/koyson-zoho/acc-reports/
 ```
 
 Uses `POST /settings/tabs` (scope `ZohoBooks.settings.CREATE`), shared with all users. Idempotent: lists
@@ -150,8 +163,8 @@ Executive Summary, P&L, BS, Trial Balance, Margin and Purchases.
 ## Ledger postings (Cost of Sales - Nellon ↔ Inventory)
 
 ```bash
-.venv/bin/python fetch_cost_of_sales_nellon.py --from-date 2026-10-01 --to-date 2026-10-31
-.venv/bin/python fetch_inventory.py           --from-date 2026-10-01 --to-date 2026-10-31
+.venv/bin/python -m scripts.fetch_cost_of_sales_nellon --from-date 2026-10-01 --to-date 2026-10-31
+.venv/bin/python -m scripts.fetch_inventory           --from-date 2026-10-01 --to-date 2026-10-31
 ```
 
 Both page through `GET /chartofaccounts/transactions` (200 per page) and upsert one row per posting

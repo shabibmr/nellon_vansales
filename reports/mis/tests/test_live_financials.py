@@ -11,10 +11,10 @@ import unittest
 from datetime import date, timedelta
 from unittest import mock
 
-from reports import live_financials as live
-from reports import monthly_trial_balance as mtb
-from reports import periods
-from reports.periods import Col
+from backend.reports import live_financials as live
+from backend.reports import monthly_trial_balance as mtb
+from common import periods
+from common.periods import Col
 
 START = date(2024, 1, 1)
 FY_MONTH = 4  # fiscal year starts in April

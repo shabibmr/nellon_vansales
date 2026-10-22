@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import unittest
 
-from reports import db
-
+from common import db
 
 class SqlFragmentTests(unittest.TestCase):
     def test_status_filters(self) -> None:
