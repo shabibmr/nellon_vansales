@@ -1,4 +1,6 @@
-/* Reports page: reads MariaDB through the local server API, never Zoho. */
+/* Reports page: margin / purchases come from MariaDB through the local server API; with live
+   financials on, Executive Summary, P&L, BS and TB come from Zoho through the server's cache
+   (reports/live_financials.py). */
 (() => {
   "use strict";
 
@@ -14,11 +16,12 @@
   const { TABS } = window.MISTabs;  // assets/report-tabs.js
 
   // Pivot tabs (margin, purchases): rows = chosen dimension, columns = months + Total.
-  const MARGIN_MEASURES = [["net_sales", "Net sales"], ["cost", "Cost"], ["gross_margin", "Margin"], ["gm_pct", "GM %"]];
+  const MARGIN_MEASURES = [["net_sales", "Net sales"], ["cost", "COGS"], ["gross_margin", "Margin"], ["gm_pct", "GM %"]];
   const PIVOTS = {
     margin: {
-      dims: [["item", "Item"], ["customer", "Customer"], ["salesperson", "Salesperson"], ["van", "Van"]],
-      measures: [["net_sales", "Net sales"], ["cost", "Cost"], ["gross_margin", "Gross margin"],
+      dims: [["item", "Item"], ["customer", "Customer"], ["salesperson", "Salesperson"], ["van", "Van"],
+        ["location", "Location"]],
+      measures: [["net_sales", "Net sales"], ["cost", "COGS (invoice line cost)"], ["gross_margin", "Gross margin"],
         ["gm_pct", "GM %"], ["base_quantity", "Base quantity"]],
     },
     purchases: {
@@ -28,25 +31,48 @@
   };
 
   const qs = new URLSearchParams(location.search);
+  // Margin and purchases read the dated tables for any range; financials are live from Zoho
+  // (`/api/config` says whether the server allows it).
+  const DATASET = { margin: "sales", purchases: "purchases" };
+  // Sales & Margin is one tab with three views; the invoice / line views are flat lists (`detail`).
+  const MARGIN_VIEWS = [["summary", "Summary"], ["invoice", "By Invoice"], ["line", "By Line"]];
+  const LEGACY_TABS = { mline: ["margin", "line"], minv: ["margin", "invoice"] };  // old bookmarks
+  const legacy = LEGACY_TABS[qs.get("tab")];
   const state = {
-    tab: TABS.some((t) => t.id === qs.get("tab")) ? qs.get("tab") : "exec",
-    runs: { financials: [], margin: [], purchases: [] },
-    selected: { financials: null, margin: null, purchases: null },
+    tab: legacy ? legacy[0] : TABS.some((t) => t.id === qs.get("tab")) ? qs.get("tab") : "exec",
+    marginView: MARGIN_VIEWS.some(([v]) => v === (legacy ? legacy[1] : qs.get("view"))) ? (legacy ? legacy[1] : qs.get("view")) : "summary",
+    coverage: { sales: null, purchases: null },  // /api/coverage per dataset
     pivot: { margin: { dim: "item", measure: "net_sales" }, purchases: { dim: "vendor", measure: "amount" } },
+    query: "",           // header search; mirrored into the per-view filters below
     tbFilter: "",
     detailFilter: "",
     detailData: null,
     org: null,
+    live: false,         // server serves live financials
+    fiscalStart: null,   // "2000-MM" from /api/config: quarters / years follow it
+    seq: 0,              // newest live request; older answers are dropped
     tbData: null,
     labels: {},  // column key → heading for the date filter's columns (periods, Total)
+    tableMode: "dock",  // dock pins the open group; signal draws share bars
+    screen: null,       // last painted table, so the style switch does not refetch
     // Expandable statements: `tree` on a tab is its default outline level.
     tree: { nodes: null, cols: [], open: new Set(), q: "", sort: "statement", reveal: null },
   };
 
   // ---------------------------------------------------------------- helpers
 
-  const tab = () => TABS.find((t) => t.id === state.tab) || TABS[0];
-  const runOf = (kind) => state.runs[kind].find((r) => r.id === state.selected[kind]);
+  // Stable objects per view: callers compare tab() by identity to drop stale answers.
+  const MARGIN_TAB = TABS.find((t) => t.id === "margin");
+  const MARGIN_DETAIL = {
+    invoice: { ...MARGIN_TAB, api: undefined, pivot: false, detail: "invoice" },
+    line: { ...MARGIN_TAB, api: undefined, pivot: false, detail: "line" },
+  };
+  const tab = () => {
+    const t = TABS.find((x) => x.id === state.tab) || TABS[0];
+    return t === MARGIN_TAB && MARGIN_DETAIL[state.marginView] || t;
+  };
+  const isLive = (t) => state.live && t.kind === "financials";
+  const fiscalStart = () => state.fiscalStart;
 
   const colLabel = (c) => {
     if (state.labels[c]) return state.labels[c];
@@ -62,15 +88,52 @@
     return n < 0 ? `(${NUM.format(-n)})` : NUM.format(n);
   };
 
-  const numCell = (v, { pct = false, total = false } = {}) =>
-    `<td class="n${Number(v) < -0.004 ? " neg" : ""}${total ? " tot" : ""}">${fmt(v, pct)}</td>`;
+  const tableMode = () => (state.tableMode === "signal" ? "signal" : "dock");
+
+  // `scale` is the group total for this column. Signal draws |value| / scale behind the figure.
+  // `mid` grows from the center (trial balance). `plain` keeps a total row as figures only.
+  const numCell = (v, { pct = false, total = false, scale = 0, mid = false, plain = false, edge = false } = {}) => {
+    const n = Number(v);
+    const neg = n < -0.004;
+    let cls = `n${neg ? " neg" : ""}${total ? " tot" : ""}${edge ? " pe" : ""}`;
+    let style = "";
+    if (tableMode() === "signal" && !plain && Number.isFinite(n)) {
+      const mag = pct ? Math.min(1, Math.abs(n))
+        : (scale >= 0.005 ? Math.min(1, Math.abs(n) / scale) : 0);
+      if (mag >= 0.012 && (pct || Math.abs(n) >= 0.005)) {
+        cls += mid ? " sig mid" : " sig";
+        style = ` style="--bar:${mag.toFixed(3)};--dir:${n < 0 ? -1 : 1}"`;
+      }
+    }
+    return `<td class="${cls}"${style}>${fmt(v, pct)}</td>`;
+  };
 
   const headRow = (first, cols, totalCol) =>
-    `<thead><tr><th scope="col">${esc(first)}</th>${cols.map((c) =>
-      `<th scope="col" class="${c === totalCol ? "tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr></thead>`;
+    `<thead><tr class="cols"><th scope="col">${esc(first)}</th>${cols.map((c) =>
+      `<th scope="col" class="pe${c === totalCol ? " tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr></thead>`;
 
-  const view = (html) => { $("out").innerHTML = html; };
-  const skeleton = () => view(`<div class="skeleton" aria-label="Loading report">${"<div></div>".repeat(9)}</div>`);
+  // The figure the dock repeats: Total when the statement has one, otherwise the last column.
+  const dockAmount = (values, cols) => {
+    if (!values) return "";
+    const key = cols.includes("Total") ? "Total" : cols[cols.length - 1];
+    return fmt(values[key] ?? 0);
+  };
+
+  const view = (html) => {
+    const scroll = $("out");
+    const at = scroll.scrollTop;
+    const left = scroll.scrollLeft;
+    const slot = html.includes("<table")
+      ? `<div class="dock-slot" aria-hidden="true"><div class="dock-bar">` +
+        `<span class="dock-name"></span><span class="dock-amt num"></span></div></div>`
+      : "";
+    scroll.innerHTML = slot + html;
+    scroll.scrollTop = at;
+    scroll.scrollLeft = left;
+    bindSheet();
+  };
+  const skeleton = (note = "") => view((note ? `<p class="loading-note">${esc(note)}</p>` : "") +
+    `<div class="skeleton" aria-label="Loading report">${"<div></div>".repeat(9)}</div>`);
   const stateView = (iconName, title, body, cls = "") =>
     view(`<div class="state ${cls}">${icon(iconName, "xl")}<h2>${esc(title)}</h2><p>${body}</p></div>`);
 
@@ -89,8 +152,12 @@
     return body;
   }
 
+  // A dated tab's link carries its range, so it reproduces the view.
   function syncUrl() {
     const p = new URLSearchParams({ tab: state.tab });
+    if (state.tab === "margin" && state.marginView !== "summary") p.set("view", state.marginView);
+    const r = (DATASET[tab().kind] || isLive(tab())) && DF.isoRange();
+    if (r) { p.set("from", r.from); p.set("to", r.to); p.set("by", DF.split()); }
     history.replaceState(null, "", `?${p}`);
   }
 
@@ -100,59 +167,41 @@
     MISTabs.render($("tabs"), state.tab);
   }
 
-  function pickRun() {
-    const kind = tab().kind;
-    const runs = state.runs[kind];
-    if (!runs.length) return false;
-    if (!runs.some((r) => r.id === state.selected[kind])) state.selected[kind] = runs[0].id;
-    return true;
-  }
-
   function renderExport() {
-    // The workbook covers the selected financials run.
+    // The workbook covers the date filter's columns (its href is set on click).
     const btn = $("exportBtn");
-    const id = state.selected.financials || (state.runs.financials[0] || {}).id;
-    if (id) {
-      const extra = ["margin", "purchases"].map((k) => state.selected[k] ? `&${k}_run=${state.selected[k]}` : "").join("");
-      btn.href = `api/export.xlsx?run_id=${id}${extra}`;
-      btn.removeAttribute("aria-disabled");
-      btn.title = `Run #${id}: Executive Summary, PL, BS, Trial Balance, Margin, Purchases and Category Master`;
-    } else {
-      btn.href = "api/export.xlsx";
-      btn.setAttribute("aria-disabled", "true");
-      btn.title = "Save a financials run first";
-    }
+    btn.removeAttribute("aria-disabled");
+    btn.title = "Executive Summary, PL, BS, Trial Balance (live from Zoho), Sales & Margin, Purchase and Category Master for the selected dates";
   }
 
+  // The header search box: what it searches on this tab.
+  const searchHint = (t) => (t.id === "tb" ? "Search accounts, codes or categories"
+    : t.detail ? "Search invoices, customers or items"
+      : t.pivot ? "Search rows" : "Search lines");
+
+  // Row 2 of the header holds the tab's own controls (margin view, pivot rows / measure);
+  // the search box lives in row 1 and serves every tab.
   function renderTools() {
     const t = tab();
+    $("q").placeholder = searchHint(t);
     let html = "";
-    if (t.detail) {
-      html = `<label class="field grow"><span>Filter</span>
-          <span class="search">${icon("search")}
-            <input class="input" id="dtq" type="search" autocomplete="off"
-                   placeholder="Invoice, customer or item" value="${esc(state.detailFilter)}"></span></label>`;
-    }
-    if (t.id === "tb") {
-      html = `<label class="field grow"><span>Filter</span>
-                <span class="search">${icon("search")}
-                  <input class="input" id="tbq" type="search" autocomplete="off"
-                         placeholder="Account, code or category" value="${esc(state.tbFilter)}"></span></label>`;
-    }
+    const views = t.id === "margin" ? `<div class="seg" role="group" aria-label="Margin view">${MARGIN_VIEWS.map(([v, l]) =>
+      `<button type="button" data-mview="${v}" aria-pressed="${v === state.marginView}">${esc(l)}</button>`).join("")}</div>` : "";
     if (t.pivot) {
       const cfg = PIVOTS[t.id], cur = state.pivot[t.id];
       const opts = (list, sel) => list.map(([v, l]) =>
         `<option value="${v}"${v === sel ? " selected" : ""}>${esc(l)}</option>`).join("");
-      html = `<label class="field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
-        ${t.id === "margin" ? "" : `<label class="field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`}`;
+      html = `<label class="mh-field"><span>Rows</span><select class="input" id="pvDim">${opts(cfg.dims, cur.dim)}</select></label>
+        ${t.id === "margin" ? "" : `<label class="mh-field"><span>Measure</span><select class="input" id="pvMeasure">${opts(cfg.measures, cur.measure)}</select></label>`}`;
     }
-    $("toolbar").innerHTML = html;
+    $("toolbar").innerHTML = views + html;
+    $("toolbar").querySelectorAll("[data-mview]").forEach((b) => {
+      b.onclick = () => { state.marginView = b.dataset.mview; load(); };
+    });
     if ($("pvDim")) {
       $("pvDim").onchange = (e) => { state.pivot[t.id].dim = e.target.value; load(); };
       if ($("pvMeasure")) $("pvMeasure").onchange = (e) => { state.pivot[t.id].measure = e.target.value; load(); };
     }
-    if ($("dtq")) $("dtq").oninput = (e) => { state.detailFilter = e.target.value; renderDetail(state.detailData, t); };
-    if ($("tbq")) $("tbq").oninput = (e) => { state.tbFilter = e.target.value; renderTb(state.tbData); };
   }
 
   // "2026-04-01" → "Apr-26"; the period reads "Apr-26 – Sep-26", or one month when both ends fall in it.
@@ -165,45 +214,103 @@
     return !a || a === b ? a || b : `${a} – ${b}`;
   };
 
-  function setHead(run, title) {
+  function setHead(title) {
     $("reportTitle").textContent = title;
-    $("period").textContent = run ? periodLabel(run.from_date, run.to_date) : "";
-    const ccy = (state.org && state.org.currency_code) || (run && run.currency_code) || "";
+    $("period").textContent = "";
+    const ccy = (state.org && state.org.currency_code) || "";
     $("ccy").textContent = ccy;
     $("ccy").hidden = !ccy;
-    $("orgName").textContent = (state.org && state.org.name) || "";
     document.title = `${title} · ${(state.org && state.org.name) || "MIS"}`;
   }
 
   // ---------------------------------------------------------------- reports
 
+  // Per column, the section total (or the largest line when the section has no total).
+  function sectionScales(lines, cols) {
+    const scales = new Array(lines.length);
+    let start = 0;
+    const flush = (end) => {
+      const scale = {};
+      for (const c of cols) {
+        let s = 0;
+        for (let i = start; i < end; i++) {
+          if (lines[i].kind === "total") s = Math.max(s, Math.abs(Number(lines[i].values?.[c]) || 0));
+        }
+        if (s < 0.005) {
+          for (let i = start; i < end; i++) {
+            const kind = lines[i].kind;
+            if (kind === "title" || kind === "check" || kind === "pct") continue;
+            s = Math.max(s, Math.abs(Number(lines[i].values?.[c]) || 0));
+          }
+        }
+        scale[c] = s;
+      }
+      for (let i = start; i < end; i++) scales[i] = scale;
+      start = end;
+    };
+    lines.forEach((ln, i) => { if (i && ln.kind === "title") flush(i); });
+    flush(lines.length);
+    return scales;
+  }
+
   function renderStatement(data) {
+    state.screen = { type: "statement", data };
     const cols = data.columns;
     if (!data.lines.length) {
-      stateView("database", "Nothing in this statement", `This run has no ${esc(data.statement)} lines.`);
+      stateView("database", "Nothing in this statement", `There are no ${esc(data.statement)} lines for these dates.`);
       return;
     }
-    const body = data.lines.map((ln) => {
+    // The header search keeps the matching lines (section titles drop out while searching).
+    const q = state.query.trim().toLowerCase();
+    const lines = q
+      ? data.lines.filter((ln) => ln.kind !== "title" && String(ln.label).toLowerCase().includes(q))
+      : data.lines;
+    if (!lines.length) {
+      stateView("search", "Nothing matches", "Try a different line name.");
+      return;
+    }
+    const scales = sectionScales(lines, cols);
+    const lastTotal = lines.reduce((at, ln, i) => (ln.kind === "total" ? i : at), -1);
+    const titleAmt = lines.map((ln, i) => {
+      if (ln.kind !== "title") return "";
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].kind === "title") break;
+        if (lines[j].kind === "total") return dockAmount(lines[j].values, cols);
+      }
+      return "";
+    });
+    const body = lines.map((ln, i) => {
       if (ln.kind === "title") {
-        return `<tr class="title"><td colspan="${cols.length + 1}">${esc(ln.label)}</td></tr>`;
+        return `<tr class="title" data-depth="0" data-dock="${esc(ln.label)}" data-amt="${esc(titleAmt[i])}">` +
+          `<td colspan="${cols.length + 1}">${esc(ln.label)}</td></tr>`;
       }
       let cls = ln.kind;
       if (ln.kind === "check") {
         cls += Object.values(ln.values).every((v) => Math.abs(v) < 0.015) ? " ok" : " bad";
       }
-      return `<tr class="${cls}"><td>${esc(ln.label)}</td>` +
-        cols.map((c) => numCell(ln.values[c] ?? 0, { pct: ln.kind === "pct", total: c === "Total" })).join("") +
-        `</tr>`;
+      const grand = i === lastTotal;
+      if (grand) cls += " grand";
+      const depth = ln.kind === "total" ? "0" : "1";
+      const lined = ln.kind === "category" || ln.kind === "sub";
+      return `<tr class="${cls}" data-depth="${depth}"><td>${esc(ln.label)}</td>` +
+        cols.map((c) => numCell(ln.values[c] ?? 0, {
+          pct: ln.kind === "pct",
+          total: c === "Total",
+          scale: lined ? (scales[i]?.[c] || 0) : 0,
+          plain: ln.kind === "check" || ln.kind === "total",
+          edge: true,
+        })).join("") + `</tr>`;
     }).join("");
     view(`<table class="data">${headRow("Particulars", cols, "Total")}<tbody>${body}</tbody></table>`);
   }
 
   // Margin text cells: max 50 chars, longer values cut with "…" (full text in the tooltip).
   const TXT_MAX = 50;
-  const txt = (v, extra = "") => {
+  const txt = (v, extra = "", cls = "") => {
     const t = String(v ?? "");
     const cut = t.length > TXT_MAX ? `${t.slice(0, TXT_MAX - 1)}…` : t;
-    return `<td class="txt"${t.length > TXT_MAX ? ` title="${esc(t)}"` : ""}>${esc(cut)}${extra}</td>`;
+    const tip = t.length > 18 ? ` title="${esc(t)}"` : "";
+    return `<td class="txt${cls ? ` ${cls}` : ""}"${tip}><div class="clipwrap"><span class="clip">${esc(cut)}</span>${extra}</div></td>`;
   };
 
   // ---------------------------------------------------------------- expandable statements
@@ -292,6 +399,7 @@
   }
 
   function renderTree() {
+    state.screen = { type: "tree" };
     const { nodes, cols, open, sort, reveal } = state.tree;
     if (!nodes) return;
     const q = state.tree.q.trim().toLowerCase();
@@ -314,10 +422,26 @@
     const order = (list) => sort === "size" && list[0]?.depth > 0
       ? [...list].sort((a, b) => Math.abs(nodeTotal(b)) - Math.abs(nodeTotal(a))) : list;
 
+    let grandKey = null;
+    for (const n of nodes) if (n.kind === "total") grandKey = n.key;
+    // A line's bar is its share of the parent. A root section is its share of the largest root figure.
+    const scaleOf = (n, c) => {
+      const parentAbs = n.parent ? Math.abs(Number(n.parent.values?.[c]) || 0) : 0;
+      if (parentAbs >= 0.005) return parentAbs;
+      const sibs = n.parent ? n.parent.children : nodes;
+      let m = 0;
+      for (const s of sibs) {
+        if (s.kind === "pct") continue;
+        m = Math.max(m, Math.abs(Number(s.values?.[c]) || 0));
+      }
+      return m;
+    };
+
     let seq = 0;
     const row = (n, { isOpen = false, kids = false, revealing = false, dim = false } = {}) => {
       const p = n.parent;
-      const cls = [n.kind, `d${n.depth}`, kids && "parent", isOpen && "open", revealing && "reveal", dim && "dim"];
+      const grand = n.key === grandKey;
+      const cls = [n.kind, `d${n.depth}`, kids && "parent", isOpen && "open", revealing && "reveal", dim && "dim", grand && "grand"];
       const guides = Array.from({ length: n.depth }, (_, g) => `<span class="guide" style="--g:${g}"></span>`).join("");
       const twisty = kids
         ? `<button type="button" class="twisty" aria-expanded="${isOpen}" ` +
@@ -335,9 +459,17 @@
         (n.meta ? `<span class="code">${highlight(n.meta, q)}</span>` : "") +
         (kids && !isOpen ? `<span class="kids" title="${n.children.length} rows inside">${n.children.length}</span>` : "") +
         `${share}</span></td>`;
-      return `<tr class="${cls.filter(Boolean).join(" ")}"${kids ? ` data-key="${esc(n.key)}"` : ""}` +
+      const dock = ` data-depth="${n.depth}"` +
+        (kids ? ` data-dock="${esc(n.label)}" data-amt="${esc(dockAmount(n.values, cols))}"` : "");
+      return `<tr class="${cls.filter(Boolean).join(" ")}"${dock}${kids ? ` data-key="${esc(n.key)}"` : ""}` +
         `${revealing ? ` style="--i:${seq++}"` : ""}>${label}` +
-        cols.map((c) => numCell(n.values[c] ?? 0, { pct: n.kind === "pct", total: c === "Total" })).join("") + `</tr>`;
+        cols.map((c) => numCell(n.values[c] ?? 0, {
+          pct: n.kind === "pct",
+          total: c === "Total",
+          plain: grand || n.kind === "total",
+          scale: n.kind === "pct" || n.kind === "total" ? 0 : scaleOf(n, c),
+          edge: true,
+        })).join("") + `</tr>`;
     };
 
     let body = "";
@@ -358,20 +490,34 @@
     view(`<table class="data tree">${headRow("Particulars", cols, "Total")}<tbody>${body}</tbody></table>`);
   }
 
-  function renderPivot(data, t) {
+  function renderPivot(all, t) {
+    state.screen = { type: "pivot", data: all };
+    if (!all.rows.length) {
+      stateView("database", "Nothing in this period", "No lines were loaded for these dates.");
+      return;
+    }
+    // The header search narrows the rows; the Total row stays the total of every row.
+    const q = state.query.trim().toLowerCase();
+    const data = q ? { ...all, rows: all.rows.filter((r) => String(r.label).toLowerCase().includes(q)) } : all;
     if (!data.rows.length) {
-      stateView("database", "Nothing in this run", "This run has no lines.");
+      stateView("search", "Nothing matches", "Try a different name.");
       return;
     }
     if (data.multi) return renderMarginPivot(data, t);
     const pct = data.measure === "gm_pct";
     const cols = data.columns;
+    const scale = {};
+    for (const c of cols) {
+      let s = Math.abs(Number(data.total?.[c]) || 0);
+      if (s < 0.005) for (const r of data.rows) s = Math.max(s, Math.abs(Number(r.values?.[c]) || 0));
+      scale[c] = s;
+    }
     const body = data.rows.map((r) =>
       `<tr>${t.kind === "margin" ? txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")
         : `<td>${esc(r.label)}${r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : ""}</td>`}` +
-      cols.map((c) => numCell(r.values[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`).join("");
-    const foot = `<tr class="total"><td>Total</td>` +
-      cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total" })).join("") + `</tr>`;
+      cols.map((c) => numCell(r.values[c] ?? 0, { pct, total: c === "Total", scale: scale[c], edge: true })).join("") + `</tr>`).join("");
+    const foot = `<tr class="total grand"><td>${q ? "Total of all rows" : "Total"}</td>` +
+      cols.map((c) => numCell(data.total[c] ?? 0, { pct, total: c === "Total", plain: true, edge: true })).join("") + `</tr>`;
     const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
     view(`<table class="data">${headRow(dimLabel, cols, "Total")}<tbody>${body}${foot}</tbody></table>`);
   }
@@ -379,19 +525,33 @@
   function renderMarginPivot(data, t) {
     const cols = data.columns, M = MARGIN_MEASURES;
     const dimLabel = PIVOTS[t.id].dims.find(([v]) => v === data.dimension)?.[1] || "Rows";
-    const cells = (src, c) => M.map(([m]) => numCell(src[m][c] ?? 0, { pct: m === "gm_pct", total: c === "Total" })).join("");
-    const head = `<thead><tr><th scope="col" rowspan="2">${esc(dimLabel)}</th>${cols.map((c) =>
-      `<th scope="colgroup" colspan="${M.length}" class="grp${c === "Total" ? " tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr>` +
-      `<tr>${cols.map((c) => M.map(([, l]) => `<th scope="col" class="n${c === "Total" ? " tot" : ""}">${l}</th>`).join("")).join("")}</tr></thead>`;
+    const scale = {};
+    for (const [m] of M) {
+      scale[m] = {};
+      for (const c of cols) {
+        let s = Math.abs(Number(data.mtotal?.[m]?.[c]) || 0);
+        if (s < 0.005) for (const r of data.rows) s = Math.max(s, Math.abs(Number(r.m?.[m]?.[c]) || 0));
+        scale[m][c] = s;
+      }
+    }
+    const cells = (src, c, plain = false) => M.map(([m], i) => numCell(src[m][c] ?? 0, {
+      pct: m === "gm_pct", total: c === "Total", scale: scale[m][c], plain,
+      edge: i === M.length - 1,
+    })).join("");
+    const head = `<thead><tr class="cols"><th scope="col" rowspan="2">${esc(dimLabel)}</th>${cols.map((c) =>
+      `<th scope="colgroup" colspan="${M.length}" class="grp pe${c === "Total" ? " tot" : ""}">${esc(colLabel(c))}</th>`).join("")}</tr>` +
+      `<tr class="cols">${cols.map((c) => M.map(([, l], i) => `<th scope="col" class="n${i === M.length - 1 ? " pe" : ""}${c === "Total" ? " tot" : ""}">${l}</th>`).join("")).join("")}</tr></thead>`;
     const body = data.rows.map((r) =>
       `<tr>${txt(r.label, r.flagged ? `<span class="tag review">${r.flagged} flagged</span>` : "")}` +
       cols.map((c) => cells(r.m, c)).join("") + `</tr>`).join("");
-    const foot = `<tr class="total"><td>Total</td>${cols.map((c) => cells(data.mtotal, c)).join("")}</tr>`;
+    const foot = `<tr class="total grand"><td>${state.query.trim() ? "Total of all rows" : "Total"}</td>` +
+      `${cols.map((c) => cells(data.mtotal, c, true)).join("")}</tr>`;
     view(`<table class="data">${head}<tbody>${body}${foot}</tbody></table>`);
   }
 
   function renderDetail(data, t) {
     if (!data) return;
+    state.screen = { type: "detail", data };
     const q = state.detailFilter.trim().toLowerCase();
     const rows = data.rows.filter((r) => !q || [r.invoice_number, r.customer_name, r.item_name, r.salesperson_name]
       .some((v) => String(v ?? "").toLowerCase().includes(q)));
@@ -400,32 +560,51 @@
       return;
     }
     const byLine = t.detail === "line";
-    const th = (l, n, c) => `<th scope="col"${n ? ' class="n"' : c ? ` class="${c}"` : ""}>${l}</th>`;
+    const th = (l, kind) => `<th scope="col" class="${kind}">${l}</th>`;
     const head = byLine
-      ? [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Item"), th("Unit"), th("Qty", 1), th("Rate", 1),
-        th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)]
-      : [th("Date", 0, "date"), th("Invoice"), th("Customer"), th("Salesperson"), th("Lines", 1),
-        th("Net sales", 1), th("Cost", 1), th("Margin", 1), th("GM %", 1)];
-    const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
-    const tn = sum("net_sales"), tc = sum("cost"), tm = sum("gross_margin");
+      ? [th("Date", "l"), th("Invoice", "l"), th("Customer", "l"), th("Item", "l"),
+        th("Qty", "n"), th("Rate", "n"), th("Net sales", "n"), th("COGS", "n"), th("Margin", "n"), th("GM %", "n")]
+      : [th("Date", "l"), th("Invoice", "l"), th("Customer", "l"),
+        th("Net sales", "n"), th("COGS", "n"), th("Margin", "n"), th("GM %", "n")];
+    const sum = (k) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+    const tn = sum("net_sales"), tc = sum("cost"), tm = sum("gross_margin"), tq = sum("quantity");
+    const fields = byLine
+      ? ["quantity", "rate", "net_sales", "cost", "gross_margin"]
+      : ["net_sales", "cost", "gross_margin"];
+    const scale = Object.fromEntries(fields.map((k) =>
+      [k, rows.reduce((m, r) => Math.max(m, Math.abs(Number(r[k]) || 0)), 0)]));
+    const ncell = (v, k, opt = {}) => numCell(v, { ...opt, scale: scale[k] || 0 });
+    const money = (v) => numCell(v, { plain: true });
+    const qtyCell = (v, unit, opt = {}) => {
+      const u = String(unit ?? "").trim();
+      const html = ncell(v, "quantity", opt);
+      return u ? html.replace(/<\/td>$/, ` <span class="uom">${esc(u)}</span></td>`) : html;
+    };
     const flag = (r) => (byLine ? r.flag : r.flagged)
       ? `<span class="tag review">${byLine ? esc(r.flag) : `${r.flagged} flagged`}</span>` : "";
     const body = rows.map((r) => byLine
-      ? `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number)}${txt(r.customer_name)}` +
-        `${txt(r.item_name, flag(r))}${txt(r.unit)}${numCell(r.quantity)}${numCell(r.rate)}` +
-        `${numCell(r.net_sales)}${numCell(r.cost)}${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`
-      : `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, flag(r))}${txt(r.customer_name)}` +
-        `${txt(r.salesperson_name)}<td class="n">${r.line_count}</td>${numCell(r.net_sales)}${numCell(r.cost)}` +
-        `${numCell(r.gross_margin)}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
-    const span = byLine ? 7 : 4;
-    const foot = `<tr class="total"><td colspan="${span}">Total${q ? " of filtered rows" : ""}</td>` +
-      (byLine ? "" : `<td class="n">${rows.reduce((s, r) => s + r.line_count, 0)}</td>`) +
-      `${numCell(tn)}${numCell(tc)}${numCell(tm)}${numCell(tn ? tm / tn : 0, { pct: true })}</tr>`;
-    view(`<table class="data"><thead><tr>${head.join("")}</tr></thead><tbody>${body}${foot}</tbody></table>`);
+      ? `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, "", "inv")}${txt(r.customer_name, "", "name")}` +
+        `${txt(r.item_name, flag(r), "item")}${qtyCell(r.quantity, r.unit)}${ncell(r.rate, "rate")}` +
+        `${ncell(r.net_sales, "net_sales")}${ncell(r.cost, "cost")}` +
+        `${ncell(r.gross_margin, "gross_margin")}${numCell(r.gm_pct, { pct: true })}</tr>`
+      : `<tr><td class="date">${esc(r.date)}</td>${txt(r.invoice_number, flag(r), "inv")}${txt(r.customer_name, "", "name")}` +
+        `${ncell(r.net_sales, "net_sales")}${ncell(r.cost, "cost")}` +
+        `${ncell(r.gross_margin, "gross_margin")}${numCell(r.gm_pct, { pct: true })}</tr>`).join("");
+    const label = `Total${q ? " of filtered rows" : ""}`;
+    const gm = tn ? tm / tn : 0;
+    // Rate is a unit price: the total row shows the quantity-weighted average.
+    const foot = byLine
+      ? `<tr class="total grand"><td>${label}</td><td></td><td></td><td></td>` +
+        `${money(tq)}${money(tq ? tn / tq : "")}${money(tn)}${money(tc)}${money(tm)}` +
+        `${numCell(gm, { pct: true, plain: true })}</tr>`
+      : `<tr class="total grand"><td>${label}</td><td></td><td></td>` +
+        `${money(tn)}${money(tc)}${money(tm)}${numCell(gm, { pct: true, plain: true })}</tr>`;
+    view(`<table class="data detail"><thead><tr class="cols">${head.join("")}</tr></thead><tbody>${body}${foot}</tbody></table>`);
   }
 
   function renderTb(data) {
     if (!data) return;
+    state.screen = { type: "tb", data };
     const months = data.months;
     const keys = ["opening", ...months, "closing"];
     const labels = ["Opening", ...months, "Closing"];
@@ -444,79 +623,44 @@
       groups.get(k).push(r);
     }
     const sum = (list, k) => list.reduce((s, r) => s + (Number(r[k]) || 0), 0);
-    const cells = (src) => keys.map((k) => numCell(src[k], { total: k === "closing" })).join("");
+    const scale = Object.fromEntries(keys.map((k) =>
+      [k, rows.reduce((m, r) => Math.max(m, Math.abs(Number(r[k]) || 0)), 0)]));
+    const cells = (src, { plain = false } = {}) => keys.map((k) =>
+      numCell(src[k], { total: k === "closing", mid: !plain, scale: scale[k], plain, edge: true })).join("");
 
     let body = "";
     for (const [k, list] of groups) {
       const [plbs, cat] = k.split("|");
       const sub = Object.fromEntries(keys.map((key) => [key, sum(list, key)]));
-      body += `<tr class="category"><td>${esc(cat)}<span class="tag">${plbs}</span></td>${cells(sub)}</tr>`;
+      body += `<tr class="category" data-depth="0" data-dock="${esc(cat)}" data-amt="${esc(fmt(sub.closing))}">` +
+        `<td>${esc(cat)}<span class="tag">${plbs}</span></td>${cells(sub)}</tr>`;
       for (const r of list) {
-        body += `<tr class="sub"><td>${esc(r.account_name)}<span class="meta">${esc(r.account_code)}` +
+        body += `<tr class="sub" data-depth="1"><td>${esc(r.account_name)}<span class="meta">${esc(r.account_code)}` +
           `${r.sub_category ? ` · ${esc(r.sub_category)}` : ""}</span></td>${cells(r)}</tr>`;
       }
     }
     const totals = Object.fromEntries(keys.map((key) => [key, sum(rows, key)]));
-    if (q) body += `<tr class="total"><td>Total of filtered accounts</td>${cells(totals)}</tr>`;
+    body += `<tr class="total grand" data-depth="0"><td>${q ? "Total of filtered accounts" : "Total"}</td>${cells(totals, { plain: true })}</tr>`;
 
-    view(`<table class="data"><thead><tr><th scope="col">Account</th>${labels.map((l, i) =>
-      `<th scope="col" class="${i === labels.length - 1 ? "tot" : ""}">${esc(colLabel(l))}</th>`).join("")}</tr></thead>` +
-      `<tbody>${body}</tbody></table>`);
+    view(`<table class="data"><thead><tr class="cols"><th scope="col">Account</th>${labels.map((l, i) =>
+      `<th scope="col" class="pe${i === labels.length - 1 ? " tot" : ""}">${esc(colLabel(l))}</th>`).join("")}</tr>` +
+      `</thead><tbody>${body}</tbody></table>`);
   }
 
   // ---------------------------------------------------------------- date filter
 
   const DF = MISDateFilter;
   const NO_DATA = ["search", "No data in this period",
-    "The selected range has no months in this report run. Pick another period or a Full run."];
+    "The selected range has no months to show. Pick another period."];
 
-  // Sum / last-month the stored month columns into the filter's columns (months, Total, comparison periods).
-  const REVENUE = ["Revenue", "Revenue Booked", "Total Revenue"];
-  function remapLines(list, L, mode) {
-    for (const n of list) {
-      n.values = DF.aggregate(n.values, L.cols, mode);
-      if (n.children) remapLines(n.children, L, mode);
-    }
-    // Ratios can't be summed: rebuild each % row from the row above it over revenue.
-    list.forEach((n, i) => {
-      if (n.kind !== "pct" || !i) return;
-      const num = list[i - 1].values, den = (list.find((x) => REVENUE.includes(x.label)) || list[0]).values;
-      n.values = Object.fromEntries(L.cols.map((c) => [c.key, den[c.key] ? num[c.key] / den[c.key] : 0]));
-    });
-  }
-
-  function filterStatement(data, t) {
-    const mode = t.id === "bs" ? "balance" : "flow";
-    const L = DF.layout({ total: mode === "flow" });
-    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
-    $("period").textContent = L.summary;
-    if (L.empty) return null;
-    remapLines(data.lines, L, mode);
-    remapLines(data.tree || [], L, mode);
-    data.columns = L.cols.map((c) => c.key);
-    return data;
-  }
-
-  function pivotAgg(data, L) {
-    return {
-      ...data,
-      columns: L.cols.map((c) => c.key),
-      rows: data.rows.map((r) => ({ ...r, values: DF.aggregate(r.values, L.cols) })),
-      total: DF.aggregate(data.total, L.cols),
-    };
-  }
-
-  async function loadPivot(t, runId) {
+  // Dated pivots: the server buckets the lines into the filter's columns (months, Total, comparisons).
+  async function loadPivot(t, L) {
     const cur = state.pivot[t.id];
-    const L = DF.layout();
-    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
-    $("period").textContent = L.summary;
-    if (L.empty) return null;
-    const get = (measure) => api(`${t.api}?run_id=${runId}&dim=${cur.dim}&measure=${measure}`);
+    const get = (measure) => api(`${t.api}?cols=${DF.colsParam(L.cols)}&dim=${cur.dim}&measure=${measure}`);
     if (t.id === "margin") {
       // Every measure side by side: Net sales, Cost, Margin, GM % for each period.
-      const [ns, cost, gm] = (await Promise.all(MARGIN_MEASURES.slice(0, 3).map(([m]) => get(m)))).map((d) => pivotAgg(d, L));
-      const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? g[c.key] / n[c.key] : 0]));
+      const [ns, cost, gm] = await Promise.all(MARGIN_MEASURES.slice(0, 3).map(([m]) => get(m)));
+      const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? (g[c.key] || 0) / n[c.key] : 0]));
       const by = (d) => new Map(d.rows.map((r) => [r.label, r]));
       const cm = by(cost), gmm = by(gm);
       const rows = ns.rows.map((r) => {
@@ -528,99 +672,194 @@
       tot.gm_pct = ratio(tot.gross_margin, tot.net_sales);
       return { ...ns, multi: true, rows, mtotal: tot };
     }
-    if (cur.measure !== "gm_pct") {
-      const out = pivotAgg(await get(cur.measure), L);
-      out.rows = out.rows.filter((r) => L.cols.some((c) => Math.abs(r.values[c.key]) > 0.004));
-      return out;
-    }
-    // GM % is a ratio: aggregate margin and sales separately, then divide.
-    const [gm, ns] = (await Promise.all([get("gross_margin"), get("net_sales")])).map((d) => pivotAgg(d, L));
-    const ratio = (g, n) => Object.fromEntries(L.cols.map((c) => [c.key, n[c.key] ? g[c.key] / n[c.key] : 0]));
-    const sales = new Map(ns.rows.map((r) => [r.label, r]));
-    const rows = gm.rows.filter((r) => sales.get(r.label) && L.cols.some((c) => Math.abs(sales.get(r.label).values[c.key]) > 0.004))
-      .map((r) => ({ ...r, values: ratio(r.values, sales.get(r.label).values) }));
-    return { ...gm, measure: "gm_pct", rows, total: ratio(gm.total, ns.total) };
-  }
-
-  // Trial balance: opening rolls forward over the months before the range, closing over the range.
-  function filterTb(data) {
-    const L = DF.layout({ total: false, compare: false });
-    $("period").textContent = L.summary;
-    if (L.empty) return null;
-    const sum = (r, ms) => ms.reduce((s, m) => s + (Number(r[m]) || 0), 0);
-    const earlier = data.months.filter((m) => m < L.from);
-    const rows = data.rows.map((r) => {
-      const opening = (Number(r.opening) || 0) + sum(r, earlier);
-      return { ...r, opening, closing: opening + sum(r, L.main) };
-    });
-    return { months: L.main, rows };
-  }
-
-  function filterDetail(data) {
-    const L = DF.layout({ total: false, compare: false });
-    $("period").textContent = L.summary;
-    const range = DF.isoRange();
-    if (!range) return null;
-    return { ...data, rows: data.rows.filter((r) => r.date >= range.from && r.date <= range.to) };
+    const out = await get(cur.measure);  // gm % arrives as a ratio of sums per column
+    out.rows = out.rows.filter((r) => L.cols.some((c) => Math.abs(r.values[c.key] || 0) > 0.004));
+    return out;
   }
 
   // ---------------------------------------------------------------- load
 
-  async function load() {
-    const t = tab();
-    renderTabs();
-    const hasRuns = pickRun();
-    renderTools();
-    renderExport();
-    syncUrl();
-
-    if (!hasRuns) {
-      setHead(null, t.label);
-      stateView(
-        "database",
-        "No report runs saved yet",
-        t.kind === "financials"
-          ? "Run <code>main.py financials --from-date … --to-date …</code>, or import a saved trial balance " +
-            "with <code>main.py db-load --tb-json …</code>."
-          : `Run <code>main.py ${t.kind === "margin" ? "margin" : "purchases"} --from-date … --to-date …</code>, ` +
-            `or import a saved file with <code>main.py db-load --${t.kind}-json …</code>.`,
-      );
+  // Margin / purchases: any date range over everything loaded so far.
+  async function loadDated(t) {
+    const cov = state.coverage[DATASET[t.kind]];
+    const what = t.kind === "margin" ? "sales" : "purchases";
+    setHead(t.label);
+    if (!cov || !cov.ranges.length) {
+      stateView("database", `No ${what} loaded yet`,
+        "Load them with the seeder.");
       return;
     }
-
-    const runId = state.selected[t.kind];
-    const run = runOf(t.kind);
-    DF.setSource({ months: run.months, fiscalStart: run.fiscal_year_start });
-    DF.setCompare(!(t.id === "tb" || t.detail));  // those two have no period columns to compare
-    state.labels = {};
-    setHead(run, t.label);
-    skeleton();
-    try {
-      if (t.detail) {
-        state.detailData = filterDetail(await api(`api/margin-detail?run_id=${runId}&view=${t.detail}`));
-        if (state.detailData) renderDetail(state.detailData, t); else stateView(...NO_DATA);
-      } else if (t.pivot) {
-        const data = await loadPivot(t, runId);
-        if (data) renderPivot(data, t); else stateView(...NO_DATA);
-      } else if (t.statement) {
-        const data = filterStatement(await api(`api/statement?run_id=${runId}&name=${encodeURIComponent(t.statement)}`), t);
-        state.tree.nodes = null;
-        if (!data) {
-          if (t.tree) $("toolbar").innerHTML = "";
-          stateView(...NO_DATA);
-        } else if (t.tree && data.tree?.length) {
-          showTree(data, t);
-        } else {
-          if (t.tree) $("toolbar").innerHTML = "";  // no stored TB to expand from: plain statement
-          renderStatement(data);
-        }
-      } else {
-        state.tbData = filterTb(await api(`api/tb?run_id=${runId}`));
-        if (state.tbData) renderTb(state.tbData); else stateView(...NO_DATA);
-      }
-    } catch (e) {
-      stateView("error", "Could not load this report", esc(e.message), "error");
+    DF.setSource({ coverage: cov.merged, fiscalStart: fiscalStart() });
+    DF.setCompare(!t.detail);  // flat lists have no period columns to compare
+    const L = DF.layout();
+    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
+    $("period").textContent = L.summary;
+    syncUrl();
+    if (L.tooMany) {
+      stateView("search", `Too many columns (${L.tooMany})`,
+        "Shorten the range, split by a longer period, or drop comparison periods.");
+      return;
     }
+    if (L.empty) {
+      stateView("search", `No ${what} loaded for ${DF.rangeLabel(L.from, L.to)}`,
+        `Loaded: ${esc(DF.rangeLabel(cov.min, cov.max))}. Load the missing dates with the seeder.`);
+      return;
+    }
+    skeleton();
+    if (t.detail) {
+      state.detailData = await api(`api/margin-detail?from=${L.from}&to=${L.to}&view=${t.detail}`);
+      renderDetail(state.detailData, t);
+    } else {
+      renderPivot(await loadPivot(t, L), t);
+    }
+  }
+
+  // Refresh control for live financials; stale banner only when Zoho is down.
+  function showLive(data) {
+    const el = $("live");
+    const at = new Date(data.fetched_at);
+    const sameDay = at.toDateString() === new Date().toDateString();
+    const when = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
+      (sameDay ? "" : ` ${at.toLocaleDateString([], { day: "numeric", month: "short" })}`);
+    el.className = `rpt-live${data.stale ? " stale" : ""}`;
+    el.innerHTML = (data.stale ? `${icon("error")}<span>Zoho unavailable — showing data from ${esc(when)}</span>` : "") +
+      `<button type="button" class="btn text" id="liveRefresh" title="${data.zoho_calls ? `${data.zoho_calls} Zoho calls` : "From the 15-minute cache"}">${icon("refresh")}Refresh</button>`;
+    el.hidden = false;
+  }
+
+  // Executive Summary, P&L, BS, TB live from Zoho for any dates; the server caches for 15 minutes.
+  async function loadLive(t, refresh = false) {
+    DF.setSource({ live: true, fiscalStart: fiscalStart() });
+    DF.setCompare(t.id !== "tb");  // the trial balance has no period columns to compare
+    const L = t.id === "tb" ? DF.layout({ total: false, compare: false }) : DF.layout({ total: t.id !== "bs" });
+    state.labels = Object.fromEntries(L.cols.map((c) => [c.key, c.label]));
+    setHead(t.label);
+    $("period").textContent = L.summary;
+    syncUrl();
+    if (L.tooMany) {
+      stateView("search", `Too many columns (${L.tooMany})`,
+        "Each column is a Zoho call. Shorten the range, split by a longer period, or drop comparison periods.");
+      return;
+    }
+    if (!L.cols.length) return stateView(...NO_DATA);
+    const seq = ++state.seq;
+    skeleton("Lining up the books. A long range takes a minute the first time.");
+    const cols = `cols=${DF.colsParam(L.cols)}${refresh ? "&refresh=1" : ""}`;
+    const data = await api(t.statement ? `api/statement?name=${encodeURIComponent(t.statement)}&${cols}` : `api/tb?${cols}`);
+    if (seq !== state.seq || tab() !== t) return;  // the user moved on while Zoho answered
+    showLive(data);
+    if (!t.statement) {
+      state.tbData = { months: data.months, rows: data.rows };
+      renderTb(state.tbData);
+      return;
+    }
+    data.columns = L.cols.map((c) => c.key);
+    state.tree.nodes = null;
+    if (t.tree && data.tree?.length) {
+      showTree(data, t);
+    } else {
+      if (t.tree) $("toolbar").innerHTML = "";
+      renderStatement(data);
+    }
+  }
+
+  async function load() {
+    const t = tab();
+    state.screen = null;  // so a search typed while this tab loads never repaints the previous one
+    renderTabs();
+    renderTools();
+    renderExport();
+    $("live").hidden = true;
+    if (DATASET[t.kind] || isLive(t)) {
+      try {
+        await (isLive(t) ? loadLive(t) : loadDated(t));
+      } catch (e) {
+        stateView("error", "Could not load this report", esc(e.message), "error");
+      }
+      return;
+    }
+    setHead(t.label);
+    stateView("database", "Live financials are switched off",
+      "This server has live financials disabled (<code>MIS_LIVE_FINANCIALS=1</code> turns them on).");
+  }
+
+  // The rail follows the group whose header has passed under the column header
+  // and whose last line has not. The scroll listener is on the sheet, not the window.
+  function groupEndTop(tr) {
+    const depth = Number(tr.dataset.depth || 0);
+    let n = tr.nextElementSibling;
+    while (n) {
+      if (n.dataset.depth !== undefined && Number(n.dataset.depth) <= depth) return n.getBoundingClientRect().top;
+      n = n.nextElementSibling;
+    }
+    return tr.parentElement.getBoundingClientRect().bottom;
+  }
+
+  function bindSheet() {
+    const scroll = $("out");
+    const table = scroll.querySelector("table.data");
+    if (!table) {
+      scroll.onscroll = null;
+      return;
+    }
+    const thead = table.querySelector("thead");
+    const colRows = [...thead.querySelectorAll("tr.cols")];
+    const theadTop = thead.getBoundingClientRect().top;
+    for (const tr of colRows) {
+      const top = tr.getBoundingClientRect().top - theadTop;
+      for (const th of tr.children) th.style.top = `${top}px`;
+    }
+    const headH = colRows.length
+      ? colRows[colRows.length - 1].getBoundingClientRect().bottom - theadTop
+      : 0;
+    scroll.style.setProperty("--head", `${headH}px`);
+    scroll.style.setProperty("--port", `${scroll.clientWidth}px`);
+    const dock = scroll.querySelector(".dock-slot");
+    const groups = [...table.querySelectorAll("tbody tr[data-dock]")];
+    const name = dock?.querySelector(".dock-name");
+    const amt = dock?.querySelector(".dock-amt");
+    const update = () => {
+      scroll.style.setProperty("--port", `${scroll.clientWidth}px`);
+      if (!dock || tableMode() !== "dock" || !groups.length) {
+        dock?.classList.remove("on");
+        dock?.setAttribute("aria-hidden", "true");
+        return;
+      }
+      const line = scroll.getBoundingClientRect().top + headH;
+      let hit = null;
+      for (const tr of groups) {
+        if (tr.getBoundingClientRect().top > line - 8) break;
+        if (groupEndTop(tr) > line + 32) hit = tr;
+      }
+      if (!hit) {
+        dock.classList.remove("on");
+        dock.setAttribute("aria-hidden", "true");
+        return;
+      }
+      if (name.textContent !== hit.dataset.dock) name.textContent = hit.dataset.dock;
+      const amount = hit.dataset.amt || "";
+      if (amt.textContent !== amount) amt.textContent = amount;
+      dock.classList.add("on");
+      dock.setAttribute("aria-hidden", "false");
+    };
+    scroll.onscroll = () => {
+      if (bindSheet.frame) return;
+      bindSheet.frame = requestAnimationFrame(() => {
+        bindSheet.frame = 0;
+        update();
+      });
+    };
+    update();
+  }
+
+  function paint() {
+    const s = state.screen;
+    if (!s) return;
+    if (s.type === "tree") renderTree();
+    else if (s.type === "statement") renderStatement(s.data);
+    else if (s.type === "pivot") renderPivot(s.data, tab());
+    else if (s.type === "detail") renderDetail(s.data, tab());
+    else if (s.type === "tb") renderTb(s.data);
   }
 
   // ---------------------------------------------------------------- events
@@ -658,12 +897,54 @@
     if (parent) focusTwisty(parent.key);
   });
 
+  $("live").addEventListener("click", (e) => {
+    if (!e.target.closest("#liveRefresh")) return;
+    loadLive(tab(), true).catch((err) => stateView("error", "Could not load this report", esc(err.message), "error"));
+  });
+
+  // Header search: one box for every tab; each view filters its own rows.
+  $("q").addEventListener("input", (e) => {
+    const v = e.target.value;
+    state.query = v;
+    state.tbFilter = v;
+    state.detailFilter = v;
+    state.tree.q = v;
+    paint();
+  });
+
+  // More actions menu (Export, Print, Dock / Signal). Escape or a click outside closes it.
+  const moreMenu = $("moreMenu"), moreBtn = $("moreBtn");
+  function setMenu(on) {
+    moreMenu.hidden = !on;
+    moreBtn.setAttribute("aria-expanded", String(on));
+    if (on) moreMenu.querySelector('[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemradio"]')?.focus();
+  }
+  function syncModeItems() {
+    for (const b of moreMenu.querySelectorAll("[data-mode]")) {
+      b.setAttribute("aria-checked", String(b.dataset.mode === state.tableMode));
+    }
+  }
+  moreBtn.addEventListener("click", () => setMenu(moreMenu.hidden));
+  document.addEventListener("click", (e) => {
+    if (!moreMenu.hidden && !e.composedPath().includes($("moreWrap"))) setMenu(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !moreMenu.hidden) { setMenu(false); moreBtn.focus(); }
+  });
+  $("printBtn").addEventListener("click", () => { setMenu(false); window.print(); });
+
   // The workbook needs the Bearer token, so fetch it and save the blob instead of following a link.
   $("exportBtn").addEventListener("click", async (e) => {
     e.preventDefault();
     const btn = $("exportBtn");
     if (btn.getAttribute("aria-disabled") === "true") return;
-    snackbar("Preparing the Excel workbook");
+    setMenu(false);
+    {
+      const L = DF.layout({ total: true });
+      if (!L.cols.length) return snackbar(L.tooMany ? `Too many columns (${L.tooMany})` : "Pick a date range first", true);
+      btn.setAttribute("href", `api/export.xlsx?cols=${DF.colsParam(L.cols)}`);
+    }
+    snackbar("Preparing the Excel workbook (financials live from Zoho)");
     try {
       const res = await MISAuth.fetch(btn.getAttribute("href"));
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
@@ -677,16 +958,39 @@
     }
   });
 
+  try { state.tableMode = localStorage.getItem("mis.tableMode") === "signal" ? "signal" : "dock"; }
+  catch { state.tableMode = "dock"; }
+  document.body.dataset.table = state.tableMode;
+  syncModeItems();
+  moreMenu.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-mode]");
+    if (!b) return;
+    setMenu(false);
+    if (b.dataset.mode === state.tableMode) return;
+    state.tableMode = b.dataset.mode;
+    document.body.dataset.table = state.tableMode;
+    try { localStorage.setItem("mis.tableMode", state.tableMode); } catch { /* storage blocked */ }
+    syncModeItems();
+    paint();
+  });
+  window.addEventListener("resize", () => { if ($("out").querySelector("table.data")) bindSheet(); });
+
+  if (qs.get("from") && qs.get("to")) DF.setRange(qs.get("from"), qs.get("to"), qs.get("by"));  // a shared link's range
   DF.init({ mount: $("datebar"), onChange: () => load() });
   renderTabs();
   skeleton();
+  const noCoverage = { ranges: [], merged: [], gaps: [], min: null, max: null };
   Promise.all([
-    ...["financials", "margin", "purchases"].map((k) => api(`api/runs?kind=${k}`)),
+    ...Object.values(DATASET).map((ds) => api(`api/coverage?dataset=${ds}`).catch(() => noCoverage)),
     api("api/org").catch(() => ({})),  // company profile from MariaDB; the page still works without it
+    api("api/config").catch(() => ({})),
   ])
-    .then(([fin, mar, pur, org]) => {
+    .then(([sales, purchases, org, config]) => {
       state.org = org && org.name ? org : null;
-      state.runs = { financials: fin.runs, margin: mar.runs, purchases: pur.runs };
+      state.live = !!config.live_financials;
+      const fy = Number(config.fiscal_year_start_month);
+      if (fy >= 1 && fy <= 12) state.fiscalStart = `2000-${String(fy).padStart(2, "0")}`;
+      state.coverage = { sales, purchases };
       load();
     })
     .catch((e) => stateView("error", "Could not reach the report database", esc(e.message), "error"));

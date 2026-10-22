@@ -26,7 +26,7 @@ One row per Zoho invoice. Primary key `invoice_id`.
 | `currency_code`, `exchange_rate` | Currency |
 | `sub_total`, `discount_total`, `tax_total`, `shipping_charge`, `adjustment`, `total`, `balance` | Zoho header amounts, invoice currency |
 | `net_sales` | Revenue in AED, after discount, excluding tax |
-| `cogs` | Invoice COGS in AED. Sum of `sales_lines.cogs` |
+| `cogs` | Invoice COGS in AED. The GL-reconciled figure: the Cost of Sales ledger's `inventory_valuation_for_invoice` amount for this invoice. `sales_lines.cogs` is allocated so the lines add up to it |
 | `flagged_lines` | Count of lines with a flag |
 | `last_modified_time` | Later fetch replaces this invoice |
 
@@ -116,7 +116,7 @@ One row per Zoho customer credit note. Primary key `creditnote_id`. No database 
 | `currency_code`, `exchange_rate` | Currency |
 | `sub_total`, `discount_total`, `tax_total`, `adjustment`, `total`, `balance` | Zoho header amounts, document currency |
 | `net_sales` | Amount in AED that reduces revenue, after discount, excluding tax |
-| `cogs` | Amount in AED that reduces COGS. Sum of `credit_note_lines.cogs` |
+| `cogs` | Amount in AED that reduces COGS. The GL-reconciled figure: the Cost of Sales ledger's `inventory_valuation_for_credit_notes` amount for this note, stored positive. `credit_note_lines.cogs` is allocated so the lines add up to it. A note with no ledger row keeps the total from the line rule |
 | `flagged_lines` | Count of lines with a flag |
 | `last_modified_time` | Later fetch replaces this credit note |
 
@@ -161,7 +161,7 @@ One row per Zoho customer debit note. Primary key `debit_note_id`. No database h
 | `currency_code`, `exchange_rate` | Currency |
 | `sub_total`, `discount_total`, `tax_total`, `shipping_charge`, `adjustment`, `total`, `balance` | Zoho header amounts, document currency |
 | `net_sales` | Amount in AED that increases revenue, after discount, excluding tax |
-| `cogs` | Amount in AED that increases COGS. Sum of `debit_note_lines.cogs` |
+| `cogs` | Amount in AED that increases COGS. GL-reconciled when the Cost of Sales ledger has a valuation row for this debit note's id; otherwise the sum of `debit_note_lines.cogs` from the line rule. No such ledger type is loaded yet, see below |
 | `flagged_lines` | Count of lines with a flag |
 | `last_modified_time` | Later fetch replaces this debit note |
 
@@ -287,7 +287,7 @@ A complete set of postings in a period has `SUM(amount) = 0` across every accoun
 
 `tb_monthly` for Apr–Sep 2026 can check a month's net. Each of those months sums to 0.00. It cannot seed `gl_journals`. It has no posting id, and debit and credit exist only as a six-month total on `tb_accounts`.
 
-`sales_invoices.cogs` stays the sum of the line costs. The Cost of Sales account sum is a check. An invoice can have two debit rows, and then the account sum is about twice the invoice.
+`sales_invoices.cogs` is the GL-reconciled figure: the sum of the invoice's `inventory_valuation_for_invoice` rows in the Cost of Sales account. `sales_lines.cogs` is allocated so the lines add up to it. An invoice with no ledger row keeps the total from the line rule.
 
 ## items
 
@@ -532,7 +532,7 @@ For each line:
 2. The line names a base unit, `conversion_rate` is greater than 1, and `purchase_price` is in the same range as `items.purchase_rate`. `cogs` is `quantity × conversion_rate × purchase_price`. A pack price is many times the base rate. A band of 25 percent is too tight: Matta sold at 2.754 against a master rate of 2.20.
 3. Otherwise `purchase_price` is the pack price. `cogs` is `quantity × purchase_price`. Do not multiply by `conversion_rate`.
 
-`sales_invoices.cogs` is the sum of those line amounts. Do not replace it with `cf_actual_cogs` or with the sum of `cost_of_sales_nellon`. Use those two as checks. An invoice can have two Cost of Sales debit rows, and then the account sum is about twice the custom field.
+`sales_invoices.cogs` is the GL-reconciled figure: the sum of the invoice's `inventory_valuation_for_invoice` rows in the Cost of Sales account. Do not use `cf_actual_cogs`; use it only as a check. The line rule above gives each line a baseline. `reconcile_invoice_line_items.py` then makes the lines add up to the ledger figure. A difference of one cent goes to the largest line. A single-line invoice takes the whole ledger amount. On a multi-line invoice the difference is spread over the goods lines in proportion to their baseline cost, and non-inventory tax lines stay at 0. An invoice with no ledger row keeps the total from the line rule. Per-line `cogs` is therefore an allocation of the ledger figure, not Zoho's line valuation. `purchase_price`, `conversion_rate` and the item `purchase_rate` stay on the row so the baseline can be recomputed.
 
 Checked examples:
 
@@ -559,9 +559,9 @@ Debit notes share `GET /invoices` with sales invoices. List them with `filter_by
 
 Draft and void notes are stored. A revenue report skips them. Open and closed credit notes both count. A debit note counts when its status is one an invoice report would count.
 
-`inventory_valuation_for_credit_notes` on `cost_of_sales_nellon` is the check for credit-note COGS, not the value to copy. It is a credit, 266,789.30 across 257 documents in the loaded ledger.
+`inventory_valuation_for_credit_notes` on `cost_of_sales_nellon` gives the credit-note header `cogs`. Match a row to a note on `transaction_id` = `creditnote_id`, sum the rows, and store the amount positive. It is a credit, 266,789.30 across 257 documents in the loaded ledger. The line rule gives each line a baseline, and the difference to the ledger figure is allocated over the goods lines the same way as for invoices. A credit-only line stays at 0. A note with no ledger row keeps the total from the line rule. In the September 2026 list, 55 of 107 notes have no ledger row. Check them against the detail before relying on their line-rule `cogs`, because the ledger shows no stock movement for them.
 
-`inventory_valuation_for_debit_notes` is not the customer debit note. All 44 ids in the loaded ledger are also `vendor_credit`, and the entry numbers are `KGT-VC-*`. The valuation is a debit and the vendor-credit row is a credit on the same id. Those rows stay on the ledger. Vendor credits still have no document table.
+`inventory_valuation_for_debit_notes` is not the customer debit note. All 44 ids in the loaded ledger are also `vendor_credit`, and the entry numbers are `KGT-VC-*`. The valuation is a debit and the vendor-credit row is a credit on the same id. Those rows stay on the ledger. Vendor credits still have no document table. Because those ids belong to vendor credits, no customer debit note matches the ledger by id. A debit note's header `cogs` is therefore the sum of its line costs from the line rule until the ledger holds a valuation row for a customer debit note id.
 
 ### Purchases
 

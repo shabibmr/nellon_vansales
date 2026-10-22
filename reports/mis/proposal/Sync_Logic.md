@@ -84,7 +84,7 @@ Document list endpoints provide the IDs and modification timestamps. Complete he
 
 | Target Table | Source Endpoint | Fields Populated in Header |
 |---|---|---|
-| **`sales_invoices`** | `GET /invoices/{invoice_id}` | `invoice_id`, `invoice_number`, `date`, `due_date`, `status`, `customer_id`, `customer_name`, `salesperson_id`, `salesperson_name`, `location_id`, `location_name`, `currency_code`, `exchange_rate`, `sub_total`, `discount_total`, `tax_total`, `shipping_charge`, `adjustment`, `total`, `balance`, `net_sales` (AED calc), `cogs` (sum of line COGS), `flagged_lines`, `last_modified_time` |
+| **`sales_invoices`** | `GET /invoices/{invoice_id}` | `invoice_id`, `invoice_number`, `date`, `due_date`, `status`, `customer_id`, `customer_name`, `salesperson_id`, `salesperson_name`, `location_id`, `location_name`, `currency_code`, `exchange_rate`, `sub_total`, `discount_total`, `tax_total`, `shipping_charge`, `adjustment`, `total`, `balance`, `net_sales` (AED calc), `cogs` (GL-reconciled; lines are allocated to add up to it), `flagged_lines`, `last_modified_time` |
 | **`credit_notes`** | `GET /creditnotes/{creditnote_id}` | `creditnote_id`, `creditnote_number`, `date`, `status`, `customer_id`, `customer_name`, `salesperson_id`, `salesperson_name`, `location_id`, `location_name`, `invoice_id`, `invoice_number`, `reference_number`, `reason`, `currency_code`, `exchange_rate`, `sub_total`, `discount_total`, `tax_total`, `adjustment`, `total`, `balance`, `net_sales` (AED calc), `cogs`, `flagged_lines`, `last_modified_time` |
 | **`debit_notes`** | `GET /invoices/{debit_note_id}` (`Type.DebitNote`) | `debit_note_id`, `debit_note_number`, `date`, `due_date`, `status`, `customer_id`, `customer_name`, `salesperson_id`, `salesperson_name`, `location_id`, `location_name`, `reference_invoice_id`, `reference_invoice_number`, `reference_number`, `reason`, `currency_code`, `exchange_rate`, `sub_total`, `discount_total`, `tax_total`, `shipping_charge`, `adjustment`, `total`, `balance`, `net_sales`, `cogs`, `flagged_lines`, `last_modified_time` |
 | **`purchase_docs`** | `GET /bills/{bill_id}`<br>`GET /purchaseorders/{po_id}` | `kind`, `doc_id`, `number`, `date`, `due_date`, `expected_delivery_date`, `status`, `billed_status`, `received_status`, `vendor_id`, `vendor_name`, `location_id`, `location_name`, `currency_code`, `exchange_rate`, `reference_number`, `sub_total`, `discount_total`, `tax_total`, `adjustment`, `total`, `balance`, `amount` (AED calc), `flagged_lines`, `last_modified_time` |
@@ -96,6 +96,8 @@ Document list endpoints provide the IDs and modification timestamps. Complete he
 2. **COGS (AED):**
    - Computed from `purchase_price`, base unit conversion rate (`item_units`), and master `purchase_rate`.
    - Never copied directly from old margin tables or custom fields.
+   - Invoice header `cogs` is the Cost of Sales ledger's `inventory_valuation_for_invoice` amount (GL-reconciled); line `cogs` is allocated so the lines add up to it.
+   - Credit-note header `cogs` is the ledger's `inventory_valuation_for_credit_notes` amount, stored positive, with lines allocated the same way. Debit notes have no matching ledger type loaded, so they keep the sum of line COGS.
 3. **Line Replacement:**
    - On document header update, existing child lines are replaced by matching `line_item_id`.
 

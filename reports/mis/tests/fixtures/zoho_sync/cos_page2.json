@@ -1,0 +1,37 @@
+{
+  "transactions": [
+    {
+      "account_id": "3331482000000034003",
+      "categorized_transaction_id": "3331482000188095289",
+      "transaction_id": "3331482000188071001",
+      "transaction_type": "inventory_valuation_for_invoice",
+      "transaction_type_formatted": "Inventory Valuation for Invoice",
+      "transaction_date": "2026-10-12",
+      "entry_number": "YNS-INV-00409",
+      "reference_number": "",
+      "customer_id": "3331482000001065276",
+      "payee": "CALICUT PARK RESTAURANT",
+      "description": "",
+      "debit_or_credit": "debit",
+      "debit_amount": 103.61,
+      "credit_amount": "",
+      "fcy_debit_amount": 103.61,
+      "fcy_credit_amount": "",
+      "currency_id": "3331482000000075111",
+      "currency_code": "AED",
+      "offset_account_name": ""
+    }
+  ],
+  "page_context": {
+    "page": 2,
+    "per_page": 200,
+    "has_more_page": false,
+    "report_name": "Transactions",
+    "account_name": "Cost of Sales - Nellon",
+    "report_basis": "Accrual",
+    "account_code": "5.1.1000",
+    "applied_filter": "TransactionType.All",
+    "sort_column": "transaction_date",
+    "sort_order": "D"
+  }
+}

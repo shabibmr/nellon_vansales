@@ -32,10 +32,18 @@
     });
   }
 
+  // Where "api/..." calls go. The Python server answers api/ itself; a static copy (deploy/test-web) sets
+  // <meta name="mis-api-base" content="api.php/"> so a PHP shim forwards them instead.
+  const API_BASE = document.querySelector('meta[name="mis-api-base"]')?.content || "api/";
+  const url = (path) => (path.startsWith("api/") ? API_BASE + path.slice(4) : path);
+
   window.MISAuth = {
+    url,
     async fetch(path, opts = {}) {
+      // Outside an iframe no token will ever arrive; let the server decide (401 unless auth is disabled).
+      if (window.parent === window && !token) return fetch(url(path), opts);
       const jwt = await ready();
-      return fetch(path, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${jwt}` } });
+      return fetch(url(path), { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${jwt}` } });
     },
   };
 })();
