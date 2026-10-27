@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
+import '../../../../domain/utils/allocation_rules.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -215,30 +216,8 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
     }
   }
 
-  List<PaymentAllocation> _autoAllocate(List<OpenInvoice> openInvoices, double amount) {
-    if (amount <= 0) return const [];
-    final sortedInvoices = List<OpenInvoice>.from(openInvoices)
-      ..sort((a, b) => a.date.compareTo(b.date));
-
-    final List<PaymentAllocation> allocations = [];
-    double remainingAmount = amount;
-
-    for (final invoice in sortedInvoices) {
-      if (remainingAmount <= 0) break;
-      final balance = invoice.balance;
-      if (balance <= 0) continue;
-
-      final allocated = remainingAmount >= balance ? balance : remainingAmount;
-      allocations.add(
-        PaymentAllocation(
-          invoiceId: invoice.invoiceId,
-          invoiceNumber: invoice.invoiceNumber,
-          amountApplied: double.parse(allocated.toStringAsFixed(2)),
-        ),
-      );
-      remainingAmount -= allocated;
-      remainingAmount = double.parse(remainingAmount.toStringAsFixed(2));
-    }
-    return allocations;
-  }
+  List<PaymentAllocation> _autoAllocate(
+    List<OpenInvoice> openInvoices,
+    double amount,
+  ) => AllocationRules.autoAllocate(openInvoices, amount);
 }

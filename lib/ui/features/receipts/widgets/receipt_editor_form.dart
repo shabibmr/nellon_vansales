@@ -12,6 +12,7 @@ import '../bloc/receipt_editor_bloc.dart';
 import '../bloc/receipt_editor_event.dart';
 import '../bloc/receipt_editor_state.dart';
 import 'receipt_allocations_section.dart';
+import 'receipt_allocations_sheet.dart';
 import 'receipt_customer_card.dart';
 import 'receipt_date_card.dart';
 
@@ -62,6 +63,22 @@ class _ReceiptEditorFormState extends State<ReceiptEditorForm> {
     _referenceController = TextEditingController(
       text: widget.state.editingReferenceNumber,
     );
+  }
+
+  Future<void> _manageAllocations(
+    BuildContext context,
+    ReceiptEditorState state,
+    String cs,
+  ) async {
+    final bloc = context.read<ReceiptEditorBloc>();
+    final result = await showReceiptAllocationsSheet(
+      context,
+      openInvoices: state.openInvoices,
+      allocations: state.editingAllocations,
+      paymentAmount: state.editingAmount,
+      currencySymbol: cs,
+    );
+    if (result != null) bloc.add(UpdateReceiptAllocations(result));
   }
 
   @override
@@ -217,6 +234,15 @@ class _ReceiptEditorFormState extends State<ReceiptEditorForm> {
                     allocations: state.editingAllocations,
                     currencySymbol: cs,
                     readOnly: readOnly,
+                    manageHint: customer == null
+                        ? 'Select a customer first'
+                        : state.editingAmount <= 0
+                        ? 'Enter an amount first'
+                        : null,
+                    onManageAllocations:
+                        (customer == null || state.editingAmount <= 0)
+                        ? null
+                        : () => _manageAllocations(context, state, cs),
                   ),
                   const SizedBox(height: 30),
                 ],

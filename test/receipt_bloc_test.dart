@@ -233,5 +233,89 @@ void main() {
       expect(salesRepo.syncQueue.single.type, 'receipt');
       bloc.close();
     });
+
+    ReceiptEditorBloc newBloc() => ReceiptEditorBloc(
+      receiptRepository: salesRepo,
+      customerRepository: salesRepo,
+      documentNumberService: docNumbers,
+    );
+    Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+    OpenInvoice inv(String id, double balance, int day) => OpenInvoice(
+      invoiceId: id,
+      invoiceNumber: 'INV-$id',
+      customerId: 'c1',
+      date: DateTime(2026, 1, day),
+      dueDate: DateTime(2026, 2, day),
+      total: balance,
+      balance: balance,
+      status: 'unpaid',
+    );
+
+    const manual = [
+      PaymentAllocation(invoiceId: 'b', invoiceNumber: 'INV-b', amountApplied: 70),
+    ];
+
+    test('SaveReceipt rejects allocations that exceed the amount', () async {
+      final bloc = newBloc();
+      bloc.add(StartNewReceipt(customer: _cust('c1', 'Acme')));
+      bloc.add(const SetEditingAmount(50));
+      bloc.add(const UpdateReceiptAllocations(manual));
+      await settle();
+      bloc.add(const SaveReceipt());
+      await settle();
+
+      expect(bloc.state.errorMessage, 'Allocated amount exceeds the payment amount');
+      expect(salesRepo.syncQueue, isEmpty);
+      bloc.close();
+    });
+
+    test('manual allocations survive an amount change that still fits', () async {
+      salesRepo.openInvoices = [inv('a', 60, 1), inv('b', 80, 2)];
+      final bloc = newBloc();
+      bloc.add(StartNewReceipt(customer: _cust('c1', 'Acme')));
+      bloc.add(const SetEditingAmount(100));
+      bloc.add(const UpdateReceiptAllocations(manual));
+      await settle();
+      bloc.add(const SetEditingAmount(120));
+      await settle();
+
+      expect(bloc.state.isAllocationManual, isTrue);
+      expect(bloc.state.editingAllocations, manual);
+      bloc.close();
+    });
+
+    test('manual allocations reset with a message when the amount drops below them', () async {
+      salesRepo.openInvoices = [inv('a', 60, 1), inv('b', 80, 2)];
+      final bloc = newBloc();
+      bloc.add(StartNewReceipt(customer: _cust('c1', 'Acme')));
+      bloc.add(const SetEditingAmount(100));
+      bloc.add(const UpdateReceiptAllocations(manual));
+      await settle();
+      bloc.add(const SetEditingAmount(50));
+      await settle();
+
+      expect(bloc.state.isAllocationManual, isFalse);
+      expect(bloc.state.infoMessage, isNotNull);
+      expect(
+        bloc.state.editingAllocations.fold<double>(0, (s, a) => s + a.amountApplied),
+        50,
+      );
+      bloc.close();
+    });
+
+    test('changing customer clears the manual flag', () async {
+      final bloc = newBloc();
+      bloc.add(StartNewReceipt(customer: _cust('c1', 'Acme')));
+      bloc.add(const SetEditingAmount(100));
+      bloc.add(const UpdateReceiptAllocations(manual));
+      await settle();
+      bloc.add(SetEditingReceiptCustomer(_cust('c2', 'Other')));
+      await settle();
+      await settle();
+
+      expect(bloc.state.isAllocationManual, isFalse);
+      bloc.close();
+    });
   });
 }

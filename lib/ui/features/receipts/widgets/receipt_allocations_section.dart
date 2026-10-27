@@ -8,7 +8,11 @@ class ReceiptAllocationsSection extends StatelessWidget {
   final List<PaymentAllocation> allocations;
   final String currencySymbol;
   final bool readOnly;
+  /// Null disables the MANAGE button.
   final VoidCallback? onManageAllocations;
+
+  /// Why MANAGE is disabled, shown under the header while it is.
+  final String? manageHint;
 
   const ReceiptAllocationsSection({
     super.key,
@@ -16,6 +20,7 @@ class ReceiptAllocationsSection extends StatelessWidget {
     required this.currencySymbol,
     required this.readOnly,
     this.onManageAllocations,
+    this.manageHint,
   });
 
   @override
@@ -36,7 +41,7 @@ class ReceiptAllocationsSection extends StatelessWidget {
                 letterSpacing: 1,
               ),
             ),
-            if (!readOnly && onManageAllocations != null)
+            if (!readOnly)
               TextButton.icon(
                 onPressed: onManageAllocations,
                 icon: const Icon(Icons.edit_note, size: 18),
@@ -44,6 +49,11 @@ class ReceiptAllocationsSection extends StatelessWidget {
               ),
           ],
         ),
+        if (!readOnly && manageHint != null)
+          Text(
+            manageHint!,
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
         const SizedBox(height: 8),
         if (allocations.isEmpty)
           const Card(

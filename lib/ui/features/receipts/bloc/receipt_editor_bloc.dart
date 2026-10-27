@@ -11,6 +11,7 @@ import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/models/submit_result.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
 import '../../../../domain/repositories/customer_repository.dart';
+import '../../../../domain/utils/allocation_rules.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 import 'receipt_editor_event.dart';
 import 'receipt_editor_state.dart';
@@ -61,6 +62,8 @@ class ReceiptEditorBloc
         editingPaymentMode: 'Cash',
         editingReferenceNumber: '',
         editingAllocations: const [],
+        openInvoices: _cachedOpenInvoices(event.customer?.id),
+        isAllocationManual: false,
         isEditingNew: true,
         isEditorLoading: false,
         isSaving: false,
@@ -92,6 +95,7 @@ class ReceiptEditorBloc
         clearMessages: true,
         clearEditorError: true,
         editingAllocations: const [],
+        openInvoices: const [],
         isEditingNew: false,
         isEditorLoading: true,
         isSaving: false,
@@ -277,6 +281,8 @@ class ReceiptEditorBloc
       editingPaymentMode: rec.paymentMode,
       editingReferenceNumber: rec.referenceNumber,
       editingAllocations: List.of(rec.allocations),
+      openInvoices: _cachedOpenInvoices(rec.customerId),
+      isAllocationManual: false,
       isEditingNew: false,
       isEditorLoading: false,
       isSaving: false,
@@ -297,11 +303,16 @@ class ReceiptEditorBloc
       // Safe swallow: fallback to cached local open invoices when offline
     }
 
-    final allocations = _autoAllocate(event.customer.id, state.editingAmount);
+    final openInvoices = _cachedOpenInvoices(event.customer.id);
     emit(
       state.copyWith(
         editingCustomer: event.customer,
-        editingAllocations: allocations,
+        openInvoices: openInvoices,
+        editingAllocations: AllocationRules.autoAllocate(
+          openInvoices,
+          state.editingAmount,
+        ),
+        isAllocationManual: false,
         clearMessages: true,
       ),
     );
@@ -309,8 +320,28 @@ class ReceiptEditorBloc
 
   void _onSetAmount(SetEditingAmount event, Emitter<ReceiptEditorState> emit) {
     final customerId = state.editingCustomer?.id;
+
+    // Hand-picked allocations survive an amount edit as long as they still
+    // fit; otherwise fall back to auto allocation and say so.
+    if (state.isAllocationManual && customerId != null) {
+      final total = AllocationRules.total(state.editingAllocations);
+      if (!AllocationRules.exceeds(total, event.amount)) {
+        emit(state.copyWith(editingAmount: event.amount, clearMessages: true));
+        return;
+      }
+      emit(
+        state.copyWith(
+          editingAmount: event.amount,
+          editingAllocations: AllocationRules.autoAllocate(state.openInvoices, event.amount),
+          isAllocationManual: false,
+          infoMessage: 'Allocations reset to fit the new amount',
+        ),
+      );
+      return;
+    }
+
     final allocations = customerId != null
-        ? _autoAllocate(customerId, event.amount)
+        ? AllocationRules.autoAllocate(state.openInvoices, event.amount)
         : const <PaymentAllocation>[];
     emit(
       state.copyWith(
@@ -346,38 +377,19 @@ class ReceiptEditorBloc
     UpdateReceiptAllocations event,
     Emitter<ReceiptEditorState> emit,
   ) {
-    emit(state.copyWith(editingAllocations: event.allocations));
+    emit(
+      state.copyWith(
+        editingAllocations: event.allocations,
+        isAllocationManual: true,
+      ),
+    );
   }
 
-  List<PaymentAllocation> _autoAllocate(String customerId, double amount) {
-    if (amount <= 0) return const [];
+  /// Cached open invoices for [customerId]; empty when none or on failure.
+  List<OpenInvoice> _cachedOpenInvoices(String? customerId) {
+    if (customerId == null) return const [];
     try {
-      final openInvoices = _receiptRepository.getOpenInvoices(
-        customerId: customerId,
-      );
-      final sortedInvoices = List<OpenInvoice>.from(openInvoices)
-        ..sort((a, b) => a.date.compareTo(b.date));
-
-      final List<PaymentAllocation> allocations = [];
-      double remainingAmount = amount;
-
-      for (final invoice in sortedInvoices) {
-        if (remainingAmount <= 0) break;
-        final balance = invoice.balance;
-        if (balance <= 0) continue;
-
-        final allocated = remainingAmount >= balance ? balance : remainingAmount;
-        allocations.add(
-          PaymentAllocation(
-            invoiceId: invoice.invoiceId,
-            invoiceNumber: invoice.invoiceNumber,
-            amountApplied: double.parse(allocated.toStringAsFixed(2)),
-          ),
-        );
-        remainingAmount -= allocated;
-        remainingAmount = double.parse(remainingAmount.toStringAsFixed(2));
-      }
-      return allocations;
+      return _receiptRepository.getOpenInvoices(customerId: customerId);
     } catch (_) {
       return const [];
     }
@@ -393,6 +405,16 @@ class ReceiptEditorBloc
     }
     if (state.editingAmount <= 0) {
       emit(state.copyWith(errorMessage: 'Please enter a valid payment amount'));
+      return;
+    }
+
+    final totalAllocated = AllocationRules.total(state.editingAllocations);
+    if (AllocationRules.exceeds(totalAllocated, state.editingAmount)) {
+      emit(
+        state.copyWith(
+          errorMessage: 'Allocated amount exceeds the payment amount',
+        ),
+      );
       return;
     }
 

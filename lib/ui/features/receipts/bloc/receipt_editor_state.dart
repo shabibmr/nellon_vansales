@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import '../../../../domain/models/customer.dart';
+import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/utils/voucher_content_fingerprint.dart';
 
@@ -14,7 +15,14 @@ class ReceiptEditorState extends Equatable {
   final String editingPaymentMode;
   final String editingReferenceNumber;
   final List<PaymentAllocation> editingAllocations;
+
+  /// Open invoices of [editingCustomer] that allocations can be applied to.
+  final List<OpenInvoice> openInvoices;
   final bool isEditingNew;
+
+  /// True once the user hand-picked allocations; amount edits then keep them
+  /// instead of re-running the oldest-first auto allocation.
+  final bool isAllocationManual;
 
   final bool isEditorLoading;
   final bool isRefreshing;
@@ -36,7 +44,9 @@ class ReceiptEditorState extends Equatable {
     this.editingPaymentMode = 'Cash',
     this.editingReferenceNumber = '',
     this.editingAllocations = const [],
+    this.openInvoices = const [],
     this.isEditingNew = false,
+    this.isAllocationManual = false,
     this.isEditorLoading = false,
     this.isRefreshing = false,
     this.isSaving = false,
@@ -84,7 +94,9 @@ class ReceiptEditorState extends Equatable {
     String? editingPaymentMode,
     String? editingReferenceNumber,
     List<PaymentAllocation>? editingAllocations,
+    List<OpenInvoice>? openInvoices,
     bool? isEditingNew,
+    bool? isAllocationManual,
     bool? isEditorLoading,
     bool? isRefreshing,
     bool? isSaving,
@@ -113,7 +125,9 @@ class ReceiptEditorState extends Equatable {
       editingReferenceNumber:
           editingReferenceNumber ?? this.editingReferenceNumber,
       editingAllocations: editingAllocations ?? this.editingAllocations,
+      openInvoices: openInvoices ?? this.openInvoices,
       isEditingNew: isEditingNew ?? this.isEditingNew,
+      isAllocationManual: isAllocationManual ?? this.isAllocationManual,
       isEditorLoading: isEditorLoading ?? this.isEditorLoading,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       isSaving: isSaving ?? this.isSaving,
@@ -135,7 +149,9 @@ class ReceiptEditorState extends Equatable {
     editingPaymentMode,
     editingReferenceNumber,
     editingAllocations,
+    openInvoices,
     isEditingNew,
+    isAllocationManual,
     isEditorLoading,
     isRefreshing,
     isSaving,
