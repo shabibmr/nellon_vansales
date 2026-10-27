@@ -109,6 +109,32 @@ void main() {
       });
       expect((out['line_items'] as List).first['tax_id'], 'tax_from_item');
     });
+
+    test('maps a non-zero round_off to Zoho adjustment', () {
+      final out = ZohoPayloadMapper.zohoInvoicePayload({
+        'customer_id': 'c1',
+        'round_off': -0.05,
+        'line_items': const [],
+      });
+      expect(out.containsKey('round_off'), isFalse);
+      expect(out['adjustment'], -0.05);
+      expect(out['adjustment_description'], 'Round Off');
+    });
+
+    test('omits adjustment when round_off is zero or missing', () {
+      final zero = ZohoPayloadMapper.zohoInvoicePayload({
+        'customer_id': 'c1',
+        'round_off': 0.0,
+        'line_items': const [],
+      });
+      final missing = ZohoPayloadMapper.zohoInvoicePayload({
+        'customer_id': 'c1',
+        'line_items': const [],
+      });
+      expect(zero.containsKey('adjustment'), isFalse);
+      expect(zero.containsKey('adjustment_description'), isFalse);
+      expect(missing.containsKey('adjustment'), isFalse);
+    });
   });
 
   group('zohoSalesOrderPayload', () {
@@ -160,6 +186,18 @@ void main() {
       expect(line.containsKey('item'), isFalse);
       expect(line['discount'], 1.0);
       expect(line['tax_id'], 'tax_std');
+      expect(out.containsKey('adjustment'), isFalse);
+    });
+
+    test('maps a non-zero round_off to Zoho adjustment', () {
+      final out = ZohoPayloadMapper.zohoSalesOrderPayload({
+        'customer_id': 'c1',
+        'round_off': 0.25,
+        'line_items': const [],
+      });
+      expect(out.containsKey('round_off'), isFalse);
+      expect(out['adjustment'], 0.25);
+      expect(out['adjustment_description'], 'Round Off');
     });
   });
 

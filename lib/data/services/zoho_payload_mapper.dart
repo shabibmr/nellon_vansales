@@ -26,6 +26,23 @@ class ZohoPayloadMapper {
     }
   }
 
+  /// Maps the app's local `round_off` onto Zoho's `adjustment` fields.
+  ///
+  /// Zoho create/update has no `round_off` key. A non-zero document round-off
+  /// (nearest 0.50) is sent as `adjustment` so Books posts the same total the
+  /// app shows. Zero is omitted so a document with no round-off stays clean.
+  static void _putRoundOffAdjustment(
+    Map<String, dynamic> dst,
+    Map<String, dynamic> src,
+  ) {
+    final raw = src['round_off'];
+    if (raw is! num) return;
+    final value = raw.toDouble();
+    if (value == 0) return;
+    dst['adjustment'] = value;
+    dst['adjustment_description'] = 'Round Off';
+  }
+
   /// Reduces a stored `line_items` array to the whitelisted primitive keys,
   /// dropping nested `item`/`invoiceLineItem` objects and duplicate keys.
   ///
@@ -141,8 +158,9 @@ class ZohoPayloadMapper {
   // --- Sales Invoice (POST /invoices) --------------------------------------
 
   /// Whitelists an invoice create payload to `create-an-invoice-request`.
-  /// Drops `id`, `invoice_id`, `customer_name`, `isPendingSync`, `round_off`,
-  /// and the nested `line_items[].item` object.
+  /// Drops `id`, `invoice_id`, `customer_name`, `isPendingSync`, and the
+  /// nested `line_items[].item` object. A non-zero local `round_off` is
+  /// sent as Zoho `adjustment` (see [_putRoundOffAdjustment]).
   static Map<String, dynamic> zohoInvoicePayload(Map<String, dynamic> raw) {
     final out = <String, dynamic>{};
     for (final key in const [
@@ -176,6 +194,7 @@ class ZohoPayloadMapper {
       // header — this is what actually deducts van stock.
       'location_id',
     ]);
+    _putRoundOffAdjustment(out, raw);
     return out;
   }
 
@@ -183,8 +202,9 @@ class ZohoPayloadMapper {
 
   /// Whitelists a sales-order create/update payload to
   /// `create-a-sales-order-request`. Drops `id`, `salesorder_id`,
-  /// `customer_name`, `isPendingSync`, `round_off`, `status`,
+  /// `customer_name`, `isPendingSync`, `status`,
   /// `converted_invoice_number`, `zoho_order_id`, and `line_items[].item`.
+  /// A non-zero local `round_off` is sent as Zoho `adjustment`.
   static Map<String, dynamic> zohoSalesOrderPayload(Map<String, dynamic> raw) {
     final out = <String, dynamic>{};
     for (final key in const [
@@ -211,6 +231,7 @@ class ZohoPayloadMapper {
       'unit_conversion_id', // multi-UOM; omitted for base-unit lines
       'location_id', // Option B: van lives on line items, not header
     ]);
+    _putRoundOffAdjustment(out, raw);
     return out;
   }
 
