@@ -53,7 +53,7 @@ Phones already running a **debug-signed** APK cannot upgrade onto this keystore.
 
 1. Bump `pubspec.yaml`: `1.0.0+1` → `1.1.0+2`. The number after `+` must increase.
 2. `flutter build apk --release` (fails if `key.properties` is missing).
-3. Upload `app-nellon-release.apk` to the VPS **first** (`https://algoray.cloud/nellon/app-nellon-release.apk`).
+3. Upload `app-nellon-release.apk` to the VPS **first** (`https://algoray.tech/nellon/app-nellon-release.apk`).
 4. Publish metadata (hashes the local APK in the same write):
 
 ```bash

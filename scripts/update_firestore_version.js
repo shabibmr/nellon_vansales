@@ -12,7 +12,7 @@
  *   --apk=<path>           Local APK to hash (default: branded release outputs)
  *   --build=<number>       Set build number (default: auto-read from pubspec.yaml)
  *   --version=<string>     Set version name (default: auto-read from pubspec.yaml)
- *   --url=<string>         Set APK download URL (default: https://algoray.cloud/nellon/app-nellon-release.apk)
+ *   --url=<string>         Set APK download URL (default: https://algoray.tech/nellon/app-nellon-release.apk)
  *   --channel=<name>       production | beta | test (default: production)
  *   --force=<true|false>   Set force_update flag (default: false)
  *   --notes=<string>       Set release notes
@@ -79,8 +79,8 @@ const sha256 = crypto.createHash('sha256').update(fs.readFileSync(apkPath)).dige
 const channel = (getArg('channel', 'production') || 'production').toLowerCase();
 const isBeta = channel === 'beta' || channel === 'test';
 const defaultUrl = isBeta
-  ? 'https://algoray.cloud/nellon/test/app-nellon-release.apk'
-  : 'https://algoray.cloud/nellon/app-nellon-release.apk';
+  ? 'https://algoray.tech/nellon/test/app-nellon-release.apk'
+  : 'https://algoray.tech/nellon/app-nellon-release.apk';
 
 const buildNumber = parseInt(getArg('build', defaultBuildNumber), 10);
 const versionName = getArg('version', defaultVersionName);
