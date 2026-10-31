@@ -1,0 +1,10 @@
+{
+  "account_id": "3331482000000075012",
+  "account_code": "1.6.2000",
+  "account_name": "Prepaid Expenses",
+  "account_type": "other_current_asset",
+  "parent_account_id": "3331482000000119047",
+  "parent_account_name": "Accruals And Other Current Assets",
+  "is_active": true,
+  "last_modified_time": "2022-07-04T18:16:23+0400"
+}

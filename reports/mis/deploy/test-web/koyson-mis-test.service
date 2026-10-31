@@ -1,0 +1,25 @@
+# Test report server behind https://algoray.tech/nellon/test-mis/ (static web + api.php shim).
+# Runs the mis-date-range worktree against the dev DB (its own .env: MIS_DB_NAME=nellon_mis_dev).
+# Install: cp to /etc/systemd/system/, then systemctl daemon-reload && systemctl enable --now koyson-mis-test
+[Unit]
+Description=Koyson Zoho MIS reports web - TEST (dev DB, port 8766)
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/mis
+ExecStart=/home/nellon/nellon_vansales/.claude/worktrees/mis-date-range/reports/mis/.venv/bin/python -m backend serve --host 127.0.0.1 --port 8766
+Environment=PYTHONUNBUFFERED=1
+# Live financials call Zoho (approved for this test server); creds live in the main checkout.
+Environment=MIS_LIVE_FINANCIALS=1
+# TEST ONLY: skip the Zoho web-tab login check so the page opens directly (remove before going wider).
+Environment=MIS_AUTH_DISABLED=1
+# The disable flag only works with no secret; an empty value here wins over .env.mis.
+Environment=MIS_JWT_SECRET=
+EnvironmentFile=/home/nellon/nellon_vansales/.env_zoho
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
