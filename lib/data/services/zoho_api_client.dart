@@ -594,6 +594,10 @@ class ZohoApiClient {
         return response.data['contact']['contact_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Customer Sync Failed: $e');
     }
@@ -622,6 +626,10 @@ class ZohoApiClient {
         return response.data['contact']?['contact_id']?.toString() ?? contactId;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Customer GPS Update Failed: $e');
     }
@@ -646,6 +654,10 @@ class ZohoApiClient {
         return response.data['contact']?['contact_id']?.toString() ?? contactId;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Customer Contact Update Failed: $e');
     }
@@ -668,6 +680,10 @@ class ZohoApiClient {
         return response.data['invoice']['invoice_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Invoice Sync Failed: $e');
     }
@@ -754,6 +770,10 @@ class ZohoApiClient {
         return response.data['invoice']['invoice_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Sales Order Conversion Failed: $e');
     }
@@ -922,6 +942,10 @@ class ZohoApiClient {
         return response.data['salesorder']['salesorder_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Sales Order Update Failed: $e');
     }
@@ -942,6 +966,10 @@ class ZohoApiClient {
         return response.data['transfer_order']['transfer_order_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Stock Transfer Sync Failed: $e');
     }
@@ -971,6 +999,10 @@ class ZohoApiClient {
         return response.data['transfer_order']['transfer_order_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Stock Transfer Update Failed: $e');
     }
@@ -1056,6 +1088,10 @@ class ZohoApiClient {
         return response.data['payment']['payment_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Payment Sync Failed: $e');
     }
@@ -1104,6 +1140,10 @@ class ZohoApiClient {
         createdCreditnote: createdCreditnote,
       );
       return remoteId;
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Credit Note Sync Failed: $e');
     }
@@ -1161,6 +1201,10 @@ class ZohoApiClient {
         return response.data['expense']['expense_id'] as String;
       }
       throw Exception('HTTP ${response.statusCode}');
+    } on DioException {
+      // Keep the typed error so humanizeSyncError can read Zoho's `message`
+      // and classifySyncError can tell 4xx (permanent) from 5xx (retryable).
+      rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Expense Sync Failed: $e');
     }
