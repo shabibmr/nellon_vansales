@@ -11,6 +11,7 @@ import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
+import '../../../core/utils/currency.dart';
 
 /// Full-screen invoice receipts summary, grouped by payment mode.
 ///
@@ -24,7 +25,6 @@ class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = context.org.currencySymbol;
 
     return ReportBlocHost<ReceiptVoucher>(
       create: (_) => ReportBloc<ReceiptVoucher>(
@@ -82,7 +82,7 @@ class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
             ),
             ReportSummaryChip(
               label: 'Total Collected',
-              value: '$cs${totalCollected.toStringAsFixed(2)}',
+              value: context.formatCurrency(totalCollected),
               color: AppTheme.successEmerald,
             ),
           ],
@@ -114,9 +114,9 @@ class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
           exportRow: (row) => [
             row.mode,
             '${row.receiptCount}',
-            row.totalCollected.toStringAsFixed(2),
-            row.totalAllocated.toStringAsFixed(2),
-            row.totalUnallocated.toStringAsFixed(2),
+            formatMoneyNumber(row.totalCollected, decimals: context.org.currencyDecimalPlaces),
+            formatMoneyNumber(row.totalAllocated, decimals: context.org.currencyDecimalPlaces),
+            formatMoneyNumber(row.totalUnallocated, decimals: context.org.currencyDecimalPlaces),
           ],
           itemBuilder: (context, row) {
             return Card(
@@ -154,7 +154,7 @@ class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
                         Expanded(
                           flex: 4,
                           child: Text(
-                            '$cs${row.totalCollected.toStringAsFixed(2)}',
+                            context.formatCurrency(row.totalCollected),
                             textAlign: TextAlign.end,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
@@ -170,7 +170,7 @@ class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Allocated: $cs${row.totalAllocated.toStringAsFixed(2)}',
+                          'Allocated: ${context.formatCurrency(row.totalAllocated)}',
                           style: TextStyle(
                             fontSize: 11,
                             color: isDark
@@ -179,7 +179,7 @@ class InvoiceReceiptsSummaryReportPage extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Unallocated: $cs${row.totalUnallocated.toStringAsFixed(2)}',
+                          'Unallocated: ${context.formatCurrency(row.totalUnallocated)}',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,

@@ -3,6 +3,7 @@ import 'package:van_sales/domain/models/item.dart';
 import 'package:van_sales/domain/models/sales_invoice.dart';
 import 'package:van_sales/domain/models/sales_order.dart';
 import 'package:van_sales/domain/models/sales_return.dart';
+import 'package:van_sales/domain/utils/money_math.dart';
 
 void main() {
   const item1 = Item(
@@ -47,7 +48,7 @@ void main() {
       expect(line.total, equals(35.80));
     });
 
-    test('invoice rounding to nearest integer', () {
+    test('invoice total matches rawTotal at the money scale', () {
       const line1 = InvoiceLineItem(
         item: item1,
         quantity: 2, // subtotal = 21.00, tax (5%) = 1.05, total = 22.05
@@ -86,16 +87,64 @@ void main() {
       // rawTotal = 22.05 + 20.50 = 42.55
       expect(invoice.rawTotal, equals(42.55));
 
-      // total (rounded to nearest 0.50) = 42.50
-      expect(invoice.total, equals(42.50));
+      expect(invoice.total, equals(42.55));
+      expect(invoice.roundOff, equals(0.0));
+    });
 
-      // roundOff = total - rawTotal = 42.50 - 42.55 = -0.05
-      expect(invoice.roundOff, closeTo(-0.05, 0.0001));
+    test('total rounds to the org step and shows round off', () {
+      MoneyScale.useTotalStep(0.5);
+      addTearDown(() => MoneyScale.useTotalStep(0));
+
+      const line = InvoiceLineItem(
+        item: item1,
+        quantity: 3,
+        rate: 3.80,
+        taxPercentage: 0,
+      );
+      final invoice = SalesInvoice(
+        id: 'inv_step',
+        invoiceNumber: 'INV-STEP',
+        customerId: 'cust_1',
+        customerName: 'Customer One',
+        date: DateTime.now(),
+        dueDate: DateTime.now(),
+        items: const [line],
+        notes: '',
+      );
+
+      expect(invoice.rawTotal, equals(11.40));
+      expect(invoice.total, equals(11.50));
+      expect(invoice.roundOff, equals(0.10));
+    });
+
+    test('3.750 stays 3.750 at 3 decimal places', () {
+      MoneyScale.use(3);
+      addTearDown(() => MoneyScale.use(2));
+
+      const line = InvoiceLineItem(
+        item: item1,
+        quantity: 1,
+        rate: 3.750,
+        taxPercentage: 0,
+      );
+      final invoice = SalesInvoice(
+        id: 'inv_kwd',
+        invoiceNumber: 'INV-KWD',
+        customerId: 'cust_1',
+        customerName: 'Customer One',
+        date: DateTime.now(),
+        dueDate: DateTime.now(),
+        items: const [line],
+        notes: '',
+      );
+
+      expect(invoice.total, equals(3.750));
+      expect(invoice.roundOff, equals(0.0));
     });
   });
 
   group('OrderLineItem & SalesOrder calculations', () {
-    test('sales order rounding to nearest 0.50', () {
+    test('sales order total matches rawTotal at the money scale', () {
       const line1 = OrderLineItem(
         item: item1,
         quantity: 2, // subtotal = 21.00, tax (5%) = 1.05, total = 22.05
@@ -134,11 +183,8 @@ void main() {
       // rawTotal = 22.05 + 20.40 = 42.45
       expect(order.rawTotal, equals(42.45));
 
-      // total (rounded to nearest 0.50) = 42.50
-      expect(order.total, equals(42.50));
-
-      // roundOff = total - rawTotal = 42.50 - 42.45 = 0.05
-      expect(order.roundOff, closeTo(0.05, 0.0001));
+      expect(order.total, equals(42.45));
+      expect(order.roundOff, equals(0.0));
     });
   });
 

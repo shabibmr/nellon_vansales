@@ -211,7 +211,6 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
     AsyncSearchState state,
     bool isDark,
   ) {
-    final cs = context.org.currencySymbol;
 
     if (state.status == AsyncSearchStatus.loading) {
       return Center(
@@ -319,7 +318,7 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
                               style: TextStyle(fontSize: 10),
                             ),
                             Text(
-                              '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
+                              context.formatCurrency(customer.outstandingBalance),
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -387,7 +386,7 @@ class _AsyncSearchViewState extends State<_AsyncSearchView> {
                     ),
                   ),
                   Text(
-                    '$cs${item.rate.toStringAsFixed(2)}',
+                    context.formatCurrency(item.rate),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,

@@ -11,6 +11,7 @@ import '../aggregators/order_status_aggregator.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
+import '../../../core/utils/currency.dart';
 
 export '../aggregators/order_status_aggregator.dart'
     show OrderStatusFilter, OrderStatusSortField;
@@ -32,7 +33,6 @@ class OrderStatusReportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = context.org.currencySymbol;
     final DateFormat dateFmt = DateFormat('dd MMM yyyy');
 
     return ReportBlocHost<SalesOrder>(
@@ -92,7 +92,7 @@ class OrderStatusReportPage extends StatelessWidget {
             order.customerName,
             dateFmt.format(order.date),
             dateFmt.format(order.shipmentDate),
-            order.total.toStringAsFixed(2),
+            formatMoneyNumber(order.total, decimals: context.org.currencyDecimalPlaces),
             order.isConverted ? 'Invoiced' : 'Open',
           ],
           itemBuilder: (context, order) {
@@ -101,7 +101,7 @@ class OrderStatusReportPage extends StatelessWidget {
               customerName: order.customerName,
               date: dateFmt.format(order.date),
               subtitle: 'Ship: ${dateFmt.format(order.shipmentDate)}',
-              total: '$cs${order.total.toStringAsFixed(2)}',
+              total: context.formatCurrency(order.total),
               itemCount: order.items.length,
               isPendingSync: order.isPendingSync,
               extraBadgeLabel: order.isConverted ? 'Invoiced' : null,

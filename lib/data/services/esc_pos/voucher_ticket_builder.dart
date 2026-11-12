@@ -11,6 +11,7 @@ import '../../../domain/models/stock_transfer.dart';
 import '../../../domain/models/thermal_paper_size.dart';
 import '../../../domain/models/thermal_ticket_preview.dart';
 import '../../../domain/repositories/voucher_pdf_repository.dart';
+import '../../../domain/utils/quantity_format.dart';
 import 'esc_pos_ticket_builder.dart';
 
 /// Builds ESC/POS command bytes for all supported voucher types.
@@ -209,7 +210,7 @@ class VoucherTicketBuilder {
     bytes.addAll(
       b.leftRight(
         'TOTAL SAMPLE',
-        'AED 100.00',
+        '100.00',
         bold: true,
         width: PosTextSize.size2,
         height: PosTextSize.size2,
@@ -220,6 +221,15 @@ class VoucherTicketBuilder {
     bytes.addAll(b.center('If readable, setup OK'));
     bytes.addAll(b.cut());
     return bytes;
+  }
+
+  /// ASCII thermal firmware cannot draw a non-ASCII symbol, so print the code.
+  static String _moneySymbol(Organization org) {
+    final symbol = org.currencySymbol;
+    if (symbol.codeUnits.any((unit) => unit > 127)) {
+      return org.currencyCode;
+    }
+    return symbol;
   }
 
   static List<int> _orgHeader(
@@ -267,7 +277,8 @@ class VoucherTicketBuilder {
     String? supervisorPhone,
     String? companyPhone,
   ) {
-    final symbol = org.currencySymbol;
+    final symbol = _moneySymbol(org);
+    final decimals = org.currencyDecimalPlaces;
     final bytes = <int>[];
     bytes.addAll(
       _orgHeader(
@@ -288,7 +299,7 @@ class VoucherTicketBuilder {
           serial: i + 1,
           name: line.item.name,
           qty: line.quantity,
-          amountText: b.amountOnly(line.total),
+          amountText: b.amountOnly(line.total, decimals: decimals),
           uom: line.displayUom,
         ),
       );
@@ -303,6 +314,7 @@ class VoucherTicketBuilder {
             tail.totalsBlock(
               symbol: symbol,
               currencyCode: org.currencyCode,
+              decimals: decimals,
               subTotal: invoice.subTotal,
               taxTotal: invoice.taxTotal,
               discountTotal: invoice.discountTotal,
@@ -344,7 +356,8 @@ class VoucherTicketBuilder {
     String? supervisorPhone,
     String? companyPhone,
   ) {
-    final symbol = org.currencySymbol;
+    final symbol = _moneySymbol(org);
+    final decimals = org.currencyDecimalPlaces;
     final bytes = <int>[];
     bytes.addAll(
       _orgHeader(
@@ -371,7 +384,7 @@ class VoucherTicketBuilder {
           serial: i + 1,
           name: line.item.name,
           qty: line.quantity,
-          amountText: b.amountOnly(line.total),
+          amountText: b.amountOnly(line.total, decimals: decimals),
           uom: line.displayUom,
         ),
       );
@@ -386,6 +399,7 @@ class VoucherTicketBuilder {
             tail.totalsBlock(
               symbol: symbol,
               currencyCode: org.currencyCode,
+              decimals: decimals,
               subTotal: order.subTotal,
               taxTotal: order.taxTotal,
               discountTotal: order.discountTotal,
@@ -427,7 +441,8 @@ class VoucherTicketBuilder {
     String? supervisorPhone,
     String? companyPhone,
   ) {
-    final symbol = org.currencySymbol;
+    final symbol = _moneySymbol(org);
+    final decimals = org.currencyDecimalPlaces;
     final bytes = <int>[];
     bytes.addAll(
       _orgHeader(
@@ -450,7 +465,7 @@ class VoucherTicketBuilder {
           serial: i + 1,
           name: line.invoiceLineItem.item.name,
           qty: line.returnedQuantity,
-          amountText: b.amountOnly(line.total),
+          amountText: b.amountOnly(line.total, decimals: decimals),
           uom: line.displayUom,
         ),
       );
@@ -465,6 +480,7 @@ class VoucherTicketBuilder {
             tail.totalsBlock(
               symbol: symbol,
               currencyCode: org.currencyCode,
+              decimals: decimals,
               total: salesReturn.total,
               taxLabel: _vatLabel(
                 salesReturn.items.map(
@@ -504,7 +520,8 @@ class VoucherTicketBuilder {
     String? supervisorPhone,
     String? companyPhone,
   ) {
-    final symbol = org.currencySymbol;
+    final symbol = _moneySymbol(org);
+    final decimals = org.currencyDecimalPlaces;
     final bytes = <int>[];
     bytes.addAll(
       _orgHeader(
@@ -523,13 +540,18 @@ class VoucherTicketBuilder {
       bytes.addAll(b.leftRight('Ref:', receipt.referenceNumber));
     }
     bytes.addAll(
-      b.leftRight('Amount:', b.money(receipt.amount, symbol), bold: true),
+      b.leftRight(
+        'Amount:',
+        b.money(receipt.amount, symbol, decimals: decimals),
+        bold: true,
+      ),
     );
     bytes.addAll(
       b.amountInWordsBlock(
         total: receipt.amount,
         symbol: symbol,
         currencyCode: org.currencyCode,
+        decimals: decimals,
       ),
     );
     if (receipt.allocations.isNotEmpty) {
@@ -539,7 +561,7 @@ class VoucherTicketBuilder {
         bytes.addAll(
           b.leftRight(
             b.truncate(a.invoiceNumber, b.columns - 12),
-            b.money(a.amountApplied, symbol),
+            b.money(a.amountApplied, symbol, decimals: decimals),
           ),
         );
       }
@@ -567,7 +589,8 @@ class VoucherTicketBuilder {
     String? supervisorPhone,
     String? companyPhone,
   ) {
-    final symbol = org.currencySymbol;
+    final symbol = _moneySymbol(org);
+    final decimals = org.currencyDecimalPlaces;
     final bytes = <int>[];
     bytes.addAll(
       _orgHeader(
@@ -588,7 +611,7 @@ class VoucherTicketBuilder {
       bytes.addAll(
         b.leftRight(
           b.truncate(label, b.columns - 12),
-          b.money(line.amount, symbol),
+          b.money(line.amount, symbol, decimals: decimals),
         ),
       );
       if (line.description.isNotEmpty && line.category.isNotEmpty) {
@@ -607,6 +630,7 @@ class VoucherTicketBuilder {
             tail.totalsBlock(
               symbol: symbol,
               currencyCode: org.currencyCode,
+              decimals: decimals,
               total: expense.amount,
             ),
           );
@@ -692,9 +716,7 @@ class VoucherTicketBuilder {
             tail.leftRight('Total Items:', '${transfer.lines.length}'),
           );
           final totalQty = transfer.totalQuantity;
-          final totalQtyStr = totalQty % 1 == 0
-              ? totalQty.toInt().toString()
-              : totalQty.toStringAsFixed(2);
+          final totalQtyStr = formatQuantity(totalQty);
           final totalCols = (tail.columns / 2).floor().clamp(16, tail.columns);
           after.addAll(
             tail.leftRight(

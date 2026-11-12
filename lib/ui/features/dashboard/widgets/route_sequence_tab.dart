@@ -26,7 +26,6 @@ class RouteSequenceTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = context.org.currencySymbol;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600),
@@ -158,7 +157,7 @@ class RouteSequenceTab extends StatelessWidget {
                                         ),
                                       ),
                                       Text(
-                                        '$cs${customer.outstandingBalance.toStringAsFixed(2)}',
+                                        context.formatCurrency(customer.outstandingBalance),
                                         style: TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w900,

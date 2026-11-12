@@ -18,7 +18,6 @@ class ExpensePdfTemplate {
     pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
-    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
@@ -60,7 +59,7 @@ class ExpensePdfTemplate {
               const PdfInfoEntry('Voucher Type', 'Route Fleet Expense'),
               PdfInfoEntry(
                 'Total Disbursed',
-                '$currencySymbol${expense.amount.toStringAsFixed(2)}',
+                SharedPdfTemplate.money(org, expense.amount),
                 alignment: pw.CrossAxisAlignment.end,
                 valueColor: SharedPdfTemplate.primaryRed,
               ),
@@ -127,7 +126,7 @@ class ExpensePdfTemplate {
                         isSubText: true,
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '$currencySymbol${expense.lines[i].amount.toStringAsFixed(2)}',
+                        SharedPdfTemplate.money(org, expense.lines[i].amount),
                         isBold: true,
                       ),
                     ],
@@ -173,7 +172,7 @@ class ExpensePdfTemplate {
                   rows: const [],
                   grandTotalLabel: 'Total Claim',
                   grandTotalValue:
-                      '$currencySymbol${expense.amount.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, expense.amount),
                   grandTotalLabelFontSize: 10,
                   grandTotalValueFontSize: 12,
                 ),

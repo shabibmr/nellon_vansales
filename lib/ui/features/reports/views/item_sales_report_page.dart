@@ -12,6 +12,7 @@ import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
+import '../../../core/utils/currency.dart';
 
 /// Full-screen itemwise sales report page.
 ///
@@ -25,7 +26,6 @@ class ItemSalesReportPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = context.org.currencySymbol;
 
     return ReportBlocHost<SalesInvoice>(
       create: (_) => ReportBloc<SalesInvoice>(
@@ -83,7 +83,7 @@ class ItemSalesReportPage extends StatelessWidget {
             ),
             ReportSummaryChip(
               label: 'Total',
-              value: '$cs${totalAmount.toStringAsFixed(2)}',
+              value: context.formatCurrency(totalAmount),
               color: AppTheme.successEmerald,
             ),
           ],
@@ -111,7 +111,7 @@ class ItemSalesReportPage extends StatelessWidget {
             row.itemName,
             row.sku,
             formatQuantity(row.totalQty),
-            row.totalAmount.toStringAsFixed(2),
+            formatMoneyNumber(row.totalAmount, decimals: context.org.currencyDecimalPlaces),
             '${row.customerCount}',
           ],
           itemBuilder: (context, row) {
@@ -169,7 +169,7 @@ class ItemSalesReportPage extends StatelessWidget {
                         Expanded(
                           flex: 3,
                           child: Text(
-                            '$cs${row.totalAmount.toStringAsFixed(2)}',
+                            context.formatCurrency(row.totalAmount),
                             textAlign: TextAlign.end,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,

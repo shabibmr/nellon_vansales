@@ -57,7 +57,7 @@ class _ReceiptEditorFormState extends State<ReceiptEditorForm> {
     super.initState();
     _amountController = TextEditingController(
       text: widget.state.editingAmount > 0
-          ? widget.state.editingAmount.toStringAsFixed(2)
+          ? formatMoneyNumber(widget.state.editingAmount, decimals: context.org.currencyDecimalPlaces)
           : '',
     );
     _referenceController = TextEditingController(

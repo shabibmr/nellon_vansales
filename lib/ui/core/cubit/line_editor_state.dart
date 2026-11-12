@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../domain/utils/money_math.dart';
+
 /// Reactive line-item calculation state for [LineEditorCubit].
 ///
 /// [quantity] and [rate] are expressed in the currently selected unit;
@@ -10,14 +12,14 @@ class LineEditorState extends Equatable {
   final double discount;
   final double taxPercentage;
 
-  /// Pre-computed: rate × quantity
-  double get subtotal => rate * quantity;
+  /// rate × quantity, rounded to the active money scale.
+  double get subtotal => roundMoney(rate * quantity);
 
-  /// Pre-computed: (subtotal − discount) × taxPercentage / 100
-  double get taxAmount => (subtotal - discount) * (taxPercentage / 100);
+  /// Tax on the full subtotal (discount is applied after tax).
+  double get taxAmount => roundMoney(subtotal * (taxPercentage / 100));
 
-  /// Pre-computed: subtotal + taxAmount − discount
-  double get total => subtotal + taxAmount - discount;
+  /// subtotal + tax − discount, rounded to the active money scale.
+  double get total => roundMoney(subtotal + taxAmount - discount);
 
   const LineEditorState({
     this.quantity = 1,

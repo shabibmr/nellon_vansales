@@ -19,8 +19,22 @@ void main() {
 
     test('simple whole', () {
       expect(
-        amountInWords(15, currencyName: 'AED'),
+        amountInWords(15, currencyName: 'AED', decimals: 2),
         'AED Fifteen only',
+      );
+    });
+
+    test('three decimal fils keeps the third digit', () {
+      final words = amountInWords(1.225, currencyName: 'KWD', decimals: 3);
+      expect(words, contains('225'));
+      expect(words, contains('fils'));
+      expect(words, isNot(contains('23 fils')));
+    });
+
+    test('usd fraction is cents', () {
+      expect(
+        amountInWords(1.5, currencyName: 'USD', decimals: 2),
+        contains('cents'),
       );
     });
 

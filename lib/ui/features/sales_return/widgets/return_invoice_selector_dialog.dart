@@ -160,7 +160,6 @@ class _ReturnInvoiceSelectorDialogState
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = context.org.currencySymbol;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -202,7 +201,7 @@ class _ReturnInvoiceSelectorDialogState
               ),
               const SizedBox(height: 4),
               Text(
-                'SKU: ${widget.item.sku} | Rate: $cs${widget.item.rate.toStringAsFixed(2)}',
+                'SKU: ${widget.item.sku} | Rate: ${context.formatCurrency(widget.item.rate)}',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark
@@ -300,7 +299,7 @@ class _ReturnInvoiceSelectorDialogState
                                   const SizedBox(height: 2),
                                   Text(
                                     'Sold: ${formatQuantity(originalLine.quantity)} ${originalLine.displayUom}'
-                                    ' @ $cs${originalLine.rate.toStringAsFixed(2)}',
+                                    ' @ ${context.formatCurrency(originalLine.rate)}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,

@@ -12,6 +12,7 @@ import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
+import '../../../core/utils/currency.dart';
 
 /// Full-screen sales-by-customer (by item) breakdown.
 ///
@@ -25,7 +26,6 @@ class SalesSummaryByCustomerItemReportPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = context.org.currencySymbol;
 
     return ReportBlocHost<SalesInvoice>(
       create: (_) => ReportBloc<SalesInvoice>(
@@ -85,7 +85,7 @@ class SalesSummaryByCustomerItemReportPage extends StatelessWidget {
             ),
             ReportSummaryChip(
               label: 'Total',
-              value: '$cs${totalAmount.toStringAsFixed(2)}',
+              value: context.formatCurrency(totalAmount),
               color: AppTheme.successEmerald,
             ),
           ],
@@ -112,7 +112,7 @@ class SalesSummaryByCustomerItemReportPage extends StatelessWidget {
             row.customerName,
             row.itemName,
             formatQuantity(row.totalQty),
-            row.totalAmount.toStringAsFixed(2),
+            formatMoneyNumber(row.totalAmount, decimals: context.org.currencyDecimalPlaces),
           ],
           itemBuilder: (context, row) {
             return Card(
@@ -165,7 +165,7 @@ class SalesSummaryByCustomerItemReportPage extends StatelessWidget {
                     Expanded(
                       flex: 3,
                       child: Text(
-                        '$cs${row.totalAmount.toStringAsFixed(2)}',
+                        context.formatCurrency(row.totalAmount),
                         textAlign: TextAlign.end,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,

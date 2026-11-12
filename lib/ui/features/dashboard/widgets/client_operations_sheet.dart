@@ -40,7 +40,6 @@ class ClientOperationsSheet extends StatelessWidget {
       maxChildSize: 0.85,
       expand: false,
       builder: (context, scrollController) {
-        final cs = context.org.currencySymbol;
         return SingleChildScrollView(
           controller: scrollController,
           padding: const EdgeInsets.all(24.0),
@@ -80,7 +79,7 @@ class ClientOperationsSheet extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      'Outstanding: $cs${customer.outstandingBalance.toStringAsFixed(2)}',
+                      'Outstanding: ${context.formatCurrency(customer.outstandingBalance)}',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
@@ -94,7 +93,7 @@ class ClientOperationsSheet extends StatelessWidget {
                   const SizedBox(width: 12),
                   Flexible(
                     child: Text(
-                      'Limit: $cs${customer.creditLimit.toStringAsFixed(2)}',
+                      'Limit: ${context.formatCurrency(customer.creditLimit)}',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,

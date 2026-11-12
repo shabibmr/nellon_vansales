@@ -46,7 +46,7 @@ lib/
 
 **Clean Architecture rule**: `domain/` knows nothing about `data/` or `ui/`. `data/` implements `domain/` interfaces. `ui/` depends on `domain/` interfaces only.
 
-`domain/utils/` holds pure business-rule helpers reused across repositories and the UI: `money_math.dart` (rounds every money-bearing getter to 2dp to stop float drift from compounding across totals), `stock_rules.dart` (`InsufficientStockException`), `phone_normalizer.dart` (E.164 normalization for comparisons), `amount_in_words.dart` (currency-in-words for vouchers), `voucher_content_fingerprint.dart` (stable per-voucher-type content hashes used for "up to date" refresh messaging — deliberately narrower than full model equality, which is noisy from stock/tax-name/unit-conversion fields rebuilt off Zoho JSON).
+`domain/utils/` holds pure business-rule helpers reused across repositories and the UI: `money_math.dart` (`MoneyScale` + `roundMoney` round every money-bearing getter to the org's `price_precision` to stop float drift from compounding across totals), `currency_precision.dart` (ISO-4217 minor units when Zoho omits `price_precision`), `quantity_format.dart`, `stock_rules.dart` (`InsufficientStockException`), `phone_normalizer.dart` (E.164 normalization for comparisons), `amount_in_words.dart` (currency-in-words for vouchers), `voucher_content_fingerprint.dart` (stable per-voucher-type content hashes used for "up to date" refresh messaging — deliberately narrower than full model equality, which is noisy from stock/tax-name/unit-conversion fields rebuilt off Zoho JSON).
 
 ### Dependency Injection
 

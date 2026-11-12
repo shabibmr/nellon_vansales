@@ -163,7 +163,6 @@ class _TransactionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = context.org.currencySymbol;
     final textStyle = TextStyle(
       fontSize: 12,
       color: isDark ? AppTheme.darkText : AppTheme.lightText,
@@ -246,7 +245,7 @@ class _TransactionRow extends StatelessWidget {
                     width: 72,
                     child: Text(
                       tx.debit > 0
-                          ? '$cs${tx.debit.toStringAsFixed(2)}'
+                          ? context.formatCurrency(tx.debit)
                           : '-',
                       style: textStyle.copyWith(
                         color: tx.debit > 0
@@ -261,7 +260,7 @@ class _TransactionRow extends StatelessWidget {
                     width: 72,
                     child: Text(
                       tx.credit > 0
-                          ? '$cs${tx.credit.toStringAsFixed(2)}'
+                          ? context.formatCurrency(tx.credit)
                           : '-',
                       style: textStyle.copyWith(
                         color: tx.credit > 0
@@ -275,7 +274,7 @@ class _TransactionRow extends StatelessWidget {
                   SizedBox(
                     width: 80,
                     child: Text(
-                      '$cs${tx.balance.toStringAsFixed(2)}',
+                      context.formatCurrency(tx.balance),
                       style: textStyle.copyWith(fontWeight: FontWeight.bold),
                       textAlign: TextAlign.right,
                     ),

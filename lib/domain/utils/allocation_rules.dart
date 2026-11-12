@@ -1,5 +1,6 @@
 import '../models/open_invoice.dart';
 import '../models/receipt_voucher.dart';
+import 'money_math.dart';
 
 /// Rules for spreading a customer payment across open invoices.
 ///
@@ -9,13 +10,17 @@ import '../models/receipt_voucher.dart';
 class AllocationRules {
   AllocationRules._();
 
-  /// Amounts within half a cent of a limit count as within it.
-  static const double tolerance = 0.005;
-
-  static double round2(double v) => double.parse(v.toStringAsFixed(2));
+  /// Half a minor unit at the active [MoneyScale]. At 2 decimals this is 0.005.
+  static double get tolerance {
+    var minor = 1.0;
+    for (var i = 0; i < MoneyScale.decimals; i++) {
+      minor /= 10.0;
+    }
+    return minor / 2;
+  }
 
   static double total(Iterable<PaymentAllocation> allocations) =>
-      allocations.fold(0.0, (s, a) => s + a.amountApplied);
+      roundMoney(allocations.fold(0.0, (s, a) => s + a.amountApplied));
 
   /// True when [amount] exceeds [limit] by more than the rounding tolerance.
   static bool exceeds(double amount, double limit) => amount > limit + tolerance;
@@ -46,10 +51,10 @@ class AllocationRules {
         PaymentAllocation(
           invoiceId: invoice.invoiceId,
           invoiceNumber: invoice.invoiceNumber,
-          amountApplied: round2(allocated),
+          amountApplied: roundMoney(allocated),
         ),
       );
-      remaining = round2(remaining - allocated);
+      remaining = roundMoney(remaining - allocated);
     }
     return allocations;
   }

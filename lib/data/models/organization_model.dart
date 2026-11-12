@@ -1,4 +1,5 @@
 import '../../domain/models/organization.dart';
+import '../../domain/utils/currency_precision.dart';
 
 /// Data transfer object representing the [Organization] config.
 ///
@@ -15,17 +16,27 @@ class OrganizationModel extends Organization {
     super.address,
     super.phone,
     super.trn,
+    super.currencyDecimalPlaces,
+    super.totalRoundingStep,
   });
 
   /// Factory constructor to parse local/remote JSON maps into an [OrganizationModel].
   ///
   /// Maps keys (`organization_id`, `currency_code`, address/phone/tax fields).
   factory OrganizationModel.fromJson(Map<String, dynamic> json) {
+    final rawDecimals = json['currency_decimal_places'] ??
+        json['currencyDecimalPlaces'] ??
+        json['price_precision'];
+    final int? parsedDecimals = rawDecimals is num
+        ? rawDecimals.toInt()
+        : (rawDecimals is String ? int.tryParse(rawDecimals) : null);
+    final currencyCode =
+        ((json['currency_code'] ?? json['currencyCode']) as String?) ?? '';
+
     return OrganizationModel(
       id: ((json['organization_id'] ?? json['id']) as String?) ?? '',
       name: (json['name'] as String?) ?? '',
-      currencyCode:
-          ((json['currency_code'] ?? json['currencyCode']) as String?) ?? '',
+      currencyCode: currencyCode,
       currencySymbol:
           ((json['currency_symbol'] ?? json['currencySymbol']) as String?) ??
               '',
@@ -41,6 +52,8 @@ class OrganizationModel extends Organization {
         json['company_phone'],
       ]),
       trn: _extractTrn(json),
+      currencyDecimalPlaces: parsedDecimals ?? minorUnitsFor(currencyCode),
+      totalRoundingStep: _asDouble(json['total_rounding_step']),
     );
   }
 
@@ -58,6 +71,8 @@ class OrganizationModel extends Organization {
       'phone': phone,
       'trn': trn,
       'tax_reg_no': trn,
+      'currency_decimal_places': currencyDecimalPlaces,
+      'total_rounding_step': totalRoundingStep,
     };
   }
 
@@ -73,6 +88,8 @@ class OrganizationModel extends Organization {
       address: o.address,
       phone: o.phone,
       trn: o.trn,
+      currencyDecimalPlaces: o.currencyDecimalPlaces,
+      totalRoundingStep: o.totalRoundingStep,
     );
   }
 
@@ -172,6 +189,12 @@ class OrganizationModel extends Organization {
       if (s.isNotEmpty) return s;
     }
     return '';
+  }
+
+  static double _asDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0;
+    return 0;
   }
 
   static String _asString(dynamic v) {

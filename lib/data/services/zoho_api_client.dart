@@ -1544,6 +1544,31 @@ class ZohoApiClient {
     }
   }
 
+  // 13b. Recent org-wide invoice totals (one GET /invoices page) — used to
+  // detect the org's transaction rounding step. Voided invoices are skipped.
+  Future<List<double>> fetchRecentInvoiceTotals({int count = 50}) async {
+    final response = await _dio.get<dynamic>('/invoices', queryParameters: {
+      'per_page': count,
+      'page': 1,
+      'sort_column': 'date',
+      'sort_order': 'D',
+    });
+    if (response.statusCode != 200) {
+      throw Exception('GET /invoices failed: ${response.statusCode}');
+    }
+    final rows = jsonMap(response.data)['invoices'];
+    if (rows is! List) return const [];
+    final totals = <double>[];
+    for (final row in rows) {
+      if (row is! Map) continue;
+      if (row['status']?.toString() == 'void') continue;
+      final t = row['total'];
+      final v = t is num ? t.toDouble() : double.tryParse('${t ?? ''}');
+      if (v != null) totals.add(v);
+    }
+    return totals;
+  }
+
   // 14. Customer Statement — composed locally from primary records.
   //
   // Zoho Books does not expose a JSON ledger endpoint. We build it Option-A style:

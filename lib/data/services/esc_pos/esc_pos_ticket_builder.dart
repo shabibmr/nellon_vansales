@@ -5,6 +5,8 @@ import '../../../domain/models/print_settings.dart';
 import '../../../domain/models/thermal_paper_size.dart';
 import '../../../domain/models/thermal_ticket_preview.dart';
 import '../../../domain/utils/amount_in_words.dart';
+import '../../../domain/utils/money_math.dart';
+import '../../../domain/utils/quantity_format.dart';
 import '../../../domain/utils/supervisor_label.dart';
 
 /// Shared ESC/POS layout helpers for 2" / 4" thermal tickets.
@@ -113,15 +115,16 @@ class EscPosTicketBuilder {
   }
 
   /// Currency symbol + amount with a space (`AED 12.50`).
-  String money(num amount, String symbol) {
+  String money(num amount, String symbol, {int? decimals}) {
     final cleanSymbol = sanitize(symbol).trim();
-    final value = amount.toStringAsFixed(2);
+    final value = amount.toStringAsFixed(decimals ?? MoneyScale.decimals);
     if (cleanSymbol.isEmpty) return value;
     return '$cleanSymbol $value';
   }
 
   /// Amount only for item table cells (no currency symbol).
-  String amountOnly(num amount) => amount.toStringAsFixed(2);
+  String amountOnly(num amount, {int? decimals}) =>
+      amount.toStringAsFixed(decimals ?? MoneyScale.decimals);
 
   String truncate(String text, int max) {
     final clean = sanitize(text);
@@ -526,15 +529,10 @@ class EscPosTicketBuilder {
         conversionRate != 1.0 &&
         enteredUom.trim().isNotEmpty) {
       final entered = quantity / conversionRate;
-      final enteredNum = entered % 1 == 0
-          ? entered.toInt().toString()
-          : entered.toStringAsFixed(2);
-      lines.add('  ($enteredNum ${enteredUom.trim()})');
+      lines.add('  (${formatQuantity(entered)} ${enteredUom.trim()})');
     }
 
-    final qtyNum = quantity % 1 == 0
-        ? quantity.toInt().toString()
-        : quantity.toStringAsFixed(2);
+    final qtyNum = formatQuantity(quantity);
     final unit = baseUom.trim();
     final qtyText = unit.isEmpty ? qtyNum : '$qtyNum $unit';
 
@@ -562,20 +560,29 @@ class EscPosTicketBuilder {
     required double total,
     double? roundOff,
     String taxLabel = 'VAT @ 5%',
+    int? decimals,
   }) {
     final bytes = <int>[];
     bytes.addAll(divider());
     if (subTotal != null) {
-      bytes.addAll(leftRight('Subtotal', money(subTotal, symbol)));
+      bytes.addAll(
+        leftRight('Subtotal', money(subTotal, symbol, decimals: decimals)),
+      );
     }
     if (taxTotal != null && taxTotal != 0) {
-      bytes.addAll(leftRight(taxLabel, money(taxTotal, symbol)));
+      bytes.addAll(
+        leftRight(taxLabel, money(taxTotal, symbol, decimals: decimals)),
+      );
     }
     if (discountTotal != null && discountTotal != 0) {
-      bytes.addAll(leftRight('Discount', money(discountTotal, symbol)));
+      bytes.addAll(
+        leftRight('Discount', money(discountTotal, symbol, decimals: decimals)),
+      );
     }
     if (roundOff != null && roundOff != 0) {
-      bytes.addAll(leftRight('Round off', money(roundOff, symbol)));
+      bytes.addAll(
+        leftRight('Round off', money(roundOff, symbol, decimals: decimals)),
+      );
     }
 
     // Bold + double-height TOTAL (no reverse). Double-width halves
@@ -584,7 +591,7 @@ class EscPosTicketBuilder {
     bytes.addAll(
       leftRight(
         'TOTAL',
-        money(total, symbol),
+        money(total, symbol, decimals: decimals),
         bold: true,
         width: PosTextSize.size2,
         height: PosTextSize.size2,
@@ -597,6 +604,7 @@ class EscPosTicketBuilder {
         total: total,
         symbol: symbol,
         currencyCode: currencyCode,
+        decimals: decimals,
       ),
     );
     return bytes;
@@ -607,6 +615,7 @@ class EscPosTicketBuilder {
     required num total,
     required String symbol,
     String? currencyCode,
+    int? decimals,
   }) {
     final bytes = <int>[];
     bytes.addAll(divider());
@@ -615,7 +624,11 @@ class EscPosTicketBuilder {
           ? currencyCode
           : symbol,
     );
-    final words = amountInWords(total, currencyName: unit);
+    final words = amountInWords(
+      total,
+      currencyName: unit,
+      decimals: decimals,
+    );
     bytes.addAll(left('In words:', bold: true));
     for (final line in wrapText(words, columns)) {
       bytes.addAll(left(line));

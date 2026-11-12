@@ -132,7 +132,6 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
     List<SalesOrder> filtered,
     String action,
   ) async {
-    final cs = context.org.currencySymbol;
     final dateFmt = DateFormat('dd MMM yyyy');
     final headers = const ['Order No', 'Customer', 'Ship Date', 'Status', 'Amount'];
     final data = filtered
@@ -141,7 +140,7 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
               o.customerName,
               dateFmt.format(o.shipmentDate),
               o.status.name.toUpperCase(),
-              o.total.toStringAsFixed(2),
+              formatMoneyNumber(o.total, decimals: context.org.currencyDecimalPlaces),
             ])
         .toList();
 
@@ -155,7 +154,7 @@ class _ShipmentOrdersReportBody extends StatelessWidget {
     final totalVal = filtered.fold<double>(0.0, (s, o) => s + o.total);
     final stats = {
       'Total Orders': '${filtered.length}',
-      'Total Value': '$cs${totalVal.toStringAsFixed(2)}',
+      'Total Value': context.formatCurrency(totalVal),
     };
 
     try {

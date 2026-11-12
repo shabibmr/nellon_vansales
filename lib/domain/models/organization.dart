@@ -32,6 +32,14 @@ class Organization extends Equatable {
   /// Company tax registration number (e.g. UAE TRN).
   final String trn;
 
+  /// Number of decimal places used for monetary display and calculations.
+  /// Defaults to 2 when omitted.
+  final int currencyDecimalPlaces;
+
+  /// Step Zoho rounds document totals to (e.g. 0.5), detected from recent
+  /// invoices. 0 means totals are not cash-rounded.
+  final double totalRoundingStep;
+
   /// Creates a new [Organization] configuration.
   const Organization({
     required this.id,
@@ -43,7 +51,15 @@ class Organization extends Equatable {
     this.address = '',
     this.phone = '',
     this.trn = '',
-  });
+    int? currencyDecimalPlaces,
+    this.totalRoundingStep = 0,
+  }) : currencyDecimalPlaces = currencyDecimalPlaces ?? 2;
+
+  /// Formats [value] using this organization's symbol and decimal places.
+  String formatCurrency(double value, {int? decimals}) {
+    final d = decimals ?? currencyDecimalPlaces;
+    return '$currencySymbol${value.toStringAsFixed(d)}';
+  }
 
   /// Creates a copy of this [Organization] with replaced values for specific fields.
   Organization copyWith({
@@ -56,6 +72,8 @@ class Organization extends Equatable {
     String? address,
     String? phone,
     String? trn,
+    int? currencyDecimalPlaces,
+    double? totalRoundingStep,
   }) {
     return Organization(
       id: id ?? this.id,
@@ -67,6 +85,9 @@ class Organization extends Equatable {
       address: address ?? this.address,
       phone: phone ?? this.phone,
       trn: trn ?? this.trn,
+      currencyDecimalPlaces:
+          currencyDecimalPlaces ?? this.currencyDecimalPlaces,
+      totalRoundingStep: totalRoundingStep ?? this.totalRoundingStep,
     );
   }
 
@@ -81,5 +102,7 @@ class Organization extends Equatable {
         address,
         phone,
         trn,
+        currencyDecimalPlaces,
+        totalRoundingStep,
       ];
 }

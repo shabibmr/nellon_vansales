@@ -23,6 +23,7 @@ import '../models/stock_transfer_model.dart';
 import '../../domain/models/route.dart';
 import '../../domain/models/sales_invoice.dart';
 import '../../domain/models/sales_order.dart';
+import '../../domain/utils/money_math.dart';
 import '../../domain/utils/json_read.dart';
 import '../../domain/models/stock_transfer.dart';
 import '../../domain/models/submit_result.dart';
@@ -1006,6 +1007,20 @@ class SyncWorker {
     }
   }
 
+  /// Detects Zoho's total rounding step from recent invoices. Keeps the
+  /// cached step when the fetch fails or there are too few invoices.
+  Future<double> _detectTotalStep() async {
+    var cached = 0.0;
+    try {
+      cached = _dbService.getOrganization()?.totalRoundingStep ?? 0;
+      final totals = await _apiClient.fetchRecentInvoiceTotals();
+      return detectTotalRoundingStep(totals) ?? cached;
+    } catch (e) {
+      AppLogger.error('SyncWorker', 'total rounding detection failed: $e');
+      return cached;
+    }
+  }
+
   /// Fetches a specific configuration master from the Zoho Books REST endpoints and updates local Hive boxes.
   Future<void> syncMaster(MasterType type) async {
     _syncStatusController.add('Syncing ${type.label}...');
@@ -1014,7 +1029,10 @@ class SyncWorker {
         case MasterType.organization:
           final org = await _apiClient.fetchOrganization();
           if (org != null) {
-            await _dbService.saveOrganization(OrganizationModel.fromJson(org));
+            final parsed = OrganizationModel.fromJson(org);
+            await _dbService.saveOrganization(
+              parsed.copyWith(totalRoundingStep: await _detectTotalStep()),
+            );
           }
           break;
         case MasterType.warehouses:

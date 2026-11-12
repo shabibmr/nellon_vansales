@@ -142,9 +142,9 @@ class ZohoPayloadMapper {
 
   /// Whitelists an invoice create payload to `create-an-invoice-request`.
   /// Drops `id`, `invoice_id`, `customer_name`, `isPendingSync`, and the
-  /// nested `line_items[].item` object. Local `round_off` is never sent: the
-  /// org's Zoho transaction rounding (nearest 0.50) applies it, and `adjustment`
-  /// is rejected on VAT-registered orgs (error 73006).
+  /// nested `line_items[].item` object. Local `round_off` is never sent: Zoho
+  /// applies its own transaction rounding, and `adjustment` is rejected on
+  /// VAT-registered orgs (error 73006).
   static Map<String, dynamic> zohoInvoicePayload(Map<String, dynamic> raw) {
     final out = <String, dynamic>{};
     for (final key in const [

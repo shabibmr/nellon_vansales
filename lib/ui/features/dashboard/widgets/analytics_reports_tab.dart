@@ -110,7 +110,7 @@ class AnalyticsReportsTab extends StatelessWidget {
                   Expanded(
                     child: VanMetricCard(
                       title: 'Today Sales',
-                      value: '$cs${todaySales.toStringAsFixed(2)}',
+                      value: context.formatCurrency(todaySales),
                       icon: Icons.point_of_sale_rounded,
                       color: AppTheme.primaryIndigo,
                       isDark: isDark,
@@ -122,7 +122,7 @@ class AnalyticsReportsTab extends StatelessWidget {
                   Expanded(
                     child: VanMetricCard(
                       title: 'Receipts',
-                      value: '$cs${todayPayments.toStringAsFixed(2)}',
+                      value: context.formatCurrency(todayPayments),
                       icon: Icons.account_balance_wallet_rounded,
                       color: AppTheme.successEmerald,
                       isDark: isDark,
@@ -138,7 +138,7 @@ class AnalyticsReportsTab extends StatelessWidget {
                   Expanded(
                     child: VanMetricCard(
                       title: 'Expenses',
-                      value: '$cs${todayExpenses.toStringAsFixed(2)}',
+                      value: context.formatCurrency(todayExpenses),
                       icon: Icons.receipt_long_rounded,
                       color: AppTheme.errorRose,
                       isDark: isDark,
@@ -166,7 +166,7 @@ class AnalyticsReportsTab extends StatelessWidget {
                   Expanded(
                     child: VanMetricCard(
                       title: 'Orders Total',
-                      value: '$cs${todayOrdersTotal.toStringAsFixed(2)}',
+                      value: context.formatCurrency(todayOrdersTotal),
                       icon: Icons.assignment_turned_in_outlined,
                       color: AppTheme.primaryIndigo,
                       isDark: isDark,
@@ -178,7 +178,7 @@ class AnalyticsReportsTab extends StatelessWidget {
                   Expanded(
                     child: VanMetricCard(
                       title: 'Sales Returns',
-                      value: '$cs${todayReturns.toStringAsFixed(2)}',
+                      value: context.formatCurrency(todayReturns),
                       icon: Icons.assignment_return_outlined,
                       color: AppTheme.warningAmber,
                       isDark: isDark,

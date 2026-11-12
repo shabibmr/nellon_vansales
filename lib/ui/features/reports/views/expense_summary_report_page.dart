@@ -10,6 +10,7 @@ import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
+import '../../../core/utils/currency.dart';
 
 /// Full-screen expense summary, grouped by ledger category.
 ///
@@ -21,7 +22,6 @@ class ExpenseSummaryReportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = context.org.currencySymbol;
 
     return ReportBlocHost<ExpenseEntry>(
       create: (_) => ReportBloc<ExpenseEntry>(
@@ -76,7 +76,7 @@ class ExpenseSummaryReportPage extends StatelessWidget {
             ),
             ReportSummaryChip(
               label: 'Total',
-              value: '$cs${totalAmount.toStringAsFixed(2)}',
+              value: context.formatCurrency(totalAmount),
               color: AppTheme.errorRose,
             ),
           ],
@@ -102,7 +102,7 @@ class ExpenseSummaryReportPage extends StatelessWidget {
           exportRow: (row) => [
             row.category,
             '${row.entryCount}',
-            row.totalAmount.toStringAsFixed(2),
+            formatMoneyNumber(row.totalAmount, decimals: context.org.currencyDecimalPlaces),
           ],
           itemBuilder: (context, row) {
             final pct = totalAmount > 0 ? (row.totalAmount / totalAmount) : 0.0;
@@ -143,7 +143,7 @@ class ExpenseSummaryReportPage extends StatelessWidget {
                         Expanded(
                           flex: 3,
                           child: Text(
-                            '$cs${row.totalAmount.toStringAsFixed(2)}',
+                            context.formatCurrency(row.totalAmount),
                             textAlign: TextAlign.end,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,

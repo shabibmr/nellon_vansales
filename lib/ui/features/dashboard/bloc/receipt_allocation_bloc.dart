@@ -4,6 +4,7 @@ import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
 import '../../../../domain/utils/allocation_rules.dart';
+import '../../../../domain/utils/money_math.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../core/utils/error_mapper.dart';
@@ -95,7 +96,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
             PaymentAllocation(
               invoiceId: alloc.invoiceId,
               invoiceNumber: alloc.invoiceNumber,
-              amountApplied: double.parse(cappedAmount.toStringAsFixed(2)),
+              amountApplied: roundMoney(cappedAmount),
             ),
           );
         }
@@ -152,7 +153,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
         newAllocations[idx] = PaymentAllocation(
           invoiceId: event.invoiceId,
           invoiceNumber: event.invoiceNumber,
-          amountApplied: double.parse(cappedVal.toStringAsFixed(2)),
+          amountApplied: roundMoney(cappedVal),
         );
       }
     } else if (cappedVal > 0) {
@@ -160,7 +161,7 @@ class ReceiptAllocationBloc extends Bloc<ReceiptAllocationEvent, ReceiptAllocati
         PaymentAllocation(
           invoiceId: event.invoiceId,
           invoiceNumber: event.invoiceNumber,
-          amountApplied: double.parse(cappedVal.toStringAsFixed(2)),
+          amountApplied: roundMoney(cappedVal),
         ),
       );
     }

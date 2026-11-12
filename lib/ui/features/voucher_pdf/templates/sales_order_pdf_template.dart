@@ -21,7 +21,6 @@ class SalesOrderPdfTemplate {
     pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
-    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
@@ -125,7 +124,7 @@ class SalesOrderPdfTemplate {
                       SharedPdfTemplate.buildTableCell('${i + 1}'),
                       SharedPdfTemplate.buildTableCell(
                         '${order.items[i].item.name}\nSKU: ${order.items[i].item.sku}'
-                        '${order.items[i].discount > 0 ? ' | Disc: $currencySymbol${order.items[i].discount.toStringAsFixed(2)}' : ''}',
+                        '${order.items[i].discount > 0 ? ' | Disc: ${SharedPdfTemplate.money(org, order.items[i].discount)}' : ''}',
                         alignLeft: true,
                         isSubText: true,
                       ),
@@ -134,13 +133,13 @@ class SalesOrderPdfTemplate {
                         '${order.items[i].displayUom.isNotEmpty ? ' ${order.items[i].displayUom}' : ''}',
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '$currencySymbol${order.items[i].rate.toStringAsFixed(2)}',
+                        SharedPdfTemplate.money(org, order.items[i].rate),
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '$currencySymbol${order.items[i].taxAmount.toStringAsFixed(2)} (${order.items[i].taxPercentage.toStringAsFixed(0)}%)',
+                        '${SharedPdfTemplate.money(org, order.items[i].taxAmount)} (${formatQuantity(order.items[i].taxPercentage)}%)',
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '$currencySymbol${order.items[i].total.toStringAsFixed(2)}',
+                        SharedPdfTemplate.money(org, order.items[i].total),
                         isBold: true,
                       ),
                     ],
@@ -187,31 +186,31 @@ class SalesOrderPdfTemplate {
                   rows: [
                     SharedPdfTemplate.buildSummaryRow(
                       'Sub Total',
-                      '$currencySymbol${order.subTotal.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, order.subTotal),
                     ),
                     if (order.discountTotal > 0) ...[
                       pw.SizedBox(height: 4),
                       SharedPdfTemplate.buildSummaryRow(
                         'Discount Total',
-                        '$currencySymbol${order.discountTotal.toStringAsFixed(2)}',
+                        SharedPdfTemplate.money(org, order.discountTotal),
                       ),
                     ],
                     pw.SizedBox(height: 4),
                     SharedPdfTemplate.buildSummaryRow(
                       'VAT / Tax Total',
-                      '$currencySymbol${order.taxTotal.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, order.taxTotal),
                     ),
                     if (order.roundOff != 0) ...[
                       pw.SizedBox(height: 4),
                       SharedPdfTemplate.buildSummaryRow(
                         'Round Off',
-                        '$currencySymbol${order.roundOff.toStringAsFixed(2)}',
+                        SharedPdfTemplate.money(org, order.roundOff),
                       ),
                     ],
                   ],
                   grandTotalLabel: 'Grand Total',
                   grandTotalValue:
-                      '$currencySymbol${order.total.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, order.total),
                 ),
               ],
             ),

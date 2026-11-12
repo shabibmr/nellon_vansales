@@ -14,6 +14,7 @@ import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
+import '../../../core/utils/currency.dart';
 
 /// Full-screen "Aggregate of All" transactions summary.
 ///
@@ -40,7 +41,6 @@ class TransactionsSummaryReportPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = context.org.currencySymbol;
 
     return ReportBlocHost<TransactionsReportData>(
       create: (_) => ReportBloc<TransactionsReportData>(
@@ -125,7 +125,7 @@ class TransactionsSummaryReportPage extends StatelessWidget {
             ),
             ReportSummaryChip(
               label: 'Total Value',
-              value: '$cs${totalAmount.toStringAsFixed(2)}',
+              value: context.formatCurrency(totalAmount),
               color: AppTheme.primaryIndigo,
             ),
           ],
@@ -151,7 +151,7 @@ class TransactionsSummaryReportPage extends StatelessWidget {
           exportRow: (row) => [
             row.type,
             '${row.count}',
-            row.totalAmount.toStringAsFixed(2),
+            formatMoneyNumber(row.totalAmount, decimals: context.org.currencyDecimalPlaces),
           ],
           itemBuilder: (context, row) {
             final (icon, color) = _getRowStyle(row.type);
@@ -196,7 +196,7 @@ class TransactionsSummaryReportPage extends StatelessWidget {
                     Expanded(
                       flex: 3,
                       child: Text(
-                        '$cs${row.totalAmount.toStringAsFixed(2)}',
+                        context.formatCurrency(row.totalAmount),
                         textAlign: TextAlign.end,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,

@@ -92,11 +92,11 @@ void main() {
   });
 
   group('Item price/conversion helpers', () {
-    test('rateFor scales the base rate by conversion rate', () {
+    test('rateFor scales the base rate by conversion rate and rounds money', () {
       final item = _rice();
-      expect(item.rateFor('kg'), 4.875);
-      expect(item.rateFor('25 Kg Bag'), 4.875 * 25);
-      expect(item.rateFor('g'), closeTo(0.004875, 1e-9));
+      expect(item.rateFor('kg'), 4.88);
+      expect(item.rateFor('25 Kg Bag'), 121.88);
+      expect(item.rateFor('g'), 0.0);
     });
 
     test('conversionRateFor falls back to 1.0 for base/unknown units', () {
@@ -292,7 +292,7 @@ void main() {
         taxPercentage: 5,
       );
       cubit.setUnit(baseRate: 4.875, conversionRate: 25);
-      expect(cubit.state.rate, 121.875);
+      expect(cubit.state.rate, 121.88);
       // Rate stays user-editable afterwards.
       cubit.setRate(120.0);
       expect(cubit.state.rate, 120.0);
@@ -307,7 +307,7 @@ void main() {
         taxPercentage: 0,
       );
       cubit.setQuantity(2.5);
-      expect(cubit.state.subtotal, closeTo(12.1875, 1e-9));
+      expect(cubit.state.subtotal, 12.19);
       cubit.close();
     });
   });

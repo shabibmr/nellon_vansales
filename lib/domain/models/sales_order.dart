@@ -186,8 +186,8 @@ class SalesOrder extends Equatable {
 
   /// Final grand total: line-derived when items exist, else [listedTotal].
   double get total {
-    if (items.isNotEmpty) return roundToNearestHalf(rawTotal);
-    if (listedTotal != null) return roundToNearestHalf(listedTotal!);
+    if (items.isNotEmpty) return roundTotal(rawTotal);
+    if (listedTotal != null) return roundTotal(listedTotal!);
     return 0.0;
   }
 

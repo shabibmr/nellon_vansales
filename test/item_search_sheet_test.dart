@@ -31,6 +31,13 @@ class _FakeOrgCubit extends Cubit<Organization?> implements OrganizationCubit {
   String get currencyCode => 'AED';
 
   @override
+  int get currencyDecimalPlaces => 2;
+
+  @override
+  String formatCurrency(double value, {int? decimals, String? symbol}) =>
+      '${symbol ?? currencySymbol}${value.toStringAsFixed(decimals ?? currencyDecimalPlaces)}';
+
+  @override
   void refresh() {}
 }
 

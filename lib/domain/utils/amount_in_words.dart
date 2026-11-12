@@ -1,20 +1,38 @@
+import 'money_math.dart';
+
 /// Converts a numeric amount to English words for thermal / PDF totals.
 ///
 /// Whole amounts omit the fraction: `AED Fifteen only`.
 /// With fils: `AED One Thousand Two Hundred Thirty-Four And fifty six fils.`
-String amountInWords(num amount, {String currencyName = ''}) {
+///
+/// [decimals] selects the subunit (2 → 0–99, 3 → 0–999). Two-decimal subunits
+/// stay in words so existing fils lines are unchanged; any other scale prints
+/// the subunit count (`1.225` → `225 fils`, not `23 fils`).
+String amountInWords(
+  num amount, {
+  String currencyName = '',
+  int? decimals,
+}) {
+  final scale = decimals ?? MoneyScale.decimals;
+  final factor = _scaleFactor(scale);
   final absolute = amount.abs();
   final whole = absolute.floor();
-  final cents = ((absolute - whole) * 100).round().clamp(0, 99);
+  final maxFraction = factor <= 1 ? 0 : factor - 1;
+  final fraction = ((absolute - whole) * factor)
+      .round()
+      .clamp(0, maxFraction)
+      .toInt();
 
   final wholeWords = _integerToWords(whole);
   final String body;
-  if (cents == 0) {
+  if (fraction == 0) {
     body = '$wholeWords only';
-  } else {
+  } else if (scale == 2) {
     final filsWords =
-        _integerToWords(cents).toLowerCase().replaceAll('-', ' ');
+        _integerToWords(fraction).toLowerCase().replaceAll('-', ' ');
     body = '$wholeWords And $filsWords ${_subunitName(currencyName)}.';
+  } else {
+    body = '$wholeWords And $fraction ${_subunitName(currencyName)}.';
   }
 
   final prefix = currencyName.trim();
@@ -26,12 +44,29 @@ String amountInWords(num amount, {String currencyName = ''}) {
 String _subunitName(String currencyName) {
   final key = currencyName.trim().toLowerCase();
   return switch (key) {
-    'dirhams' || 'dirham' || 'aed' || 'dhs' || 'dh' => 'fils',
+    'dirhams' ||
+    'dirham' ||
+    'aed' ||
+    'dhs' ||
+    'dh' ||
+    'kwd' ||
+    'kd' ||
+    'dinars' ||
+    'dinar' => 'fils',
     'rupees' || 'rupee' || 'inr' => 'paise',
     'pounds' || 'pound' || 'gbp' => 'pence',
     'dollars' || 'dollar' || 'usd' || 'euros' || 'euro' => 'cents',
-    _ => 'fils',
+    _ => 'cents',
   };
+}
+
+int _scaleFactor(int decimals) {
+  if (decimals <= 0) return 1;
+  var factor = 1;
+  for (var i = 0; i < decimals; i++) {
+    factor *= 10;
+  }
+  return factor;
 }
 
 /// Maps common currency codes/symbols to a printable unit name.

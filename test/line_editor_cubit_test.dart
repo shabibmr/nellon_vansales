@@ -26,8 +26,8 @@ void main() {
     expect(cubit.state.subtotal, 20.0); // 10 × 2
   });
 
-  test('Computed taxAmount = (subtotal − discount) × tax%', () {
-    // (20 - 0) × 5% = 1.0
+  test('Computed taxAmount = subtotal × tax% (discount after tax)', () {
+    // 20 × 5% = 1.0; discount does not reduce the taxable base
     expect(cubit.state.taxAmount, 1.0);
   });
 
@@ -55,9 +55,9 @@ void main() {
   test('setDiscount updates discount and recalculates totals', () {
     cubit.setDiscount(5.0);
     expect(cubit.state.discount, 5.0);
-    // subtotal = 20, taxAmount = (20 - 5) × 5% = 0.75, total = 20 + 0.75 - 5 = 15.75
-    expect(cubit.state.taxAmount, 0.75);
-    expect(cubit.state.total, 15.75);
+    // subtotal = 20, tax on full subtotal = 20 × 5% = 1.0, total = 20 + 1 - 5 = 16
+    expect(cubit.state.taxAmount, 1.0);
+    expect(cubit.state.total, 16.0);
   });
 
   test('Zero quantity initialQuantity falls back to 1', () {

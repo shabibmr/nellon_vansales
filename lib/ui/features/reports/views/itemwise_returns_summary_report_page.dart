@@ -11,6 +11,7 @@ import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../widgets/report_bloc_host.dart';
 import '../widgets/report_date_actions.dart';
+import '../../../core/utils/currency.dart';
 
 /// Full-screen itemwise sales-returns summary.
 ///
@@ -23,7 +24,6 @@ class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = context.org.currencySymbol;
 
     return ReportBlocHost<SalesReturn>(
       create: (_) => ReportBloc<SalesReturn>(
@@ -82,7 +82,7 @@ class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
             ),
             ReportSummaryChip(
               label: 'Total Refunded',
-              value: '$cs${totalRefunded.toStringAsFixed(2)}',
+              value: context.formatCurrency(totalRefunded),
               color: AppTheme.errorRose,
             ),
           ],
@@ -109,7 +109,7 @@ class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
             row.itemName,
             row.sku,
             formatQuantity(row.totalQty),
-            row.totalRefunded.toStringAsFixed(2),
+            formatMoneyNumber(row.totalRefunded, decimals: context.org.currencyDecimalPlaces),
           ],
           itemBuilder: (context, row) {
             return Card(
@@ -160,7 +160,7 @@ class ItemwiseReturnsSummaryReportPage extends StatelessWidget {
                     Expanded(
                       flex: 3,
                       child: Text(
-                        '$cs${row.totalRefunded.toStringAsFixed(2)}',
+                        context.formatCurrency(row.totalRefunded),
                         textAlign: TextAlign.end,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,

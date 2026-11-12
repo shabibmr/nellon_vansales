@@ -1,4 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../domain/utils/money_math.dart';
 import 'line_editor_state.dart';
 
 export 'line_editor_state.dart';
@@ -40,6 +42,6 @@ class LineEditorCubit extends Cubit<LineEditorState> {
   /// base rate × the selected unit's conversion rate (Zoho stores no
   /// per-unit price). The rate stays user-editable afterwards via [setRate].
   void setUnit({required double baseRate, required double conversionRate}) {
-    emit(state.copyWith(rate: baseRate * conversionRate));
+    emit(state.copyWith(rate: roundMoney(baseRate * conversionRate)));
   }
 }

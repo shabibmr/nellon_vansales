@@ -1,0 +1,14 @@
+{
+  "organization_id": "org-kwd",
+  "name": "Kuwait Trading Co.",
+  "currency_code": "KWD",
+  "currency_symbol": "KWD",
+  "price_precision": 3,
+  "currency_format": "###,##0.000",
+  "time_zone": "Asia/Kuwait",
+  "date_format": "dd.MM.yyyy",
+  "tax_settings": {
+    "is_tax_registered": false,
+    "tax_reg_no": ""
+  }
+}

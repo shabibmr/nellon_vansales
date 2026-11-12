@@ -20,7 +20,6 @@ class ReceiptPdfTemplate {
     pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
-    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
@@ -68,7 +67,7 @@ class ReceiptPdfTemplate {
               ),
               PdfInfoEntry(
                 'Total Received',
-                '$currencySymbol${receipt.amount.toStringAsFixed(2)}',
+                SharedPdfTemplate.money(org, receipt.amount),
                 alignment: pw.CrossAxisAlignment.end,
                 valueColor: SharedPdfTemplate.primaryRed,
               ),
@@ -144,7 +143,7 @@ class ReceiptPdfTemplate {
                           alignLeft: true,
                         ),
                         SharedPdfTemplate.buildTableCell(
-                          '$currencySymbol${receipt.allocations[i].amountApplied.toStringAsFixed(2)}',
+                          SharedPdfTemplate.money(org, receipt.allocations[i].amountApplied),
                           isBold: true,
                         ),
                       ],
@@ -164,17 +163,17 @@ class ReceiptPdfTemplate {
                   rows: [
                     SharedPdfTemplate.buildSummaryRow(
                       'Total Allocated',
-                      '$currencySymbol${receipt.totalAllocated.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, receipt.totalAllocated),
                     ),
                     pw.SizedBox(height: 4),
                     SharedPdfTemplate.buildSummaryRow(
                       'Unallocated General Credit',
-                      '$currencySymbol${receipt.unallocatedAmount.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, receipt.unallocatedAmount),
                     ),
                   ],
                   grandTotalLabel: 'Grand Total Received',
                   grandTotalValue:
-                      '$currencySymbol${receipt.amount.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, receipt.amount),
                   grandTotalLabelFontSize: 10,
                   grandTotalValueFontSize: 12,
                 ),

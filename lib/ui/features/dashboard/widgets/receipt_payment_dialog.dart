@@ -5,6 +5,7 @@ import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../data/services/document_number_service.dart';
 import '../../../../data/services/sync_worker.dart';
 import '../../../../domain/repositories/receipt_repository.dart';
+import '../../../../domain/utils/allocation_rules.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../../../../ui/core/utils/currency.dart';
@@ -165,7 +166,7 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
           );
 
           final expectedText = amountApplied > 0
-              ? amountApplied.toStringAsFixed(2)
+              ? formatMoneyNumber(amountApplied, decimals: context.org.currencyDecimalPlaces)
               : '';
           if (ctrl.text != expectedText && !focusNode.hasFocus) {
             _setControllerText(ctrl, expectedText);
@@ -259,11 +260,15 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
                           ),
                           Flexible(
                             child: Text(
-                              'Allocated: $cs${totalAllocated.toStringAsFixed(2)} / $cs${paymentAmount.toStringAsFixed(2)}',
+                              'Allocated: ${context.formatCurrency(totalAllocated)} / ${context.formatCurrency(paymentAmount)}',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: totalAllocated > paymentAmount + 0.005
+                                color:
+                                    AllocationRules.exceeds(
+                                      totalAllocated,
+                                      paymentAmount,
+                                    )
                                     ? AppTheme.errorRose
                                     : AppTheme.successEmerald,
                               ),
@@ -310,7 +315,7 @@ class _ReceiptPaymentDialogViewState extends State<_ReceiptPaymentDialogView> {
                                         ),
                                       ),
                                       Text(
-                                        'Outstanding: $cs${inv.balance.toStringAsFixed(2)}',
+                                        'Outstanding: ${context.formatCurrency(inv.balance)}',
                                         style: const TextStyle(fontSize: 11),
                                       ),
                                     ],

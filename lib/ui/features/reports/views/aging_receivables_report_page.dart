@@ -13,6 +13,7 @@ import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../bloc/report_state.dart';
 import '../widgets/report_bloc_host.dart';
+import '../../../core/utils/currency.dart';
 
 extension _AgingBucketColor on AgingBucket {
   Color get color {
@@ -112,7 +113,6 @@ class _AgingReceivablesReportViewState
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = context.org.currencySymbol;
     final DateFormat dateFmt = DateFormat('dd MMM yyyy');
 
     final state = widget.state;
@@ -206,7 +206,7 @@ class _AgingReceivablesReportViewState
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    '$cs${grandTotal.toStringAsFixed(2)}',
+                    context.formatCurrency(grandTotal),
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
@@ -260,7 +260,7 @@ class _AgingReceivablesReportViewState
         for (final b in AgingBucket.values)
           ReportSummaryChip(
             label: '${b.label} days',
-            value: '$cs${bucketTotals[b]!.toStringAsFixed(0)}',
+            value: context.formatCurrency(bucketTotals[b]!),
             color: b.color,
           ),
       ],
@@ -284,8 +284,8 @@ class _AgingReceivablesReportViewState
       ],
       exportRow: (row) => [
         row.customerName,
-        for (final b in AgingBucket.values) row.amount(b).toStringAsFixed(2),
-        row.total.toStringAsFixed(2),
+        for (final b in AgingBucket.values) formatMoneyNumber(row.amount(b), decimals: context.org.currencyDecimalPlaces),
+        formatMoneyNumber(row.total, decimals: context.org.currencyDecimalPlaces),
       ],
       itemBuilder: (context, row) {
         return Card(
@@ -310,7 +310,7 @@ class _AgingReceivablesReportViewState
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '$cs${row.total.toStringAsFixed(2)}',
+                      context.formatCurrency(row.total),
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 15,
@@ -327,7 +327,7 @@ class _AgingReceivablesReportViewState
                         child: _BucketCell(
                           label: b.label,
                           value: row.amount(b) > 0
-                              ? '$cs${row.amount(b).toStringAsFixed(0)}'
+                              ? context.formatCurrency(row.amount(b))
                               : '—',
                           color: b.color,
                           active: row.amount(b) > 0,

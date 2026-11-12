@@ -42,31 +42,48 @@ this pass to verify it directly.
 ## Per-value rounding (drift guard)
 
 Every money-bearing getter (subtotal, tax, discount, allocations, expense
-totals, etc.) is rounded to 2 decimal places via `roundMoney()`
-(`lib/domain/utils/money_math.dart`) at the point it is computed — including
-before being summed by a caller (`fold`). This exists purely to stop binary
+totals, etc.) is rounded via `roundMoney()` (`lib/domain/utils/money_math.dart`)
+to the active `MoneyScale` (Zoho `price_precision`, else ISO-4217 minor units
+for the currency code, else 2) at the point it is computed — including before
+being summed by a caller (`fold`). This exists purely to stop binary
 floating-point drift from compounding across many line items (e.g. raw
 `double` addition of `0.1` thirty times yields `3.0000000000000004`, not
-`3.0`). It is not a business-rule rounding step.
+`3.0`). It is not a cash-rounding step.
 
 ## Document-level "Round Off"
 
-`SalesInvoice.total` / `SalesOrder.total` round the summed `rawTotal` to the
-**nearest 0.50** (`roundToNearestHalf(rawTotal)`), and expose the
-adjustment as `roundOff = total - rawTotal`. This implements 50-fils / 0.50 step
-rounding (e.g. `.10` -> `.00`, `.40` -> `.50`, `.90` -> `1.00`). `roundOff`
-is surfaced to the user in the invoice/order editors
-(`sales_invoice_editor_page.dart`, `sales_order_editor_page.dart`), PDF
-templates, and thermal ticket printing whenever it is nonzero.
+Zoho applies the org's transaction rounding to API-created invoices (e.g. the
+UAE org rounds to the nearest 0.50; verified with a draft invoice, commit
+`bf2eb49`). The app mirrors it so printed totals match what Zoho books.
+
+- `SalesInvoice.total` / `SalesOrder.total` = `roundTotal(rawTotal)`, which
+  rounds to `MoneyScale.totalStep` (0 = no cash rounding, only `roundMoney`).
+- `roundOff = total - rawTotal`; editors, PDFs and thermal tickets show the
+  row when it is nonzero.
+- The step is `Organization.totalRoundingStep`, cached in Hive. Zoho's
+  organization API has no rounding field, so the organization master sync
+  detects it (`detectTotalRoundingStep`): one `GET /invoices` page (latest 50,
+  void skipped); the largest of 1 / 0.5 / 0.25 / 0.1 / 0.05 that every
+  non-zero total is a multiple of, else 0. With fewer than 10 totals, or if
+  the call fails, the cached step is kept.
+- Limitation: an org with no Zoho rounding whose prices all happen to sit on
+  a step (e.g. every total a multiple of 0.05) is detected as that step. The
+  local total then differs from Zoho only when a document's raw total is off
+  the step. A per-tenant override is planned with the multi-tenant config.
+- Local `round_off` is never sent to Zoho (`adjustment` is rejected on VAT
+  orgs, error 73006).
 
 ## Test coverage
 
 `test/domain_totals_test.dart` covers:
 - Line-item and document-level subtotal/tax/discount/total calculations.
-- Document-level round-off to the nearest whole unit.
+- Document totals rounding to the org step, with the round-off row.
 - `SalesReturnLineItem` tax + prorated-discount calculation (full and
   partial return quantities).
 - The floating-point drift guard (`roundMoney`) across many summed lines.
+
+`test/money_math_test.dart` covers `roundTotal` for steps 0 / 0.5 / 1 and the
+step detector (0.5, 1, mixed, KWD 3-decimal, too few samples).
 
 `test/stock_rules_test.dart` covers the related `deductStock` invariant
 (not a rounding concern, but lives in the same `domain/utils` layer).

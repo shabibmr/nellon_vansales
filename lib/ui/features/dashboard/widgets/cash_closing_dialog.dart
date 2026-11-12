@@ -7,6 +7,7 @@ import '../../../../ui/core/extensions/org_context_extension.dart';
 import '../../../../ui/core/utils/snackbars.dart';
 import '../cubit/cash_closing_cubit.dart';
 import '../cubit/cash_closing_state.dart';
+import '../../../core/utils/currency.dart';
 
 /// Modal dialog for filing the daily end-of-trip cash closing reconciliation.
 ///
@@ -77,7 +78,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
         context.read<CashClosingRepository>().getLocalCashClosing();
     final opening = lastClosing?.closingBalance ?? 0.0;
     _openingBalanceController = TextEditingController(
-      text: opening == 0 ? '' : opening.toStringAsFixed(2),
+      text: opening == 0 ? '' : formatMoneyNumber(opening, decimals: context.org.currencyDecimalPlaces),
     );
   }
 
@@ -112,7 +113,7 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
               content: Text(
                 difference == 0
                     ? 'Session closed successfully with zero cash discrepancy!'
-                    : 'Session closed. Cash discrepancy detected: ${difference > 0 ? "+" : ""}$cs${difference.toStringAsFixed(2)}. Discrepancy is logged for Zoho reconciliation.',
+                    : 'Session closed. Cash discrepancy detected: ${difference > 0 ? "+" : ""}${context.formatCurrency(difference)}. Discrepancy is logged for Zoho reconciliation.',
               ),
               actions: [
                 ElevatedButton(
@@ -156,17 +157,17 @@ class _CashClosingDialogState extends State<CashClosingDialog> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Total Invoiced Sales: $cs${widget.todaySales.toStringAsFixed(2)}',
+                    'Total Invoiced Sales: ${context.formatCurrency(widget.todaySales)}',
                   ),
                   Text(
-                    'Total Cash Collected: $cs${widget.todayPayments.toStringAsFixed(2)}',
+                    'Total Cash Collected: ${context.formatCurrency(widget.todayPayments)}',
                   ),
                   Text(
-                    'Total Claimed Expenses: $cs${widget.todayExpenses.toStringAsFixed(2)}',
+                    'Total Claimed Expenses: ${context.formatCurrency(widget.todayExpenses)}',
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Expected Cash In Hand: $cs${expectedClosing.toStringAsFixed(2)}',
+                    'Expected Cash In Hand: ${context.formatCurrency(expectedClosing)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: AppTheme.primaryIndigo,

@@ -13,7 +13,6 @@ class ItemDetailsDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = context.org.currencySymbol;
     return AlertDialog(
       title: Text(item.name),
       content: ConstrainedBox(
@@ -28,7 +27,7 @@ class ItemDetailsDialog extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              Text('Rate: $cs${item.rate.toStringAsFixed(2)}'),
+              Text('Rate: ${context.formatCurrency(item.rate)}'),
               const SizedBox(height: 8),
               Text('Tax Group: ${item.taxName} (${item.taxPercentage}%)'),
               const SizedBox(height: 8),

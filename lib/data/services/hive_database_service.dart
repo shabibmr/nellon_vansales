@@ -19,6 +19,7 @@ import '../../domain/models/organization.dart';
 import '../../domain/models/open_invoice.dart';
 import '../../domain/models/sales_order.dart';
 import '../../domain/utils/json_read.dart';
+import '../../domain/utils/money_math.dart';
 import '../../domain/models/stock_transfer.dart';
 import '../../domain/models/unit_conversion.dart';
 import '../../domain/utils/stock_rules.dart';
@@ -675,9 +676,12 @@ class HiveDatabaseService {
   Organization? getOrganization() {
     final raw = _masterBox.get('organization');
     if (raw == null) return null;
-    return OrganizationModel.fromJson(
+    final org = OrganizationModel.fromJson(
       jsonMap(jsonDecode(jsonString(raw))),
     );
+    MoneyScale.use(org.currencyDecimalPlaces);
+    MoneyScale.useTotalStep(org.totalRoundingStep);
+    return org;
   }
 
   /// Caches active Organization configurations.
@@ -686,6 +690,8 @@ class HiveDatabaseService {
       'organization',
       jsonEncode(OrganizationModel.fromDomain(org).toJson()),
     );
+    MoneyScale.use(org.currencyDecimalPlaces);
+    MoneyScale.useTotalStep(org.totalRoundingStep);
   }
 
   /// Number of JSON-encoded records stored under [key] in the master box.

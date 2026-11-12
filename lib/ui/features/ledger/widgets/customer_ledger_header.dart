@@ -15,7 +15,6 @@ class CustomerLedgerHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = context.org.currencySymbol;
     return Card(
       color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
       child: Padding(
@@ -45,25 +44,25 @@ class CustomerLedgerHeader extends StatelessWidget {
               children: [
                 _SummaryChip(
                   label: 'Opening Balance',
-                  value: '$cs${ledger.openingBalance.toStringAsFixed(2)}',
+                  value: context.formatCurrency(ledger.openingBalance),
                   color: AppTheme.primaryIndigo,
                   isDark: isDark,
                 ),
                 _SummaryChip(
                   label: 'Total Invoiced',
-                  value: '$cs${ledger.totalDebits.toStringAsFixed(2)}',
+                  value: context.formatCurrency(ledger.totalDebits),
                   color: AppTheme.warningAmber,
                   isDark: isDark,
                 ),
                 _SummaryChip(
                   label: 'Total Received',
-                  value: '$cs${ledger.totalCredits.toStringAsFixed(2)}',
+                  value: context.formatCurrency(ledger.totalCredits),
                   color: AppTheme.successEmerald,
                   isDark: isDark,
                 ),
                 _SummaryChip(
                   label: 'Closing Balance',
-                  value: '$cs${ledger.closingBalance.toStringAsFixed(2)}',
+                  value: context.formatCurrency(ledger.closingBalance),
                   color: ledger.closingBalance > 0
                       ? AppTheme.errorRose
                       : AppTheme.successEmerald,

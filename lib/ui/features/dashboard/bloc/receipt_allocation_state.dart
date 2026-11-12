@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../domain/models/customer.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
+import '../../../../domain/utils/money_math.dart';
 
 class ReceiptAllocationState extends Equatable {
   final Customer? customer;
@@ -55,8 +56,8 @@ class ReceiptAllocationState extends Equatable {
       sumAllocated += alloc.amountApplied;
     }
 
-    final roundedSum = double.parse(sumAllocated.toStringAsFixed(2));
-    final roundedAmount = double.parse(paymentAmount.toStringAsFixed(2));
+    final roundedSum = roundMoney(sumAllocated);
+    final roundedAmount = roundMoney(paymentAmount);
 
     return roundedSum <= roundedAmount;
   }

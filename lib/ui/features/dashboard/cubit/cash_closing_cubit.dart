@@ -6,6 +6,7 @@ import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../data/models/sync_queue_item.dart';
 import '../../../../ui/core/utils/error_mapper.dart';
 import 'cash_closing_state.dart';
+import '../../../core/utils/currency.dart';
 
 class CashClosingCubit extends Cubit<CashClosingState> {
   final CashClosingRepository cashClosingRepository;
@@ -53,7 +54,7 @@ class CashClosingCubit extends Cubit<CashClosingState> {
           'amount': closing.reportedDifference.abs(),
           'category': 'Miscellaneous',
           'description':
-              'Daily Cash Closing: counted: $physicalCashCounted, expected: $expectedClosing. Difference: ${closing.reportedDifference.toStringAsFixed(2)}. Notes: $notes',
+              'Daily Cash Closing: counted: $physicalCashCounted, expected: $expectedClosing. Difference: ${formatMoneyNumber(closing.reportedDifference)}. Notes: $notes',
           'date': closing.date.toIso8601String().split('T')[0],
           'isPendingSync': true,
         },

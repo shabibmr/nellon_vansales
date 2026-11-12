@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/domain/models/open_invoice.dart';
 import 'package:van_sales/domain/utils/allocation_rules.dart';
+import 'package:van_sales/domain/utils/money_math.dart';
 
 OpenInvoice _inv(String id, double balance, int day) => OpenInvoice(
   invoiceId: id,
@@ -36,5 +37,16 @@ void main() {
     expect(AllocationRules.fillFor(_inv('a', 60, 1), 100), 60);
     expect(AllocationRules.fillFor(_inv('a', 60, 1), 25), 25);
     expect(AllocationRules.fillFor(_inv('a', 60, 1), -5), 0);
+  });
+
+  test('autoAllocate keeps the active MoneyScale', () {
+    MoneyScale.use(3);
+    try {
+      final result = AllocationRules.autoAllocate([_inv('a', 10, 1)], 5.555);
+      expect(result.single.amountApplied, 5.555);
+      expect(AllocationRules.total(result), 5.555);
+    } finally {
+      MoneyScale.use(2);
+    }
   });
 }

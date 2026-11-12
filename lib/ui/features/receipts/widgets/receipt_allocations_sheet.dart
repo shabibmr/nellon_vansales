@@ -6,6 +6,7 @@ import '../../../../domain/models/receipt_voucher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../cubit/receipt_allocations_sheet_cubit.dart';
+import '../../../core/extensions/org_context_extension.dart';
 
 /// Bottom sheet that lets the user pick which open invoices a receipt settles
 /// and how much goes to each (partial amounts allowed).
@@ -54,7 +55,7 @@ class _ReceiptAllocationsSheetState extends State<_ReceiptAllocationsSheet> {
       for (final inv in initial.invoices)
         inv.invoiceId: TextEditingController(
           text: initial.amountFor(inv.invoiceId) > 0
-              ? initial.amountFor(inv.invoiceId).toStringAsFixed(2)
+              ? formatMoneyNumber(initial.amountFor(inv.invoiceId), decimals: context.org.currencyDecimalPlaces)
               : '',
         ),
     };
@@ -76,7 +77,7 @@ class _ReceiptAllocationsSheetState extends State<_ReceiptAllocationsSheet> {
       final typed = double.tryParse(ctrl.text) ?? 0.0;
       final target = state.amountFor(inv.invoiceId);
       if ((typed - target).abs() > 0.0001) {
-        ctrl.text = target > 0 ? target.toStringAsFixed(2) : '';
+        ctrl.text = target > 0 ? formatMoneyNumber(target, decimals: context.org.currencyDecimalPlaces) : '';
       }
     }
   }

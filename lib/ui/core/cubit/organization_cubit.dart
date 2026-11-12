@@ -12,9 +12,17 @@ class OrganizationCubit extends Cubit<Organization?> {
       : _db = db,
         super(db.getOrganization());
 
-  String get currencySymbol => state?.currencySymbol ?? 'AED';
+  String get currencySymbol => state?.currencySymbol ?? '';
   String get companyName => state?.name ?? 'Van Sales Pro';
-  String get currencyCode => state?.currencyCode ?? 'AED';
+  String get currencyCode => state?.currencyCode ?? '';
+  int get currencyDecimalPlaces => state?.currencyDecimalPlaces ?? 2;
+
+  /// Formats [value] using the active organization's symbol and decimal places.
+  String formatCurrency(double value, {int? decimals, String? symbol}) {
+    final s = symbol ?? currencySymbol;
+    final d = decimals ?? currencyDecimalPlaces;
+    return '$s${value.toStringAsFixed(d)}';
+  }
 
   /// Reloads organization details from Hive (e.g. after masters sync).
   void refresh() {

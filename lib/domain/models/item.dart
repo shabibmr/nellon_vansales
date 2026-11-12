@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../utils/money_math.dart';
 import 'unit_conversion.dart';
 
 /// Represents an inventory item or product stocked in the delivery van.
@@ -72,8 +73,10 @@ class Item extends Equatable {
       conversionFor(unitName)?.conversionRate ?? 1.0;
 
   /// Effective sale rate when selling in [unitName]:
-  /// base [rate] × conversion rate. Zoho stores no per-unit price.
-  double rateFor(String unitName) => rate * conversionRateFor(unitName);
+  /// base [rate] × conversion rate, rounded to the active money scale.
+  /// Zoho stores no per-unit price.
+  double rateFor(String unitName) =>
+      roundMoney(rate * conversionRateFor(unitName));
 
   /// Creates a copy of this [Item] with replaced values for specific fields.
   Item copyWith({

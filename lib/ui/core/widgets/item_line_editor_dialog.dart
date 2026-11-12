@@ -167,12 +167,18 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     _selectedUom = options.contains(initialUom)
         ? initialUom
         : (options.isNotEmpty ? options.first : '');
+    final moneyDecimals = context.org.currencyDecimalPlaces;
     _rateController = TextEditingController(
-      text: (widget.initialRate ?? widget.item.rateFor(_currentUom))
-          .toStringAsFixed(2),
+      text: formatMoneyNumber(
+        widget.initialRate ?? widget.item.rateFor(_currentUom),
+        decimals: moneyDecimals,
+      ),
     );
     _discountController = TextEditingController(
-      text: (widget.initialDiscount ?? 0.0).toStringAsFixed(2),
+      text: formatMoneyNumber(
+        widget.initialDiscount ?? 0.0,
+        decimals: moneyDecimals,
+      ),
     );
   }
 
@@ -189,7 +195,10 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
     if (unit == null || unit == _selectedUom) return;
     setState(() => _selectedUom = unit);
     final newRate = widget.item.rateFor(unit);
-    _rateController.text = newRate.toStringAsFixed(2);
+    _rateController.text = formatMoneyNumber(
+      newRate,
+      decimals: context.org.currencyDecimalPlaces,
+    );
     context.read<LineEditorCubit>().setUnit(
           baseRate: widget.item.rate,
           conversionRate: widget.item.conversionRateFor(unit),
@@ -291,11 +300,14 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   }
 
   Widget _buildRateField(String currencySymbol) {
+    final decimals = context.org.currencyDecimalPlaces;
     return TextFormField(
       controller: _rateController,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+        FilteringTextInputFormatter.allow(
+          RegExp('^\\d*\\.?\\d{0,$decimals}'),
+        ),
       ],
       onChanged: (val) {
         final rate = double.tryParse(val) ?? 0.0;
@@ -317,11 +329,14 @@ class _LineEditorDialogBodyState extends State<_LineEditorDialogBody> {
   }
 
   Widget _buildDiscountField(String currencySymbol) {
+    final decimals = context.org.currencyDecimalPlaces;
     return TextFormField(
       controller: _discountController,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+        FilteringTextInputFormatter.allow(
+          RegExp('^\\d*\\.?\\d{0,$decimals}'),
+        ),
       ],
       onChanged: (val) {
         final discount = double.tryParse(val) ?? 0.0;

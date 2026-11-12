@@ -1,3 +1,4 @@
+import 'package:van_sales/domain/models/organization.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:van_sales/data/services/sync_worker.dart';
 import 'package:van_sales/data/services/hive_database_service.dart';
@@ -17,6 +18,9 @@ class FakeHiveDatabaseService extends HiveDatabaseService {
 
   @override
   String? get activeRouteId => null;
+
+  @override
+  Organization? getOrganization() => null;
 
   @override
   Future<void> saveOrganization(dynamic org) async {
@@ -87,6 +91,13 @@ class FakeZohoApiClient extends ZohoApiClient {
       'currency_code': 'AED',
       'currency_symbol': 'AED',
     };
+  }
+
+  @override
+  Future<List<double>> fetchRecentInvoiceTotals({int count = 50}) async {
+    callCounts['fetchRecentInvoiceTotals'] =
+        (callCounts['fetchRecentInvoiceTotals'] ?? 0) + 1;
+    return List<double>.filled(12, 10.5);
   }
 
   @override
@@ -201,6 +212,9 @@ void main() {
       expect(fakeApi.callCounts['fetchCustomers'], 1);
       expect(fakeApi.callCounts['fetchOpenInvoices'], isNull);
       expect(fakeApi.callCounts['fetchSalespersons'], 1);
+      expect(fakeApi.callCounts['fetchRecentInvoiceTotals'], 1);
+      final org = fakeDb.savedData.whereType<Organization>().single;
+      expect(org.totalRoundingStep, 0.5);
 
       // Verify all master categories successfully saved locally
       // (open invoices are live-fetched, not master-synced)

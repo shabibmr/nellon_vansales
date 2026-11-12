@@ -21,7 +21,6 @@ class SalesReturnPdfTemplate {
     pw.ImageProvider? logoImage,
   }) {
     final pdf = pw.Document();
-    final currencySymbol = org.currencySymbol;
 
     pdf.addPage(
       pw.MultiPage(
@@ -167,10 +166,10 @@ class SalesReturnPdfTemplate {
                         '${returnVoucher.items[i].displayUom.isNotEmpty ? ' ${returnVoucher.items[i].displayUom}' : ''}',
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '$currencySymbol${returnVoucher.items[i].rate.toStringAsFixed(2)}',
+                        SharedPdfTemplate.money(org, returnVoucher.items[i].rate),
                       ),
                       SharedPdfTemplate.buildTableCell(
-                        '$currencySymbol${returnVoucher.items[i].total.toStringAsFixed(2)}',
+                        SharedPdfTemplate.money(org, returnVoucher.items[i].total),
                         isBold: true,
                       ),
                     ],
@@ -188,7 +187,7 @@ class SalesReturnPdfTemplate {
                   rows: const [],
                   grandTotalLabel: 'Total Credit Issued',
                   grandTotalValue:
-                      '$currencySymbol${returnVoucher.total.toStringAsFixed(2)}',
+                      SharedPdfTemplate.money(org, returnVoucher.total),
                 ),
               ],
             ),

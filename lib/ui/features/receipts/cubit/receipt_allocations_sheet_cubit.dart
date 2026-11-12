@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/models/open_invoice.dart';
 import '../../../../domain/models/receipt_voucher.dart';
 import '../../../../domain/utils/allocation_rules.dart';
+import '../../../../domain/utils/money_math.dart';
 
 class ReceiptAllocationsSheetState extends Equatable {
   /// Open invoices, oldest first.
@@ -39,7 +40,7 @@ class ReceiptAllocationsSheetState extends Equatable {
         PaymentAllocation(
           invoiceId: inv.invoiceId,
           invoiceNumber: inv.invoiceNumber,
-          amountApplied: AllocationRules.round2(amountFor(inv.invoiceId)),
+          amountApplied: roundMoney(amountFor(inv.invoiceId)),
         ),
   ];
 

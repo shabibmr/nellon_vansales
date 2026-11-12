@@ -17,6 +17,7 @@ import '../utils/open_ledger_transaction.dart';
 import '../widgets/customer_ledger_header.dart';
 import '../widgets/ledger_filter_header.dart';
 import '../widgets/ledger_transaction_table.dart';
+import '../../../core/utils/currency.dart';
 
 class CustomerLedgerPage extends StatefulWidget {
   const CustomerLedgerPage({super.key});
@@ -47,7 +48,6 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
   }
 
   void _showCustomerSelector(BuildContext context, bool isDark) {
-    final cs = context.org.currencySymbol;
     final bloc = context.read<CustomerLedgerBloc>();
     final allCustomers = bloc.customers;
 
@@ -157,7 +157,9 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
                                   subtitle: Text(customer.companyName),
                                   trailing: customer.outstandingBalance > 0
                                       ? Text(
-                                          '$cs${customer.outstandingBalance.toStringAsFixed(0)}',
+                                          context.formatCurrency(
+                                            customer.outstandingBalance,
+                                          ),
                                           style: const TextStyle(
                                             color: AppTheme.errorRose,
                                             fontWeight: FontWeight.bold,
@@ -191,7 +193,6 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
     CustomerLedgerState state,
     String action,
   ) async {
-    final cs = context.org.currencySymbol;
     final headers = const [
       'Date',
       'Doc No',
@@ -205,9 +206,9 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
               _shortDate.format(t.date),
               t.transactionNumber.isNotEmpty ? t.transactionNumber : '-',
               t.type.toUpperCase(),
-              t.debit > 0 ? t.debit.toStringAsFixed(2) : '-',
-              t.credit > 0 ? t.credit.toStringAsFixed(2) : '-',
-              t.balance.toStringAsFixed(2),
+              t.debit > 0 ? formatMoneyNumber(t.debit, decimals: context.org.currencyDecimalPlaces) : '-',
+              t.credit > 0 ? formatMoneyNumber(t.credit, decimals: context.org.currencyDecimalPlaces) : '-',
+              formatMoneyNumber(t.balance, decimals: context.org.currencyDecimalPlaces),
             ])
         .toList();
 
@@ -215,10 +216,10 @@ class _CustomerLedgerPageState extends State<CustomerLedgerPage> {
     final dateRange =
         '${_dateFormat.format(state.startDate)} to ${_dateFormat.format(state.endDate)}';
     final stats = {
-      'Opening Bal': '$cs${ledger.openingBalance.toStringAsFixed(2)}',
-      'Total Debits': '$cs${ledger.totalDebits.toStringAsFixed(2)}',
-      'Total Credits': '$cs${ledger.totalCredits.toStringAsFixed(2)}',
-      'Closing Bal': '$cs${ledger.closingBalance.toStringAsFixed(2)}',
+      'Opening Bal': context.formatCurrency(ledger.openingBalance),
+      'Total Debits': context.formatCurrency(ledger.totalDebits),
+      'Total Credits': context.formatCurrency(ledger.totalCredits),
+      'Closing Bal': context.formatCurrency(ledger.closingBalance),
     };
 
     try {

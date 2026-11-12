@@ -41,6 +41,21 @@ class SharedPdfTemplate {
   static final DateFormat dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
   static final DateFormat dateOnlyFormat = DateFormat('dd MMM yyyy');
 
+  /// Money string for PDF fonts, which cannot draw code units outside Latin-1.
+  ///
+  /// A symbol such as ₹ is replaced by [Organization.currencyCode]. ASCII and
+  /// Latin-1 symbols (including £) keep [Organization.formatCurrency].
+  static String money(Organization org, num amount) {
+    final value = amount.toDouble();
+    final symbol = org.currencySymbol;
+    if (symbol.codeUnits.any((unit) => unit > 255)) {
+      return org
+          .copyWith(currencySymbol: org.currencyCode)
+          .formatCurrency(value);
+    }
+    return org.formatCurrency(value);
+  }
+
   /// Default supervisor phone for documents (number only; footer adds the label).
   static const String supervisorContact = PrintSettings.fallbackSupervisorPhone;
 

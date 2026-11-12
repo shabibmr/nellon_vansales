@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../../ui/core/utils/currency.dart';
 import '../../../../ui/core/theme/app_theme.dart';
 import '../cubit/daily_stats_state.dart';
 
@@ -134,7 +135,7 @@ class SalesTrendChart extends StatelessWidget {
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
               return LineTooltipItem(
-                '$currencySymbol${spot.y.toStringAsFixed(2)}',
+                formatCurrency(spot.y, currencySymbol),
                 const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,

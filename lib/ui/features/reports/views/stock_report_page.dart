@@ -208,7 +208,7 @@ class _StockReportBodyState extends State<_StockReportBody> {
             exportHeaders: const ['Item', 'Rate', 'Stock'],
             exportRow: (item) => [
               item.name,
-              item.rate.toStringAsFixed(2),
+              formatMoneyNumber(item.rate, decimals: context.org.currencyDecimalPlaces),
               '${item.stock}',
             ],
             itemBuilder: (context, item) {
