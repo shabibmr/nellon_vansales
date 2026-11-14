@@ -27,5 +27,6 @@ subprojects {
     project.plugins.withId("com.android.library") {
         val android = project.extensions.getByName("android") as com.android.build.api.dsl.LibraryExtension
         android.compileSdk = 37
+        android.compileSdkMinor = 0
     }
 }

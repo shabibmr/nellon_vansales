@@ -677,7 +677,9 @@ class ZohoApiClient {
         queryParameters: const {'ignore_auto_number_generation': true},
       );
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return response.data['invoice']['invoice_id'] as String;
+        final invoiceId = response.data['invoice']['invoice_id'] as String;
+        await _markInvoiceSent(invoiceId);
+        return invoiceId;
       }
       throw Exception('HTTP ${response.statusCode}');
     } on DioException {
@@ -686,6 +688,23 @@ class ZohoApiClient {
       rethrow;
     } on Exception catch (e) {
       throw Exception('Zoho Books Invoice Sync Failed: $e');
+    }
+  }
+
+  /// Moves a freshly created invoice from `draft` to `sent` so it counts as
+  /// issued (receivables, payments, customer pay link).
+  ///
+  /// Best-effort: the invoice already exists in Zoho, so a failure here must
+  /// NOT fail [syncInvoice] — the queue would retry the create and duplicate
+  /// the invoice. The invoice just stays a draft and can be marked sent in Zoho.
+  Future<void> _markInvoiceSent(String invoiceId) async {
+    try {
+      await _dio.post<dynamic>('/invoices/$invoiceId/status/sent');
+    } on Object catch (e) {
+      AppLogger.error(
+        'ZohoApi',
+        'Invoice $invoiceId created but mark-as-sent failed: $e',
+      );
     }
   }
 

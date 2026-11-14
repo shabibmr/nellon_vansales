@@ -21,6 +21,13 @@ analyzer:
     - "test/test_all_pages_parsers.dart"
     - "test/test_all_sync.dart"
     - "test/test_items_by_location.dart"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 
 
 linter:

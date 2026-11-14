@@ -21,6 +21,9 @@ if (hasReleaseKeystore) {
 android {
     namespace = "com.nellon.vansales.van_sales"
     compileSdk = 37
+    // SDK platform packages for API 37 are published as android-37.0.
+    // An integer compileSdk looks up android-37, which is not installed.
+    compileSdkMinor = 0
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
